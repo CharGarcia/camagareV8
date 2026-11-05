@@ -469,6 +469,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
+                            // Factura eliminada (estado:eliminada, solo superadmin): fila para restaurar.
+                            if (\App\controllers\modulos\FacturaVentaController::esFilaEliminada($r)) {
+                                echo \App\controllers\modulos\FacturaVentaController::filaEliminadaHtml($r);
+                                continue;
+                            }
                             $estado = $r['estado'] ?? 'borrador';
                             $estadoClass = match ($estado) {
                                 'aprobado', 'autorizado' => 'bg-success bg-opacity-10 text-success border-success',
@@ -2638,22 +2643,39 @@ $totalPages = $totalPagesOriginal;
         });
     }
 
+    // Clic en una fila del filtro estado:eliminada (solo superadmin; ver filaEliminadaHtml).
+    window.fvRestaurarDesdeListado = function(row) {
+        let d = {};
+        try { d = JSON.parse(row.dataset.row || '{}'); } catch (e) { return; }
+        const numero = `${String(d.establecimiento || '').padStart(3, '0')}-${String(d.punto_emision || '').padStart(3, '0')}-${String(d.secuencial || '').padStart(9, '0')}`;
+        if (!ES_SUPERADMIN) return;
+        if ((d.estado || '') !== 'borrador') {
+            Swal.fire({ icon: 'info', title: 'No se puede restaurar',
+                text: `La factura ${numero} no se eliminó en borrador (estaba ${d.estado || 'sin estado'}); solo se restauran las eliminadas en borrador.` });
+            return;
+        }
+        fvRestaurarFacturaEliminada(parseInt(d.id) || 0, numero, true);
+    };
+
     // Restaura una factura eliminada en borrador (con su número) y la abre para corregirla.
     let fvRestaurando = false;
-    async function fvRestaurarFacturaEliminada(id, numero) {
+    async function fvRestaurarFacturaEliminada(id, numero, desdeListado = false) {
         if (!id || fvRestaurando) return;
         fvRestaurando = true;
+        // Desde el listado no hay modal abierto: los avisos van sobre la página.
+        const destino = desdeListado ? undefined : document.getElementById('modalNuevaFactura');
         try {
             const conf = await Swal.fire({
                 icon: 'question',
                 title: '¿Restaurar la factura ' + numero + '?',
                 html: '<div class="small text-start">Vuelve como <strong>borrador</strong>, con su mismo número, para corregirla y reenviarla al SRI.<br>'
-                    + 'La factura nueva que tiene abierta se descarta. Los cobros que se anularon al eliminarla no se recuperan.</div>',
+                    + (desdeListado ? '' : 'La factura nueva que tiene abierta se descarta. ')
+                    + 'Los cobros que se anularon al eliminarla no se recuperan.</div>',
                 showCancelButton: true,
                 confirmButtonText: 'Restaurar',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#198754',
-                target: document.getElementById('modalNuevaFactura'),
+                target: destino,
             });
             if (!conf.isConfirmed) return;
 
@@ -2662,10 +2684,12 @@ $totalPages = $totalPagesOriginal;
             const resp = await fetch(`${B_URL}/${RUTA_MODULO}/restaurarAjax`, { method: 'POST', body: fd });
             const json = await resp.json();
             if (!json.ok) {
-                Swal.fire({ icon: 'error', title: 'No se pudo restaurar', text: json.mensaje || 'Error desconocido.', target: document.getElementById('modalNuevaFactura') });
+                Swal.fire({ icon: 'error', title: 'No se pudo restaurar', text: json.mensaje || 'Error desconocido.', target: destino });
                 return;
             }
-            await Swal.fire({ icon: 'success', title: 'Factura restaurada', text: json.mensaje || '', timer: 1800, showConfirmButton: false, target: document.getElementById('modalNuevaFactura') });
+            await Swal.fire({ icon: 'success', title: 'Factura restaurada', text: json.mensaje || '', timer: 1800, showConfirmButton: false, target: destino });
+            // La fila eliminada ya no corresponde al filtro estado:eliminada: repintar el listado.
+            if (desdeListado && typeof window.FV_fetchSearch === 'function') window.FV_fetchSearch(window.FV_currentPage || 1);
             window.abrirModalFacturaVer({ dataset: { row: JSON.stringify({ id: json.id }) } });
         } catch (e) {
             console.error('Error restaurando factura', e);

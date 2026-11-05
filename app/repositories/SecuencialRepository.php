@@ -63,13 +63,41 @@ class SecuencialRepository
     ];
 
     /**
-     * Acciones de sri_envio_log que prueban que el SRI retuvo la clave (y con ella el
-     * secuencial) en ese ambiente. 'devuelta' y 'enviando' no cuentan: la primera es un
-     * rechazo en recepción (el SRI no guarda nada) y la segunda se escribe antes de saber
-     * el resultado. 'no_autorizado' sí cuenta: es conservador, pero un hueco de más no
-     * cuesta nada frente a un "ERROR 45 SECUENCIAL REGISTRADO".
+     * ¿El SRI retiene el secuencial de un documento? Decide la ÚLTIMA acción concluyente de su
+     * historial en sri_envio_log (misma regla que SriEnvioLog::getRegistroRetenidoPorSri(), que
+     * es la que permite o no eliminar el documento):
+     *   - 'recibida', 'en_procesamiento', 'autorizado/a' → el SRI tiene el número (autorizado o
+     *     aún puede autorizarlo): quemado.
+     *   - 'no_autorizado/a', 'devuelta' → el SRI NO lo retiene: el número se puede volver a usar
+     *     con otra clave de acceso. Comprobado en producción (serie 001-102, n.º 201, 202, 203 y
+     *     211, junio de 2026): NO AUTORIZADOS reenviados al día siguiente con otra fecha (otra
+     *     clave) quedaron AUTORIZADOS, sin "ERROR 45 SECUENCIAL REGISTRADO".
+     *   - 'enviando', 'error', 'aviso_email' no dicen nada y se saltan.
+     * Antes bastaba con que existiera CUALQUIER 'recibida' o 'no_autorizado' en el historial, y
+     * un NO AUTORIZADO eliminado dejaba su número perdido para siempre.
      */
-    private const ACCIONES_SRI_RETIENE_SECUENCIAL = "'recibida','en_procesamiento','autorizado','autorizada','no_autorizado','no_autorizada'";
+    private const ACCIONES_SRI_CONCLUYENTES = "'recibida','en_procesamiento','autorizado','autorizada','no_autorizado','no_autorizada','devuelta'";
+    private const ACCIONES_SRI_RETIENE_SECUENCIAL = "'recibida','en_procesamiento','autorizado','autorizada'";
+
+    /**
+     * Condición SQL "el SRI retiene el secuencial del documento {$aliasDoc}" (ver la regla en
+     * ACCIONES_SRI_CONCLUYENTES). Usa los parámetros :{$p}tipo y :{$p}amb.
+     */
+    private function sqlSriRetiene(string $aliasDoc, string $p): string
+    {
+        return "EXISTS (
+                    SELECT 1 FROM (
+                        SELECT x.accion FROM sri_envio_log x
+                         WHERE x.tipo_comprobante = :{$p}tipo
+                           AND x.id_comprobante   = {$aliasDoc}.id
+                           AND x.tipo_ambiente    = :{$p}amb
+                           AND x.accion IN (" . self::ACCIONES_SRI_CONCLUYENTES . ")
+                         ORDER BY x.id DESC
+                         LIMIT 1
+                    ) ult
+                    WHERE ult.accion IN (" . self::ACCIONES_SRI_RETIENE_SECUENCIAL . ")
+                )";
+    }
 
     /**
      * Tipos de documento que, ante el SRI, comparten el MISMO codDoc (Tabla 3) y
@@ -769,7 +797,6 @@ class SecuencialRepository
         $unionQuemados = '';
         $tipoSriLog    = self::TABLA_A_TIPO_SRI_LOG[$tabla] ?? null;
         if ($tipoSriLog !== null && $this->tableExists('sri_envio_log')) {
-            $acciones      = self::ACCIONES_SRI_RETIENE_SECUENCIAL;
             $unionQuemados = "
                     UNION
                     SELECT DISTINCT CAST(TRIM(d.{$colSec}) AS BIGINT) AS sec
@@ -778,19 +805,13 @@ class SecuencialRepository
                        AND d.{$colSec} IS NOT NULL
                        AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
                        AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :piso_q AND :techo_q
-                       AND EXISTS (
-                           SELECT 1 FROM sri_envio_log l
-                            WHERE l.tipo_comprobante = :tipo_sri_log
-                              AND l.id_comprobante   = d.id
-                              AND l.tipo_ambiente    = :tipo_ambiente_q
-                              AND l.accion IN ({$acciones})
-                       )";
+                       AND " . $this->sqlSriRetiene('d', 'q_');
             $params += [
-                ':id_punto_q'      => $idPuntoEmision,
-                ':piso_q'          => $inicial,
-                ':techo_q'         => $techo,
-                ':tipo_sri_log'    => $tipoSriLog,
-                ':tipo_ambiente_q' => $tipoAmbiente,
+                ':id_punto_q' => $idPuntoEmision,
+                ':piso_q'     => $inicial,
+                ':techo_q'    => $techo,
+                ':q_tipo'     => $tipoSriLog,
+                ':q_amb'      => $tipoAmbiente,
             ];
         }
 
@@ -873,10 +894,13 @@ class SecuencialRepository
         $tabla    = $map['tabla'];
         $colSec   = $map['col_sec'];
         $colPunto = $map['col_punto'];
-        $acciones = self::ACCIONES_SRI_RETIENE_SECUENCIAL;
-        $inicial  = max(1, $secuencialInicial);
-        $techo    = $techo ?? PHP_INT_MAX;
+        $concluyentes = self::ACCIONES_SRI_CONCLUYENTES;
+        $retiene      = self::ACCIONES_SRI_RETIENE_SECUENCIAL;
+        $inicial      = max(1, $secuencialInicial);
+        $techo        = $techo ?? PHP_INT_MAX;
 
+        // Última acción concluyente del documento: solo cuenta si con ella el SRI retiene el
+        // número (misma regla que getSiguienteDisponible, ver ACCIONES_SRI_CONCLUYENTES).
         $sql = "WITH vigente AS (
                     SELECT COALESCE(MAX(CAST(TRIM({$colSec}) AS BIGINT)), 0) AS max_sec
                       FROM {$tabla}
@@ -901,10 +925,10 @@ class SecuencialRepository
                         WHERE x.tipo_comprobante = :tipo_sri_log
                           AND x.id_comprobante   = d.id
                           AND x.tipo_ambiente    = :amb_l
-                          AND x.accion IN ({$acciones})
-                        ORDER BY x.created_at DESC
+                          AND x.accion IN ({$concluyentes})
+                        ORDER BY x.id DESC
                         LIMIT 1
-                  ) l ON true
+                  ) l ON l.accion IN ({$retiene})
                  WHERE d.{$colPunto} = :id_punto
                    AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
                    AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :piso AND :techo

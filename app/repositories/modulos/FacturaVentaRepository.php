@@ -164,17 +164,32 @@ class FacturaVentaRepository extends BaseRepository
      * @param array $ordenMulti Criterios de orden [['col'=>…,'dir'=>…], …] cuando el
      *        llamador usa `OrdenListado`. Vacío = se ordena por $ordenCol/$ordenDir.
      */
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, array $ordenMulti = []): array
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, array $ordenMulti = [], bool $permitirEliminadas = false): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
-
-        $where = "WHERE v.id_empresa = :id_empresa AND v.eliminado = FALSE AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         // Parsear filtros (sintaxis tipo "clave:valor") y texto libre
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
+
+        // estado:eliminada — SOLO el superadministrador ($permitirEliminadas, lo decide el
+        // controlador): lista las facturas ELIMINADAS en vez de las vigentes, para poder
+        // restaurarlas (FacturaVentaService::restaurar). Para el resto de usuarios el filtro
+        // sigue su curso normal y no encuentra nada (ninguna factura tiene estado 'eliminada').
+        $soloEliminadas = false;
+        if ($permitirEliminadas && isset($filtros['estado']) && empty($filtros['estado']['neg'])) {
+            $vals = (array) $filtros['estado']['valor'];
+            $vals = array_map(static fn($x) => strtolower(trim((string) $x)), $vals);
+            if (array_intersect($vals, ['eliminada', 'eliminadas', 'eliminado', 'eliminados'])) {
+                $soloEliminadas = true;
+                unset($filtros['estado']);
+            }
+        }
+        $condEliminado = $soloEliminadas ? 'v.eliminado = TRUE' : 'v.eliminado = FALSE';
+
+        $where = "WHERE v.id_empresa = :id_empresa AND {$condEliminado} AND v.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         // Abonos (cobros + notas de crédito + retenciones) y saldo, con la regla
         // compartida de AbonosVentaSql (enlace por dígitos; retención repartida por
@@ -414,7 +429,12 @@ class FacturaVentaRepository extends BaseRepository
                        ab.total_nc,
                        ab.total_nd,
                        ab.total_retencion,
-                       chq.cheque_posfechado_pendiente",
+                       chq.cheque_posfechado_pendiente" . ($soloEliminadas ? ",
+                       -- Último paso por el SRI (null = nunca se envió): la fila eliminada lo muestra.
+                       (SELECT l.accion FROM sri_envio_log l
+                         WHERE l.tipo_comprobante = 'factura_venta' AND l.id_comprobante = v.id
+                           AND l.tipo_ambiente = v.tipo_ambiente
+                         ORDER BY l.created_at DESC LIMIT 1) AS sri_ultima_accion" : ''),
             ],
             $params
         );

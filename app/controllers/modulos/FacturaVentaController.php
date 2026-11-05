@@ -74,7 +74,7 @@ class FacturaVentaController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $totalPages = (int) ceil($result['total'] / $perPage);
 
         // Cargar datos maestros para el modal de nueva factura
@@ -247,7 +247,7 @@ class FacturaVentaController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $orden, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -3452,8 +3452,75 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Fila de una factura ELIMINADA (filtro estado:eliminada, solo superadministrador): se ve
+     * atenuada, dice qué pasó con ella en el SRI y al hacer clic ofrece restaurarla en vez de
+     * abrir el modal (getFacturaAjax no abre facturas eliminadas). La usan el listado inicial
+     * (vista) y el de búsqueda (renderFilaHtml).
+     */
+    public static function filaEliminadaHtml(array $r): string
+    {
+        $esc    = static fn($v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $numero = $esc(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''));
+        $fecha  = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime((string) $r['fecha_emision'])) : '-';
+        $elimEl = !empty($r['deleted_at']) ? date('d-m-Y H:i:s', strtotime((string) $r['deleted_at'])) : '';
+        $ivaCalc = max(0, (float)($r['importe_total'] ?? 0) - (float)($r['total_sin_impuestos'] ?? 0) - (float)($r['total_ice'] ?? 0) - (float)($r['propina'] ?? 0));
+
+        $accion = (string) ($r['sri_ultima_accion'] ?? '');
+        $sri = match ($accion) {
+            ''                                 => ['No enviada al SRI', 'secondary'],
+            'autorizado', 'autorizada'         => ['SRI: AUTORIZADA', 'success'],
+            'no_autorizado', 'no_autorizada'   => ['SRI: NO AUTORIZADA', 'danger'],
+            'recibida'                         => ['SRI: RECIBIDA', 'warning'],
+            'en_procesamiento'                 => ['SRI: EN PROCESAMIENTO', 'warning'],
+            'devuelta'                         => ['SRI: DEVUELTA', 'secondary'],
+            default                            => ['SRI: ' . strtoupper(str_replace('_', ' ', $accion)), 'secondary'],
+        };
+        $estadoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" title="'
+            . $esc('Eliminada' . ($elimEl ? ' el ' . $elimEl : '') . ' · estado al eliminar: ' . ($r['estado'] ?? '')) . '">Eliminada</span>'
+            . ' <span class="badge bg-' . $sri[1] . ' bg-opacity-10 text-' . $sri[1] . ' border border-' . $sri[1] . ' border-opacity-25">' . $esc($sri[0]) . '</span>';
+
+        // Solo el dato que necesita el JS para restaurar (id, número, estado), no la fila entera.
+        $rowData = $esc(json_encode([
+            'id'              => (int) ($r['id'] ?? 0),
+            'establecimiento' => $r['establecimiento'] ?? '',
+            'punto_emision'   => $r['punto_emision'] ?? '',
+            'secuencial'      => $r['secuencial'] ?? '',
+            'estado'          => $r['estado'] ?? '',
+        ]));
+
+        return '<tr class="factura-row factura-eliminada" role="button" tabindex="0" style="opacity:.6" data-row=\'' . $rowData . '\' onclick="fvRestaurarDesdeListado(this)" title="Factura eliminada: clic para restaurarla">
+                <td class="ps-3" data-col="numero"><code class="text-secondary text-decoration-line-through">' . $numero . '</code></td>
+                <td data-col="fecha_emision">' . $fecha . '</td>
+                <td class="fw-medium text-truncate" data-col="cliente_nombre" style="max-width:200px">' . $esc($r['cliente_nombre'] ?? '') . '</td>
+                <td data-col="cliente_ruc"><small class="text-muted">' . $esc($r['cliente_ruc'] ?? '') . '</small></td>
+                <td class="text-end" data-col="total_sin_impuestos">$' . number_format((float)($r['total_sin_impuestos'] ?? 0), 2) . '</td>
+                <td class="text-end" data-col="total_descuento">$' . number_format((float)($r['total_descuento'] ?? 0), 2) . '</td>
+                <td class="text-end" data-col="iva">$' . number_format($ivaCalc, 2) . '</td>
+                <td class="text-end" data-col="total_ice">$' . number_format((float)($r['total_ice'] ?? 0), 2) . '</td>
+                <td class="text-end" data-col="propina">$' . number_format((float)($r['propina'] ?? 0), 2) . '</td>
+                <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
+                <td class="text-end" data-col="saldo_pendiente">-</td>
+                <td data-col="vendedor_nombre">' . $esc($r['vendedor_nombre'] ?? '') . '</td>
+                <td data-col="observaciones" class="text-truncate" style="max-width:180px">' . $esc($r['observaciones'] ?? '') . '</td>
+                <td data-col="usuario_nombre">' . $esc($r['usuario_nombre'] ?? '') . '</td>
+                <td class="text-center" data-col="estado_correo">-</td>
+                <td class="text-center" data-col="estado_pago">-</td>
+                <td class="text-center pe-3 text-nowrap" data-col="estado">' . $estadoBadge . '</td>
+              </tr>';
+    }
+
+    /** ¿La fila del listado es una factura eliminada? (PDO puede devolver el booleano como bool o 't'). */
+    public static function esFilaEliminada(array $r): bool
+    {
+        return in_array($r['eliminado'] ?? false, [true, 't', 'true', 1, '1'], true);
+    }
+
     private function renderFilaHtml(array $r): string
     {
+        if (self::esFilaEliminada($r)) {
+            return self::filaEliminadaHtml($r);
+        }
         $rowData      = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
         $numero       = htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''));
         $fecha        = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-';

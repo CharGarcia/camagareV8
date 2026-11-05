@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, secuencial inicial, restaurar factura, recuperar factura eliminada, revivir factura, deshacer eliminar, factura eliminada, error 45, secuencial registrado, agregar item a factura de consignacion, servicio de envio, flete, agregar servicio, no me deja agregar producto, factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, guardada con otro numero, cambio el numero de la factura, numero distinto, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, adicional cortado, columna adicional, ancho del adicional, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, espacio en blanco abajo, margen inferior, aprovechar la hoja, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador, descuento global, descuento a toda la factura, descuento general, repartir descuento, prorratear descuento, aplicar a todos los items, no se puede anular la factura, tiene notas de credito vigentes, eliminar factura con nota de credito, stock duplicado al anular, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar
-version: 2.58
+etiquetas: reusar secuencial no autorizado, numero no autorizado, volver a usar numero, ver facturas eliminadas, estado:eliminada, listado de eliminadas, factura borrada, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, secuencial inicial, restaurar factura, recuperar factura eliminada, revivir factura, deshacer eliminar, factura eliminada, error 45, secuencial registrado, agregar item a factura de consignacion, servicio de envio, flete, agregar servicio, no me deja agregar producto, factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, guardada con otro numero, cambio el numero de la factura, numero distinto, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, adicional cortado, columna adicional, ancho del adicional, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, espacio en blanco abajo, margen inferior, aprovechar la hoja, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador, descuento global, descuento a toda la factura, descuento general, repartir descuento, prorratear descuento, aplicar a todos los items, no se puede anular la factura, tiene notas de credito vigentes, eliminar factura con nota de credito, stock duplicado al anular, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar
+version: 2.59
 orden: 20
 estado: activo
 ---
@@ -430,15 +430,22 @@ la de hoy: o la fecha no es la correcta, o el comprobante no se autorizó ese d�
 
 ## Número saltado: factura eliminada que ya pasó por el SRI
 
-El número de una factura nueva no siempre es "la última + 1". Si una factura
-**se envió al SRI** (recibida, en procesamiento, autorizada o **no autorizada**) y
-después **se eliminó**, su número queda registrado en el SRI con esa clave. Una
-factura nueva con ese mismo número sería rechazada con *«ERROR 45 SECUENCIAL
-REGISTRADO»*, así que el sistema lo salta y propone el siguiente libre.
+El número de una factura nueva no siempre es "la última + 1". Qué pasa con el
+número de una factura eliminada depende de lo **último** que respondió el SRI:
 
-Ejemplo: la serie va en la 1129, la 1130 volvió **NO AUTORIZADA** y se eliminó.
-La factura nueva sale con la **1131**, aunque el secuencial inicial configurado
-en la empresa sea 1130.
+| Último resultado del SRI | ¿Se vuelve a usar el número? |
+|---|---|
+| Nunca se envió, o **DEVUELTA** | Sí: la siguiente factura nueva lo toma. |
+| **NO AUTORIZADA** | Sí: la siguiente factura nueva lo toma. El SRI acepta ese número con otra clave de acceso (otra fecha). |
+| **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
+| **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
+
+Cuando se salta, una factura nueva con ese número sería rechazada con *«ERROR 45
+SECUENCIAL REGISTRADO»*, por eso el sistema propone el siguiente libre.
+
+Ejemplo: la serie va en la 1129 y la 1130 volvió **NO AUTORIZADA** y se eliminó.
+La factura nueva sale con la **1130**. En cambio, si la 1130 hubiera quedado
+**RECIBIDA** sin resolverse, la factura nueva saldría con la **1131**.
 
 Cuando pasa esto, junto a la etiqueta **Secuencial** aparece un **triángulo
 amarillo** y el número se ve con borde amarillo. Al pulsar el triángulo se ve qué
@@ -452,13 +459,37 @@ los demás usuarios ven el aviso de pedírselo. La factura vuelve como **borrado
 con su mismo número y se abre para corregirla y reenviarla al SRI. La factura
 nueva que estaba abierta se descarta.
 
+### Ver y restaurar facturas eliminadas desde el listado
+
+El superadministrador puede ver las facturas eliminadas escribiendo en el buscador
+del listado:
+
+```
+estado:eliminada
+```
+
+Aparecen **todas** las facturas eliminadas del ambiente actual, hayan pasado o no
+por el SRI. Se ven atenuadas, con el número tachado y dos etiquetas: **Eliminada**
+y lo que pasó con ella en el SRI (**No enviada al SRI**, **SRI: NO AUTORIZADA**,
+**SRI: RECIBIDA**, etc.). El filtro se combina con los demás, por ejemplo
+`estado:eliminada serie:001-001` o `estado:eliminada cliente:perez`.
+
+Al hacer clic en una fila se pide confirmación y la factura se **restaura como
+borrador** con su mismo número, y se abre. Sirve para una factura que se eliminó
+**sin haberse registrado en el SRI** o que quedó **NO AUTORIZADA**: mientras nadie
+haya usado su número, se recupera tal como estaba. Al reenviarla con la **fecha de
+hoy** la clave de acceso cambia, y el SRI la acepta con el mismo número.
+
+Para los demás usuarios el filtro `estado:eliminada` no muestra nada.
+
 Qué tener en cuenta:
 
 - Solo se restauran facturas que se eliminaron **en borrador**.
 - Los **cobros** que se anularon al eliminarla (p. ej. el ingreso automático del
   POS) **no se recuperan**: si hace falta, se registra el cobro de nuevo.
 - No se restaura si su **período contable está cerrado**, si otra factura vigente
-  ya usa ese número, o si la factura salió de **Facturación de consignaciones** o
+  ya usa ese número (pasa con las que nunca llegaron al SRI o quedaron NO
+  AUTORIZADAS: su número queda libre y la siguiente factura nueva lo toma), o si la factura salió de **Facturación de consignaciones** o
   de una **orden Car-Wash** (al eliminarla se deshizo ese vínculo: hay que volver a
   emitirla desde ese módulo).
 - La restauración queda registrada en el historial del sistema (acción *RESTAURAR*).
@@ -690,6 +721,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.59** — El superadministrador ve las **facturas eliminadas** escribiendo `estado:eliminada` en el buscador del listado, hayan pasado o no por el SRI (cada fila dice qué pasó con ella en el SRI), y con un clic la **restaura como borrador** con su mismo número. Ver *Ver y restaurar facturas eliminadas desde el listado*. Además, el número de una factura eliminada que el SRI dejó **NO AUTORIZADA** ya **no se salta**: la siguiente factura nueva lo usa (el SRI lo acepta con otra clave de acceso). Solo se saltan los números que el SRI autorizó o tiene recibidos sin resolver.
 - **2.58** — Cuando la factura nueva **salta un número** porque esa factura se envió al SRI y luego se eliminó, aparece un **triángulo amarillo** junto al Secuencial que explica qué número se omitió y por qué. Desde ahí el **superadministrador** puede **restaurar la factura eliminada** (vuelve como borrador con su mismo número) para corregirla y reenviarla. Ver *Número saltado: factura eliminada que ya pasó por el SRI*.
 - **2.57** — Al **guardar una factura nueva**, el número se reserva en ese momento. Si otra persona de la misma serie ya usó el número que mostraba la pantalla, la factura se guarda con el **siguiente libre** y aparece el aviso *«Factura guardada con otro número»*. Antes se rechazaba con *"El número de secuencial ya existe… Recargue e intente nuevamente"* y había que volver a llenarla.
 - **2.56** — Pestaña **Pagos**: registrar un cobro pide **confirmar monto y forma de cobro**, y después de cada cobro el **Monto queda vacío** en lugar de traer el saldo restante. Antes, un segundo clic en *Registrar Cobro* cobraba todo el saldo con la última forma de cobro elegida. Las **observaciones** del cobro usan el mismo formato que Ingresos (*Cobro factura de venta 14644; Cobrado con …*); antes decían *Cobro de factura 001-…*.
