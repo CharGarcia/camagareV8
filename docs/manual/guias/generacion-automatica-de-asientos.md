@@ -4,8 +4,8 @@ resumen: Al abrir un módulo, el sistema genera solo y en silencio los asientos 
 categoria: Contabilidad
 tipo: guia
 visibilidad: todos
-etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido
-version: 1.6
+etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido, pestaña asiento contable, ver asiento del documento, generar asiento de una compra
+version: 1.7
 orden: 30
 estado: activo
 ---
@@ -50,6 +50,23 @@ No se usa: funciona solo. Lo único que hay que hacer es abrir el módulo.
 4. Los asientos nuevos aparecen en el Libro Diario y en los Estados Financieros.
 
 Si quiere ver el resultado, revise **Asientos Contables** o **Mayores**.
+
+## Generar el asiento de un documento desde la pestaña Asiento contable
+
+No hace falta esperar a la siguiente pasada para ver el asiento de un documento.
+Al abrir el documento y hacer clic en la pestaña **Asiento contable**, si todavía
+no tiene asiento, el sistema lo genera en ese momento (solo ese documento) y lo
+muestra ya registrado. Mientras tanto la pestaña dice *Generando asiento
+contable…*.
+
+- Se genera solo al **mirar la pestaña**: abrir el documento sin entrar a ella no
+  genera nada.
+- Sigue las mismas reglas que la generación al abrir el módulo: un documento
+  anulado, en borrador, migrado o de un período cerrado no se contabiliza.
+- Si no se puede generar (por ejemplo, falta una cuenta), la pestaña muestra la
+  vista previa con el motivo, como siempre.
+- La pestaña solo la ven quienes tienen acceso a **Contabilidad → Asientos
+  Contables**. Para el resto, el asiento se sigue generando al abrir el módulo.
 
 ## Módulos que generan asientos automáticamente
 
@@ -166,6 +183,8 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.7** — La pestaña **Asiento contable** de los documentos genera en el acto el
+  asiento del documento que aún no lo tiene, sin esperar a la siguiente pasada.
 - **1.6** — Configurar o corregir una cuenta de IVA ahora reintenta los documentos
   que habían fallado por ella: facturas y recibos de venta, notas de crédito y de
   débito, facturas de reembolso, facturas de compra y liquidaciones. Antes solo los

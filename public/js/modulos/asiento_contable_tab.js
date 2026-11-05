@@ -92,6 +92,8 @@
         let guardando = false;     // un guardado en curso (§8: un guardado = un registro)
         let idDocumento = 0;
         let opcionesDim = { centros: [], proyectos: [] };
+        let cargando = false;          // una carga en curso
+        let pendienteGenerar = false;  // se cargó con la pestaña oculta y el documento no tiene asiento
 
         // ── Centro de costo / proyecto por línea ─────────────────────────────────
 
@@ -403,6 +405,48 @@
             }
         }
 
+        /** ¿La pestaña se está viendo? (un tab-pane oculto o un modal cerrado no tienen cajas). */
+        function pestanaVisible() {
+            const tbody = $(ids.tbody);
+            return !!(tbody && tbody.getClientRects().length > 0);
+        }
+
+        /**
+         * Documento sin asiento: pide al servidor que lo genere en el acto (solo ese documento),
+         * con la misma detección y reglas que la generación al abrir el módulo. Devuelve true si
+         * quedó generado. Nunca lanza: si falla, la pestaña sigue con la vista previa de siempre,
+         * que explica qué falta.
+         */
+        async function generarEnElActo() {
+            if (!cfg.moduloOrigen || !idDocumento) return false;
+            try {
+                const fd = new FormData();
+                fd.append('modulo_origen', cfg.moduloOrigen);
+                fd.append('id', String(idDocumento));
+                const base = (typeof BASE_URL !== 'undefined' ? BASE_URL : '').replace(/\/$/, '');
+                const res = await (await fetch(`${base}/modulos/contabilidad-auto/generar-documento-ajax`, { method: 'POST', body: fd })).json();
+                return !!(res && res.ok && res.generado);
+            } catch (err) {
+                console.error('Generar asiento del documento:', err);
+                return false;
+            }
+        }
+
+        // Si la pestaña se cargó oculta (el módulo precarga al abrir el modal) y el documento no
+        // tenía asiento, generarlo cuando el usuario haga clic en ella. Los módulos que ya cargan
+        // en 'shown.bs.tab' llaman a cargar() antes: entonces `cargando` corta este segundo intento.
+        (function escucharPestana() {
+            const tbody = $(ids.tbody);
+            const pane = tbody ? tbody.closest('.tab-pane') : null;
+            if (!pane || !pane.id) return;
+            const sel = `[data-bs-target="#${pane.id}"], [href="#${pane.id}"]`;
+            document.querySelectorAll(sel).forEach(btn => btn.addEventListener('shown.bs.tab', () => {
+                setTimeout(() => {
+                    if (pendienteGenerar && !cargando) cargar(idDocumento);
+                }, 0);
+            }));
+        })();
+
         /**
          * @param {number} id id del documento.
          * @param {{vistaPrevia?: boolean}} [opciones] `vistaPrevia: true` salta el asiento
@@ -410,6 +454,16 @@
          *   formulario. Lo usa la factura de venta mientras se editan sus líneas.
          */
         async function cargar(id, opciones) {
+            cargando = true;
+            pendienteGenerar = false;
+            try {
+                return await cargarInterno(id, opciones);
+            } finally {
+                cargando = false;
+            }
+        }
+
+        async function cargarInterno(id, opciones) {
             const soloVistaPrevia = !!(opciones && opciones.vistaPrevia);
             const tbody = $(ids.tbody);
             if (!tbody) return;
@@ -468,6 +522,24 @@
                 if (cabecera && cabecera.detalles.length) {
                     pintarRegistrado();
                     return;
+                }
+
+                // 1b. Sin asiento: generarlo ahora, solo este documento y solo si el usuario está
+                //     mirando la pestaña. Oculta, se deja anotado y se genera al hacer clic en ella.
+                if (!soloVistaPrevia && cfg.moduloOrigen) {
+                    if (pestanaVisible()) {
+                        placeholder('<i class="bi bi-hourglass-split me-1"></i> Generando asiento contable...');
+                        if (await generarEnElActo()) {
+                            cabecera = await cargarAsientoReal();
+                            if (cabecera && cabecera.detalles.length) {
+                                pintarRegistrado();
+                                return;
+                            }
+                        }
+                        cabecera = null;
+                    } else {
+                        pendienteGenerar = true;
+                    }
                 }
 
                 // `soloRegistrado`: el módulo muestra únicamente el asiento ya generado y completo

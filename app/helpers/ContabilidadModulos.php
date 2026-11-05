@@ -37,6 +37,40 @@ class ContabilidadModulos
         return self::$mapa;
     }
 
+    /**
+     * asientos_contables_cabecera.modulo_origen (el `moduloOrigen` que usa cada pestaña
+     * «Asiento contable», ver public/js/modulos/asiento_contable_tab.js) → clave de trabajo.
+     * Solo los documentos cuyo asiento genera SincronizadorAsientosService.
+     */
+    private const ORIGEN_A_CLAVE = [
+        'factura_venta'         => 'facturas_venta',
+        'recibo_venta'          => 'recibos_venta',
+        'nota_credito'          => 'notas_credito',
+        'nota_debito'           => 'notas_debito',
+        'factura_reembolso'     => 'factura_reembolso',
+        'retencion_venta'       => 'retenciones_venta',
+        'compra'                => 'compras',
+        'liquidacion_compra'    => 'liquidaciones_compra',
+        'retencion_compra'      => 'retenciones_compra',
+        'importacion'           => 'importaciones',
+        'ingreso'               => 'ingresos',
+        'egreso'                => 'egresos',
+        'traspaso'              => 'traspasos',
+        'conciliacion_tarjetas' => 'conciliacion_tarjetas',
+        'consignacion_venta'    => 'consignaciones',
+        'retorno_cv'            => 'retornos_cv',
+        'cambio_producto_cv'    => 'cambios_producto_cv',
+        'FACTURACION_CV'        => 'facturacion_cv',
+        'ajuste_inventario'     => 'ajustes_inventario',
+    ];
+
+    /** Clave de trabajo del módulo de origen de un asiento, o null si no se genera automáticamente. */
+    public static function claveDeOrigen(string $moduloOrigen): ?string
+    {
+        $clave = self::ORIGEN_A_CLAVE[$moduloOrigen] ?? null;
+        return $clave !== null && self::definicion($clave) !== null ? $clave : null;
+    }
+
     /** Definición de un trabajo, o null si la clave no está declarada. */
     public static function definicion(string $clave): ?array
     {

@@ -301,6 +301,18 @@ class ContabilidadAutoRepository extends BaseRepository
     }
 
     /**
+     * ¿El documento está entre los que le faltan asiento según el SQL de detección del trabajo?
+     * Así la generación de UN documento respeta las mismas exclusiones que la pasada completa
+     * (anulados, borradores, migrados, períodos cerrados), sin repetirlas aquí.
+     */
+    public function esPendiente(string $sqlDeteccion, array $params, int $idDocumento): bool
+    {
+        $st = $this->db->prepare("SELECT 1 FROM ({$sqlDeteccion}) AS _p WHERE _p.id = ? LIMIT 1");
+        $st->execute(array_merge(array_values($params), [$idDocumento]));
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
      * Deja registrado que un documento no se pudo contabilizar, con la
      * configuración vigente al momento del fallo. Mientras esa firma no cambie,
      * idsPendientes() lo salta.

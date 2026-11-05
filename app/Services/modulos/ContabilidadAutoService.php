@@ -136,6 +136,70 @@ class ContabilidadAutoService
         }
     }
 
+    /**
+     * Genera el asiento de UN documento: lo pide la pestaña «Asiento contable» del modal cuando el
+     * documento todavía no lo tiene, para que el usuario lo vea en el acto sin esperar a la
+     * siguiente pasada del módulo. Usa la misma detección y el mismo service que la pasada:
+     * un documento que esta no contabilizaría (anulado, borrador, migrado, período cerrado)
+     * tampoco se contabiliza aquí.
+     *
+     * A diferencia de la pasada, no salta los documentos anotados como fallidos: el usuario lo
+     * está pidiendo de forma explícita y es uno solo. Si vuelve a fallar se actualiza su anotación.
+     *
+     * @return array{generado: bool, motivo?: string}
+     */
+    public function generarDocumento(int $idEmpresa, int $idUsuario, string $clave, int $idDocumento): array
+    {
+        $definicion = ContabilidadModulos::definicion($clave);
+        if ($definicion === null || $idDocumento <= 0) {
+            return ['generado' => false, 'motivo' => 'documento sin contabilidad automática'];
+        }
+
+        try {
+            if (!ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, $clave)) {
+                return ['generado' => false, 'motivo' => 'la empresa no contabiliza este módulo'];
+            }
+
+            $hashConfig = $this->repo->firmaConfiguracion($idEmpresa, $definicion);
+            if ($hashConfig === null) {
+                return ['generado' => false, 'motivo' => 'sin configuración contable'];
+            }
+
+            $trabajo = $this->sincronizador->getTrabajoPorClave($idEmpresa, $clave);
+            if ($trabajo === null || !$this->repo->esPendiente($trabajo['sql'], $trabajo['params'], $idDocumento)) {
+                return ['generado' => false, 'motivo' => 'el documento no está pendiente de contabilizar'];
+            }
+
+            $service = ($trabajo['factory'])();
+            if (!method_exists($service, 'procesarAsientoContablePorSincronizacion')) {
+                return ['generado' => false, 'motivo' => 'el módulo no expone la generación por sincronización'];
+            }
+
+            try {
+                $service->procesarAsientoContablePorSincronizacion($idDocumento);
+            } catch (\Throwable $e) {
+                $motivo = trim($e->getMessage()) !== '' ? trim($e->getMessage()) : get_class($e);
+                $this->repo->registrarFallo($idEmpresa, $clave, $idDocumento, $motivo, $hashConfig, $idUsuario);
+                return ['generado' => false, 'motivo' => $motivo];
+            }
+
+            // Algunos services retornan en silencio si el asiento queda vacío (mismo control que la pasada).
+            $tablaVerif = (string) ($trabajo['tablaVerif'] ?? '');
+            $colAsiento = (string) ($trabajo['colAsiento'] ?? 'id_asiento_contable');
+            if ($this->repo->idsSinAsiento($tablaVerif, $colAsiento, [$idDocumento]) !== []) {
+                $motivo = 'El asiento quedó vacío: faltan cuentas configuradas para este documento.';
+                $this->repo->registrarFallo($idEmpresa, $clave, $idDocumento, $motivo, $hashConfig, $idUsuario);
+                return ['generado' => false, 'motivo' => $motivo];
+            }
+
+            $this->repo->limpiarFallos($idEmpresa, $clave, [$idDocumento], $idUsuario);
+            return ['generado' => true];
+        } catch (\Throwable $e) {
+            ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'generarDocumento', 'modulo' => $clave, 'id' => $idDocumento]);
+            return ['generado' => false, 'motivo' => $e->getMessage()];
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
 
     private function debeEsperar(int $idEmpresa, string $clave, string $hashConfig): bool

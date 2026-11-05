@@ -84,4 +84,42 @@ class ContabilidadAutoController extends BaseModuloController
             echo json_encode(['ok' => true]);
         }
     }
+
+    /**
+     * Genera el asiento de UN documento que aún no lo tiene. Lo llama la pestaña «Asiento
+     * contable» al abrirse (public/js/modulos/asiento_contable_tab.js). POST: modulo_origen, id.
+     * Permiso: ver el módulo dueño del documento, igual que la pasada al abrir el módulo.
+     * Responde {ok, generado, motivo?}; la pestaña recarga el asiento si se generó.
+     */
+    public function generarDocumentoAjax(): void
+    {
+        header('Content-Type: application/json; charset=utf-8');
+
+        try {
+            $origen = trim((string) ($_POST['modulo_origen'] ?? ''));
+            $idDoc  = (int) ($_POST['id'] ?? 0);
+            $clave  = $origen !== '' ? ContabilidadModulos::claveDeOrigen($origen) : null;
+            $def    = $clave !== null ? ContabilidadModulos::definicion($clave) : null;
+            $ruta   = $def !== null ? ContabilidadModulos::rutaCanonica((string) (((array) ($def['rutas'] ?? []))[0] ?? '')) : null;
+            if ($clave === null || $ruta === null || $idDoc <= 0) {
+                echo json_encode(['ok' => true, 'generado' => false]);
+                return;
+            }
+
+            $this->rutaSolicitada = $ruta;
+            $this->requireLeer();
+
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+
+            $res = ContabilidadAutoService::crear()->generarDocumento($idEmpresa, $idUsuario, $clave, $idDoc);
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $th) {
+            ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'generado' => false]);
+        }
+    }
 }
