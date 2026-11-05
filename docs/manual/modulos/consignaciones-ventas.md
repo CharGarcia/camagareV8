@@ -117,10 +117,16 @@ vencimiento **con los que se guardó**, aunque el inventario haya cambiado desde
 entonces: manda el documento, no el catálogo.
 
 Cada línea muestra el **stock disponible** en la bodega de esa fila (verde si
-alcanza para todo lo pendiente, rojo si no). Al elegir un **lote**, el badge
-pasa a **Stock lote** y muestra lo que queda de ese lote en esa bodega (verde si
-alcanza para la cantidad de la fila). Al cambiar la bodega o el lote de la fila,
-el stock se actualiza solo. La casilla **Desagr.** parte la
+alcanza para la cantidad de la fila, rojo si no). Al elegir un **lote**, el badge
+pasa a **Stock lote** y muestra lo que queda de ese lote en esa bodega.
+
+El stock **cuadra entre filas**: a cada fila se le descuenta lo que ya tomaron
+del mismo producto, bodega y lote las líneas que ya están en la consignación y
+las filas de arriba. Se reparte en orden: si un lote tiene 10 y dos filas piden
+6 cada una, la primera muestra 10 (verde) y la segunda 4 (rojo). Al cambiar una
+fila de lote, de bodega o de cantidad, lo que soltó vuelve a las demás y todos
+los badges se actualizan. Pasando el mouse sobre el badge se ve el detalle
+(stock, ya tomado en otras filas y lo que queda). La casilla **Desagr.** parte la
 línea en una fila por unidad, para asignar un NUP distinto a cada una; conviene
 desmarcarla en cantidades grandes. Marcarla o desmarcarla en un producto **no
 borra** lo ya escrito en los demás (cantidad, precio, lote y NUP se conservan);
@@ -597,7 +603,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
-- **1.48** — Al cargar desde un pedido, el stock de cada fila se actualiza al cambiar el **lote** (muestra el stock de ese lote en la bodega de la fila) y al cambiar la **bodega**.
+- **1.48** — Al cargar desde un pedido, el stock de cada fila se actualiza al cambiar el **lote** (muestra el stock de ese lote en la bodega de la fila), la **bodega** o la cantidad, y **cuadra entre filas**: descuenta lo que ya tomaron las filas de arriba y las líneas de la consignación.
 - **1.47** — **Unidad de medida por línea** (Empresa → Facturación → *Mostrar unidad de medida*), como en Facturas de venta: 4 CIENTO descuentan 400 unidades del inventario. Antes no había selector y la cantidad salía siempre en la unidad del producto (4 cajas salían como 4 unidades). Las líneas cargadas desde un pedido heredan su unidad; retornos, cambios y facturación convierten igual.
 - **1.46** — Corregido: editar una consignación con el punto de partida o de llegada vacío fallaba al guardar.
 - **1.45** — **Anular devuelve la mercadería a la bodega** y anula el asiento; antes solo cambiaba el estado y el stock quedaba fuera sin forma de recuperarlo. Una anulada ya no se reactiva, y en las anuladas antiguas aparece **Eliminar** para devolver lo que quedó fuera. La consignación descuenta inventario con la **misma regla que la factura** (establecimiento de su serie con «La facturación afecta al inventario» y producto inventariable que no sea servicio); antes descontaba siempre y el retorno no devolvía esas líneas.

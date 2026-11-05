@@ -109,7 +109,7 @@ eliminado (boolean), deleted_at, deleted_by
 
 **Reglas**
 - Ningún usuario (salvo Nivel 3) puede acceder a información de empresas que no tenga asignadas.
-- Todo acceso a módulos/submódulos se valida con middleware: **autenticación → empresa activa → permisos**.
+- Todo acceso a módulos/submódulos se valida con middleware: **autenticación → empresa activa → permisos**. `AuthMiddleware::handle()` lo invoca `Application::run()` en cada petición web con sesión (no en `$publicControllers` ni en `/api/v1`): token de otro dispositivo cada 60 s, empresa activa cada 5 min (salvo nivel 3) y respaldo del IVA temporal. Si cierra la sesión en un AJAX responde 401 + cabecera `X-Sesion-Cerrada` (la reconoce `public/js/csrf.js`); no volver a sacarlo de `Application::run()`.
 - Permisos por submódulo (tabla `modulos_asignados`): `r` ver, `w` crear, `u` actualizar, `d` eliminar, `t` acceso total (`todo`).
 - **Registros propios vs. acceso total**: si el usuario tiene `t` (acceso total) ve los registros de **toda la empresa**; si **no** lo tiene, solo ve/gestiona **los que él creó** (`created_by = id_usuario`). Mecanismo:
   - Controller: `$idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;` y se pasa al listado del repository.

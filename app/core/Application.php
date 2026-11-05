@@ -146,6 +146,23 @@ class Application
             exit;
         }
 
+        // ── Revalidación de la sesión web (AuthMiddleware) ────────────────────
+        // Toda petición web con sesión, salvo controladores/acciones públicos (que sirven sin
+        // login y no deben echar a nadie) y la API móvil (ApiAuthMiddleware). Comprueba, con
+        // frenos en la sesión: token (otro dispositivo), empresa activa (CLAUDE.md §6) y el
+        // respaldo del IVA temporal. Si hay que cerrar la sesión, responde y termina aquí.
+        $esWebConSesion = !$isApi && isset($_SESSION['id_usuario'])
+            && !$esAccionPublica && !in_array($controller, $publicControllers, true);
+        if ($esWebConSesion) {
+            \App\middleware\AuthMiddleware::handle();
+
+            // Métricas del sistema: en qué empresa trabaja el usuario hoy (páginas y AJAX,
+            // incluido el sondeo del navbar). Frenado a 5 min en la sesión, o antes si cambia
+            // de empresa o de día; nunca bloquea ni lanza. La app móvil lo registra en
+            // ApiAuthMiddleware.
+            \App\Services\ActividadUsuarioService::registrarWeb();
+        }
+
         // ── Protección CSRF ──────────────────────────────────────────────────
         // Punto único de validación para todo el sistema: los módulos no hacen
         // nada, el token lo inyecta public/js/csrf.js en fetch, XHR y formularios.

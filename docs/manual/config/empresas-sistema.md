@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, prestador de servicios turisticos, prestador turistico, empresa de turismo, turismo, iva 8 feriados, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
-version: 1.22
+etiquetas: empresas del sistema, desactivar empresa, empresa inactiva, cerrar sesiones, sacar usuarios, sesion cerrada, prestador de servicios turisticos, prestador turistico, empresa de turismo, turismo, iva 8 feriados, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
+version: 1.23
 orden: 1
 estado: activo
 ---
@@ -198,6 +198,17 @@ cambio de tarifa de IVA durante los feriados decretados (ver la guía
 - Filtro *Prestador de servicios turísticos* en el modal de filtros (`prestador_turistico:si`).
 - Requiere el SQL `database/2026-10-31_iva_cambios_temporales.sql`.
 
+## Desactivar una empresa cierra las sesiones de sus usuarios
+
+Al poner una empresa **inactiva** (o eliminarla), los usuarios que estén trabajando
+en ella salen del sistema solos **en un máximo de 5 minutos**, con el aviso *«La
+empresa a la que pertenece su sesión fue desactivada. Contacte al administrador.»*
+No hace falta esperar a que cierren el navegador. Al volver a entrar solo pueden
+elegir empresas activas.
+
+Los **superadministradores** no salen: pueden seguir entrando a una empresa
+inactiva para revisarla o reactivarla.
+
 ## Permisos
 
 Exclusivo de nivel 3 (superadministrador) para crear empresas y eliminar
@@ -226,6 +237,7 @@ las empresas que ese usuario tiene asignadas.
 
 ## Historial de cambios
 
+- **1.23** — Desactivar o eliminar una empresa **cierra en máximo 5 minutos** las sesiones de los usuarios que trabajan en ella (salvo superadministradores). Antes seguían trabajando hasta cerrar sesión.
 - **1.22** — Nuevo interruptor **Prestador de servicios turísticos** (solo superadministrador): habilita el
   cambio temporal de IVA en Productos (8% en feriados). Filtro *Prestador de servicios turísticos*.
 - **1.21** — Al crear una empresa, queda registrada automáticamente como cliente de su

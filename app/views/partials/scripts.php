@@ -19,10 +19,12 @@
     var URL_LOGOUT = BASE_URL + '/auth/logout';
     var _alertaActiva = false;
 
-    window.CMG_sesionCerrada = function() {
+    // `motivo` lo manda el servidor cuando él cerró la sesión (AuthMiddleware: empresa
+    // desactivada u otro dispositivo, vía la cabecera X-Sesion-Mensaje que lee csrf.js).
+    window.CMG_sesionCerrada = function(motivo) {
         if (_alertaActiva) return;      // no apilar avisos
         _alertaActiva = true;
-        var msg = 'Su sesión fue cerrada porque se inició sesión desde otro dispositivo.';
+        var msg = motivo || 'Su sesión fue cerrada porque se inició sesión desde otro dispositivo.';
         if (window.Swal) {
             Swal.fire({
                 icon: 'warning',

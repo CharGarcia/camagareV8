@@ -2180,7 +2180,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (!window._BP_LOTES_CACHE[clave]) {
             window._BP_LOTES_CACHE[clave] = (async () => {
                 try {
-                    const r = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${idProducto}&id_bodega=${idBodega}`);
+                    // Con id_consignacion, el kardex no cuenta lo que esta misma consignación ya
+                    // descontó al guardarse: eso se resta desde las líneas de la grilla (bpMapaGrilla).
+                    const idCons = document.getElementById('cons_id')?.value || 0;
+                    const r = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesDisponiblesAjax?id_producto=${idProducto}&id_bodega=${idBodega}&id_consignacion=${idCons}`);
                     const j = await r.json();
                     if (j.ok) return { lotes: j.data || [], stock: parseFloat(j.stock_total) || 0 };
                 } catch (e) { /* sin stock: la fila se muestra sin badge y sin lotes */ }
@@ -2196,6 +2199,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         try {
             const fd = new FormData();
             fd.append('pares', JSON.stringify(pares));
+            fd.append('id_consignacion', document.getElementById('cons_id')?.value || '');
             const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getLotesVariosAjax`, { method: 'POST', body: fd });
             const json = await resp.json();
             if (!json.ok || !json.data) return;
@@ -2261,6 +2265,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             tr._bpStockBodega = undefined;
             if (badge) badge.innerHTML = '';
             if (datos.manejaNup) bpPintarLotesFila(tr, []);
+            bpRepintarStock(); // lo que esta fila soltó vuelve a las demás
             return;
         }
         // Mientras llega la respuesta de la bodega nueva, el badge no debe seguir mostrando el
@@ -2272,44 +2277,94 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (!tr.isConnected || tr.dataset.idBodega !== valor) return;
         tr._bpStockBodega = info.stock;
         if (datos.manejaNup) bpPintarLotesFila(tr, info.lotes);
-        bpPintarStockFila(tr);
+        bpRepintarStock();
     }
-    // Badge de stock de UNA fila: con un lote elegido muestra el stock de ESE lote en la bodega
-    // de la fila (y se compara con la cantidad de la fila); sin lote, el stock total de la bodega
-    // (comparado con todo lo pendiente). Se repinta al cambiar bodega, lote, vencimiento o cantidad.
-    function bpPintarStockFila(tr) {
+    // ---- Stock que cuadra entre filas ----
+    // El badge de cada fila muestra lo que QUEDA para esa fila: el stock del kardex (sin contar
+    // esta misma consignación al editarla) menos lo ya tomado del mismo producto/bodega(/lote)
+    // por las líneas que ya están en la grilla de la consignación y por las filas de ARRIBA en
+    // este modal. Se reparte en orden: si dos filas toman un lote de 10 con 6 cada una, la
+    // primera ve 10 (verde) y la segunda 4 (rojo). Al cambiar una fila de lote o de bodega, lo
+    // que soltó vuelve a las demás. Todo se compara en la unidad del producto (cantidad × ratio).
+    function bpLoteFila(tr) {
+        const sel = tr.querySelector('.item-lote');
+        if (!sel || sel.selectedIndex <= 0 || !tr._bpLotes) return null;
+        const l = tr._bpLotes[sel.selectedIndex - 1];
+        return l ? (l.numero_lote === 'sin_lote' ? '' : l.numero_lote) : null;
+    }
+    function bpSumar(mapa, clave, cant) { mapa[clave] = (mapa[clave] || 0) + cant; }
+    // Tomado por las líneas de la grilla de la consignación, por clave "prod_bod" (todo el
+    // producto en la bodega) y "prod_bod|lote".
+    function bpMapaGrilla() {
+        const total = {}, porLote = {};
+        document.querySelectorAll('#cons_detalles_body tr.row-detalle-cons').forEach(tr => {
+            const idProd = tr.querySelector('.input-id-producto')?.value || tr.dataset.idProducto || '';
+            const idBod = tr.dataset.idBodega || document.getElementById('cons_id_bodega')?.value || '';
+            if (!idProd || !idBod) return;
+            const cant = (parseFloat(tr.querySelector('.input-cantidad')?.value) || 0) * (consRatioFila(tr) || 1);
+            if (cant <= 0) return;
+            const k = `${idProd}_${idBod}`;
+            bpSumar(total, k, cant);
+            const fLote = tr.querySelector('.input-lote');
+            if (fLote && !fLote.classList.contains('d-none') && fLote.selectedIndex > 0) {
+                bpSumar(porLote, `${k}|${fLote.value}`, cant);
+            }
+        });
+        return { total, porLote };
+    }
+    // Pinta el badge de una fila con lo tomado ANTES que ella (mapa) y suma lo suyo al mapa.
+    function bpPintarStockFila(tr, mapa) {
         const datos = tr._bpDatos;
         const badge = tr.querySelector('.bp-badge-stock');
         if (!datos || !badge) return;
         const stockBodega = tr._bpStockBodega;
-        if (!datos.esInv || stockBodega === null || stockBodega === undefined) {
+        if (!datos.esInv || stockBodega === null || stockBodega === undefined || !tr.dataset.idBodega) {
             badge.innerHTML = '';
             return;
         }
-        // El stock viene en la unidad del producto y se muestra en la de la línea del pedido
-        // (400 UNIDAD = 4 CAJA X100).
         const ratio = datos.ratio || 1;
-        const selLote = tr.querySelector('.item-lote');
-        const idxLote = selLote ? selLote.selectedIndex : 0;
-        const lote = (idxLote > 0 && tr._bpLotes) ? tr._bpLotes[idxLote - 1] : null;
-        let stockBase, requerido, titulo;
-        if (lote) {
-            stockBase = parseFloat(lote.stock_lote) || 0;
-            requerido = parseFloat(tr.querySelector('.item-cantidad')?.value) || 0;
-            const nombreLote = lote.numero_lote === 'sin_lote' ? 'Sin Lote' : lote.numero_lote;
-            titulo = `Stock del lote ${nombreLote} en la bodega de esta fila`;
+        const k = `${datos.item.id_producto}_${tr.dataset.idBodega}`;
+        const propia = Math.max(0, (parseFloat(tr.querySelector('.item-cantidad')?.value) || 0) * ratio);
+        const lote = bpLoteFila(tr);
+        let stockBase, tomado, titulo;
+        if (lote !== null) {
+            const l = (tr._bpLotes || []).find(x => (x.numero_lote === 'sin_lote' ? '' : x.numero_lote) === lote);
+            stockBase = parseFloat(l?.stock_lote) || 0;
+            tomado = mapa.porLote[`${k}|${lote}`] || 0;
+            titulo = `Lote ${lote || 'Sin Lote'}`;
         } else {
             stockBase = stockBodega;
-            requerido = datos.cantPendiente;
-            titulo = 'Stock disponible en la bodega de esta fila';
+            tomado = mapa.total[k] || 0;
+            titulo = 'Bodega de esta fila';
         }
-        if (ratio !== 1) titulo += ` (${stockBase.toFixed(2)} en la unidad del producto)`;
-        const stockLinea = stockBase / ratio;
-        // Verde si alcanza (lo pendiente, o la cantidad de la fila si hay lote), rojo si no.
-        const alcanza = stockLinea >= requerido - 0.000001;
+        const queda = stockBase - tomado;
+        const u = (v) => (v / ratio).toFixed(2);
+        titulo += `: stock ${u(stockBase)}`;
+        if (tomado > 0.000001) titulo += ` − ya tomado en otras filas ${u(tomado)} = queda ${u(queda)}`;
+        if (ratio !== 1) titulo += ' (en la unidad de la línea del pedido)';
+        // Verde si lo que queda alcanza para la cantidad de esta fila, rojo si no.
+        const alcanza = queda >= propia - 0.000001;
         const cls = alcanza ? 'bg-success bg-opacity-10 text-success border-success' : 'bg-danger bg-opacity-10 text-danger border-danger';
-        const etiqueta = lote ? 'Stock lote' : 'Stock';
-        badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="${titulo}">${etiqueta}: ${stockLinea.toFixed(2)}</span>`;
+        const etiqueta = lote !== null ? 'Stock lote' : 'Stock';
+        badge.innerHTML = `<span class="badge ${cls} border border-opacity-25" title="${titulo}">${etiqueta}: ${u(queda)}</span>`;
+
+        if (propia > 0) {
+            bpSumar(mapa.total, k, propia);
+            if (lote !== null) bpSumar(mapa.porLote, `${k}|${lote}`, propia);
+        }
+    }
+    // Repinta los badges de TODAS las filas en orden (un cambio en una fila mueve el saldo de las
+    // de abajo). Agrupado en un solo repintado por cuadro: al cargar el pedido llegan muchas
+    // respuestas de stock seguidas.
+    let _bpRepintadoPendiente = false;
+    function bpRepintarStock() {
+        if (_bpRepintadoPendiente) return;
+        _bpRepintadoPendiente = true;
+        requestAnimationFrame(() => {
+            _bpRepintadoPendiente = false;
+            const mapa = bpMapaGrilla();
+            document.querySelectorAll('#bp_items_tbody tr').forEach(tr => bpPintarStockFila(tr, mapa));
+        });
     }
     // Una fila "tocada" es una que el usuario ya configuró (cantidad, precio, lote, NUP o su
     // propia bodega). Cambiar la bodega por defecto no la altera.
@@ -2609,7 +2664,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             }
                             bpAplicarBodegaFila(tr, bodegaFila);
                             // Con un lote elegido, el color del badge depende de la cantidad de la fila.
-                            tr.querySelector('.item-cantidad')?.addEventListener('input', () => bpPintarStockFila(tr));
+                            tr.querySelector('.item-cantidad')?.addEventListener('input', bpRepintarStock);
 
                             if (u === 0 && manejaNup) {
                                 const chk = tr.querySelector('.chk-desagregar-producto');
@@ -2645,14 +2700,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                     if (idx <= 0 || !lotesData.length) {
                                         selVencRow.innerHTML = tr._bpVencOptions || '<option value="">Vencimiento...</option>';
                                         selVencRow.selectedIndex = 0;
-                                        bpPintarStockFila(tr);
+                                        bpRepintarStock();
                                         return;
                                     }
                                     const l = lotesData[idx - 1];
                                     const c = (l && l.fecha_caducidad) ? l.fecha_caducidad : '';
                                     selVencRow.innerHTML = `<option value="${c}">${consFechaCadTexto(c)}</option>`;
                                     selVencRow.selectedIndex = 0;
-                                    bpPintarStockFila(tr);
+                                    bpRepintarStock();
                                     if (moverFoco && c !== '') enfocarNup();
                                 };
                                 selLoteRow.addEventListener('change', () => aplicarLote(selLoteRow.selectedIndex, true));

@@ -58,6 +58,9 @@
             }
             return fetchOriginal.apply(this, [entrada, opciones]).then(function (respuesta) {
                 if (respuesta && respuesta.status === 419) { avisarSesionExpirada(); }
+                if (respuesta && respuesta.status === 401) {
+                    revisarSesionCerrada(function (h) { return respuesta.headers.get(h); });
+                }
                 return respuesta;
             });
         };
@@ -78,7 +81,11 @@
                 this.setRequestHeader(CABECERA, TOKEN);
             }
             this.addEventListener('load', function () {
-                if (this.status === 419) { avisarSesionExpirada(); }
+                var xhr = this;
+                if (xhr.status === 419) { avisarSesionExpirada(); }
+                if (xhr.status === 401) {
+                    revisarSesionCerrada(function (h) { return xhr.getResponseHeader(h); });
+                }
             });
         } catch (e) { /* no bloquear el envío */ }
         return sendOriginal.apply(this, arguments);
@@ -127,6 +134,28 @@
 
     // ── Aviso al usuario ─────────────────────────────────────────────────────
     var avisoMostrado = false;
+    /**
+     * El servidor cerró la sesión (AuthMiddleware: empresa desactivada u otro dispositivo) y
+     * respondió a un AJAX con 401 + `X-Sesion-Cerrada`. Se avisa con el motivo y se va al
+     * login: con el layout estándar, vía CMG_sesionCerrada (partials/scripts.php); en vistas
+     * standalone que no la tienen, con un alert y recargando (sin sesión, carga el login).
+     */
+    var sesionCerradaAvisada = false;
+    function revisarSesionCerrada(leerCabecera) {
+        try {
+            if (leerCabecera('X-Sesion-Cerrada') !== '1' || sesionCerradaAvisada) { return; }
+            sesionCerradaAvisada = true;
+            var msg = '';
+            try { msg = decodeURIComponent(leerCabecera('X-Sesion-Mensaje') || ''); } catch (e) { msg = ''; }
+            if (typeof window.CMG_sesionCerrada === 'function') {
+                window.CMG_sesionCerrada(msg);
+            } else {
+                alert(msg || 'Su sesión fue cerrada.');
+                window.location.reload();
+            }
+        } catch (e) { /* nunca romper la respuesta original */ }
+    }
+
     function avisarSesionExpirada() {
         if (avisoMostrado) { return; }
         avisoMostrado = true;
