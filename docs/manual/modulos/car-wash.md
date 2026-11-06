@@ -5,8 +5,8 @@ categoria: Servicios
 ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
-etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
-version: 1.29
+etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, buscar producto en historial, que ordenes tienen este servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
+version: 1.30
 orden: 10
 estado: activo
 ---
@@ -296,6 +296,13 @@ En la pestaña **Historial** elija **Buscar por**: *Vehículo* o *Cliente*.
   está en pantalla en ese momento: si todavía no la guardó se marca *En curso · sin
   guardar*, y si ya está guardada, *Orden abierta* (con los cambios que aún no haya
   guardado). Al volver a la pestaña se actualiza.
+- **Buscar un producto o servicio dentro de las órdenes**: en el campo **Producto o
+  servicio** escriba el código o parte de la descripción (p. ej. *aceite 20w50*,
+  *pulverizado*). Quedan solo las órdenes que tienen esa línea, ya desplegadas y con la
+  línea resaltada; el resumen indica cuántas órdenes de las cargadas la tienen y la
+  cantidad y el valor de esas líneas (sin las órdenes anuladas). Se aceptan varias
+  palabras en cualquier orden y no importan mayúsculas ni tildes. Al borrar el campo
+  vuelven todas. El filtro se mantiene si cambia de vehículo o cliente.
 
 Se muestran hasta las 500 órdenes más recientes.
 
@@ -518,6 +525,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.30** — Pestaña **Historial**: nuevo campo **Producto o servicio** para ver solo las órdenes que tienen un producto o servicio (por código o descripción), con la línea resaltada y su cantidad y valor en el resumen.
 - **1.29** — Al guardar, una línea con descripción y sin cantidad ya no se descarta sin aviso: se muestra *Falta la cantidad* con la lista de líneas y se marca la celda. Las filas sin descripción no se guardan (antes el servidor rechazaba la orden si alguna traía cantidad sin descripción).
 - **1.28** — Al pulsar **Guardar**, la orden ya no se cierra: queda abierta y guardada (con su número) en la misma pestaña; se cierra con **Cerrar**.
 - **1.27** — Pestaña Mantenimiento: botón **No aplica a este vehículo** por servicio (reversible).

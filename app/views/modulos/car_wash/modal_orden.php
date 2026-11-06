@@ -350,6 +350,13 @@
                                 <input type="text" id="cw_hist_q" class="form-control" placeholder="Escriba al menos 2 letras..." oninput="cwHistorialBuscarTexto()">
                             </div>
                         </div>
+                        <div style="width:260px">
+                            <label class="x-small fw-bold text-muted mb-1 d-block">Producto o servicio</label>
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-white"><i class="bi bi-funnel"></i></span>
+                                <input type="text" id="cw_hist_item" class="form-control" placeholder="Código o descripción..." oninput="cwHistorialFiltrarItem()">
+                            </div>
+                        </div>
                         <div>
                             <label class="x-small fw-bold text-muted mb-1 d-block">&nbsp;</label>
                             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="cwHistorialDeEstaOrden()" title="Historial del vehículo / cliente de esta orden">
@@ -649,6 +656,8 @@
         const tabGen = document.getElementById('cw-tab-general');
         if (tabGen) bootstrap.Tab.getOrCreateInstance(tabGen).show();
         document.getElementById('cw_hist_q').value = '';
+        document.getElementById('cw_hist_item').value = '';
+        histEstado = null;
         document.getElementById('cw_hist_resumen').innerHTML = '';
         document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
         cwRenderDocumentos([]);
@@ -2160,20 +2169,64 @@
                 rows = [act, ...rows.filter(r => r !== guardada)];
             }
 
-            if (!rows.length) {
-                document.getElementById('cw_hist_resumen').innerHTML = '';
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
-                return;
-            }
-            const previas = rows.filter(r => !r.actual);
+            histEstado = { rows, modo, proxima: data.proxima_cita };
+            cwHistPintar();
+        } catch (e) {
+            histEstado = null;
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    // Filtro local por producto/servicio sobre las órdenes ya cargadas: deja solo las que
+    // tienen una línea que coincide (código o descripción, sin importar tildes ni el orden
+    // de las palabras), las despliega y resalta esas líneas.
+    let histEstado = null, histItemTimer = null;
+    const cwNormHist = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    window.cwHistorialFiltrarItem = function () {
+        clearTimeout(histItemTimer);
+        histItemTimer = setTimeout(cwHistPintar, 200);
+    };
+    function cwHistPintar() {
+        const tbody = document.getElementById('cw_hist_body');
+        if (!histEstado) return;
+        const { modo } = histEstado;
+        const todas = histEstado.rows;
+        const palabras = cwNormHist(document.getElementById('cw_hist_item').value).split(/\s+/).filter(Boolean);
+        const coincide = l => {
+            if (!palabras.length) return false;
+            const t = cwNormHist((l.producto_codigo || '') + ' ' + (l.descripcion || ''));
+            return palabras.every(p => t.includes(p));
+        };
+        const rows = palabras.length ? todas.filter(r => (r.lineas || []).some(coincide)) : todas;
+
+        if (!todas.length) {
+            document.getElementById('cw_hist_resumen').innerHTML = '';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin órdenes registradas.</td></tr>';
+            return;
+        }
+        if (!rows.length) {
+            document.getElementById('cw_hist_resumen').innerHTML = `<span class="text-muted"><i class="bi bi-funnel me-1"></i>Ninguna de las ${todas.length} órdenes tiene ese producto o servicio.</span>`;
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Sin coincidencias.</td></tr>';
+            return;
+        }
+        {
+            const previas = todas.filter(r => !r.actual);
             const total = rows.reduce((a, r) => a + (r.estado === 'anulado' ? 0 : num(r.total)), 0);
             const placas = new Set(rows.map(r => (r.placa || '').toUpperCase()).filter(Boolean));
             const clientes = new Set(rows.map(r => r.cliente_nombre).filter(Boolean));
-            const fechaCita = data.proxima_cita ? String(data.proxima_cita).slice(0, 10).split('-').reverse().join('-') : '';
+            const fechaCita = histEstado.proxima ? String(histEstado.proxima).slice(0, 10).split('-').reverse().join('-') : '';
+            // Con filtro: cantidad y valor de las líneas que coinciden (sin las órdenes anuladas).
+            let itemCant = 0, itemTotal = 0;
+            if (palabras.length) rows.forEach(r => {
+                if (r.estado === 'anulado') return;
+                (r.lineas || []).filter(coincide).forEach(l => { itemCant += num(l.cantidad); itemTotal += num(l.total_linea); });
+            });
+            const ultima = palabras.length ? rows.filter(r => !r.actual) : previas;
             document.getElementById('cw_hist_resumen').innerHTML = `
-                <span><i class="bi bi-list-check text-primary me-1"></i><b>${rows.length}</b> ${rows.length === 1 ? 'orden' : 'órdenes'}${previas.length >= 500 ? ' (últimas 500)' : ''}</span>
+                <span><i class="bi bi-list-check text-primary me-1"></i><b>${rows.length}</b> ${rows.length === 1 ? 'orden' : 'órdenes'}${palabras.length ? ` de ${todas.length}` : ''}${previas.length >= 500 ? ' (últimas 500)' : ''}</span>
+                ${palabras.length ? `<span><i class="bi bi-funnel text-danger me-1"></i>Producto/servicio: <b>${itemCant.toLocaleString('en-US', { maximumFractionDigits: 6 })}</b> u. · <b>${fmt(itemTotal, 2)}</b></span>` : ''}
                 <span><i class="bi bi-cash-stack text-success me-1"></i>Total: <b>${fmt(total, 2)}</b></span>
-                <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${esc((previas[0] || {}).fecha || '—')}</b></span>
+                <span><i class="bi bi-calendar-check text-info me-1"></i>Última visita: <b>${esc((ultima[0] || {}).fecha || '—')}</b></span>
                 ${modo === 'vehiculo' ? `<span><i class="bi bi-calendar-event text-warning me-1"></i>Próxima cita: <b>${esc(fechaCita || '—')}</b></span>
                     <span><i class="bi bi-car-front text-secondary me-1"></i>Placa: <b>${esc([...placas].join(', ') || '—')}</b></span>` : ''}
                 ${modo === 'cliente' ? `<span><i class="bi bi-car-front text-secondary me-1"></i>${placas.size} vehículo(s)</span>` : `<span><i class="bi bi-person text-secondary me-1"></i>${clientes.size} cliente(s)</span>`}`;
@@ -2185,7 +2238,7 @@
                 const doc = r.numero_documento
                     ? `${r.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${esc(r.numero_documento)}${r.id_documento && !docVigente ? ' <span class="text-danger fw-normal">(anulado)</span>' : ''}`
                     : '<span class="text-muted">—</span>';
-                const lineas = (r.lineas || []).map(l => `<tr>
+                const lineas = (r.lineas || []).map(l => `<tr class="${coincide(l) ? 'table-warning fw-semibold' : ''}">
                         <td class="ps-4 text-muted" style="width:40px">${l.tipo_linea === 'producto' ? '<i class="bi bi-box-seam"></i>' : '<i class="bi bi-tools"></i>'}</td>
                         <td>${esc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${esc(l.descripcion)}</td>
                         <td class="text-end">${num(l.cantidad).toLocaleString('en-US', { maximumFractionDigits: 6 })} × ${fmt(l.precio_unitario, 2)}${num(l.descuento) > 0 ? ' − ' + fmt(l.descuento, 2) : ''}</td>
@@ -2207,15 +2260,17 @@
                     `Documento: <b>${doc}</b>`, pdf, pdfDoc,
                 ].filter(Boolean).join('<span class="text-muted mx-2">·</span>');
                 // Todas las órdenes (también la abierta) arrancan encogidas; un clic las despliega.
+                // Con el filtro de producto/servicio arrancan desplegadas para ver la línea.
+                const abierta = palabras.length > 0;
                 return `<tr class="cw-hist-orden ${r.actual ? 'table-primary' : ''}" role="button" data-i="${i}">
-                        <td class="text-center"><i class="bi bi-chevron-right small"></i></td>
+                        <td class="text-center"><i class="bi bi-chevron-${abierta ? 'down' : 'right'} small"></i></td>
                         <td>${esc(r.fecha || '')}</td>
                         <td class="fw-semibold text-primary">${esc(r.numero_orden || '')}${etqActual}</td>
                         <td class="text-truncate" style="max-width:260px">${esc(r.cliente_nombre || '')}</td>
                         <td class="text-end">${fmt(r.total, 2)}</td>
                         <td class="text-center pe-2"><span class="badge bg-${e[0]} bg-opacity-10 text-${e[0]}">${esc(e[1])}</span></td>
                     </tr>
-                    <tr class="cw-hist-detalle bg-light d-none" data-det="${i}"><td colspan="6" class="p-0">
+                    <tr class="cw-hist-detalle bg-light ${abierta ? '' : 'd-none'}" data-det="${i}"><td colspan="6" class="p-0">
                         <table class="table table-sm mb-0 bg-light" style="font-size:.75rem;"><tbody>${lineas || '<tr><td class="ps-4 text-muted">Sin líneas.</td></tr>'}</tbody></table>
                         <div class="ps-4 py-1 small">${pie}</div>
                     </td></tr>`;
@@ -2225,8 +2280,6 @@
                 const abierto = det.classList.toggle('d-none') === false;
                 tr.querySelector('i.bi').className = 'bi small ' + (abierto ? 'bi-chevron-down' : 'bi-chevron-right');
             }));
-        } catch (e) {
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
         }
     }
     // Al entrar a la pestaña Historial sin búsqueda previa, carga el de esta orden.
