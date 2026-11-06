@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/ordenes-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: orden de compra, ordenes, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora, solicitado por, revisado por, aprobado por, firmas, quien solicita, solicitante, serie activa, punto de emision inactivo, no aparece la serie
-version: 1.19
+etiquetas: orden de compra, ordenes, cambiar estado, estado manual, cambiar estado orden, regresar a borrador, marcar como enviada, marcar como recibida, pedido a proveedor, requisicion, compra pendiente, autorizar compra, vincular compra, recibido, pedido vs facturado, aprobacion por correo, enviado, aprobar orden, entrega parcial, recibido parcial, duplicar orden, cerrar orden, iva, tarifa iva, subtotales, total con impuestos, impuestos, notas, notas por linea, observaciones del item, instrucciones al proveedor, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden de compra, buscador, filtros, filtrar ordenes, buscar por producto pedido, compra vinculada, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora, solicitado por, revisado por, aprobado por, firmas, quien solicita, solicitante, serie activa, punto de emision inactivo, no aparece la serie
+version: 1.20
 orden: 15
 estado: activo
 ---
@@ -130,10 +130,9 @@ Borrador → [Enviar correo] → Enviado → [proveedor aprueba, o botón Aproba
                                                           manualmente]             en una o varias compras]
 ```
 
-El campo **Estado** del modal solo deja elegir a mano **Borrador** o
-**Anulado**; Enviado/Aprobado/Recibido parcial/Recibido los pone el sistema
-según la acción correspondiente — no se pueden forzar desde el formulario (ni
-tampoco desde el servidor, aunque se manipule la petición).
+Normalmente el estado avanza solo con cada acción (enviar el correo, aprobar,
+vincular compras). Además, se puede **cambiar a mano** desde el campo
+**Estado** del modal (ver "Cambiar el estado a mano" más abajo).
 
 1. **Enviar correo**: con el botón de correo en la parte superior del modal
    se envía el PDF al proveedor (se precarga su correo si lo tiene
@@ -164,6 +163,36 @@ valida en el servidor, no solo en la pantalla. Para volver a editar una orden
 primero (ver "Entregas parciales" más abajo); una orden **Enviada** o
 **Aprobada** que aún no tiene ninguna compra vinculada no tiene forma de
 "desbloquearse" para editarla directamente — para eso está **Duplicar**.
+
+## Cambiar el estado a mano
+
+El campo **Estado** del modal deja elegir cualquier estado: **Borrador**,
+**Enviado**, **Aprobado**, **Recibido parcial**, **Recibido** o **Anulado**.
+Sirve, por ejemplo, para marcar como Enviada una orden que se mandó por
+WhatsApp, para regresar una orden aprobada por error o para cerrar una orden
+que se recibió sin factura en el sistema.
+
+- **Orden nueva o Borrador que nunca se envió**: elija el estado y pulse
+  **Guardar**; se guarda junto con el resto del formulario.
+- **Orden de solo lectura** (Enviada, Aprobada, Recibida, Anulada): el campo
+  Estado sigue activo aunque lo demás esté bloqueado. Al elegir otro estado
+  el sistema pide confirmación y lo cambia en ese momento, **sin tocar los
+  ítems**. Si cancela, el campo vuelve al estado anterior.
+- Al pasar a Enviado, Aprobado o Recibido, la orden queda con su fecha de
+  envío, de aprobación o de recepción (si no las tenía ya; nunca se
+  reemplaza una fecha real). Recibido elegido a mano queda marcado como
+  "cierre manual", igual que **Cerrar orden** desde Compras.
+- **Regresar a Borrador una orden que ya se envió no la vuelve editable**: el
+  proveedor ya recibió esa versión, así que los ítems siguen bloqueados, no se
+  puede eliminar (solo anular) y para corregirla se usa **Duplicar**.
+- **Recibido parcial** y **Recibido** se pueden elegir aunque la orden no
+  tenga compras vinculadas. Tenga en cuenta que, si después se vincula o
+  desvincula una compra, el sistema vuelve a calcular el estado según las
+  cantidades reales y reemplaza el que se puso a mano.
+- Para elegir **Anulado** hace falta el permiso de eliminar del módulo; para
+  los demás estados, el de actualizar.
+- Cada cambio queda en el historial del sistema (estado anterior y nuevo,
+  usuario y fecha).
 
 ## Entregas parciales
 
@@ -282,7 +311,9 @@ No son lo mismo, y cuál está disponible depende del estado:
 - Una orden **Recibida** o **Recibida parcial** no tiene ni Eliminar ni
   Anular disponibles: hay que desvincular sus compras primero (o cerrarla
   manualmente), y desde Aprobado sí se puede anular si hace falta.
-- Una orden ya **Anulada** no tiene más acciones sobre su estado.
+- Una orden ya **Anulada** no tiene botones de acción, pero su estado se
+  puede cambiar a mano desde el campo **Estado** (ver "Cambiar el estado a
+  mano").
 
 ## Cuando llega la factura del proveedor
 
@@ -365,6 +396,11 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.20** — El campo **Estado** del modal deja elegir cualquier estado
+  (Enviado, Aprobado, Recibido parcial y Recibido ya no están bloqueados). En
+  una orden de solo lectura el cambio se aplica al instante sin tocar los
+  ítems; una orden ya enviada que se regresa a Borrador sigue sin poder
+  editarse ni eliminarse (se puede duplicar).
 - **1.19** — La **Serie** solo lista puntos de emisión **activos** (igual que
   Facturas de venta). Nuevo campo **Solicitado por**; **Observaciones** pasa
   debajo del detalle, a la izquierda de los subtotales. El PDF termina con las

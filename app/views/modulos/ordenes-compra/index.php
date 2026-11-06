@@ -368,7 +368,13 @@ const OC_AVISOS_BLOQUEO = {
     parcial:  'Esta orden está <strong>recibida parcialmente</strong> (el proveedor todavía debe entregar parte del pedido) y es de solo lectura. Puede vincular más compras desde Compras, o cerrarla como recibida si el proveedor ya no va a entregar el resto.',
     recibido: 'Esta orden ya fue <strong>recibida</strong> (vinculada a una compra) y es de solo lectura. Para modificarla, desvincúlela primero desde la compra correspondiente.',
     anulado:  'Esta orden está <strong>anulada</strong> y es de solo lectura.',
+    borrador: 'Esta orden ya fue <strong>enviada</strong> al proveedor y la regresaron a Borrador: sus ítems siguen de solo lectura. Para corregirla, duplíquela.',
 };
+
+// Estado guardado de la orden abierta y si ya salió alguna vez al proveedor (fecha_envio).
+// Sirven para revertir el selector si se cancela un cambio y para decidir el solo lectura.
+window._OC_ESTADO_GUARDADO = 'borrador';
+window._OC_YA_ENVIADA      = false;
 
 // Eliminar solo aplica a Borrador; Anular solo a Enviado/Aprobado (sin entregas reales
 // todavía); Duplicar a partir de Enviado/Aprobado/Parcial (para corregir y reenviar).
@@ -376,7 +382,11 @@ const OC_AVISOS_BLOQUEO = {
 window.ocActualizarBotonesAccion = function(estado) {
     document.getElementById('oc_btn_eliminar')?.classList.toggle('d-none', estado !== 'borrador');
     document.getElementById('oc_btn_anular')?.classList.toggle('d-none', !['enviado', 'aprobado'].includes(estado));
-    document.getElementById('oc_btn_duplicar')?.classList.toggle('d-none', !['enviado', 'aprobado', 'parcial'].includes(estado));
+    const duplicable = ['enviado', 'aprobado', 'parcial'].includes(estado) || (estado === 'borrador' && window._OC_YA_ENVIADA);
+    document.getElementById('oc_btn_duplicar')?.classList.toggle('d-none', !duplicable);
+    if (estado === 'borrador' && window._OC_YA_ENVIADA) {
+        document.getElementById('oc_btn_eliminar')?.classList.add('d-none');
+    }
 };
 
 window.ocLimpiarSoloLectura = function() {
@@ -409,7 +419,10 @@ window.ocAplicarSoloLectura = function(estado) {
         el.disabled = true;
         el.classList.add('oc-lock-off');
     };
-    modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(bloquear);
+    // El selector de Estado queda activo: en solo lectura cambia el estado al instante.
+    modal.querySelectorAll('.modal-body input, .modal-body select, .modal-body textarea').forEach(el => {
+        if (el.id !== 'oc_estado') bloquear(el);
+    });
     modal.querySelectorAll('.modal-body button').forEach(btn => {
         if (['ocPdf', 'ocExcel', 'ocEnviarCorreo', 'ocAprobarManual', 'ocAnular', 'ocDuplicar'].some(fn => (btn.getAttribute('onclick') || '').includes(fn))) return;
         bloquear(btn);
@@ -426,6 +439,8 @@ window.ocAbrirCrear = function() {
     document.getElementById('oc_solicitado_por').value  = '';
     document.getElementById('oc_observaciones').value   = '';
     document.getElementById('oc_estado').value           = 'borrador';
+    window._OC_ESTADO_GUARDADO = 'borrador';
+    window._OC_YA_ENVIADA      = false;
     document.getElementById('oc_proveedor_id').value    = '';
     document.getElementById('oc_proveedor_texto').value = '';
     window._OC_PROVEEDOR_EMAIL = '';
@@ -460,6 +475,8 @@ window.ocAbrirEditar = function(tr) {
     document.getElementById('oc_solicitado_por').value  = d.solicitado_por ?? '';
     document.getElementById('oc_observaciones').value   = d.observaciones ?? '';
     document.getElementById('oc_estado').value          = d.estado ?? 'borrador';
+    window._OC_ESTADO_GUARDADO = d.estado ?? 'borrador';
+    window._OC_YA_ENVIADA      = !!d.fecha_envio;
     document.getElementById('oc_proveedor_id').value    = d.id_proveedor ?? '';
     document.getElementById('oc_proveedor_texto').value = d.proveedor_nombre ?? '';
     window._OC_PROVEEDOR_EMAIL = d.proveedor_email ?? '';
@@ -483,7 +500,7 @@ window.ocAbrirEditar = function(tr) {
     }
     document.getElementById('oc_secuencial').value = d.secuencial ?? '';
 
-    const soloLectura = ['enviado', 'aprobado', 'parcial', 'recibido', 'anulado'].includes(d.estado ?? '');
+    const soloLectura = ['enviado', 'aprobado', 'parcial', 'recibido', 'anulado'].includes(d.estado ?? '') || window._OC_YA_ENVIADA;
     if (soloLectura) {
         ocAplicarSoloLectura(d.estado);
     } else {
@@ -512,6 +529,72 @@ window.ocAbrirEditar = function(tr) {
 
 document.getElementById('oc_id_punto_emision')?.addEventListener('change', function() {
     ocSyncSerie(this.value);
+});
+
+// ── Cambio manual de estado (selector Estado) ────────────────────────────────
+// Orden nueva o Borrador editable: el estado elegido se guarda con el botón Guardar.
+// Orden de solo lectura (ya enviada/aprobada/recibida/anulada): se cambia al instante,
+// sin tocar los ítems, con confirmación previa.
+let ocCambiandoEstado = false;
+document.getElementById('oc_estado')?.addEventListener('change', async function() {
+    const id     = document.getElementById('oc_id').value;
+    const editable = !document.getElementById('oc_btn_guardar')?.classList.contains('d-none');
+    if (!id || editable) return;
+
+    const sel      = this;
+    const nuevo    = sel.value;
+    const anterior = window._OC_ESTADO_GUARDADO;
+    if (nuevo === anterior) return;
+    if (ocCambiandoEstado) { sel.value = anterior; return; }
+    ocCambiandoEstado = true;
+    sel.disabled = true;
+
+    const modal    = document.getElementById('modalOrdenCompra');
+    const etiqueta = sel.options[sel.selectedIndex]?.text || nuevo;
+    const aviso    = ['parcial', 'recibido'].includes(nuevo)
+        ? '<br><small class="text-muted">Este estado normalmente lo pone el sistema al vincular la orden con una compra.</small>'
+        : (nuevo === 'borrador' ? '<br><small class="text-muted">Los ítems de una orden ya enviada siguen sin poder editarse.</small>' : '');
+
+    try {
+        const confirm = await Swal.fire({
+            icon: 'question',
+            title: '¿Cambiar el estado?',
+            html: `La orden pasará a <strong>${ocEscHtml(etiqueta)}</strong>.${aviso}`,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, cambiar',
+            cancelButtonText: 'Cancelar',
+            target: modal,
+        });
+        if (!confirm.isConfirmed) { sel.value = anterior; return; }
+
+        const fd = new FormData();
+        fd.append('id', id);
+        fd.append('estado', nuevo);
+        const res  = await fetch(`${OC_URL_BASE}/cambiarEstadoAjax`, {
+            method: 'POST',
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            body: fd
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            sel.value = anterior;
+            Swal.fire({ icon: 'error', title: 'Error', text: data.mensaje || 'No se pudo cambiar el estado.', target: modal });
+            return;
+        }
+
+        window._OC_ESTADO_GUARDADO = nuevo;
+        if (!['borrador', 'anulado'].includes(nuevo)) window._OC_YA_ENVIADA = true;
+        ocLimpiarSoloLectura();
+        ocAplicarSoloLectura(nuevo);
+        ocBuscar(ocCurrentPage);
+        Swal.fire({ icon: 'success', title: 'Estado actualizado', text: data.mensaje, timer: 1600, showConfirmButton: false, target: modal });
+    } catch (e) {
+        sel.value = anterior;
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Error de comunicación con el servidor.', target: modal });
+    } finally {
+        sel.disabled = false;
+        ocCambiandoEstado = false;
+    }
 });
 
 // ── Guardar ───────────────────────────────────────────────────────────────────
@@ -663,6 +746,18 @@ window.ocDuplicar = async function() {
             icon: 'question',
             title: '¿Duplicar esta orden?',
             text: 'Se creará una nueva orden en Borrador con las cantidades que aún faltan por recibir, para que la pueda editar y volver a enviar.',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, duplicar',
+            cancelButtonText: 'Cancelar',
+            target: modal,
+        });
+        if (!confirm.isConfirmed) return;
+    } else if (estado === 'borrador') {
+        // Borrador que ya salió al proveedor (sus ítems están bloqueados): se duplica sin anularla.
+        const confirm = await Swal.fire({
+            icon: 'question',
+            title: '¿Duplicar esta orden?',
+            text: 'Se creará una nueva orden en Borrador con los mismos ítems, para que la pueda editar y volver a enviar.',
             showCancelButton: true,
             confirmButtonText: 'Sí, duplicar',
             cancelButtonText: 'Cancelar',

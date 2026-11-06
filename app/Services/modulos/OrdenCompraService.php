@@ -12,6 +12,16 @@ use PDO;
 
 class OrdenCompraService
 {
+    /** Estados válidos de una orden de compra (clave guardada => etiqueta). */
+    public const ESTADOS = [
+        'borrador' => 'Borrador',
+        'enviado'  => 'Enviado',
+        'aprobado' => 'Aprobado',
+        'parcial'  => 'Recibido parcial',
+        'recibido' => 'Recibido',
+        'anulado'  => 'Anulado',
+    ];
+
     public function __construct(
         private OrdenCompraRepository $repository,
         private OrdenCompraRules      $rules,
@@ -103,8 +113,8 @@ class OrdenCompraService
     {
         $this->rules->validarCabecera($data);
         $this->rules->validarDetalle($items);
-        if (!in_array($data['estado'] ?? 'borrador', ['borrador', 'anulado'], true)) {
-            throw new \Exception('Estado no válido para guardar manualmente.');
+        if (!isset(self::ESTADOS[$data['estado'] ?? 'borrador'])) {
+            throw new \Exception('Estado no válido.');
         }
 
         $db = $this->repository->getDb();
@@ -151,6 +161,7 @@ class OrdenCompraService
                 }
                 throw $e;
             }
+            $this->_marcarFechasEstado($idOrden, (int) $data['id_empresa'], (string) ($data['estado'] ?? 'borrador'), (int) $data['created_by']);
 
             foreach ($items as $item) {
                 $this->repository->insertarDetalle([
@@ -196,10 +207,9 @@ class OrdenCompraService
             if (!$anterior) throw new \Exception('Orden de compra no encontrada.');
             $this->_validarEditable($anterior);
 
-            // Enviado/Aprobado/Recibido solo los pone el sistema (enviar correo, aprobar,
-            // vincular con una compra). El formulario de edición no puede saltarse ese flujo.
-            if (!in_array($data['estado'] ?? 'borrador', ['borrador', 'anulado'], true)) {
-                throw new \Exception('Estado no válido para guardar manualmente.');
+            // El estado se elige a mano en el modal (cualquiera de la lista, desde 2026-11-06).
+            if (!isset(self::ESTADOS[$data['estado'] ?? 'borrador'])) {
+                throw new \Exception('Estado no válido.');
             }
 
             $estabData = $this->_getDatosSerie((int)$data['id_establecimiento'], (int)$data['id_punto_emision']);
@@ -207,6 +217,7 @@ class OrdenCompraService
             $data['punto_emision']   = $estabData['punto_emision'];
 
             $this->repository->actualizar($id, $idEmpresa, $data);
+            $this->_marcarFechasEstado($id, $idEmpresa, (string) ($data['estado'] ?? 'borrador'), (int) $data['updated_by']);
             $this->repository->eliminarDetalle($id, $idEmpresa);
 
             foreach ($items as $item) {
@@ -259,6 +270,9 @@ class OrdenCompraService
                     'anulado'  => 'Esta orden ya está anulada.',
                 ];
                 throw new \Exception($mapa[$estado] ?? 'Solo se puede eliminar una orden en estado Borrador.');
+            }
+            if ($this->_yaEnviada($anterior)) {
+                throw new \Exception('Esta orden ya fue enviada al proveedor: no se puede eliminar, solo anular.');
             }
 
             $this->repository->eliminar($id, $idEmpresa, $idUsuario);
@@ -316,7 +330,10 @@ class OrdenCompraService
         if (!$orden) throw new \Exception('Orden de compra no encontrada.');
 
         $estado = $orden['estado'] ?? '';
-        if (!in_array($estado, ['enviado', 'aprobado', 'parcial'], true)) {
+        // Un Borrador que ya salió (regresado a Borrador a mano) también se duplica: sus ítems
+        // están bloqueados y duplicar es la forma de corregirla.
+        $borradorYaEnviado = $estado === 'borrador' && $this->_yaEnviada($orden);
+        if (!$borradorYaEnviado && !in_array($estado, ['enviado', 'aprobado', 'parcial'], true)) {
             throw new \Exception('Solo se puede duplicar una orden Enviada, Aprobada o Recibida Parcialmente.');
         }
 
@@ -458,13 +475,72 @@ class OrdenCompraService
         return ['numero_orden' => $orden['numero_orden'] ?? ''];
     }
 
-    /** Bloquea edición/eliminación una vez enviada la orden (solo lectura desde 'enviado' en adelante). */
+    /**
+     * Cambia el estado elegido a mano en el modal, sin tocar cabecera ni ítems. Se permite
+     * cualquier estado de la lista (decisión del usuario, 2026-11-06), incluso Recibido
+     * parcial / Recibido sin compra vinculada. Una orden que ya salió (fecha_envio puesta)
+     * y se regresa a Borrador sigue con sus ítems de solo lectura (_validarEditable).
+     */
+    public function cambiarEstadoManual(int $id, int $idEmpresa, int $idUsuario, string $estado, string $nombreUsuario): void
+    {
+        if (!isset(self::ESTADOS[$estado])) {
+            throw new \Exception('Estado no válido.');
+        }
+
+        $this->repository->beginTransaction();
+        try {
+            $orden = $this->repository->getById($id, $idEmpresa);
+            if (!$orden) throw new \Exception('Orden de compra no encontrada.');
+
+            $anterior = (string) ($orden['estado'] ?? '');
+            if ($anterior === $estado) {
+                throw new \Exception('La orden ya está en estado ' . self::ESTADOS[$estado] . '.');
+            }
+
+            $this->repository->cambiarEstadoManual($id, $idEmpresa, $estado, $idUsuario, 'Manual (' . $nombreUsuario . ')');
+            $this->logService->registrar(
+                $idUsuario, $idEmpresa, 'cambiar_estado', 'ordenes_compra', $id,
+                ['estado' => $anterior], ['estado' => $estado, 'origen' => 'manual']
+            );
+
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Si se guarda el formulario con un estado ya "emitido" elegido en el selector, deja las
+     * mismas fechas que el cambio manual (fecha de envío, aprobación, recepción). Borrador y
+     * Anulado no marcan nada.
+     */
+    private function _marcarFechasEstado(int $id, int $idEmpresa, string $estado, int $idUsuario): void
+    {
+        if (!in_array($estado, ['enviado', 'aprobado', 'parcial', 'recibido'], true)) return;
+        $this->repository->cambiarEstadoManual($id, $idEmpresa, $estado, $idUsuario, 'Manual');
+    }
+
+    /** true si la orden ya salió alguna vez al proveedor (aunque ahora esté de vuelta en Borrador). */
+    private function _yaEnviada(array $orden): bool
+    {
+        return !empty($orden['fecha_envio']);
+    }
+
+    /**
+     * Bloquea la edición de cabecera e ítems una vez enviada la orden: solo lectura desde
+     * 'enviado' en adelante, y también en Borrador si la orden ya salió alguna vez y la
+     * regresaron a Borrador con el cambio manual de estado.
+     */
     private function _validarEditable(array $orden): void
     {
         $estado = $orden['estado'] ?? '';
         $participios = ['enviado' => 'enviada', 'aprobado' => 'aprobada', 'parcial' => 'recibida parcialmente', 'recibido' => 'recibida', 'anulado' => 'anulada'];
         if (isset($participios[$estado])) {
             throw new \Exception("Esta orden ya fue {$participios[$estado]} y no se puede editar.");
+        }
+        if ($this->_yaEnviada($orden)) {
+            throw new \Exception('Esta orden ya fue enviada al proveedor: aunque esté en Borrador, sus ítems no se pueden editar. Duplíquela para corregirla.');
         }
     }
 

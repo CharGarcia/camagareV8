@@ -870,6 +870,35 @@ h2 { margin:3px 0 0; color:#666; font-size:10pt; text-transform:uppercase; }
         exit;
     }
 
+    /** Cambia a mano el estado de una orden ya guardada (selector Estado del modal), sin tocar sus ítems. */
+    public function cambiarEstadoAjax(): void
+    {
+        $estado = trim((string) ($_POST['estado'] ?? ''));
+        // Anular pide el mismo permiso que el botón Anular; el resto, actualizar.
+        if ($estado === 'anulado') {
+            $this->requireEliminar();
+        } else {
+            $this->requireActualizar();
+        }
+        header('Content-Type: application/json');
+
+        $id        = (int) ($_POST['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        if ($id <= 0) { echo json_encode(['ok' => false, 'mensaje' => 'ID de orden no válido.']); exit; }
+
+        try {
+            $nombreUsuario = trim((string) ($_SESSION['nombre'] ?? $_SESSION['nombre_usuario'] ?? 'Usuario interno'));
+            $this->service->cambiarEstadoManual($id, $idEmpresa, $idUsuario, $estado, $nombreUsuario);
+            $etiqueta = \App\Services\modulos\OrdenCompraService::ESTADOS[$estado] ?? $estado;
+            echo json_encode(['ok' => true, 'mensaje' => "La orden quedó en estado {$etiqueta}."]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Cuerpo HTML del correo de la orden de compra, con botón de aprobación si $urlAprobar viene informado. */
     private function _construirCorreoOrdenCompra(string $proveedor, string $numero, string $empresaNombre, string $urlAprobar): string
     {

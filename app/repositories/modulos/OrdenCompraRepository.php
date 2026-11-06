@@ -611,6 +611,38 @@ class OrdenCompraRepository extends BaseRepository
     }
 
     /**
+     * Cambio de estado elegido a mano desde el modal. Solo toca el estado y las fechas que
+     * ese estado implica (cada una con COALESCE: nunca pisa la fecha real de un envío,
+     * aprobación o recepción anterior). Pasar de Borrador a cualquier estado "emitido"
+     * deja fecha_envio puesta: es la marca de que la orden ya salió y, aunque después la
+     * regresen a Borrador, sus ítems siguen de solo lectura.
+     */
+    public function cambiarEstadoManual(int $id, int $idEmpresa, string $estado, int $idUsuario, string $aprobadoPor): void
+    {
+        $set    = ["estado = :estado", "updated_at = NOW()", "updated_by = :updated_by"];
+        $params = [':id' => $id, ':id_empresa' => $idEmpresa, ':estado' => $estado, ':updated_by' => $idUsuario];
+
+        if (in_array($estado, ['enviado', 'aprobado', 'parcial', 'recibido'], true)) {
+            $set[] = "fecha_envio = COALESCE(fecha_envio, NOW())";
+        }
+        if ($estado === 'aprobado') {
+            $set[] = "fecha_aprobacion = COALESCE(fecha_aprobacion, NOW())";
+            $set[] = "aprobado_por = COALESCE(aprobado_por, :aprobado_por)";
+            $params[':aprobado_por'] = $aprobadoPor;
+        }
+        if ($estado === 'recibido') {
+            $set[] = "fecha_recepcion = COALESCE(fecha_recepcion, CURRENT_DATE)";
+        }
+        // Recibido a mano = cierre manual (igual que "cerrar como recibida" desde Compras).
+        $set[] = "cierre_forzado = " . ($estado === 'recibido' ? 'true' : 'false');
+
+        $sql = "UPDATE ordenes_compra SET " . implode(', ', $set)
+             . " WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+    }
+
+    /**
      * Cambia solo el estado (y opcionalmente marca fecha_recepcion) sin tocar el resto de
      * la cabecera. $cierreForzado se escribe siempre de forma explícita (no solo cuando es
      * true) para que un recómputo automático posterior (vincular/desvincular otra compra)

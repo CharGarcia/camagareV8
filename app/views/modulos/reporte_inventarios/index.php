@@ -37,11 +37,11 @@ $riSubtitulo = count($riNombres) > 1
         display: block; overflow: hidden; text-overflow: ellipsis;
         white-space: nowrap; max-width: 100%;
     }
-    /* Ordenar por columna en pantalla (RI_Orden, reporte_inventarios.js): clic en el encabezado. */
-    .ri-ordenable > thead th:not(.ri-no-orden):not(.sortable-header) { cursor: pointer; user-select: none; }
-    .ri-ordenable > thead th:not(.ri-no-orden):not(.sortable-header)::after { content: "\2195"; margin-left: 4px; font-size: .75em; opacity: .35; }
-    .ri-ordenable > thead th.ri-orden-asc::after  { content: "\25B2"; opacity: 1; color: var(--bs-primary); }
-    .ri-ordenable > thead th.ri-orden-desc::after { content: "\25BC"; opacity: 1; color: var(--bs-primary); }
+    /* Ordenar por columna en pantalla (RI_Orden, reporte_inventarios.js): clic en el encabezado.
+       Mismo diseño que Cuentas por Cobrar (orden_tabla.js): ícono bi-arrow-down-up gris en cada
+       columna ordenable, bi-sort-alpha-down/up azul en la activa, fondo al pasar el mouse. */
+    .ri-ordenable > thead th.ri-th-orden, .ri-ordenable > thead th.sortable-header { cursor: pointer; user-select: none; }
+    .ri-ordenable > thead th.ri-th-orden:hover, .ri-ordenable > thead th.sortable-header:hover { background: #eef2f5; }
     .ri-kpi-icon { width: 48px; height: 48px; }
     .ri-nav-tabs .nav-link { font-weight: 600; font-size: .85rem; }
     .ri-nav-tabs .nav-link.active { border-bottom: 3px solid var(--bs-primary); }

@@ -88,16 +88,16 @@
                             <label class="form-label small fw-bold mb-1">Estado</label>
                             <select class="form-select form-select-sm" id="oc_estado" name="estado">
                                 <option value="borrador">Borrador</option>
-                                <option value="enviado" disabled>Enviado</option>
-                                <option value="aprobado" disabled>Aprobado</option>
-                                <option value="parcial" disabled>Recibido parcial</option>
-                                <option value="recibido" disabled>Recibido</option>
+                                <option value="enviado">Enviado</option>
+                                <option value="aprobado">Aprobado</option>
+                                <option value="parcial">Recibido parcial</option>
+                                <option value="recibido">Recibido</option>
                                 <option value="anulado">Anulado</option>
                             </select>
-                            <!-- Enviado/Aprobado/Recibido los pone el sistema (enviar correo, aprobar, vincular
-                                 con una compra); por eso están deshabilitados aquí — solo se puede elegir a
-                                 mano Borrador o Anulado. Se dejan como <option> para que el valor guardado
-                                 se siga mostrando correctamente al reabrir una orden ya avanzada de estado. -->
+                            <!-- Cualquier estado se puede elegir a mano (2026-11-06). En una orden editable
+                                 (Borrador que nunca salió) el estado se guarda con el botón Guardar; en una
+                                 orden de solo lectura el selector sigue activo y cambia el estado al instante
+                                 (ocCambiarEstadoManual en index.php), sin tocar los ítems. -->
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small fw-bold mb-1">Proveedor <span class="text-danger">*</span></label>
@@ -611,6 +611,8 @@ window.ocEnviarCorreo = async function() {
             // El primer envío mueve la orden de Borrador a Enviado y la deja de solo lectura.
             if (document.getElementById('oc_estado').value === 'borrador') {
                 document.getElementById('oc_estado').value = 'enviado';
+                window._OC_ESTADO_GUARDADO = 'enviado';
+                window._OC_YA_ENVIADA      = true;
                 if (typeof ocAplicarSoloLectura === 'function') ocAplicarSoloLectura('enviado');
             }
         } else {
@@ -643,6 +645,8 @@ window.ocAprobarManual = async function() {
         const data = await res.json();
         if (data.ok) {
             document.getElementById('oc_estado').value = 'aprobado';
+            window._OC_ESTADO_GUARDADO = 'aprobado';
+            window._OC_YA_ENVIADA      = true;
             if (typeof ocAplicarSoloLectura === 'function') ocAplicarSoloLectura('aprobado');
             Swal.fire({ icon: 'success', title: 'Aprobada', text: data.mensaje || 'Orden aprobada correctamente.', target: document.getElementById('modalOrdenCompra') });
         } else {

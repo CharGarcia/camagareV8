@@ -1585,12 +1585,41 @@ const RI_Orden = {
             const obs = new MutationObserver(() => this.limpiarIndicadores(table));
             obs.observe(tbody, { childList: true });
             table._riObs = obs;
+
+            // Cada pestaña redibuja su cabecera según la agrupación (dibujarCabecera): el ícono
+            // se pone solo a cada encabezado nuevo.
+            this.decorar(table);
+            if (table.tHead) {
+                new MutationObserver(() => this.decorar(table)).observe(table.tHead, { childList: true, subtree: true });
+            }
+        });
+    },
+
+    ICONO_NEUTRO: 'bi bi-arrow-down-up small text-muted ms-1 ri-orden-icono',
+
+    /** Encabezados ordenables con el diseño de Cuentas por Cobrar (ícono + title + role). */
+    decorar(table) {
+        if (!table.tHead) return;
+        table.tHead.querySelectorAll('th').forEach(th => {
+            if (th.classList.contains('sortable-header') || th.classList.contains('ri-no-orden')) return;
+            if (th.querySelector('.ri-orden-icono')) return;
+            const texto = th.textContent.replace(/\s+/g, ' ').trim();
+            if (texto === '') return;
+            th.classList.add('ri-th-orden');
+            th.setAttribute('role', 'button');
+            if (!th.title) th.title = 'Ordenar por ' + texto.toLowerCase();
+            const i = document.createElement('i');
+            i.className = this.ICONO_NEUTRO;
+            th.appendChild(i);
         });
     },
 
     limpiarIndicadores(table) {
-        table.querySelectorAll('thead th.ri-orden-asc, thead th.ri-orden-desc')
-            .forEach(th => th.classList.remove('ri-orden-asc', 'ri-orden-desc'));
+        table.querySelectorAll('thead th.ri-orden-asc, thead th.ri-orden-desc').forEach(th => {
+            th.classList.remove('ri-orden-asc', 'ri-orden-desc');
+            const i = th.querySelector('.ri-orden-icono');
+            if (i) i.className = this.ICONO_NEUTRO;
+        });
     },
 
     /** Texto de la celda hasta el primer <br> (la segunda línea es un dato secundario). */
@@ -1614,14 +1643,19 @@ const RI_Orden = {
         }
         const num = txt.replace(/[$%\s]/g, '');
         if (/^-?\d{1,3}(,\d{3})*(\.\d+)?$/.test(num) || /^-?\d+(\.\d+)?$/.test(num)) {
-            return { tipo: 1, v: parseFloat(num.replace(/,/g, '')) };
+            return { tipo: 1, v: parseFloat(num.replace(/,/g, '')), cantidad: true };
         }
         return { tipo: 2, v: txt };
     },
 
+    /**
+     * 1.er clic: las columnas de cantidades (Saldo, Stock, Valor…) empiezan de MAYOR a menor;
+     * las de texto y fecha, de menor a mayor. Con ascendente primero, un clic en Saldo dejaba
+     * arriba todas las consignaciones en 0.00 —la mayoría— y la tabla parecía no ordenarse.
+     * Los clics siguientes alternan el sentido.
+     */
     ordenar(table, tbody, th) {
         const idx = Array.prototype.indexOf.call(th.parentNode.children, th);
-        const dir = th.classList.contains('ri-orden-asc') ? -1 : 1;
 
         const filas = Array.from(tbody.rows);
         const fijas = [];
@@ -1632,6 +1666,14 @@ const RI_Orden = {
             datos.push({ tr, i, k: this.clave(this.textoCelda(tr.cells[idx])) });
         });
         if (datos.length < 2) return;
+
+        let dir;
+        if (th.classList.contains('ri-orden-asc')) dir = -1;
+        else if (th.classList.contains('ri-orden-desc')) dir = 1;
+        else {
+            const conValor = datos.filter(d => d.k.tipo !== 0);
+            dir = conValor.length && conValor.every(d => d.k.cantidad) ? -1 : 1;
+        }
 
         const col = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
         datos.sort((a, b) => {
@@ -1655,6 +1697,10 @@ const RI_Orden = {
 
         this.limpiarIndicadores(table);
         th.classList.add(dir === 1 ? 'ri-orden-asc' : 'ri-orden-desc');
+        const icono = th.querySelector('.ri-orden-icono');
+        if (icono) {
+            icono.className = (dir === 1 ? 'bi bi-sort-alpha-down' : 'bi bi-sort-alpha-up') + ' text-primary ms-1 ri-orden-icono';
+        }
     },
 };
 
