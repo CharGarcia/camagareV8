@@ -570,7 +570,8 @@ function renderUltimoEstado(c) {
 
 // ── Documentos emitidos por otras empresas del sistema ──────────────────────
 function cargarRecepcionEntreEmpresas() {
-    const card = document.getElementById('card_entre_empresas');
+    // La pestaña «Documentos de empresas del sistema» aparece solo si está disponible.
+    const card = document.getElementById('tab-entre-empresas-item');
     if (!card) return;
     fetch(`${BASE_URL}/modulos/descargas_sri/obtenerRecepcionEntreEmpresasAjax`)
         .then(r => r.json())

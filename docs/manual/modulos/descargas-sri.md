@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional
-version: 1.14
+version: 1.15
 orden: 50
 estado: activo
 ---
@@ -68,7 +68,8 @@ descargado aquí.
   conectadas y origen *empresa_sistema*. El detalle muestra cada documento y si
   se registró, ya existía, se ignoró o tuvo error.
 
-La tarjeta **Documentos de empresas del sistema** tiene el interruptor
+La pestaña **Documentos de empresas del sistema**, después de *Documentos para
+no descargar*, explica esta función y tiene el interruptor
 *Registrar automáticamente lo que me emiten*. Viene **activado**; solo los
 administradores (nivel 2) y superadministradores (nivel 3) pueden cambiarlo, y
 el cambio vale para todas las empresas del mismo RUC. Si lo desactiva, esos
@@ -217,6 +218,9 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.15** — **Documentos de empresas del sistema** pasa a su propia **pestaña**,
+  después de *Documentos para no descargar*, con la explicación de qué documentos
+  entran solos, sus reglas y dónde se ven (antes era una tarjeta de Descarga Automática).
 - **1.14** — Al registrar una factura descargada, el **adicional de cada ítem**
   que trae el XML del proveedor se guarda en la columna *Adicional* del detalle
   de la compra.

@@ -40,6 +40,12 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <i class="bi bi-slash-circle me-1"></i> Documentos para no descargar
                     </button>
                 </li>
+                <!-- Se muestra solo si la recepción entre empresas está disponible (la muestra el JS). -->
+                <li class="nav-item d-none" role="presentation" id="tab-entre-empresas-item">
+                    <button class="nav-link fw-semibold text-muted" id="tab-entre-empresas-btn" data-bs-toggle="tab" data-bs-target="#tab-entre-empresas" type="button" role="tab" aria-controls="tab-entre-empresas" aria-selected="false">
+                        <i class="bi bi-diagram-3 me-1"></i> Documentos de empresas del sistema
+                    </button>
+                </li>
             </ul>
         </div>
 
@@ -156,6 +162,80 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </div>
                 </div>
 
+                <!-- Tab: Documentos de empresas del sistema
+                     (DocumentoEntreEmpresasService). El interruptor solo lo cambian
+                     nivel 2 y 3; el endpoint lo revalida. -->
+                <div class="tab-pane fade" id="tab-entre-empresas" role="tabpanel" aria-labelledby="tab-entre-empresas-btn">
+                    <div class="row g-3">
+                        <div class="col-lg-5">
+                            <div class="card border border-success border-opacity-25 shadow-sm rounded-3">
+                                <div class="card-header bg-success bg-opacity-10 border-bottom border-success border-opacity-25 py-2 px-3">
+                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-toggle-on me-2"></i>Recepción automática</h6>
+                                </div>
+                                <div class="card-body px-3 py-3">
+                                    <div class="form-check form-switch mb-2">
+                                        <input class="form-check-input" type="checkbox" role="switch" id="entre_empresas_recibir" onchange="guardarRecepcionEntreEmpresas(this)">
+                                        <label class="form-check-label small fw-semibold" for="entre_empresas_recibir">Registrar automáticamente lo que me emiten</label>
+                                    </div>
+                                    <div class="small text-muted mb-2">
+                                        <strong>Activado</strong> (recomendado): los comprobantes que le emiten otras empresas del sistema
+                                        entran solos a su empresa. <strong>Desactivado</strong>: no entran solos; los puede seguir
+                                        descargando del SRI como cualquier otro comprobante.
+                                    </div>
+                                    <div class="small text-muted mb-2">
+                                        <i class="bi bi-shield-lock me-1"></i>Solo los administradores (nivel 2) y superadministradores (nivel 3)
+                                        pueden cambiarlo, y el cambio vale para todas las empresas con el mismo RUC.
+                                    </div>
+                                    <div class="small border-top pt-2" id="entre_empresas_resumen"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-7">
+                            <div class="card border-0 shadow-sm rounded-3">
+                                <div class="card-header bg-white border-bottom py-2 px-3">
+                                    <h6 class="mb-0 fw-bold text-dark small"><i class="bi bi-info-circle text-primary me-2"></i>¿De qué se trata?</h6>
+                                </div>
+                                <div class="card-body px-3 py-3 small">
+                                    <p class="mb-2">
+                                        Muchos de sus proveedores y clientes también usan este sistema. Cuando una de esas empresas
+                                        le emite un comprobante electrónico y el SRI lo <strong>autoriza en producción</strong>, el
+                                        sistema ya tiene ese XML: no hace falta que usted lo descargue del portal del SRI ni lo
+                                        cargue a mano. A los pocos minutos queda registrado en su empresa, igual que si lo hubiera
+                                        descargado desde esta pantalla.
+                                    </p>
+                                    <div class="fw-semibold mb-1">Qué documentos entran</div>
+                                    <ul class="mb-2 ps-3">
+                                        <li><strong>Facturas</strong> que le emiten: quedan como compra (o gasto personal).</li>
+                                        <li><strong>Notas de crédito y notas de débito</strong> sobre esas compras.</li>
+                                        <li><strong>Retenciones</strong> que le practicaron sus clientes: quedan como retención en ventas.</li>
+                                        <li><strong>Liquidaciones de compra</strong> en las que usted es el proveedor.</li>
+                                        <li class="text-muted">Las guías de remisión no se registran.</li>
+                                    </ul>
+                                    <div class="fw-semibold mb-1">Reglas</div>
+                                    <ul class="mb-2 ps-3">
+                                        <li>Solo comprobantes de <strong>producción</strong>; los de pruebas no tienen validez tributaria.</li>
+                                        <li>Aplica las mismas reglas que una descarga: respeta los <em>Documentos para no descargar</em>,
+                                            no registra en un periodo contable cerrado y genera la retención, el egreso y la
+                                            aprobación de compras automáticos según su configuración.</li>
+                                        <li><strong>Nunca se duplica</strong>: si luego descarga el mismo comprobante del SRI, aparece como
+                                            <em>Ya estaba registrado</em>.</li>
+                                        <li>Con varias empresas del mismo RUC (establecimientos), se registra una sola vez, en la
+                                            primera empresa creada con ese RUC.</li>
+                                        <li>Si no se puede registrar (p. ej. periodo cerrado), se intenta una vez más a los 30 minutos;
+                                            si vuelve a fallar, cárguelo desde esta pantalla como cualquier otro comprobante.</li>
+                                    </ul>
+                                    <div class="fw-semibold mb-1">Dónde se ve</div>
+                                    <p class="mb-0">
+                                        En el <strong>Historial de Descargas</strong> (pestaña <em>Descarga Automática</em>), con el ícono
+                                        <i class="bi bi-diagram-3 text-success"></i>. Su detalle muestra cada documento y si se registró,
+                                        ya existía, se ignoró o tuvo error.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tab: Descarga Automática -->
                 <div class="tab-pane fade show active" id="tab-auto" role="tabpanel" aria-labelledby="tab-auto-btn">
 
@@ -235,28 +315,6 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                               </div>
                             </div>
                             <?php endif; ?>
-
-                            <!-- Comprobantes emitidos por otras empresas del sistema
-                                 (DocumentoEntreEmpresasService). El interruptor solo lo
-                                 cambian nivel 2 y 3; el endpoint lo revalida. -->
-                            <div class="card border border-success border-opacity-25 shadow-sm rounded-3 mb-3 d-none" id="card_entre_empresas">
-                                <div class="card-header bg-success bg-opacity-10 border-bottom border-success border-opacity-25 py-2 px-3">
-                                    <h6 class="mb-0 fw-bold text-success small"><i class="bi bi-diagram-3 me-2"></i>Documentos de empresas del sistema</h6>
-                                </div>
-                                <div class="card-body px-3 py-3">
-                                    <div class="form-check form-switch mb-2">
-                                        <input class="form-check-input" type="checkbox" role="switch" id="entre_empresas_recibir" onchange="guardarRecepcionEntreEmpresas(this)">
-                                        <label class="form-check-label small fw-semibold" for="entre_empresas_recibir">Registrar automáticamente lo que me emiten</label>
-                                    </div>
-                                    <div class="small text-muted">
-                                        Si otra empresa que usa este sistema le emite una factura, nota de crédito, nota de débito,
-                                        retención o liquidación y el SRI la <strong>autoriza en producción</strong>, se registra sola aquí
-                                        (en unos minutos), igual que si la descargara del SRI. Aparece en el historial con el ícono
-                                        <i class="bi bi-diagram-3 text-success"></i>.
-                                    </div>
-                                    <div class="small mt-2" id="entre_empresas_resumen"></div>
-                                </div>
-                            </div>
 
                             <!-- Descarga del SRI con la extensión -->
                             <div class="card border border-primary border-opacity-25 shadow-sm rounded-3 mb-3">
