@@ -739,7 +739,8 @@
                     { t: 'Estado', f: (x) => esc(x.estado) },
                     { t: 'Transacciones', cls: 'text-end', f: (x) => num(x.n) },
                     { t: 'Monto', cls: 'text-end', f: (x) => '$' + dinero(x.monto) },
-                    { t: 'Empresas', cls: 'text-end', f: (x) => num(x.empresas) }
+                    { t: 'Empresas', cls: 'text-end', f: (x) => num(x.empresas) },
+                    { t: 'Empresa', cls: 'met-wrap met-empresas', f: (x) => esc(x.empresas_nombres || '') }
                 ], d.pasarelas || [], 'Sin cobros en línea en el rango.'), 'col-12', 'bi-credit-card')}
             </div>`;
         grafico('met-ch-cobros', {

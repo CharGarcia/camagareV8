@@ -343,10 +343,12 @@ class MetricasPlataformaRepository extends BaseRepository
                 continue;
             }
             $st = $this->db->prepare("
-                SELECT '{$pasarela}' AS pasarela, COALESCE(estado, '(sin estado)') AS estado,
-                       COUNT(*) AS n, COALESCE(SUM(monto), 0) AS monto, COUNT(DISTINCT id_empresa) AS empresas
-                FROM {$tabla}
-                WHERE eliminado = false AND created_at >= :desde AND created_at < (CAST(:hasta AS date) + 1)
+                SELECT '{$pasarela}' AS pasarela, COALESCE(t.estado, '(sin estado)') AS estado,
+                       COUNT(*) AS n, COALESCE(SUM(t.monto), 0) AS monto, COUNT(DISTINCT t.id_empresa) AS empresas,
+                       string_agg(DISTINCT COALESCE(NULLIF(trim(e.nombre_comercial), ''), e.nombre), ', ') AS empresas_nombres
+                FROM {$tabla} t
+                LEFT JOIN empresas e ON e.id = t.id_empresa
+                WHERE t.eliminado = false AND t.created_at >= :desde AND t.created_at < (CAST(:hasta AS date) + 1)
                 GROUP BY 2 ORDER BY 3 DESC");
             $st->execute([':desde' => $desde, ':hasta' => $hasta]);
             $out = array_merge($out, $st->fetchAll(\PDO::FETCH_ASSOC));
