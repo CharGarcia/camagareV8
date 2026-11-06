@@ -20,8 +20,9 @@ class MetricasSistemaConsultaController extends Controller
         $this->requireNivel(3);
 
         $this->viewWithLayout('layouts.main', 'config.metricas_sistema', [
-            'titulo' => 'Métricas del sistema',
-            'desde'  => date('Y-m-01'),
+            'titulo'    => 'Métricas del sistema',
+            'fullWidth' => true,
+            'desde'     => date('Y-m-01'),
             'hasta'  => date('Y-m-d'),
         ]);
     }

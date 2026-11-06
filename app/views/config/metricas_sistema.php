@@ -19,6 +19,7 @@ $base = BASE_URL;
     .metricas-scroll thead th { background:#f8f9fa; box-shadow:0 1px 0 #dee2e6; white-space:nowrap; font-size:.72rem; text-transform:uppercase; color:#6c757d; }
     .metricas-scroll td { font-size:.8rem; white-space:nowrap; }
     .metricas-scroll td.met-wrap { white-space:normal; min-width:260px; }
+    .metricas-scroll td.met-empresas { min-width:200px; font-size:.75rem; color:#495057; }
     .met-kpi { border:1px solid #e9ecef; border-radius:.5rem; padding:.6rem .8rem; background:#fff; height:100%; }
     .met-kpi__valor { font-size:1.25rem; font-weight:700; line-height:1.2; }
     .met-kpi__etq { font-size:.72rem; color:#6c757d; text-transform:uppercase; letter-spacing:.02em; }

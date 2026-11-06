@@ -6,7 +6,7 @@ ruta_modulo: config/metricas-sistema
 tipo: modulo
 visibilidad: superadmin
 etiquetas: métricas, salud del sistema, rendimiento, base de datos, servidor, cron, módulos más usados, módulos sin uso, mrr, ingreso recurrente, suscripciones atrasadas, morosidad, payphone, nuvei, tendencias, crecimiento, caída, abandono, histórico, comparativo, empresas conectadas, horas de uso, tiempo de uso, dau, mau, estadísticas, tablero, dashboard, indicadores, kpi, usuarios conectados, en línea, activos, inactivos, empresas activas, movimiento, ranking, productos más vendidos, documentos emitidos, facturas emitidas, sri, rechazos, errores, uso del sistema, plataforma, superadmin
-version: 1.3
+version: 1.4
 orden: 0
 estado: activo
 ---
@@ -31,7 +31,7 @@ Es una tarjeta de **Configuración** que reúne en pestañas los indicadores glo
 - **Documentos**: facturas, notas de crédito y de débito, retenciones, guías,
   liquidaciones y facturas de reembolso autorizadas, más los documentos internos
   (compras, recibos, proformas, pedidos). Facturas del POS frente a facturas normales.
-- **Productos**: los más vendidos en todo el sistema, por cantidad y por monto.
+- **Productos**: los más vendidos en todo el sistema, por cantidad y por monto, con la columna **Empresa** (las empresas que vendieron ese producto en el rango).
 - **SRI**: comprobantes autorizados, rechazados y en proceso, tasa de rechazo y los
   mensajes de rechazo más frecuentes.
 - **Errores**: errores técnicos por día y las rutas donde más se falla (con enlace a
@@ -186,3 +186,5 @@ con el aviso *"No tiene permisos"*.
   nuevas). El historial del resumen diario se rellena solo desde la tarea automática
   (madrugada), incluidos los documentos migrados; el script de consola queda opcional.
   Tendencias admite todo el historial (agrupado por año) y muestra el total por tipo.
+- **v1.4** (2026-11-06): La pantalla usa todo el ancho de la ventana. En Productos, las
+  tablas de más vendidos (por cantidad y por monto) muestran el nombre de la empresa.

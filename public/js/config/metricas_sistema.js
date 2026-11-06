@@ -409,6 +409,7 @@
             const cols = (campo) => [
                 { t: '#', f: (x) => x._i },
                 { t: 'Producto', cls: 'met-wrap', f: (x) => esc(x.producto) },
+                { t: 'Empresa', cls: 'met-wrap met-empresas', f: (x) => esc(x.empresas_nombres || '') },
                 { t: 'Cantidad', cls: 'text-end' + (campo === 'cantidad' ? ' fw-bold' : ''), f: (x) => num(x.cantidad, 2) },
                 { t: 'Monto', cls: 'text-end' + (campo === 'monto' ? ' fw-bold' : ''), f: (x) => '$' + dinero(x.monto) },
                 { t: 'Empresas', cls: 'text-end', f: (x) => num(x.empresas) },

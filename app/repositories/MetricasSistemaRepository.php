@@ -505,9 +505,11 @@ class MetricasSistemaRepository extends BaseRepository
                    ROUND(SUM(d.cantidad), 2)                  AS cantidad,
                    ROUND(SUM(d.precio_total_sin_impuesto), 2) AS monto,
                    COUNT(DISTINCT v.id_empresa)               AS empresas,
+                   string_agg(DISTINCT COALESCE(NULLIF(trim(e.nombre_comercial), ''), e.nombre), ', ') AS empresas_nombres,
                    COUNT(DISTINCT v.id)                       AS facturas
             FROM ventas_detalle d
             JOIN ventas_cabecera v ON v.id = d.id_venta
+            JOIN empresas e ON e.id = v.id_empresa
             WHERE v.eliminado = false AND " . AmbienteReporte::condicion('v') . "
               AND lower(v.estado) IN ('autorizado','autorizada')
               AND v.fecha_emision BETWEEN :desde AND :hasta
