@@ -805,11 +805,17 @@ class SecuencialRepository
                        AND d.{$colSec} IS NOT NULL
                        AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
                        AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :piso_q AND :techo_q
+                       -- RENDIMIENTO: solo los documentos que NO están ya en `usados` (eliminados, o de
+                       -- otro ambiente). Los vigentes de este ambiente ya cuentan como usados; mirar su
+                       -- historial en sri_envio_log era una subconsulta por CADA documento de la serie
+                       -- (miles en cada apertura y guardado de un documento nuevo).
+                       AND (d.eliminado = TRUE OR COALESCE(d.tipo_ambiente, '1') <> :amb_noq)
                        AND " . $this->sqlSriRetiene('d', 'q_');
             $params += [
                 ':id_punto_q' => $idPuntoEmision,
                 ':piso_q'     => $inicial,
                 ':techo_q'    => $techo,
+                ':amb_noq'    => $tipoAmbiente,
                 ':q_tipo'     => $tipoSriLog,
                 ':q_amb'      => $tipoAmbiente,
             ];
