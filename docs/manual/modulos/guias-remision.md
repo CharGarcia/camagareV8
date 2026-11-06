@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, secuencial omitido, numero omitido, triangulo amarillo, error 45, secuencial registrado
-version: 1.17
+etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, error 45, secuencial registrado
+version: 1.18
 orden: 55
 estado: activo
 ---
@@ -267,17 +267,12 @@ de una guía eliminada depende de lo **último** que respondió el SRI:
 | **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
 | **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
 
-Cuando se salta un número, junto a la etiqueta **Secuencial** de la guía nueva
-aparece un **triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo
-se ve qué número se omitió, qué respondió el SRI y cuándo se eliminó la guía. Una
-guía nueva con ese número sería rechazada con *«ERROR 45 SECUENCIAL REGISTRADO»*,
-por eso el sistema propone el siguiente libre.
-
-Desde esa ventana el **superadministrador** ve el botón **Restaurar este
-documento**: la guía eliminada vuelve como **borrador** con su mismo número y se
-abre (la guía nueva que tenía abierta se descarta). Los demás usuarios ven el aviso
-de pedírselo. Cuando la guía nueva se crea desde **Facturas de Venta**, el aviso
-sale igual pero sin el botón: la restauración se hace desde este módulo.
+Cuando se salta un número, una guía nueva con ese número sería rechazada con
+*«ERROR 45 SECUENCIAL REGISTRADO»*, por eso el sistema propone el siguiente libre.
+Para revisar qué guía se eliminó con un número que falta, o para recuperarla, el
+superadministrador usa el listado de este módulo con `estado:eliminada` (ver
+abajo); los demás usuarios deben pedírselo. Esto vale también para las guías
+creadas desde **Facturas de Venta**.
 
 ### Ver y restaurar guías eliminadas desde el listado
 
@@ -339,6 +334,7 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.18** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.17** — Cuando una guía nueva **salta un número** porque el SRI ya tiene registrada una guía eliminada con ese número, aparece un **triángulo amarillo** junto al Secuencial que lo explica. El **superadministrador** puede ver las guías eliminadas con `estado:eliminada` en el buscador y **restaurarlas como borrador** con su mismo número (también desde el aviso del número saltado). Ver *Número saltado: guía eliminada que ya pasó por el SRI*.
 - **1.16** — Al **guardar una guía nueva**, el número se reserva en ese momento. Si otra persona de la misma serie ya usó el que mostraba la pantalla, la guía se guarda con el **siguiente libre** y aparece el aviso *«Guía guardada con otro número»*, en vez de rechazarse con *"El número de secuencial ya existe"*.
 - **1.15** — La cantidad del detalle se muestra con los decimales del **establecimiento de la serie** elegida (antes, los del primer establecimiento de la empresa). El PDF, el XML y el correo ya usaban el establecimiento de la guía; ahora, en guías antiguas sin establecimiento guardado, lo toman de su punto de emisión.

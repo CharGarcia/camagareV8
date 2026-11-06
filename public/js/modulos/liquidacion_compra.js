@@ -507,9 +507,6 @@
         document.getElementById('liq-punto').value = cab.id_punto_emision;
         document.getElementById('liq-secuencial').value = cab.secuencial;
         // Liquidación existente: sin aviso de números omitidos (solo aplica a una nueva).
-        if (typeof window.CMG_avisoNumerosOmitidos === 'function') {
-            window.CMG_avisoNumerosOmitidos(document.getElementById('liq-secuencial'), []);
-        }
         document.getElementById('liq-id-proveedor').value = cab.id_proveedor;
         document.getElementById('search-proveedor').value = cab.proveedor_nombre || '';
         document.getElementById('liq-sustento').value = cab.id_sustento_tributario || '';
@@ -1136,22 +1133,6 @@
                 inputSec.value = res.formateado;
                 // Números que el SRI ya tiene recibidos/autorizados de liquidaciones que se
                 // eliminaron: se saltaron. El superadmin puede restaurar la eliminada.
-                if (typeof window.CMG_avisoNumerosOmitidos === 'function') {
-                    const sel = document.getElementById('liq-punto');
-                    const opt = sel ? sel.options[sel.selectedIndex] : null;
-                    const esNueva = !document.getElementById('liq-id')?.value;
-                    window.CMG_avisoNumerosOmitidos(inputSec, esNueva ? (res.omitidos || []) : [], {
-                        serie: opt ? `${opt.dataset.est || ''}-${opt.dataset.punto || ''}` : '',
-                        urlRestaurar: `${API_URL}/restaurarAjax`,
-                        esSuperadmin: window.LC_ES_SUPERADMIN === true,
-                        target: document.getElementById('modalLiquidacion') || undefined,
-                        onRestaurado: (j) => {
-                            // Se descarta la liquidación nueva y se abre la restaurada.
-                            fetchSearchFn(1);
-                            if (j && j.id) abrirModalLiquidacionVerFn({ dataset: { row: JSON.stringify({ id: j.id }) } });
-                        },
-                    });
-                }
             });
     }
 

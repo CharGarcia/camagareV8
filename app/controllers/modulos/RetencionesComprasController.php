@@ -972,8 +972,6 @@ class RetencionesComprasController extends BaseModuloController
         try {
             $secService = new \App\Services\SecuencialService();
             $result     = $secService->obtenerSiguienteSecuencial($idPunto, 'Retenciones de compras');
-            // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
-            $result['omitidos'] = $secService->numerosOmitidos($idPunto, 'Retenciones de compras', (int) ($result['secuencial'] ?? 0));
             echo json_encode(array_merge(['ok' => true], $result));
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

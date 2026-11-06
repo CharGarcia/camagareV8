@@ -650,10 +650,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             </div>
                                             <!-- 3. Secuencial -->
                                             <div class="col-md-2">
-                                                <label class="x-small fw-bold text-muted mb-1">Secuencial
-                                                    <!-- Aviso: números quemados en el SRI que se saltaron (ver fvMostrarOmitidos) -->
-                                                    <a href="#" id="m-sec-omitidos" class="text-warning ms-1 d-none" title="Se omitieron números de esta serie" onclick="fvMostrarOmitidos(); return false;"><i class="bi bi-exclamation-triangle-fill"></i></a>
-                                                </label>
+                                                <label class="x-small fw-bold text-muted mb-1">Secuencial</label>
                                                 <input type="text" class="form-control form-control-sm border-primary border-opacity-25 text-center text-dark py-0 bg-light" style="height: 31px;" name="secuencial" id="m-input-secuencial" placeholder="000000001" maxlength="9" readonly>
                                             </div>
                                             <?php
@@ -2609,40 +2606,6 @@ $totalPages = $totalPagesOriginal;
         });
     }
 
-    // Números quemados en el SRI que el generador saltó (getSecuencialAjax → omitidos).
-    let FV_SEC_OMITIDOS = [];
-    function fvSetOmitidos(lista) {
-        FV_SEC_OMITIDOS = lista || [];
-        const ico = document.getElementById('m-sec-omitidos');
-        if (ico) ico.classList.toggle('d-none', FV_SEC_OMITIDOS.length === 0);
-    }
-    function fvMostrarOmitidos() {
-        if (!FV_SEC_OMITIDOS.length || typeof Swal === 'undefined') return;
-        const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const opt   = document.getElementById('m-select-puntos')?.selectedOptions?.[0];
-        const serie = opt ? `${String(opt.dataset.codEst || '').padStart(3, '0')}-${String(opt.dataset.codPunto || '').padStart(3, '0')}-` : '';
-        const filas = FV_SEC_OMITIDOS.map(o => `<li class="mb-2"><strong>${esc(serie + o.secuencial)}</strong>: el SRI la respondió como
-            <strong>${esc(o.estado_sri)}</strong>${o.fecha_sri ? ' el ' + esc(o.fecha_sri) : ''}${o.eliminado_el ? ' y se eliminó el ' + esc(o.eliminado_el) : ' y luego se eliminó'}.
-            ${ES_SUPERADMIN && o.id ? `<br><button type="button" class="btn btn-sm btn-outline-success mt-1 fv-btn-restaurar" data-id="${parseInt(o.id) || 0}" data-num="${esc(serie + o.secuencial)}"><i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar esta factura</button>` : ''}</li>`).join('');
-        Swal.fire({
-            icon: 'info',
-            title: 'Números omitidos',
-            html: `<div class="text-start small"><ul class="ps-3 mb-2">${filas}</ul>
-                   El SRI ya tiene registrado ese número, por eso no se puede volver a usar en una factura nueva
-                   (la rechazaría con «ERROR 45 SECUENCIAL REGISTRADO»). Se propone el siguiente libre.
-                   <br><br>${ES_SUPERADMIN
-                       ? 'Para usar ese número, restaure la factura eliminada: vuelve como borrador para corregirla y reenviarla al SRI.'
-                       : 'Si necesita usar ese número, pida al superadministrador que restaure la factura eliminada.'}</div>`,
-            confirmButtonText: 'Entendido',
-            target: document.getElementById('modalNuevaFactura'),
-            didOpen: (popup) => {
-                popup.querySelectorAll('.fv-btn-restaurar').forEach(btn => {
-                    btn.addEventListener('click', () => fvRestaurarFacturaEliminada(parseInt(btn.dataset.id) || 0, btn.dataset.num || ''));
-                });
-            },
-        });
-    }
-
     // Clic en una fila del filtro estado:eliminada (solo superadmin; ver filaEliminadaHtml).
     window.fvRestaurarDesdeListado = function(row) {
         let d = {};
@@ -2701,8 +2664,7 @@ $totalPages = $totalPagesOriginal;
 
     async function cargarSecuencial(idPunto) {
         // En edición de una factura existente no se recalcula ni se valida la serie.
-        if (FV_BLOQUEAR_SECUENCIAL) { fvSetOmitidos([]); return; }
-        fvSetOmitidos([]);
+        if (FV_BLOQUEAR_SECUENCIAL) return;
 
         const inputSec = document.getElementById('m-input-secuencial');
 
@@ -2729,14 +2691,6 @@ $totalPages = $totalPagesOriginal;
                 } else {
                     inputSec.classList.remove('border-warning');
                     inputSec.title = json.detalle || 'Siguiente consecutivo';
-                }
-
-                // Números quemados en el SRI que se saltaron para llegar a este.
-                fvSetOmitidos(Array.isArray(json.omitidos) ? json.omitidos : []);
-                if (FV_SEC_OMITIDOS.length) {
-                    inputSec.classList.add('border-warning');
-                    inputSec.title = 'Se omitió ' + FV_SEC_OMITIDOS.map(o => o.secuencial).join(', ')
-                        + ': ya fue enviada al SRI y luego eliminada.';
                 }
 
                 // ¿Está configurado el secuencial para esta serie?
@@ -6034,7 +5988,6 @@ $totalPages = $totalPagesOriginal;
             inputSec.value = data.secuencial || '';
             inputSec.classList.remove('border-warning');
             inputSec.title = 'Secuencial original de la factura';
-            fvSetOmitidos([]);
         }
 
         // Cliente bÃ¡sico (datos del listado para mostrar mientras carga el AJAX)

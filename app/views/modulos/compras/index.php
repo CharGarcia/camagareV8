@@ -479,10 +479,6 @@ $to         = $to         ?? 0;
 <script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
 <script src="<?= $base ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/compras.js?v=<?= asset_ver('/js/modulos/compras.js') ?>"></script>
-<script>
-    // Modal de retención embebido: el superadmin ve el botón Restaurar en el aviso de números omitidos.
-    window.RET_ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
-</script>
 <script src="<?= $base ?>/js/modulos/retenciones_compras.js?v=<?= asset_ver('/js/modulos/retenciones_compras.js') ?>"></script>
 
 <script>

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, numeros omitidos, error 45, secuencial registrado, no autorizada, reusar numero, estado:eliminada, ver notas eliminadas, nota de debito eliminada, nota borrada, restaurar nota de debito, recuperar nota eliminada, deshacer eliminar
-version: 1.15
+etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, error 45, secuencial registrado, no autorizada, reusar numero, estado:eliminada, ver notas eliminadas, nota de debito eliminada, nota borrada, restaurar nota de debito, recuperar nota eliminada, deshacer eliminar
+version: 1.16
 orden: 31
 estado: activo
 ---
@@ -58,18 +58,13 @@ de una nota de débito eliminada depende de lo **último** que respondió el SRI
 | **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
 | **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
 
-Cuando se salta, junto a la etiqueta **Secuencial** de la nota nueva aparece un
-**triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo se ve qué
-número se omitió, qué respondió el SRI y cuándo se eliminó la nota. Usar ese número
-en una nota nueva haría que el SRI la rechace con *«ERROR 45 SECUENCIAL
-REGISTRADO»*, por eso se propone el siguiente libre.
+Cuando se salta, usar ese número en una nota nueva haría que el SRI la rechace con
+*«ERROR 45 SECUENCIAL REGISTRADO»*, por eso se propone el siguiente libre.
 
-Para no perder ese número, la ventana trae el botón **Restaurar este documento**:
-**solo el superadministrador** lo ve; los demás usuarios ven el aviso de pedírselo.
-La nota vuelve como **borrador** con su mismo número y se abre; la nota nueva que
-estaba abierta se descarta. Dentro de **Facturas de Venta** (nota de débito
-abierta desde la factura) el aviso se muestra, pero sin el botón: la restauración
-se hace desde este módulo.
+Para revisar qué nota se eliminó con un número que falta, o para no perder ese
+número, **solo el superadministrador** la restaura desde el listado de este módulo
+con `estado:eliminada` (ver abajo); los demás usuarios deben pedírselo. Esto vale
+también para las notas de débito abiertas desde **Facturas de Venta**.
 
 ### Ver y restaurar notas de débito eliminadas desde el listado
 
@@ -214,6 +209,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.16** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.15** — **Número saltado**: si el generador salta un número porque el SRI ya tiene recibida o autorizada una nota eliminada con ese número, el secuencial de la nota nueva muestra un aviso con el detalle (y, para el superadministrador, el botón para restaurarla). Nuevo filtro `estado:eliminada` (solo superadministrador) para ver las notas eliminadas y **restaurarlas** como borrador con su mismo número.
 - **1.14** — La configuración de facturación (decimales, logo, dirección, leyendas) sale del **establecimiento de la serie** de la nota de débito, también al guardar (XML); antes se tomaba el primer establecimiento de la empresa. Las notas antiguas sin establecimiento guardado lo toman de su punto de emisión.
 - **1.13** — El botón **Registrar nuevo cliente** no funcionaba (decía «no está disponible»): ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la nota.

@@ -941,7 +941,7 @@ window.CMG_Identificacion = (function () {
         return Math.max(0, Math.min(6, n));
     };
 
-    // ── Comprobantes electrónicos eliminados: restaurar y números omitidos ─────────────
+    // ── Comprobantes electrónicos eliminados: restaurar ─────────────
     // Servidor: App\Services\DocumentoSriRestauracionService + App\Helpers\DocumentoEliminadoSri.
     // Solo el superadministrador restaura (lo valida cada endpoint restaurarAjax).
 
@@ -1014,71 +1014,4 @@ window.CMG_Identificacion = (function () {
         var ev = new CustomEvent('documentoSriRestaurado', { cancelable: true, detail: { url: tr.dataset.restaurarSri, id: json.id } });
         if (document.dispatchEvent(ev)) location.reload();
     }, true);
-
-    /**
-     * Aviso de números omitidos junto al input del secuencial de un documento NUEVO: el
-     * generador saltó números que el SRI tiene recibidos o autorizados de documentos que
-     * luego se eliminaron (getSecuencialAjax → `omitidos`). Llamarlo SIEMPRE tras cargar el
-     * secuencial (con [] lo quita).
-     * opciones: { serie: '001-001', urlRestaurar, esSuperadmin, target, onRestaurado(json) }
-     */
-    window.CMG_avisoNumerosOmitidos = function (input, omitidos, opciones) {
-        if (!input) return;
-        opciones = opciones || {};
-        omitidos = Array.isArray(omitidos) ? omitidos : [];
-        var idIco = (input.id || 'sec') + '-omitidos';
-        var ico = document.getElementById(idIco);
-        if (!omitidos.length) {
-            if (ico) ico.remove();
-            if (input.dataset.cmgOmitidos) { input.classList.remove('border-warning'); delete input.dataset.cmgOmitidos; }
-            return;
-        }
-        input.classList.add('border-warning');
-        input.dataset.cmgOmitidos = '1';
-        input.title = 'Se omitió ' + omitidos.map(function (o) { return o.secuencial; }).join(', ') + ': el SRI ya lo tiene registrado.';
-        if (!ico) {
-            ico = document.createElement('a');
-            ico.href = '#';
-            ico.id = idIco;
-            ico.className = 'text-warning ms-1';
-            ico.title = 'Se omitieron números de esta serie';
-            ico.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
-            var cont = input.closest('.col, [class*="col-"], .mb-2, .mb-3, div');
-            var label = cont ? cont.querySelector('label') : null;
-            if (label) label.appendChild(ico); else input.insertAdjacentElement('afterend', ico);
-        }
-        ico.onclick = function (ev) {
-            ev.preventDefault();
-            if (typeof Swal === 'undefined') return;
-            var serie = opciones.serie ? opciones.serie + '-' : '';
-            var puede = !!opciones.esSuperadmin && !!opciones.urlRestaurar;
-            var filas = omitidos.map(function (o) {
-                return '<li class="mb-2"><strong>' + cmgEsc(serie + o.secuencial) + '</strong>: el SRI la respondió como <strong>'
-                    + cmgEsc(o.estado_sri) + '</strong>' + (o.fecha_sri ? ' el ' + cmgEsc(o.fecha_sri) : '')
-                    + (o.eliminado_el ? ' y se eliminó el ' + cmgEsc(o.eliminado_el) : ' y luego se eliminó') + '.'
-                    + (puede && o.id ? '<br><button type="button" class="btn btn-sm btn-outline-success mt-1 cmg-btn-restaurar-omitido" data-id="' + (parseInt(o.id, 10) || 0)
-                        + '" data-num="' + cmgEsc(serie + o.secuencial) + '"><i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar este documento</button>' : '')
-                    + '</li>';
-            }).join('');
-            Swal.fire({
-                icon: 'info',
-                title: 'Números omitidos',
-                html: '<div class="text-start small"><ul class="ps-3 mb-2">' + filas + '</ul>'
-                    + 'El SRI ya tiene registrado ese número (recibido o autorizado), por eso no se puede usar en un documento nuevo: '
-                    + 'lo rechazaría con «ERROR 45 SECUENCIAL REGISTRADO». Se propone el siguiente libre.'
-                    + (puede ? '' : '<br><br>Si necesita ese número, pida al superadministrador que restaure el documento eliminado.') + '</div>',
-                confirmButtonText: 'Entendido',
-                target: opciones.target || undefined,
-                didOpen: function (popup) {
-                    popup.querySelectorAll('.cmg-btn-restaurar-omitido').forEach(function (btn) {
-                        btn.addEventListener('click', async function () {
-                            var json = await window.CMG_restaurarDocumentoSri(opciones.urlRestaurar, parseInt(btn.dataset.id, 10) || 0, btn.dataset.num || '',
-                                { target: opciones.target, nota: 'El documento nuevo que tiene abierto se descarta.' });
-                            if (json && typeof opciones.onRestaurado === 'function') opciones.onRestaurado(json);
-                        });
-                    });
-                },
-            });
-        };
-    };
 })();

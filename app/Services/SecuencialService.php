@@ -145,69 +145,6 @@ class SecuencialService
     }
 
     /**
-     * Números quemados en el SRI que el generador saltó para llegar a $siguiente (documentos
-     * eliminados después de que el SRI los recibió). Solo para mostrar en pantalla por qué la
-     * serie salta un número: NO se llama dentro del guardado, que corre en transacción, y no
-     * cambia la numeración. Si la consulta falla, devuelve vacío (el aviso es prescindible).
-     *
-     * @return array<int, array{secuencial:string, eliminado_el:?string, estado_sri:string, fecha_sri:?string}>
-     */
-    public function numerosOmitidos(int $idPuntoEmision, string $tipoDocumento, int $siguiente): array
-    {
-        try {
-            $config = $this->repository->getConfigSecuencial($idPuntoEmision, $tipoDocumento);
-            if (($config['modo_numeracion'] ?? '') === SecuencialRepository::MODO_POR_FECHA) {
-                return [];   // los electrónicos (únicos con números quemados) no numeran por fecha
-            }
-            $techo = $this->repository->tipoPermiteModoPeriodo($tipoDocumento)
-                ? $this->repository->getTechoConsecutivo()
-                : null;
-
-            return $this->formatearOmitidos($this->repository->getQuemadosOmitidos(
-                $idPuntoEmision,
-                $tipoDocumento,
-                max(1, (int) $config['secuencial_inicial']),
-                $siguiente,
-                $techo
-            ));
-        } catch (\Throwable $e) {
-            error_log('SecuencialService::numerosOmitidos: ' . $e->getMessage());
-            return [];
-        }
-    }
-
-    /**
-     * Prepara para la pantalla los números quemados que se saltaron: fechas en d-m-Y H:i:s y
-     * la respuesta del SRI en palabras.
-     *
-     * @param array<int, array{secuencial:string, id:int, deleted_at:?string, accion:?string, fecha_sri:?string}> $filas
-     * @return array<int, array{secuencial:string, eliminado_el:?string, estado_sri:string, fecha_sri:?string}>
-     */
-    private function formatearOmitidos(array $filas): array
-    {
-        $estados = [
-            'recibida'         => 'RECIBIDA',
-            'en_procesamiento' => 'EN PROCESAMIENTO',
-            'autorizado'       => 'AUTORIZADA',
-            'autorizada'       => 'AUTORIZADA',
-            'no_autorizado'    => 'NO AUTORIZADA',
-            'no_autorizada'    => 'NO AUTORIZADA',
-        ];
-        $fecha = static function (?string $v): ?string {
-            $ts = ($v !== null && $v !== '') ? strtotime($v) : false;
-            return $ts !== false ? date('d-m-Y H:i:s', $ts) : null;
-        };
-
-        return array_map(static fn(array $f): array => [
-            'secuencial'   => $f['secuencial'],
-            'id'           => (int) $f['id'],
-            'eliminado_el' => $fecha($f['deleted_at']),
-            'estado_sri'   => $estados[$f['accion'] ?? ''] ?? strtoupper((string) $f['accion']),
-            'fecha_sri'    => $fecha($f['fecha_sri']),
-        ], $filas);
-    }
-
-    /**
      * Etiqueta legible del periodo al que pertenece una fecha ("2026", "septiembre de 2026"),
      * para los mensajes que ve el usuario.
      */

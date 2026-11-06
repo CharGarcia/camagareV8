@@ -788,8 +788,6 @@ class GuiasRemisionController extends BaseModuloController
         $idPunto = (int) ($_GET['id_punto_emision'] ?? 0);
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPunto, 'Guía de remisión');
-        // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
-        $res['omitidos'] = $secuencialService->numerosOmitidos($idPunto, 'Guía de remisión', (int) $res['secuencial']);
         echo json_encode(array_merge(['ok' => true], $res));
         exit;
     }

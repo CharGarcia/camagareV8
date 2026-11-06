@@ -549,8 +549,6 @@ class FacturaReembolsoController extends BaseModuloController
 
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPt, 'Facturas de reembolso');
-        // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
-        $res['omitidos'] = $secuencialService->numerosOmitidos($idPt, 'Facturas de reembolso', (int) $res['secuencial']);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;

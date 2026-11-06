@@ -4,8 +4,8 @@ resumen: Qué pasa con el número de una factura, nota de crédito, retención u
 categoria: Ventas
 tipo: concepto
 visibilidad: todos
-etiquetas: secuencial, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, secuencial inicial, numero omitido, eliminada, eliminado, documento eliminado, ver eliminadas, estado:eliminada, restaurar, recuperar documento eliminado, revivir factura, deshacer eliminar, no autorizada, no autorizado, devuelta, error 45, secuencial registrado, reusar numero, volver a usar numero, factura, nota de credito, nota de debito, retencion, guia de remision, liquidacion de compra, factura de reembolso, sri
-version: 1.0
+etiquetas: secuencial, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, secuencial inicial, eliminada, eliminado, documento eliminado, ver eliminadas, estado:eliminada, restaurar, recuperar documento eliminado, revivir factura, deshacer eliminar, no autorizada, no autorizado, devuelta, error 45, secuencial registrado, reusar numero, volver a usar numero, factura, nota de credito, nota de debito, retencion, guia de remision, liquidacion de compra, factura de reembolso, sri
+version: 1.1
 orden: 6
 estado: activo
 ---
@@ -37,12 +37,9 @@ la empresa: desde ahí se toma el primer número libre (un hueco que dejó un
 comprobante eliminado también cuenta como libre). Solo si no hay ninguno se usa
 "el último + 1".
 
-## El triángulo amarillo junto al Secuencial
-
-Cuando el número de un comprobante nuevo **salta** uno o más números porque el SRI
-los tiene recibidos o autorizados, junto al campo **Secuencial** aparece un
-**triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo se ve qué
-número se omitió, qué respondió el SRI y cuándo se eliminó el comprobante.
+Si nota que falta un número en la serie, el superadministrador lo busca en el
+listado del módulo con `estado:eliminada` (ver abajo): ahí se ve si ese
+comprobante se eliminó y qué le respondió el SRI.
 
 ## Ver los comprobantes eliminados (superadministrador)
 
@@ -62,9 +59,8 @@ los demás usuarios este filtro no muestra nada.
 ## Restaurar un comprobante eliminado
 
 Solo el **superadministrador** restaura. Se hace con un clic en la fila del
-listado `estado:eliminada`, o con el botón **Restaurar** de la ventana del
-triángulo amarillo. El comprobante vuelve como **borrador**, con su mismo número,
-para corregirlo y reenviarlo al SRI. Al reenviarlo con la fecha de hoy la clave de
+listado `estado:eliminada`. El comprobante vuelve como **borrador**, con su mismo
+número, para corregirlo y reenviarlo al SRI. Al reenviarlo con la fecha de hoy la clave de
 acceso cambia, y el SRI lo acepta con el mismo número cuando antes quedó NO
 AUTORIZADO.
 

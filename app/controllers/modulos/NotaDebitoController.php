@@ -1054,8 +1054,6 @@ class NotaDebitoController extends BaseModuloController
 
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPt, 'Nota de débito');
-        // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
-        $res['omitidos'] = $secuencialService->numerosOmitidos($idPt, 'Nota de débito', (int) ($res['secuencial'] ?? 0));
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;

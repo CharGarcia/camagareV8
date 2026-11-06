@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/notas_credito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, registrar otra nota, nueva nota despues de guardar, seguir en esta, crear otra, elegir lote, escoger lote, que lote devolver, columna lote, columna nup, devolver a otro lote, lote no salio con la factura, solo quedan por devolver, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, numeros omitidos, error 45, secuencial registrado, no autorizada, reusar numero, estado:eliminada, ver notas eliminadas, nota de credito eliminada, nota borrada, restaurar nota de credito, recuperar nota eliminada, deshacer eliminar
-version: 1.39
+etiquetas: nota de credito, notas de credito, devolucion, descuento, anular factura, corregir factura, sri, buscar nota de credito, buscador, filtros, filtrar notas de credito, buscar por producto, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, lote, lotes, nup, serial, numero de serie, caducidad, vencimiento, fecha de vencimiento, devolver al inventario, reingreso de stock, devolucion de mercaderia, lote equivocado, bodega de reintegro, sin bodegas asignadas, no tiene bodegas, no se refleja en inventario, no aparece en inventario, no devolvio stock, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la nota, codigo, codigo del producto, columna codigo, buscar por codigo, iva, tarifa iva, iva 12, 12%, iva anterior, iva historico, factura año anterior, exento, no objeto de impuesto, tarifa 0, descuento por pronto pago, pronto pago, descuento posterior, descuento comercial, rebaja de precio, bonificacion, no afecta inventario, sin afectar inventario, sin devolver mercaderia, nota de credito sin productos, linea libre, linea manual, subtotal negativo, valor negativo, descuento mayor, sin bodega, invalid input syntax for type integer, vendedor, asesor, vendedor de la nota de credito, cambiar vendedor, comision, motivo, cambiar vendedor nota autorizada, corregir vendedor, vendedor de la factura, vendedor equivocado, vendedor del cliente, imprimir, impresora, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, registrar otra nota, nueva nota despues de guardar, seguir en esta, crear otra, elegir lote, escoger lote, que lote devolver, columna lote, columna nup, devolver a otro lote, lote no salio con la factura, solo quedan por devolver, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, error 45, secuencial registrado, no autorizada, reusar numero, estado:eliminada, ver notas eliminadas, nota de credito eliminada, nota borrada, restaurar nota de credito, recuperar nota eliminada, deshacer eliminar
+version: 1.40
 orden: 30
 estado: activo
 ---
@@ -182,18 +182,13 @@ de una nota de crédito eliminada depende de lo **último** que respondió el SR
 | **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
 | **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
 
-Cuando se salta, junto a la etiqueta **Secuencial** de la nota nueva aparece un
-**triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo se ve qué
-número se omitió, qué respondió el SRI y cuándo se eliminó la nota. Usar ese número
-en una nota nueva haría que el SRI la rechace con *«ERROR 45 SECUENCIAL
-REGISTRADO»*, por eso se propone el siguiente libre.
+Cuando se salta, usar ese número en una nota nueva haría que el SRI la rechace con
+*«ERROR 45 SECUENCIAL REGISTRADO»*, por eso se propone el siguiente libre.
 
-Para no perder ese número, la ventana trae el botón **Restaurar este documento**:
-**solo el superadministrador** lo ve; los demás usuarios ven el aviso de pedírselo.
-La nota vuelve como **borrador** con su mismo número y se abre; la nota nueva que
-estaba abierta se descarta. Dentro de **Facturas de Venta** (nota de crédito
-abierta desde la factura) el aviso se muestra, pero sin el botón: la restauración
-se hace desde este módulo.
+Para revisar qué nota se eliminó con un número que falta, o para no perder ese
+número, **solo el superadministrador** la restaura desde el listado de este módulo
+con `estado:eliminada` (ver abajo); los demás usuarios deben pedírselo. Esto vale
+también para las notas de crédito abiertas desde **Facturas de Venta**.
 
 ### Ver y restaurar notas de crédito eliminadas desde el listado
 
@@ -489,6 +484,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.40** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.39** — **Número saltado**: si el generador salta un número porque el SRI ya tiene recibida o autorizada una nota eliminada con ese número, el secuencial de la nota nueva muestra un aviso con el detalle (y, para el superadministrador, el botón para restaurarla). Nuevo filtro `estado:eliminada` (solo superadministrador) para ver las notas eliminadas y **restaurarlas** como borrador con su mismo número.
 - **1.38** — Los **decimales de cantidad y precio** (y el logo, la dirección y las leyendas del PDF) salen de la configuración de facturación del **establecimiento de la serie** de la nota, no del primer establecimiento de la empresa: en la ventana (al elegir la serie), al guardar (XML) y en el PDF, correo y WhatsApp. Antes, en empresas con varios establecimientos con decimales distintos, el XML generado al guardar podía llevar otros decimales que la nota autorizada.
 - **1.37** — La devolución es el espejo de la venta: vuelven también los **componentes** de combos y kits, los **servicios** no entran aunque estén marcados como inventariables, y un ítem sin enlace a su línea de factura se convierte con la unidad en que la factura lo vendió (antes vender 1 CAJA x100 sacaba 100 y la nota devolvía 1).
