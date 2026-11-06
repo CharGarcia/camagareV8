@@ -338,13 +338,19 @@ class MetricasPlataformaRepository extends BaseRepository
     public function pasarelas(string $desde, string $hasta): array
     {
         $out = [];
-        foreach (['payphone' => 'payphone_transacciones', 'nuvei' => 'nuvei_transacciones'] as $pasarela => $tabla) {
+        // Payphone guarda el monto en centavos (INTEGER); Nuvei en dólares (NUMERIC(14,2)).
+        $pasarelas = [
+            'payphone' => ['tabla' => 'payphone_transacciones', 'monto' => 'ROUND(SUM(t.monto) / 100.0, 2)'],
+            'nuvei'    => ['tabla' => 'nuvei_transacciones',    'monto' => 'SUM(t.monto)'],
+        ];
+        foreach ($pasarelas as $pasarela => $cfg) {
+            $tabla = $cfg['tabla'];
             if (!$this->tablaExiste($tabla)) {
                 continue;
             }
             $st = $this->db->prepare("
                 SELECT '{$pasarela}' AS pasarela, COALESCE(t.estado, '(sin estado)') AS estado,
-                       COUNT(*) AS n, COALESCE(SUM(t.monto), 0) AS monto, COUNT(DISTINCT t.id_empresa) AS empresas,
+                       COUNT(*) AS n, COALESCE({$cfg['monto']}, 0) AS monto, COUNT(DISTINCT t.id_empresa) AS empresas,
                        string_agg(DISTINCT COALESCE(NULLIF(trim(e.nombre_comercial), ''), e.nombre), ', ') AS empresas_nombres
                 FROM {$tabla} t
                 LEFT JOIN empresas e ON e.id = t.id_empresa

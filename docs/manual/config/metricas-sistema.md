@@ -48,7 +48,7 @@ Es una tarjeta de **Configuración** que reúne en pestañas los indicadores glo
 - **Comercial**: suscripciones de la plataforma (activas, ingreso mensual recurrente
   sin IVA, cobros atrasados y los de los próximos 30 días), cobros por mes, pagos
   reportados por los clientes, empresas con plan sin costo o demo y cobros en línea
-  (Payphone / Nuvei) de todas las empresas, con el nombre de las empresas que cobraron.
+  (Payphone / Nuvei) de todas las empresas, con el nombre de las empresas que cobraron. Por estado: solo *aprobado* es dinero cobrado; *pendiente* es un enlace generado sin pago, *rechazado* una tarjeta rechazada, *cancelado* un cobro anulado antes de pagar, *reverso* un pago aprobado y luego devuelto y *error* una falla con la pasarela. El monto suma lo intentado en cada estado.
 - **Salud técnica**: tamaño y conexiones de la base de datos, aciertos de caché,
   disco, servidor PHP (OPcache, APCu, límites), estado de la tarea automática (cron),
   comprobantes atascados en el SRI, consultas lentas en curso, consultas que más
@@ -188,4 +188,5 @@ con el aviso *"No tiene permisos"*.
   Tendencias admite todo el historial (agrupado por año) y muestra el total por tipo.
 - **v1.4** (2026-11-06): La pantalla usa todo el ancho de la ventana. En Productos, las
   tablas de más vendidos (por cantidad y por monto) muestran el nombre de la empresa;
-  en Comercial, los cobros en línea (Payphone / Nuvei) también.
+  en Comercial, los cobros en línea (Payphone / Nuvei) también, con una nota que explica
+  cada estado. Corregido el monto de Payphone, que se mostraba 100 veces mayor (centavos).

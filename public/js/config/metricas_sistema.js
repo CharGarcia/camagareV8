@@ -741,7 +741,13 @@
                     { t: 'Monto', cls: 'text-end', f: (x) => '$' + dinero(x.monto) },
                     { t: 'Empresas', cls: 'text-end', f: (x) => num(x.empresas) },
                     { t: 'Empresa', cls: 'met-wrap met-empresas', f: (x) => esc(x.empresas_nombres || '') }
-                ], d.pasarelas || [], 'Sin cobros en línea en el rango.'), 'col-12', 'bi-credit-card')}
+                ], d.pasarelas || [], 'Sin cobros en línea en el rango.') + `
+                    <div class="small text-muted px-1 pt-2 mt-2 border-top" style="font-size:.72rem;">
+                        <i class="bi bi-info-circle me-1"></i>Solo <b>aprobado</b> es dinero cobrado.
+                        <b>pendiente</b>: enlace generado sin pago · <b>rechazado</b>: tarjeta rechazada ·
+                        <b>cancelado</b>: anulado antes de pagar · <b>reverso</b>: pago aprobado y luego devuelto ·
+                        <b>error</b>: falla de comunicación con la pasarela. El monto suma lo intentado en cada estado.
+                    </div>`, 'col-12', 'bi-credit-card')}
             </div>`;
         grafico('met-ch-cobros', {
             type: 'bar',
