@@ -21,15 +21,21 @@ class LiquidacionCompraRepository extends BaseRepository
         return $st;
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, bool $permitirEliminadas = false): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
 
-        $where = "WHERE l.id_empresa = :id_empresa AND l.eliminado = false AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
-
         $parsed  = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $filtros = $parsed['filtros'];
+
+        // `estado:eliminada` (solo superadministrador): las liquidaciones ELIMINADAS, para
+        // restaurarlas (DocumentoEliminadoSri). Para el resto el filtro sigue su curso y no
+        // encuentra nada (no es un valor real de la columna estado).
+        $soloEliminadas = \App\Helpers\DocumentoEliminadoSri::extraerFiltro($filtros, $permitirEliminadas);
+
+        $where = "WHERE l.id_empresa = :id_empresa AND l.eliminado = " . ($soloEliminadas ? 'TRUE' : 'FALSE')
+               . " AND l.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         // Abonos de la liquidación, con la misma regla que Compras: pagos de Egresos
         // (tipo_documento LIQUIDACION, egreso no anulado) + retenciones no anuladas
@@ -184,7 +190,8 @@ class LiquidacionCompraRepository extends BaseRepository
                        p.razon_social    AS proveedor_nombre,
                        p.identificacion   AS proveedor_ruc,
                        u.nombre          AS usuario_nombre,
-                       ROUND($saldo, 2)  AS saldo",
+                       ROUND($saldo, 2)  AS saldo"
+                       . ($soloEliminadas ? ', ' . \App\Helpers\DocumentoEliminadoSri::sqlUltimaAccion('liquidacion_compra', 'l') . ' AS sri_ultima_accion' : ''),
             ],
             $params
         );

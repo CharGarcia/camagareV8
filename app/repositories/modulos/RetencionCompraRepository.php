@@ -38,7 +38,8 @@ class RetencionCompraRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro
+        ?int $idUsuarioFiltro,
+        bool $permitirEliminadas = false
     ): array {
         $colsPermitidas = [
             'fecha_emision', 'secuencial', 'proveedor_nombre', 'proveedor_ruc',
@@ -56,10 +57,16 @@ class RetencionCompraRepository extends BaseRepository
         ];
         $colFinal = $mapCols[$ordenCol] ?? "r.{$ordenCol}";
 
-        $where  = 'r.id_empresa = :ie AND r.eliminado = false AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie)';
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // `estado:eliminada` (solo superadministrador): las retenciones ELIMINADAS, para
+        // restaurarlas (DocumentoEliminadoSri). Para el resto el filtro sigue su curso y
+        // no encuentra nada (no es un valor real de la columna estado).
+        $soloEliminadas = \App\Helpers\DocumentoEliminadoSri::extraerFiltro($parsed['filtros'], $permitirEliminadas);
+
+        $where  = 'r.id_empresa = :ie AND r.eliminado = ' . ($soloEliminadas ? 'TRUE' : 'FALSE')
+                . ' AND r.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :ie)';
         $params = [':ie' => $idEmpresa];
 
-        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         // Texto libre: todas las palabras, en cualquier orden, sobre las columnas del
         // listado — número, fecha, proveedor, identificación, documento sustento, período
         // y total retenido.
@@ -180,7 +187,8 @@ class RetencionCompraRepository extends BaseRepository
                     r.clave_acceso, r.numero_autorizacion, r.fecha_autorizacion,
                     r.tipo_doc_sustento, r.num_doc_sustento, r.fecha_emision_doc_sustento,
                     r.periodo_fiscal, r.total_retenido, r.estado, r.estado_correo,
-                    r.created_at, r.updated_at,
+                    r.created_at, r.updated_at, r.eliminado, r.deleted_at,
+                    " . ($soloEliminadas ? \App\Helpers\DocumentoEliminadoSri::sqlUltimaAccion('retencion_compra', 'r') . ' AS sri_ultima_accion,' : '') . "
                     p.razon_social AS proveedor_nombre,
                     p.identificacion AS proveedor_ruc,
                     p.tipo_id_proveedor AS proveedor_tipo_id,
@@ -1287,6 +1295,87 @@ class RetencionCompraRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return (int) $st->fetchColumn() > 0;
+    }
+
+    /**
+     * Al RESTAURAR una retención eliminada (DocumentoSriRestauracionService): vínculos que,
+     * mientras estuvo eliminada, pudieron cambiar y dejarían el sistema inconsistente.
+     *  - La compra / liquidación que retenía se eliminó (al borrar la retención, Compras y
+     *    Liquidaciones ya permiten eliminar el documento).
+     *  - Ese documento ya tiene otra retención vigente (se hizo una nueva en su lugar).
+     *  - Otra retención vigente del mismo proveedor ya retiene el mismo documento de
+     *    sustento (tipo + número), en el mismo ambiente: es la unicidad de
+     *    validarUnicidadDocSustento / uq_retencion_compra_doc_sustento_activo.
+     * Devuelve el motivo (para el mensaje) o null si se puede restaurar.
+     */
+    public function motivoNoRestaurable(int $id, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare(
+            "SELECT id, id_compra, id_liquidacion, id_proveedor, tipo_doc_sustento, num_doc_sustento,
+                    COALESCE(tipo_ambiente, '1') AS tipo_ambiente
+               FROM retencion_compra_cabecera
+              WHERE id = :id AND id_empresa = :ie AND eliminado = TRUE"
+        );
+        $st->execute([':id' => $id, ':ie' => $idEmpresa]);
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$r) {
+            return null; // el servicio común ya responde "no se encontró"
+        }
+
+        $numero = static fn(array $x): string => trim(implode('-', array_filter([
+            $x['establecimiento'] ?? '', $x['punto_emision'] ?? '', $x['secuencial'] ?? '',
+        ])), '-');
+
+        // Otra retención vigente (no eliminada ni anulada) que cumpla $cond.
+        $otra = function (string $cond, array $params) use ($id, $idEmpresa): ?array {
+            $st = $this->db->prepare(
+                "SELECT establecimiento, punto_emision, secuencial, estado
+                   FROM retencion_compra_cabecera
+                  WHERE id_empresa = :ie AND id <> :id AND eliminado = FALSE
+                    AND COALESCE(estado, '') <> 'anulada' AND {$cond}
+                  ORDER BY id LIMIT 1"
+            );
+            $st->execute([':ie' => $idEmpresa, ':id' => $id] + $params);
+            $row = $st->fetch(PDO::FETCH_ASSOC);
+            return $row ?: null;
+        };
+
+        if (!empty($r['id_compra'])) {
+            $st = $this->db->prepare('SELECT 1 FROM compras_cabecera WHERE id = ? AND id_empresa = ? AND eliminado = FALSE');
+            $st->execute([(int) $r['id_compra'], $idEmpresa]);
+            if (!$st->fetchColumn()) {
+                return 'la compra que retenía se eliminó después. Registre la compra de nuevo y emita otra retención.';
+            }
+            if ($o = $otra('id_compra = :ic', [':ic' => (int) $r['id_compra']])) {
+                return 'la compra ya tiene otra retención vigente (' . $numero($o) . ', estado ' . ($o['estado'] ?? '') . ').';
+            }
+        }
+        if (!empty($r['id_liquidacion'])) {
+            $st = $this->db->prepare('SELECT 1 FROM liquidaciones_cabecera WHERE id = ? AND id_empresa = ? AND eliminado = FALSE');
+            $st->execute([(int) $r['id_liquidacion'], $idEmpresa]);
+            if (!$st->fetchColumn()) {
+                return 'la liquidación de compra que retenía se eliminó después.';
+            }
+            if ($o = $otra('id_liquidacion = :il', [':il' => (int) $r['id_liquidacion']])) {
+                return 'la liquidación ya tiene otra retención vigente (' . $numero($o) . ', estado ' . ($o['estado'] ?? '') . ').';
+            }
+        }
+        if (!empty($r['id_proveedor']) && trim((string) $r['num_doc_sustento']) !== '' && trim((string) $r['tipo_doc_sustento']) !== '') {
+            $o = $otra(
+                "id_proveedor = :ip AND tipo_doc_sustento = :tds AND num_doc_sustento = :nds AND COALESCE(tipo_ambiente, '1') = :amb",
+                [
+                    ':ip'  => (int) $r['id_proveedor'],
+                    ':tds' => (string) $r['tipo_doc_sustento'],
+                    ':nds' => (string) $r['num_doc_sustento'],
+                    ':amb' => (string) $r['tipo_ambiente'],
+                ]
+            );
+            if ($o) {
+                return 'el documento de sustento ' . $r['num_doc_sustento'] . ' ya está retenido en la retención '
+                    . $numero($o) . ' (estado ' . ($o['estado'] ?? '') . '). Solo se permite una retención por documento y proveedor.';
+            }
+        }
+        return null;
     }
 
     /**

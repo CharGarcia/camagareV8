@@ -309,6 +309,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
+                            // estado:eliminada (solo superadmin): fila de restaurar en vez de la normal.
+                            if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                                echo \App\Helpers\DocumentoEliminadoSri::fila($r, BASE_URL . '/' . $rutaModulo . '/restaurarAjax', 13, (string) ($r['cliente_nombre'] ?? ''), (float) ($r['importe_total'] ?? 0));
+                                continue;
+                            }
                             $estado = $r['estado'] ?? 'borrador';
                             $estadoClass = match ($estado) {
                                 'autorizado' => 'bg-success bg-opacity-10 text-success border-success',

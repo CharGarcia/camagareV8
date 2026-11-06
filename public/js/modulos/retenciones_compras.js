@@ -22,6 +22,16 @@
 
     // ── Init ─────────────────────────────────────────────────────────────────────
 
+    // Retención restaurada desde el listado (filtro estado:eliminada): repintar por AJAX en
+    // vez de recargar la página. Solo en el propio listado de Retenciones: incluido desde
+    // Compras o Liquidaciones, el evento es de ese módulo y lo resuelve él (o recarga).
+    document.addEventListener('documentoSriRestaurado', (e) => {
+        if (!document.getElementById('ret-table-body')) return;
+        if (!String(e.detail?.url || '').includes('/retenciones_compras/')) return;
+        e.preventDefault();
+        window.RET_fetchSearch(1);
+    });
+
     document.addEventListener('DOMContentLoaded', () => {
         initModal();
 
@@ -233,6 +243,10 @@
             const lineas = resp.lineas || [];
 
             cargarCabecera(cab);
+            // Retención existente: sin aviso de números omitidos (solo aplica a una nueva).
+            if (typeof window.CMG_avisoNumerosOmitidos === 'function') {
+                window.CMG_avisoNumerosOmitidos(document.getElementById('ret_secuencial'), []);
+            }
             // `sri_porcentaje` es la tarifa del catálogo (viene del JOIN de getDetalle):
             // si está definida, el porcentaje de esa línea no se puede cambiar. Sin
             // enlace al catálogo queda editable y el servidor lo comprueba al guardar.
@@ -1103,6 +1117,23 @@
                     } else {
                         inputSec.classList.remove('border-warning');
                         inputSec.title = data.detalle || 'Siguiente consecutivo';
+                    }
+
+                    // Números que el SRI ya tiene recibidos/autorizados de retenciones que se
+                    // eliminaron: se saltaron. El superadmin puede restaurar la eliminada.
+                    if (typeof window.CMG_avisoNumerosOmitidos === 'function') {
+                        const opt = sel.options[sel.selectedIndex];
+                        window.CMG_avisoNumerosOmitidos(inputSec, retIdActual ? [] : (data.omitidos || []), {
+                            serie: opt ? `${opt.dataset.codEst || ''}-${opt.dataset.codPunto || ''}` : '',
+                            urlRestaurar: `${BASE}/restaurarAjax`,
+                            esSuperadmin: window.RET_ES_SUPERADMIN === true,
+                            target: document.getElementById('modalRetencion') || undefined,
+                            onRestaurado: (j) => {
+                                // Se descarta la retención nueva y se abre la restaurada.
+                                window.RET_fetchSearch(1);
+                                if (j && j.id) window.RET_abrirModal({ dataset: { row: JSON.stringify({ id: j.id }) } });
+                            },
+                        });
                     }
                 }
             }

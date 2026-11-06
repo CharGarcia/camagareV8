@@ -14,15 +14,21 @@ class FacturaReembolsoRepository extends BaseRepository
         parent::__construct('factura_reembolso_cabecera');
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, bool $permitirEliminadas = false): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
-        $where = "WHERE fr.id_empresa = :id_empresa AND fr.eliminado = false AND fr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
+
+        // estado:eliminada — SOLO el superadministrador ($permitirEliminadas): lista las facturas
+        // de reembolso eliminadas para restaurarlas (DocumentoEliminadoSri). Para el resto el
+        // filtro sigue su curso como estado = 'eliminada' y no encuentra nada.
+        $soloEliminadas = \App\Helpers\DocumentoEliminadoSri::extraerFiltro($filtros, $permitirEliminadas);
+        $condEliminado  = $soloEliminadas ? 'fr.eliminado = TRUE' : 'fr.eliminado = FALSE';
+        $where = "WHERE fr.id_empresa = :id_empresa AND {$condEliminado} AND fr.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         // Texto libre: las columnas del listado —número, fecha, cliente, identificación,
         // Terceros (la cantidad), Reembolsado, total y usuario— más las observaciones.
@@ -168,7 +174,8 @@ class FacturaReembolsoRepository extends BaseRepository
         $sql = "SELECT fr.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.email as cliente_email,
                        u.nombre as usuario_nombre,
-                       (SELECT COUNT(*) FROM factura_reembolso_terceros t WHERE t.id_factura_reembolso = fr.id) AS cantidad_terceros
+                       (SELECT COUNT(*) FROM factura_reembolso_terceros t WHERE t.id_factura_reembolso = fr.id) AS cantidad_terceros" . ($soloEliminadas ? ",
+                       " . \App\Helpers\DocumentoEliminadoSri::sqlUltimaAccion('factura_reembolso', 'fr') . " AS sri_ultima_accion" : '') . "
                 FROM factura_reembolso_cabecera fr
                 LEFT JOIN clientes c ON fr.id_cliente = c.id
                 LEFT JOIN usuarios u ON fr.id_usuario = u.id

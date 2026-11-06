@@ -40,13 +40,20 @@ class GuiaRemisionRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuario = null
+        ?int $idUsuario = null,
+        bool $permitirEliminadas = false
     ): array {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
-        $where = "WHERE g.id_empresa = :id_empresa AND g.eliminado = false AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        // estado:eliminada — SOLO el superadministrador ($permitirEliminadas): lista las guías
+        // eliminadas para restaurarlas (DocumentoEliminadoSri). Para el resto el filtro sigue
+        // su curso como estado = 'eliminada' y no encuentra nada.
+        $soloEliminadas = \App\Helpers\DocumentoEliminadoSri::extraerFiltro($parsed['filtros'], $permitirEliminadas);
+        $condEliminado  = $soloEliminadas ? 'g.eliminado = TRUE' : 'g.eliminado = FALSE';
+        $where = "WHERE g.id_empresa = :id_empresa AND {$condEliminado} AND g.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+
         // Texto libre: las columnas del listado —número, fecha, destinatario, RUC/cédula,
         // transportista, placa, motivo, fecha de inicio y usuario— más los datos de
         // cabecera que identifican la guía: identificación del transportista, documento
@@ -177,7 +184,8 @@ class GuiaRemisionRepository extends BaseRepository
                        c.identificacion AS cliente_ruc,
                        t.nombre        AS transportista_nombre,
                        t.identificacion AS transportista_ruc,
-                       u.nombre        AS usuario_nombre
+                       u.nombre        AS usuario_nombre" . ($soloEliminadas ? ",
+                       " . \App\Helpers\DocumentoEliminadoSri::sqlUltimaAccion('guia_remision', 'g') . " AS sri_ultima_accion" : '') . "
                 FROM guias_remision_cabecera g
                 INNER JOIN clientes       c ON g.id_cliente       = c.id
                 INNER JOIN transportistas t ON g.id_transportista = t.id

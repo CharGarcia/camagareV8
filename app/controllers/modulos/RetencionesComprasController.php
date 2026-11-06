@@ -51,7 +51,7 @@ class RetencionesComprasController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $total      = $result['total'];
         $totalPages = (int) ceil($total / $perPage);
 
@@ -166,7 +166,7 @@ class RetencionesComprasController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -177,7 +177,14 @@ class RetencionesComprasController extends BaseModuloController
         if (empty($rows)) {
             echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="fa-regular fa-file-lines fs-3 d-block mb-2"></i>No se encontraron retenciones.</td></tr>';
         } else {
+            $urlRestaurar = BASE_URL . '/' . $this->getRutaModulo() . '/restaurarAjax';
             foreach ($rows as $r) {
+                // Filtro estado:eliminada (solo superadmin): fila de la retención eliminada,
+                // clic para restaurarla (public/js/app.js → tr[data-restaurar-sri]).
+                if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                    echo \App\Helpers\DocumentoEliminadoSri::fila($r, $urlRestaurar, 10, (string) ($r['proveedor_nombre'] ?? ''), (float) ($r['total_retenido'] ?? 0));
+                    continue;
+                }
                 $rowData  = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 $numero   = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
                 $fecha    = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
@@ -338,6 +345,41 @@ class RetencionesComprasController extends BaseModuloController
         try {
             $this->service->eliminar($id, $idEmpresa, $idUsuario, $esSuperAdmin);
             echo json_encode(['ok' => true, 'mensaje' => 'Retención eliminada correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AJAX — restaurar (des-eliminar)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Restaura una retención eliminada en borrador / NO AUTORIZADA con su mismo número.
+     * Solo el superadministrador (nivel 3): revivir un comprobante eliminado que ya pasó por
+     * el SRI es una excepción que se decide caso por caso.
+     */
+    public function restaurarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if ((int) ($_SESSION['nivel'] ?? 1) !== 3) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Solo el superadministrador puede restaurar una retención eliminada.']);
+            exit;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $res = $this->service->restaurar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'id' => $res['id'], 'mensaje' => "Retención {$res['numero']} restaurada."]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
@@ -930,6 +972,8 @@ class RetencionesComprasController extends BaseModuloController
         try {
             $secService = new \App\Services\SecuencialService();
             $result     = $secService->obtenerSiguienteSecuencial($idPunto, 'Retenciones de compras');
+            // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
+            $result['omitidos'] = $secService->numerosOmitidos($idPunto, 'Retenciones de compras', (int) ($result['secuencial'] ?? 0));
             echo json_encode(array_merge(['ok' => true], $result));
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

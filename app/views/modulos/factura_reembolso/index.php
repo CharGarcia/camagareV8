@@ -244,6 +244,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
+                            // estado:eliminada (solo superadmin): fila de restaurar en vez de la normal.
+                            if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                                echo \App\Helpers\DocumentoEliminadoSri::fila($r, $urlBase . '/restaurarAjax', 9, (string) ($r['cliente_nombre'] ?? ''), (float) ($r['importe_total'] ?? 0));
+                                continue;
+                            }
                             $estado = $r['estado'] ?? 'borrador';
                             $estadoClass = match ($estado) {
                                 'autorizado' => 'bg-success bg-opacity-10 text-success border-success',
@@ -282,6 +287,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     window.FR_STORAGE_KEY = 'fr_borrador_' + <?= (int) ($_SESSION['id_empresa'] ?? 0) ?> + '_' + <?= (int) ($_SESSION['id_usuario'] ?? 0) ?>;
     window.FR_ORDEN_COL = <?= json_encode($ordenCol ?? 'fecha_emision') ?>;
     window.FR_ORDEN_DIR = <?= json_encode($ordenDir ?? 'DESC') ?>;
+    // Restaurar facturas de reembolso eliminadas (listado estado:eliminada y aviso de números
+    // omitidos del modal): solo el superadministrador.
+    window.FR_URL_RESTAURAR = <?= json_encode($base . '/modulos/factura-reembolso/restaurarAjax') ?>;
+    window.FR_ES_SUPERADMIN = <?= (int) ($_SESSION['nivel'] ?? 1) === 3 ? 'true' : 'false' ?>;
     // Catálogo de tarifas IVA para el selector por línea (honorarios) del detalle.
     window.FR_TARIFAS_IVA = <?= json_encode(array_map(fn($t) => [
         'porcentaje' => (string) $t['porcentaje_iva'],

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
-etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas
-version: 1.14
+etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, numeros omitidos, error 45, secuencial registrado, no autorizada, reusar numero, estado:eliminada, ver notas eliminadas, nota de debito eliminada, nota borrada, restaurar nota de debito, recuperar nota eliminada, deshacer eliminar
+version: 1.15
 orden: 31
 estado: activo
 ---
@@ -42,6 +42,62 @@ conjunto forman el subtotal del documento.
 Solo se pueden **editar** o **eliminar** notas de débito en estado
 **borrador**. Una vez enviada y autorizada, el documento es definitivo ante el
 SRI.
+
+## Número saltado: nota de débito eliminada que ya pasó por el SRI
+
+La regla es la misma para todos los comprobantes electrónicos: ver
+[Comprobantes eliminados y números del SRI](../conceptos/comprobantes-eliminados-y-secuenciales.md).
+
+El número de una nota nueva no siempre es "la última + 1". Qué pasa con el número
+de una nota de débito eliminada depende de lo **último** que respondió el SRI:
+
+| Último resultado del SRI | ¿Se vuelve a usar el número? |
+|---|---|
+| Nunca se envió, o **DEVUELTA** | Sí: la siguiente nota nueva lo toma. |
+| **NO AUTORIZADA** | Sí: la siguiente nota nueva lo toma. El SRI acepta ese número con otra clave de acceso (otra fecha). |
+| **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
+| **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
+
+Cuando se salta, junto a la etiqueta **Secuencial** de la nota nueva aparece un
+**triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo se ve qué
+número se omitió, qué respondió el SRI y cuándo se eliminó la nota. Usar ese número
+en una nota nueva haría que el SRI la rechace con *«ERROR 45 SECUENCIAL
+REGISTRADO»*, por eso se propone el siguiente libre.
+
+Para no perder ese número, la ventana trae el botón **Restaurar este documento**:
+**solo el superadministrador** lo ve; los demás usuarios ven el aviso de pedírselo.
+La nota vuelve como **borrador** con su mismo número y se abre; la nota nueva que
+estaba abierta se descarta. Dentro de **Facturas de Venta** (nota de débito
+abierta desde la factura) el aviso se muestra, pero sin el botón: la restauración
+se hace desde este módulo.
+
+### Ver y restaurar notas de débito eliminadas desde el listado
+
+El superadministrador puede ver las notas eliminadas escribiendo en el buscador:
+
+```
+estado:eliminada
+```
+
+Aparecen **todas** las notas de débito eliminadas del ambiente actual, hayan
+pasado o no por el SRI, atenuadas, con el número tachado y dos etiquetas:
+**Eliminada** y lo que pasó con ella en el SRI (**No enviada al SRI**, **SRI: NO
+AUTORIZADA**, **SRI: RECIBIDA**, etc.). Se combina con los demás filtros, por
+ejemplo `estado:eliminada serie:001-001` o `estado:eliminada cliente:perez`. Para
+los demás usuarios este filtro no muestra nada.
+
+Al hacer clic en una fila se pide confirmación y la nota se **restaura como
+borrador** con su mismo número. Sirve para una nota que se eliminó **sin haberse
+registrado en el SRI** o que quedó **NO AUTORIZADA**: al reenviarla con la fecha de
+hoy cambia la clave de acceso y el SRI la acepta con el mismo número.
+
+Qué tener en cuenta:
+
+- Solo se restauran notas que se eliminaron **en borrador**.
+- No se restaura si su **período contable está cerrado** o si otra nota vigente ya
+  usa ese número (pasa con las NO AUTORIZADAS o nunca enviadas: la siguiente nota
+  nueva toma su número). En ese caso hay que emitirla de nuevo.
+- La restauración queda registrada en el historial del sistema (acción *RESTAURAR*).
 
 ## Efecto en la cartera y la contabilidad
 
@@ -158,6 +214,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.15** — **Número saltado**: si el generador salta un número porque el SRI ya tiene recibida o autorizada una nota eliminada con ese número, el secuencial de la nota nueva muestra un aviso con el detalle (y, para el superadministrador, el botón para restaurarla). Nuevo filtro `estado:eliminada` (solo superadministrador) para ver las notas eliminadas y **restaurarlas** como borrador con su mismo número.
 - **1.14** — La configuración de facturación (decimales, logo, dirección, leyendas) sale del **establecimiento de la serie** de la nota de débito, también al guardar (XML); antes se tomaba el primer establecimiento de la empresa. Las notas antiguas sin establecimiento guardado lo toman de su punto de emisión.
 - **1.13** — El botón **Registrar nuevo cliente** no funcionaba (decía «no está disponible»): ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la nota.
 - **1.12** — El PDF ya no manda los **totales y la información adicional** a una segunda hoja cuando

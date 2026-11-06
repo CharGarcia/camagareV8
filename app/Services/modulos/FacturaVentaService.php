@@ -1615,81 +1615,30 @@ class FacturaVentaService
     }
 
     /**
-     * Restaura (des-elimina) una factura que se eliminó en BORRADOR, con su mismo número.
-     *
-     * Caso de uso: la factura se envió al SRI, volvió NO AUTORIZADA y se eliminó. Su número
-     * queda "quemado" (el SRI ya lo tiene registrado) y una factura nueva no puede usarlo, así
-     * que la única forma de recuperarlo es reabrir esa misma factura, corregirla y reenviarla.
-     *
-     * Vuelve como borrador, igual que estaba. Un borrador no tiene asiento, kardex ni devengo
-     * que rehacer. Lo que eliminar() anuló por su cuenta NO se recupera: los cobros (Ingresos)
-     * que se anularon quedan anulados y, si hace falta, se cobra de nuevo.
-     *
-     * No se restaura si: no estaba en borrador (el forzado del superadmin revirtió inventario y
-     * asiento), el periodo está cerrado, venía de Consignaciones o de Car-Wash (vínculos que no
-     * se pueden rehacer solos) u otra factura vigente ya usa el número.
+     * Restaura (des-elimina) una factura que se eliminó en BORRADOR, con su mismo número
+     * (p. ej. NO AUTORIZADA por el SRI, o eliminada sin haberse enviado). La regla común a
+     * todos los comprobantes electrónicos vive en App\Services\DocumentoSriRestauracionService
+     * (estado, período, inventario, número ocupado, candado y auditoría); aquí solo se suma lo
+     * propio de la factura: no se restaura si salió de Consignaciones o de Car-Wash (vínculos
+     * que el borrado deshizo). Los cobros (Ingresos) que se anularon al eliminarla no vuelven.
      *
      * @param int|null $idUsuarioFiltro Sin acceso total (CLAUDE.md §6): solo las que creó él.
      * @return array{id:int, numero:string}
      */
     public function restaurar(int $id, int $idEmpresa, int $idUsuario, ?int $idUsuarioFiltro = null): array
     {
-        $db = Database::getConnection();
-        $managedTransaction = !$db->inTransaction();
-        if ($managedTransaction) $db->beginTransaction();
-
-        try {
-            $cab = $this->repository->getEliminadaPorId($id, $idEmpresa);
-            if (!$cab || ($idUsuarioFiltro !== null && (int) $cab['created_by'] !== $idUsuarioFiltro)) {
-                throw new \Exception('Factura eliminada no encontrada.');
-            }
-            $numero = sprintf('%s-%s-%s',
-                str_pad((string) $cab['establecimiento'], 3, '0', STR_PAD_LEFT),
-                str_pad((string) $cab['punto_emision'], 3, '0', STR_PAD_LEFT),
-                str_pad(trim((string) $cab['secuencial']), 9, '0', STR_PAD_LEFT));
-
-            if (($cab['estado'] ?? '') !== 'borrador') {
-                throw new \Exception("La factura {$numero} no se eliminó en borrador; no se puede restaurar.");
-            }
-            $this->validarPeriodoContable(
-                $cab['fecha_emision'] ?? null,
-                $idEmpresa,
-                'No se puede restaurar la factura porque su período contable está cerrado.'
-            );
-            $motivo = $this->repository->motivoNoRestaurable($id, $idEmpresa);
-            if ($motivo !== null) {
-                throw new \Exception("No se puede restaurar la factura {$numero}: {$motivo}");
-            }
-
-            // Mismo candado que la emisión (CLAUDE.md §8): nadie toma este número mientras se revisa.
-            $idPunto = (int) $cab['id_punto_emision'];
-            if ($idPunto > 0) {
-                (new \App\repositories\SecuencialRepository())->lockSecuencial($idPunto, 'Facturas de venta');
-                if ($this->repository->secuencialOcupadoPorOtra($idPunto, (string) $cab['secuencial'], (string) $cab['tipo_ambiente'], $id)) {
-                    throw new \Exception("No se puede restaurar: otra factura vigente ya usa el número {$numero}.");
+        return (new \App\Services\DocumentoSriRestauracionService(null, $this->logService))->restaurar(
+            'factura_venta',
+            $id,
+            $idEmpresa,
+            $idUsuario,
+            function (int $id, int $idEmpresa, array $cab) use ($idUsuarioFiltro): ?string {
+                if ($idUsuarioFiltro !== null && (int) $cab['created_by'] !== $idUsuarioFiltro) {
+                    return 'solo puede restaurar las facturas que usted creó.';
                 }
+                return $this->repository->motivoNoRestaurable($id, $idEmpresa);
             }
-
-            if (!$this->repository->restaurarLogico($id, $idEmpresa, $idUsuario)) {
-                throw new \Exception('La factura ya no está eliminada.');
-            }
-
-            $this->logService->registrar(
-                $idUsuario,
-                $idEmpresa,
-                'RESTAURAR',
-                'ventas_cabecera',
-                $id,
-                ['eliminado' => true, 'deleted_at' => $cab['deleted_at'], 'deleted_by' => $cab['deleted_by']],
-                ['eliminado' => false, 'estado' => $cab['estado'], 'numero' => $numero]
-            );
-
-            if ($managedTransaction) $db->commit();
-            return ['id' => $id, 'numero' => $numero];
-        } catch (\Throwable $e) {
-            if ($managedTransaction && $db->inTransaction()) $db->rollBack();
-            throw $e;
-        }
+        );
     }
 
     /**

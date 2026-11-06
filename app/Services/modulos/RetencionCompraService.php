@@ -400,6 +400,46 @@ class RetencionCompraService
         }
     }
 
+    /**
+     * Restaura (des-elimina) una retención eliminada en borrador o NO AUTORIZADA, con su
+     * mismo número, para corregirla y reenviarla al SRI. La regla común (estado, período,
+     * número ocupado, candado del secuencial y auditoría 'RESTAURAR') vive en
+     * App\Services\DocumentoSriRestauracionService; aquí se suma lo propio de la retención:
+     * no se restaura si la compra/liquidación que retenía se eliminó o ya tiene otra
+     * retención vigente, ni si otra retención del mismo proveedor ya retiene el mismo
+     * documento de sustento (RetencionCompraRepository::motivoNoRestaurable).
+     *
+     * eliminar() limpió sus casilleros de la Declaración de IVA: se vuelven a generar en la
+     * misma transacción. El asiento que se anuló al eliminarla (si lo tenía) no vuelve; se
+     * genera de nuevo cuando la retención se autorice.
+     *
+     * @return array{id:int, numero:string}
+     */
+    public function restaurar(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+
+        try {
+            $res = (new \App\Services\DocumentoSriRestauracionService(null, $this->logService))->restaurar(
+                'retencion_compra',
+                $id,
+                $idEmpresa,
+                $idUsuario,
+                fn(int $id, int $idEmpresa, array $cab): ?string => $this->repository->motivoNoRestaurable($id, $idEmpresa)
+            );
+
+            $this->sincronizarCasilleros($id);
+
+            if ($managed) $db->commit();
+            return $res;
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // CATÁLOGOS / AUXILIARES
     // ─────────────────────────────────────────────────────────────────────────

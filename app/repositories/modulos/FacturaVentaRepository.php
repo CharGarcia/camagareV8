@@ -813,34 +813,6 @@ class FacturaVentaRepository extends BaseRepository
     }
 
     /**
-     * Cabecera de una factura ELIMINADA de la empresa (para restaurarla). Null si no existe,
-     * es de otra empresa o no está eliminada.
-     */
-    public function getEliminadaPorId(int $id, int $idEmpresa): ?array
-    {
-        $sql = "SELECT id, id_empresa, id_establecimiento, id_punto_emision, establecimiento, punto_emision,
-                       secuencial, fecha_emision, estado, COALESCE(tipo_ambiente, '1') AS tipo_ambiente,
-                       created_by, deleted_at, deleted_by
-                  FROM ventas_cabecera
-                 WHERE id = ? AND id_empresa = ? AND eliminado = TRUE";
-        $row = $this->query($sql, [$id, $idEmpresa])->fetch();
-        return $row ?: null;
-    }
-
-    /**
-     * ¿Otra factura vigente del mismo punto y ambiente ya usa este secuencial? (al restaurar,
-     * el número de la eliminada pudo haberse vuelto a emitir).
-     */
-    public function secuencialOcupadoPorOtra(int $idPunto, string $secuencial, string $tipoAmbiente, int $excluirId): bool
-    {
-        $sql = "SELECT 1 FROM ventas_cabecera
-                 WHERE id_punto_emision = ? AND TRIM(secuencial) = TRIM(?) AND eliminado = FALSE
-                   AND COALESCE(tipo_ambiente, '1') = ? AND id <> ?
-                 LIMIT 1";
-        return (bool) $this->query($sql, [$idPunto, $secuencial, $tipoAmbiente, $excluirId])->fetchColumn();
-    }
-
-    /**
      * Vínculos que eliminar() deshizo y que restaurar no puede rehacer solo: la factura salió de
      * Facturación de consignaciones (se revirtió el reingreso) o de una orden Car-Wash (la orden
      * volvió a borrador). Devuelve el motivo, o null si no hay ninguno.
@@ -858,18 +830,6 @@ class FacturaVentaRepository extends BaseRepository
             return 'la factura salió de una orden Car-Wash y al eliminarla la orden volvió a borrador. Factúrela de nuevo desde la orden.';
         }
         return null;
-    }
-
-    /** Deshace la eliminación lógica. Devuelve false si la factura ya no estaba eliminada. */
-    public function restaurarLogico(int $id, int $idEmpresa, int $idUsuario): bool
-    {
-        $sql = "UPDATE ventas_cabecera
-                   SET eliminado = false, deleted_at = NULL, deleted_by = NULL,
-                       updated_by = ?, updated_at = CURRENT_TIMESTAMP
-                 WHERE id = ? AND id_empresa = ? AND eliminado = true";
-        $st = $this->db->prepare($sql);
-        $st->execute([$idUsuario, $id, $idEmpresa]);
-        return $st->rowCount() > 0;
     }
 
     public function anular(int $id, int $idEmpresa, int $idUsuario): bool

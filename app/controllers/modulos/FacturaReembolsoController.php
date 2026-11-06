@@ -42,7 +42,7 @@ class FacturaReembolsoController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $totalPages = (int) ceil($result['total'] / $perPage);
 
         $empresaModel = new Empresa();
@@ -170,7 +170,7 @@ class FacturaReembolsoController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -181,7 +181,13 @@ class FacturaReembolsoController extends BaseModuloController
         if (empty($rows)) {
             echo '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-receipt fs-3 d-block mb-2"></i>No se encontraron facturas de reembolso.</td></tr>';
         } else {
+            $urlRestaurar = BASE_URL . '/' . $this->getRutaModulo() . '/restaurarAjax';
             foreach ($rows as $r) {
+                // estado:eliminada (solo superadmin): fila de restaurar en vez de la normal.
+                if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                    echo \App\Helpers\DocumentoEliminadoSri::fila($r, $urlRestaurar, 9, (string) ($r['cliente_nombre'] ?? ''), (float) ($r['importe_total'] ?? 0));
+                    continue;
+                }
                 $rowData     = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 $numero      = htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''));
                 $fecha       = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
@@ -461,6 +467,35 @@ class FacturaReembolsoController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Restaura una factura de reembolso eliminada en borrador con su mismo número (p. ej. una
+     * que el SRI dejó NO AUTORIZADA o que nunca se envió). Solo el superadministrador (nivel 3).
+     */
+    public function restaurarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if ((int) ($_SESSION['nivel'] ?? 1) !== 3) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Solo el superadministrador puede restaurar una factura de reembolso eliminada.']);
+            exit;
+        }
+        $id = (int) ($_POST['id'] ?? 0);
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+
+        try {
+            $res = $this->service->restaurar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'id' => $res['id'], 'mensaje' => "Factura de reembolso {$res['numero']} restaurada como borrador."]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function anularAjax(): void
     {
         $this->requireActualizar();
@@ -514,6 +549,8 @@ class FacturaReembolsoController extends BaseModuloController
 
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPt, 'Facturas de reembolso');
+        // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
+        $res['omitidos'] = $secuencialService->numerosOmitidos($idPt, 'Facturas de reembolso', (int) $res['secuencial']);
 
         echo json_encode(array_merge(['ok' => true], $res));
         exit;

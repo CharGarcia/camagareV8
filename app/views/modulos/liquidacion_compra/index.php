@@ -343,6 +343,11 @@ $pestanasConfigLiq = array_merge(
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
                             <?php
+                            // Filtro estado:eliminada (solo superadmin): clic para restaurar.
+                            if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                                echo \App\Helpers\DocumentoEliminadoSri::fila($r, $urlBase . '/restaurarAjax', 11, (string) ($r['proveedor_nombre'] ?? ''), (float) ($r['importe_total'] ?? 0));
+                                continue;
+                            }
                             $estado = $r['estado'] ?? 'borrador';
                             $estadoClass  = match ($estado) {
                                 'aprobado', 'autorizado' => 'bg-success bg-opacity-10 text-success border-success',
@@ -998,6 +1003,10 @@ if (!empty($permRetencion['ver'])) {
     // Estado inicial de ordenamiento (desde la preferencia persistida en el servidor)
     window.LC_ordenCol = '<?= $ordenCol ?>';
     window.LC_ordenDir = '<?= $ordenDir ?>';
+    // Solo el superadministrador restaura liquidaciones eliminadas (aviso de números omitidos).
+    window.LC_ES_SUPERADMIN = <?= ((int) ($_SESSION['nivel'] ?? 1) === 3) ? 'true' : 'false' ?>;
+    // El modal de retención (pestaña Retenciones) usa la misma bandera para su aviso de números omitidos.
+    window.RET_ES_SUPERADMIN = window.LC_ES_SUPERADMIN;
 
 
     // Configuración de facturación de la empresa (empresa_establecimiento): los

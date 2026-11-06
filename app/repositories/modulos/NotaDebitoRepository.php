@@ -32,15 +32,21 @@ class NotaDebitoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, bool $permitirEliminadas = false): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
-        $where = "WHERE nd.id_empresa = :id_empresa AND nd.eliminado = false AND nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
+
+        // estado:eliminada — SOLO el superadministrador ($permitirEliminadas, lo decide el
+        // controlador): lista las notas ELIMINADAS para poder restaurarlas. Para el resto el
+        // filtro sigue su curso y no encuentra nada (no existe ese estado).
+        $soloEliminadas = \App\Helpers\DocumentoEliminadoSri::extraerFiltro($filtros, $permitirEliminadas);
+        $condEliminado  = $soloEliminadas ? 'nd.eliminado = TRUE' : 'nd.eliminado = false';
+        $where = "WHERE nd.id_empresa = :id_empresa AND {$condEliminado} AND nd.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
 
         // Texto libre: las columnas del listado (número, fecha, cliente, identificación,
         // documento modificado, subtotal, total y usuario) más las observaciones.
@@ -170,7 +176,9 @@ class NotaDebitoRepository extends BaseRepository
         $sql = "SELECT nd.*, c.nombre as cliente_nombre, c.identificacion as cliente_ruc,
                        c.email as cliente_email,
                        u.nombre as usuario_nombre,
-                       e.tipo_ambiente, e.tipo_emision
+                       e.tipo_ambiente, e.tipo_emision"
+                . ($soloEliminadas ? ",
+                       " . \App\Helpers\DocumentoEliminadoSri::sqlUltimaAccion('nota_debito', 'nd') . " AS sri_ultima_accion" : '') . "
                 FROM nota_debito_cabecera nd
                 LEFT JOIN clientes c ON nd.id_cliente = c.id
                 LEFT JOIN usuarios u ON nd.id_usuario = u.id

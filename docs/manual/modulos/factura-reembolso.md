@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-reembolso
 tipo: modulo
 visibilidad: todos
-etiquetas: factura de reembolso, reembolso de gastos, cobrar factura de reembolso, cobro, saldo pendiente, cobros, ingresos, no deja anular, tiene cobros registrados, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento contable, no deja agregar lineas al asiento, registrar asiento a mano, asiento manual, factura autorizada sin asiento
-version: 2.1
+etiquetas: factura de reembolso, reembolso de gastos, cobrar factura de reembolso, cobro, saldo pendiente, cobros, ingresos, no deja anular, tiene cobros registrados, ats 41, comprobante de venta emitido por reembolso, intermediario, terceros reembolsados, sri, comprobante electronico, buscar factura de reembolso, buscador, filtros, filtrar facturas de reembolso, buscar por proveedor, comprobante de terceros, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, informacion adicional, info adicional, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento contable, no deja agregar lineas al asiento, registrar asiento a mano, asiento manual, factura autorizada sin asiento, factura de reembolso eliminada, restaurar factura de reembolso, recuperar factura eliminada, estado:eliminada, numero saltado, se salto un numero, secuencial omitido, numero omitido, triangulo amarillo, error 45, secuencial registrado
+version: 2.2
 orden: 21
 estado: activo
 ---
@@ -138,6 +138,57 @@ factura; el ícono de la derecha la abre directamente.
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 **Retroceso** quita el último.
 
+## Número saltado: factura de reembolso eliminada que ya pasó por el SRI
+
+La regla es la misma para todos los comprobantes electrónicos: ver
+[Comprobantes eliminados y números del SRI](../conceptos/comprobantes-eliminados-y-secuenciales.md).
+
+El número de una factura de reembolso nueva no siempre es "la última + 1". Qué
+pasa con el número de una eliminada depende de lo **último** que respondió el SRI:
+
+| Último resultado del SRI | ¿Se vuelve a usar el número? |
+|---|---|
+| Nunca se envió, **DEVUELTA** o **NO AUTORIZADA** | Sí: la siguiente factura de reembolso nueva lo toma. |
+| **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
+| **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
+
+Cuando se salta un número, junto a la etiqueta **Secuencial** aparece un
+**triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo se ve qué
+número se omitió, qué respondió el SRI y cuándo se eliminó la factura. Una factura
+nueva con ese número sería rechazada con *«ERROR 45 SECUENCIAL REGISTRADO»*, por
+eso el sistema propone el siguiente libre.
+
+Desde esa ventana el **superadministrador** ve el botón **Restaurar este
+documento**: la factura eliminada vuelve como **borrador** con su mismo número y se
+abre (la nueva que tenía abierta se descarta). Los demás usuarios ven el aviso de
+pedírselo.
+
+### Ver y restaurar facturas de reembolso eliminadas desde el listado
+
+El superadministrador puede ver las facturas de reembolso eliminadas escribiendo
+en el buscador:
+
+```
+estado:eliminada
+```
+
+Aparecen **todas** las eliminadas del ambiente actual, hayan pasado o no por el
+SRI, atenuadas, con el número tachado, el cliente, el total y dos etiquetas:
+**Eliminada** y lo que pasó con ella en el SRI (**No enviada al SRI**, **SRI: NO
+AUTORIZADA**, **SRI: RECIBIDA**, etc.). El filtro se combina con los demás, por
+ejemplo `estado:eliminada serie:001-002`. Para los demás usuarios no muestra nada.
+
+Al hacer clic en una fila se pide confirmación y la factura se **restaura como
+borrador** con su mismo número; el listado se actualiza solo. Qué tener en cuenta:
+
+- Solo se restauran las que se eliminaron **en borrador** (es el único estado en
+  que se pueden eliminar).
+- No se restaura si su **período contable está cerrado** o si otra factura de
+  reembolso vigente de la misma serie y ambiente ya usa ese número (pasa con las
+  que nunca llegaron al SRI o quedaron NO AUTORIZADAS: su número queda libre y la
+  siguiente lo toma).
+- La restauración queda en el registro de auditoría (acción *RESTAURAR*).
+
 ## Campos del formulario
 
 | Campo | Obligatorio | Qué significa |
@@ -235,6 +286,8 @@ igual. Los períodos se abren y se cierran en **Contabilidad → Períodos
 Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
+
+- **2.2** — Cuando una factura de reembolso nueva **salta un número** porque el SRI ya tiene registrada una eliminada con ese número, aparece un **triángulo amarillo** junto al Secuencial que lo explica. El **superadministrador** puede ver las eliminadas con `estado:eliminada` en el buscador y **restaurarlas como borrador** con su mismo número (también desde el aviso del número saltado). Ver *Número saltado: factura de reembolso eliminada que ya pasó por el SRI*.
 
 - **2.1** — Cobro desde **Ingresos**: el asiento del cobro cancela la Cuenta por
   Cobrar de la propia factura de reembolso. Nueva sub-pestaña **Cobros** y

@@ -694,6 +694,52 @@ class LiquidacionCompraService
         }
     }
 
+    /**
+     * Restaura (des-elimina) una liquidación eliminada en borrador, con su mismo número
+     * (p. ej. NO AUTORIZADA por el SRI, o eliminada sin haberse enviado), para corregirla y
+     * reenviarla. La regla común (estado, período, número ocupado, candado del secuencial y
+     * auditoría 'RESTAURAR') vive en App\Services\DocumentoSriRestauracionService.
+     *
+     * Lo propio de la liquidación:
+     *  - eliminar() exige que no tenga retención vigente, así que no hay retención que
+     *    rehacer; por si acaso, se rechaza si alguna retención vigente apunta a ella.
+     *  - eliminar() limpió sus casilleros de la Declaración de IVA: se regeneran aquí, en la
+     *    misma transacción.
+     *  - Los pagos (Egresos) que eliminar() anuló NO vuelven: la liquidación queda con su
+     *    saldo completo y, si hace falta, se paga de nuevo.
+     *
+     * @return array{id:int, numero:string}
+     */
+    public function restaurar(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        $db = \App\core\Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+
+        try {
+            $res = (new \App\Services\DocumentoSriRestauracionService(null, $this->logService))->restaurar(
+                'liquidacion_compra',
+                $id,
+                $idEmpresa,
+                $idUsuario,
+                function (int $id, int $idEmpresa, array $cab): ?string {
+                    $retRepo = new \App\repositories\modulos\RetencionCompraRepository();
+                    return $retRepo->existeRetencionParaLiquidacion($id, $idEmpresa)
+                        ? 'una retención vigente apunta a ella; revísela en Retenciones de Compra.'
+                        : null;
+                }
+            );
+
+            $this->sincronizarCasilleros($id);
+
+            if ($managed) $db->commit();
+            return $res;
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
     // ── XML en base de datos ──────────────────────────────────────────────────
 
     private function generarYGuardarXml(int $idLiq, array $data): void

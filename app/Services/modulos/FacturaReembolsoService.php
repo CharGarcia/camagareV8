@@ -374,6 +374,21 @@ class FacturaReembolsoService
         }
     }
 
+    /**
+     * Restaura (des-elimina) una factura de reembolso que se eliminó en BORRADOR, con su mismo
+     * número (p. ej. NO AUTORIZADA por el SRI, o eliminada sin haberse enviado). La regla común
+     * vive en App\Services\DocumentoSriRestauracionService (estado, período, número ocupado,
+     * candado y auditoría). eliminar() solo marca la cabecera (no anula cobros, asiento ni
+     * inventario), así que no hay vínculo propio que impida restaurarla.
+     *
+     * @return array{id:int, numero:string}
+     */
+    public function restaurar(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        return (new \App\Services\DocumentoSriRestauracionService(null, $this->logService))
+            ->restaurar('factura_reembolso', $id, $idEmpresa, $idUsuario);
+    }
+
     public function anular(int $id, int $idEmpresa, int $idUsuario): void
     {
         $db = Database::getConnection();

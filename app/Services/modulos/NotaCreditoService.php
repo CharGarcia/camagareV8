@@ -658,6 +658,26 @@ class NotaCreditoService
             throw $e;
         }
     }
+
+    /**
+     * Restaura una nota de crédito eliminada en borrador con su mismo número (p. ej. una NO
+     * AUTORIZADA por el SRI que se eliminó). Validaciones comunes (estado, período, inventario
+     * revertido, número ocupado, candado y log) en DocumentoSriRestauracionService; aquí solo lo
+     * propio de la NC que la eliminación deshizo (devengado de suscripciones).
+     *
+     * @return array{id:int, numero:string}
+     */
+    public function restaurar(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        return (new \App\Services\DocumentoSriRestauracionService(null, $this->logService))->restaurar(
+            'nota_credito',
+            $id,
+            $idEmpresa,
+            $idUsuario,
+            fn(int $id, int $idEmpresa, array $cab): ?string => $this->repository->motivoNoRestaurable($id, $idEmpresa)
+        );
+    }
+
     public function anular(int $id, int $idEmpresa, int $idUsuario): void
     {
         $db = Database::getConnection();

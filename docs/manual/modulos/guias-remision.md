@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores
-version: 1.16
+etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, secuencial omitido, numero omitido, triangulo amarillo, error 45, secuencial registrado
+version: 1.17
 orden: 55
 estado: activo
 ---
@@ -253,6 +253,56 @@ elegir a mano en la ventana de filtros (pestaña *Guía*, bloque *Documento*). S
 usuario solo ve sus propios registros, el aviso cuenta los de toda la empresa pero el
 listado muestra solo los suyos.
 
+## Número saltado: guía eliminada que ya pasó por el SRI
+
+La regla es la misma para todos los comprobantes electrónicos: ver
+[Comprobantes eliminados y números del SRI](../conceptos/comprobantes-eliminados-y-secuenciales.md).
+
+El número de una guía nueva no siempre es "la última + 1". Qué pasa con el número
+de una guía eliminada depende de lo **último** que respondió el SRI:
+
+| Último resultado del SRI | ¿Se vuelve a usar el número? |
+|---|---|
+| Nunca se envió, **DEVUELTA** o **NO AUTORIZADA** | Sí: la siguiente guía nueva lo toma. |
+| **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
+| **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
+
+Cuando se salta un número, junto a la etiqueta **Secuencial** de la guía nueva
+aparece un **triángulo amarillo** y el número se ve con borde amarillo. Al pulsarlo
+se ve qué número se omitió, qué respondió el SRI y cuándo se eliminó la guía. Una
+guía nueva con ese número sería rechazada con *«ERROR 45 SECUENCIAL REGISTRADO»*,
+por eso el sistema propone el siguiente libre.
+
+Desde esa ventana el **superadministrador** ve el botón **Restaurar este
+documento**: la guía eliminada vuelve como **borrador** con su mismo número y se
+abre (la guía nueva que tenía abierta se descarta). Los demás usuarios ven el aviso
+de pedírselo. Cuando la guía nueva se crea desde **Facturas de Venta**, el aviso
+sale igual pero sin el botón: la restauración se hace desde este módulo.
+
+### Ver y restaurar guías eliminadas desde el listado
+
+El superadministrador puede ver las guías eliminadas escribiendo en el buscador:
+
+```
+estado:eliminada
+```
+
+Aparecen **todas** las guías eliminadas del ambiente actual, hayan pasado o no por
+el SRI, atenuadas, con el número tachado y dos etiquetas: **Eliminada** y lo que
+pasó con ella en el SRI (**No enviada al SRI**, **SRI: NO AUTORIZADA**, **SRI:
+RECIBIDA**, etc.). El filtro se combina con los demás, por ejemplo
+`estado:eliminada serie:001-001`. Para los demás usuarios no muestra nada.
+
+Al hacer clic en una fila se pide confirmación y la guía se **restaura como
+borrador** con su mismo número; el listado se actualiza solo. Qué tener en cuenta:
+
+- Solo se restauran guías que se eliminaron **en borrador**. Una guía **anulada**
+  que luego se eliminó no se restaura.
+- No se restaura si su **período contable está cerrado** o si otra guía vigente de
+  la misma serie y ambiente ya usa ese número (pasa con las que nunca llegaron al
+  SRI o quedaron NO AUTORIZADAS: su número queda libre y la siguiente guía lo toma).
+- La restauración queda en el registro de auditoría (acción *RESTAURAR*).
+
 ## La guía no mueve inventario
 
 Emitir una guía **no descuenta stock**: solo ampara el traslado. El movimiento de
@@ -289,6 +339,7 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.17** — Cuando una guía nueva **salta un número** porque el SRI ya tiene registrada una guía eliminada con ese número, aparece un **triángulo amarillo** junto al Secuencial que lo explica. El **superadministrador** puede ver las guías eliminadas con `estado:eliminada` en el buscador y **restaurarlas como borrador** con su mismo número (también desde el aviso del número saltado). Ver *Número saltado: guía eliminada que ya pasó por el SRI*.
 - **1.16** — Al **guardar una guía nueva**, el número se reserva en ese momento. Si otra persona de la misma serie ya usó el que mostraba la pantalla, la guía se guarda con el **siguiente libre** y aparece el aviso *«Guía guardada con otro número»*, en vez de rechazarse con *"El número de secuencial ya existe"*.
 - **1.15** — La cantidad del detalle se muestra con los decimales del **establecimiento de la serie** elegida (antes, los del primer establecimiento de la empresa). El PDF, el XML y el correo ya usaban el establecimiento de la guía; ahora, en guías antiguas sin establecimiento guardado, lo toman de su punto de emisión.
 - **1.14** — Al crear un **transportista** desde la guía, su ficha se cierra sola y queda seleccionado en la guía. Editar un cliente o transportista existente ya no cambia el de la guía.

@@ -44,7 +44,7 @@ class NotaDebitoController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $totalPages = (int) ceil($result['total'] / $perPage);
 
         $empresaModel = new Empresa();
@@ -165,7 +165,7 @@ class NotaDebitoController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        $result     = $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, (int) ($_SESSION['nivel'] ?? 1) === 3);
         $rows       = $result['rows'];
         $total      = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -176,7 +176,13 @@ class NotaDebitoController extends BaseModuloController
         if (empty($rows)) {
             echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-minus fs-3 d-block mb-2"></i>No se encontraron notas de débito.</td></tr>';
         } else {
+            $urlRestaurar = BASE_URL . '/' . $this->getRutaModulo() . '/restaurarAjax';
             foreach ($rows as $r) {
+                // estado:eliminada (solo superadmin): fila de restaurar en vez de la normal.
+                if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                    echo \App\Helpers\DocumentoEliminadoSri::fila($r, $urlRestaurar, 10, (string) ($r['cliente_nombre'] ?? ''), (float) ($r['importe_total'] ?? 0));
+                    continue;
+                }
                 $rowData      = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                 $numero       = htmlspecialchars(($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''));
                 $fecha        = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
@@ -1048,8 +1054,42 @@ class NotaDebitoController extends BaseModuloController
 
         $secuencialService = new \App\Services\SecuencialService();
         $res = $secuencialService->obtenerSiguienteSecuencial($idPt, 'Nota de débito');
+        // Números quemados en el SRI que se saltaron, para que el modal explique el salto.
+        $res['omitidos'] = $secuencialService->numerosOmitidos($idPt, 'Nota de débito', (int) ($res['secuencial'] ?? 0));
 
         echo json_encode(array_merge(['ok' => true], $res));
+        exit;
+    }
+
+    /**
+     * Restaura una nota de débito eliminada en borrador con su mismo número (p. ej. una NO
+     * AUTORIZADA por el SRI que se eliminó). Solo el superadministrador (nivel 3).
+     */
+    public function restaurarAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if ((int) ($_SESSION['nivel'] ?? 1) !== 3) {
+            echo json_encode(['ok' => false, 'mensaje' => 'Solo el superadministrador puede restaurar una nota de débito eliminada.']);
+            exit;
+        }
+
+        $id = (int) ($_POST['id'] ?? 0);
+        if (!$id) {
+            echo json_encode(['ok' => false, 'mensaje' => 'ID requerido.']);
+            exit;
+        }
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            $res = $this->service->restaurar($id, $idEmpresa, $idUsuario);
+            echo json_encode(['ok' => true, 'id' => $res['id'], 'mensaje' => "Nota de débito {$res['numero']} restaurada como borrador."]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
         exit;
     }
 

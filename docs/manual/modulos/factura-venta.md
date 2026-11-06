@@ -430,6 +430,9 @@ la de hoy: o la fecha no es la correcta, o el comprobante no se autorizó ese d�
 
 ## Número saltado: factura eliminada que ya pasó por el SRI
 
+La regla es la misma para todos los comprobantes electrónicos: ver
+[Comprobantes eliminados y números del SRI](../conceptos/comprobantes-eliminados-y-secuenciales.md).
+
 El número de una factura nueva no siempre es "la última + 1". Qué pasa con el
 número de una factura eliminada depende de lo **último** que respondió el SRI:
 

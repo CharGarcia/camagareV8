@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
-etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, proveedor del exterior, proveedor extranjero, no residente, identificacion del exterior, pasaporte, importacion de servicios, servicios del exterior, pago al exterior, pais de pago, convenio de doble tributacion, ats pago exterior, no aparece el proveedor
-version: 1.28
+etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, proveedor del exterior, proveedor extranjero, no residente, identificacion del exterior, pasaporte, importacion de servicios, servicios del exterior, pago al exterior, pais de pago, convenio de doble tributacion, ats pago exterior, no aparece el proveedor, numero saltado, secuencial saltado, numero omitido, falta un numero, error 45, secuencial registrado, restaurar liquidacion, recuperar liquidacion eliminada, liquidaciones eliminadas, estado:eliminada
+version: 1.29
 orden: 40
 estado: activo
 ---
@@ -345,6 +345,60 @@ Si la liquidación tiene una **retención asociada**, el sistema no la deja
 eliminar: primero elimine la retención desde el módulo *Retenciones de compra* y
 vuelva a intentarlo.
 
+## Número saltado: liquidación eliminada que ya pasó por el SRI
+
+La regla es la misma para todos los comprobantes electrónicos: ver
+[Comprobantes eliminados y números del SRI](../conceptos/comprobantes-eliminados-y-secuenciales.md).
+
+El número de una liquidación nueva no siempre es "la última + 1". Qué pasa con el
+número de una liquidación eliminada depende de lo **último** que respondió el SRI:
+
+| Último resultado del SRI | ¿Se vuelve a usar el número? |
+|---|---|
+| Nunca se envió, o **DEVUELTA** | Sí: la siguiente liquidación nueva lo toma. |
+| **NO AUTORIZADA** | Sí: la siguiente liquidación nueva lo toma (el SRI lo acepta con otra clave de acceso). |
+| **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
+| **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
+
+Cuando se salta un número, junto a la etiqueta **Secuencial** de la liquidación
+nueva aparece un **triángulo amarillo** y el número se ve con borde amarillo. Al
+pulsar el triángulo se ve qué número se omitió, qué respondió el SRI y cuándo se
+eliminó la liquidación. Una liquidación nueva con ese número sería rechazada con
+*«ERROR 45 SECUENCIAL REGISTRADO»*, por eso se propone el siguiente libre.
+
+Si es el **superadministrador**, la ventana trae el botón **Restaurar este
+documento**: la liquidación eliminada vuelve como borrador con su mismo número y se
+abre; la liquidación nueva que estaba abierta se descarta. Los demás usuarios ven
+el aviso de pedírselo al superadministrador.
+
+## Ver y restaurar liquidaciones eliminadas desde el listado
+
+El superadministrador puede ver las liquidaciones eliminadas escribiendo en el
+buscador del listado:
+
+```
+estado:eliminada
+```
+
+Aparecen las liquidaciones eliminadas del ambiente actual, atenuadas, con el
+número tachado y dos etiquetas: **Eliminada** (con la fecha) y lo último que
+respondió el SRI (**No enviada al SRI**, **SRI: NO AUTORIZADA**, **SRI:
+RECIBIDA**, etc.). El filtro se combina con los demás, por ejemplo
+`estado:eliminada proveedor:perez`. Para los demás usuarios no muestra nada.
+
+Al hacer clic en una fila se pide confirmación y la liquidación se **restaura como
+borrador** con su mismo número, para corregirla y reenviarla al SRI.
+
+Qué tener en cuenta:
+
+- Solo se restauran liquidaciones que se eliminaron en **borrador**.
+- Los **pagos (egresos)** que se anularon al eliminarla **no se recuperan**: la
+  liquidación vuelve con su saldo completo y, si hace falta, se paga de nuevo.
+- No se restaura si su **período contable está cerrado**, si otra liquidación
+  vigente ya usa ese número o si alguna retención vigente apunta a ella.
+- Se vuelven a generar sus casilleros de la declaración de IVA.
+- La restauración queda registrada en el historial del sistema (acción *RESTAURAR*).
+
 ## Errores frecuentes
 
 - **"Solo se pueden registrar pagos de liquidaciones autorizadas por el SRI"**:
@@ -396,6 +450,11 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.29** — **Número saltado**: si el siguiente número de la serie lo tiene el SRI
+  recibido o autorizado de una liquidación eliminada, el secuencial de la
+  liquidación nueva muestra un triángulo amarillo que explica el salto. El
+  superadministrador puede ver las liquidaciones eliminadas con `estado:eliminada`
+  y **restaurarlas** como borrador con su mismo número.
 - **1.28** — Pestaña **Pagos**: registrar un pago pide **confirmar monto y forma de pago**, el monto queda vacío después de cada pago y las **observaciones** usan el mismo formato que Egresos (*Pago liquidación de compra 45; Pagado con …*).
 - **1.27** — Los **decimales de cantidad y precio** salen del **establecimiento de la serie** de la liquidación: en la ventana (al elegir la serie), al guardar (XML) y en el PDF. Antes el guardado tomaba el primer establecimiento de la empresa y el PDF no recibía los decimales configurados (salía con los de por defecto).
 - **1.26** — **Proveedores del exterior**: el buscador de proveedor ahora muestra

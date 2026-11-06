@@ -245,6 +245,11 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 <?php if (empty($rows)): ?>
                     <tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-truck fs-3 d-block mb-2"></i>No se encontraron guías de remisión.</td></tr>
                 <?php else: foreach ($rows as $r):
+                    // estado:eliminada (solo superadmin): fila de restaurar en vez de la normal.
+                    if (\App\Helpers\DocumentoEliminadoSri::esEliminado($r)) {
+                        echo \App\Helpers\DocumentoEliminadoSri::fila($r, $urlBase . '/restaurarAjax', 11, (string) ($r['cliente_nombre'] ?? ''), null);
+                        continue;
+                    }
                     $rowData = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
                     $numero  = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
                     $estado  = $r['estado'] ?? 'borrador';
@@ -308,6 +313,15 @@ $rutaModulo = $grRutaRespaldo;
     let GR_dir         = '<?= $ordenDir ?>';
     window.GR_establecimientos = <?= json_encode($establecimientos) ?>;
     window.GR_decimalesCantidad = <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>;
+    // Restaurar guías eliminadas (aviso de números omitidos del modal): solo superadmin.
+    window.GR_urlRestaurar  = GR_urlBase + '/restaurarAjax';
+    window.GR_esSuperadmin  = <?= (int) ($_SESSION['nivel'] ?? 1) === 3 ? 'true' : 'false' ?>;
+
+    // Fila de una guía eliminada restaurada (app.js): el listado se repinta por AJAX, sin recargar.
+    document.addEventListener('documentoSriRestaurado', ev => {
+        ev.preventDefault();
+        GR_cargar(GR_page);
+    });
 
     // Sortable headers
     document.querySelectorAll('.gr-sortable-header').forEach(th => {

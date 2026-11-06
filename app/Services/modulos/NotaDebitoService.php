@@ -423,6 +423,25 @@ class NotaDebitoService
         }
     }
 
+    /**
+     * Restaura una nota de débito eliminada en borrador con su mismo número (p. ej. una NO
+     * AUTORIZADA por el SRI que se eliminó). Todo lo valida DocumentoSriRestauracionService:
+     * eliminar() de un borrador solo anula su asiento (si lo hubiera; anular desvincula la
+     * columna y el asiento se vuelve a generar) y limpia casilleros de la declaración, que un
+     * borrador no marca; no hay vínculos propios que impidan restaurarla.
+     *
+     * @return array{id:int, numero:string}
+     */
+    public function restaurar(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        return (new \App\Services\DocumentoSriRestauracionService(null, $this->logService))->restaurar(
+            'nota_debito',
+            $id,
+            $idEmpresa,
+            $idUsuario
+        );
+    }
+
     public function anular(int $id, int $idEmpresa, int $idUsuario): void
     {
         $db = Database::getConnection();

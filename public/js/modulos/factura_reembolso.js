@@ -50,6 +50,7 @@
     };
 
     window.FR_fetchSearch = async (page = 1) => {
+        window.FR_PAGINA_ACTUAL = page;
         const buscar = document.getElementById('buscarFR')?.value || '';
         const sort = window.currentSort || 'fecha_emision';
         const dir = window.currentDir || 'DESC';
@@ -81,6 +82,13 @@
             if (tbody) tbody.classList.remove('fm-cargando-target');
         }
     };
+
+    // Fila de una factura eliminada restaurada (estado:eliminada, app.js): el listado se
+    // repinta por AJAX, sin recargar la página.
+    document.addEventListener('documentoSriRestaurado', (ev) => {
+        ev.preventDefault();
+        window.FR_fetchSearch(window.FR_PAGINA_ACTUAL || 1);
+    });
 
     // ─── MODAL ──────────────────────────────────────────────────────────────
 
@@ -199,6 +207,7 @@
             document.getElementById('fr_fecha_emision').value = (data.fecha_emision || '').split(' ')[0].split('T')[0];
             document.getElementById('fr_id_punto_emision').value = data.id_punto_emision || '';
             document.getElementById('fr_secuencial').value = data.secuencial != null ? String(data.secuencial).padStart(9, '0') : '';
+            FR_avisoOmitidos([]); // factura existente: su número es el suyo, no hay salto que explicar
             document.getElementById('fr_id_cliente').value = data.id_cliente || '';
             document.getElementById('fr_cliente_search').value = data.cliente_nombre || '';
 
@@ -339,12 +348,39 @@
 
     // ─── SECUENCIAL ─────────────────────────────────────────────────────────
 
+    /**
+     * Aviso de números omitidos junto al secuencial (CMG_avisoNumerosOmitidos, app.js): el
+     * generador saltó números que el SRI tiene recibidos/autorizados de facturas eliminadas.
+     * Con [] lo quita (factura existente o sin serie).
+     */
+    function FR_avisoOmitidos(omitidos) {
+        const inputSec = document.getElementById('fr_secuencial');
+        if (!inputSec || typeof window.CMG_avisoNumerosOmitidos !== 'function') return;
+        const sel = document.getElementById('fr_id_punto_emision');
+        const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+        const serie = opt ? (opt.dataset.codEst || '') + '-' + (opt.dataset.codPunto || '') : '';
+        const modalEl = document.getElementById('modalFR');
+        window.CMG_avisoNumerosOmitidos(inputSec, omitidos, {
+            serie: serie,
+            urlRestaurar: window.FR_URL_RESTAURAR || '',
+            esSuperadmin: !!window.FR_ES_SUPERADMIN,
+            target: modalEl || undefined,
+            onRestaurado: (j) => {
+                // La factura nueva se descarta: se abre la restaurada y se refresca el listado.
+                if (window.FR_STORAGE_KEY) { try { localStorage.removeItem(window.FR_STORAGE_KEY); } catch (e) {} }
+                if (typeof window.FR_fetchSearch === 'function') window.FR_fetchSearch(window.FR_PAGINA_ACTUAL || 1);
+                if (j && j.id) window.FR_abrirModalFR({ dataset: { row: JSON.stringify({ id: j.id }) } });
+            },
+        });
+    }
+
     window.FR_cargarSecuencial = async () => {
         const idActual = document.getElementById('fr_id').value;
-        if (idActual) return;
+        if (idActual) { FR_avisoOmitidos([]); return; }
 
         const idPt = document.getElementById('fr_id_punto_emision').value;
         const inputSec = document.getElementById('fr_secuencial');
+        FR_avisoOmitidos([]);
         if (!idPt) {
             window.FR_SECUENCIAL_CONFIGURADO = false;
             if (inputSec) { inputSec.value = ''; inputSec.placeholder = 'Sin serie'; }
@@ -358,6 +394,7 @@
             if (data.ok) {
                 inputSec.value = data.formateado || String(data.secuencial).padStart(9, '0');
                 inputSec.placeholder = '000000001';
+                FR_avisoOmitidos(data.omitidos || []);
                 window.FR_SECUENCIAL_CONFIGURADO = (data.configurado !== false);
                 inputSec.classList.toggle('border-danger', data.configurado === false);
                 if (data.configurado === false) {

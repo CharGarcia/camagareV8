@@ -122,6 +122,7 @@
             const el = document.getElementById(id); if (el) { el.value = ''; delete el.dataset.auto; }
         });
         document.getElementById('gr-secuencial').value = '';
+        GR_avisoOmitidos([]);
         document.getElementById('gr-cod-doc-sustento').value = '01';
         // Guía NUEVA: siempre editable. Si se venía de ver una autorizada, sus
         // controles quedaron bloqueados y nada más los rehabilitaba.
@@ -208,6 +209,7 @@
         }
 
         document.getElementById('gr-secuencial').value       = cab.secuencial || '';
+        GR_avisoOmitidos([]); // guía existente: su número es el suyo, no hay salto que explicar
         document.getElementById('gr-fecha-emision').value    = cab.fecha_emision || '';
         document.getElementById('gr-fecha-inicio').value     = cab.fecha_inicio_transporte || '';
         document.getElementById('gr-fecha-fin').value        = cab.fecha_fin_transporte || '';
@@ -446,9 +448,38 @@
                 if (d.ok && inputSec) {
                     inputSec.value = d.formateado;
                     inputSec.placeholder = '000000001';
+                    // Números que el SRI tiene recibidos/autorizados de guías eliminadas: se
+                    // saltaron, y el aviso lo explica (y deja restaurarlas al superadmin).
+                    GR_avisoOmitidos(idActual ? [] : (d.omitidos || []));
                 }
             });
     };
+
+    /**
+     * Aviso de números omitidos junto al secuencial (CMG_avisoNumerosOmitidos, app.js). Este
+     * JS también corre dentro de Facturas de Venta: allí no existen GR_urlRestaurar ni
+     * GR_esSuperadmin, así que el aviso sale sin botón de restaurar.
+     */
+    function GR_avisoOmitidos(omitidos) {
+        const inputSec = document.getElementById('gr-secuencial');
+        if (!inputSec || typeof window.CMG_avisoNumerosOmitidos !== 'function') return;
+        const sel = document.getElementById('gr-serie');
+        const opt = sel && sel.selectedIndex >= 0 ? sel.options[sel.selectedIndex] : null;
+        const serie = opt ? (opt.dataset.codEst || '') + '-' + (opt.dataset.codPunto || '') : '';
+        const modalEl = document.getElementById('modalGuiaRemision');
+        window.CMG_avisoNumerosOmitidos(inputSec, omitidos, {
+            serie: serie,
+            urlRestaurar: window.GR_urlRestaurar || '',
+            esSuperadmin: !!window.GR_esSuperadmin,
+            target: modalEl || undefined,
+            onRestaurado: function (j) {
+                // La guía nueva se descarta: se abre la restaurada y se refresca el listado.
+                if (typeof window.GR_eliminarRespaldo === 'function') window.GR_eliminarRespaldo();
+                if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
+                if (j && j.id) window.GR_abrirEditar({ id: j.id });
+            },
+        });
+    }
 
     window.GR_formatearNumDoc = function (input) {
         let v = input.value.replace(/\D/g, '').slice(0, 15);

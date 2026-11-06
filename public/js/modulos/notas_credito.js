@@ -358,6 +358,7 @@
             document.getElementById('nc_fecha_emision').value = (data.fecha_emision || '').split(' ')[0].split('T')[0];
             document.getElementById('nc_id_punto_emision').value = data.id_punto_emision || '';
             document.getElementById('nc_secuencial').value = data.secuencial != null ? String(data.secuencial).padStart(9, '0') : '';
+            NC_avisoOmitidos([]); // NC existente: sin aviso de números omitidos
             document.getElementById('nc_id_cliente').value = data.id_cliente || '';
             document.getElementById('nc_cliente_search').value = data.cliente_nombre || '';
             // En edición el documento a modificar siempre está habilitado.
@@ -654,9 +655,46 @@
                 if (data.ok) {
                     const padSec = String(data.secuencial).padStart(9, '0');
                     document.getElementById('nc_secuencial').value = padSec;
+                    // Números que el generador saltó porque el SRI ya los tiene (NC eliminadas
+                    // después de recibidas/autorizadas). Solo en una NC nueva.
+                    const esNueva = !document.getElementById('nc_id')?.value;
+                    NC_avisoOmitidos(esNueva ? (data.omitidos || []) : []);
                 }
             });
     };
+
+    // Aviso de números omitidos junto al secuencial (CMG_avisoNumerosOmitidos, app.js). Con []
+    // lo quita. Restaurar solo lo ofrece al superadministrador (NC_ES_SUPERADMIN): embebido en
+    // Facturas de Venta esa variable no existe y el aviso queda solo informativo.
+    function NC_avisoOmitidos(omitidos) {
+        const input = document.getElementById('nc_secuencial');
+        if (!input || typeof window.CMG_avisoNumerosOmitidos !== 'function') return;
+        const optSerie = document.getElementById('nc_id_punto_emision')?.selectedOptions?.[0];
+        window.CMG_avisoNumerosOmitidos(input, omitidos, {
+            serie: optSerie ? optSerie.textContent.trim() : '',
+            urlRestaurar: `${BASE_URL}/modulos/notas_credito/restaurarAjax`,
+            esSuperadmin: window.NC_ES_SUPERADMIN === true,
+            target: document.getElementById('modalNC') || undefined,
+            onRestaurado: (j) => {
+                if (!j || !j.id) return;
+                // Se descarta la NC nueva y se abre la restaurada (borrador) en el mismo modal.
+                if (document.getElementById('nc-table-body') && typeof window.NC_fetchSearch === 'function') {
+                    window.NC_fetchSearch(1);
+                }
+                window.NC_abrirModalNC({ dataset: { row: JSON.stringify({ id: j.id, estado: 'borrador' }) } });
+            },
+        });
+    }
+
+    // Fila de una NC eliminada (estado:eliminada, solo superadmin): tras restaurarla, app.js
+    // emite `documentoSriRestaurado`; aquí se repinta el listado por AJAX en vez de recargar.
+    document.addEventListener('documentoSriRestaurado', (ev) => {
+        const url = ev.detail?.url || '';
+        if (!url.includes('/notas_credito/restaurarAjax')) return;
+        if (!document.getElementById('nc-table-body') || typeof window.NC_fetchSearch !== 'function') return;
+        ev.preventDefault();
+        window.NC_fetchSearch(1);
+    });
 
     // ─── AUTOCOMPLETE CLIENTES ──────────────────────────────────────────────
 

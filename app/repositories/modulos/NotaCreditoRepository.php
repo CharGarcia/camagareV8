@@ -32,7 +32,7 @@ class NotaCreditoRepository extends BaseRepository
         return $st->fetchAll();
     }
 
-    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null): array
+    public function getListado(int $idEmpresa, string $buscar = '', int $page = 1, int $perPage = 20, string $ordenCol = 'fecha_emision', string $ordenDir = 'DESC', ?int $idUsuario = null, bool $permitirEliminadas = false): array
     {
         $offset = ($page - 1) * $perPage;
         $params = [':id_empresa' => $idEmpresa];
@@ -46,6 +46,14 @@ class NotaCreditoRepository extends BaseRepository
         $parsed     = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         $textoLibre = $parsed['texto_libre'];
         $filtros    = $parsed['filtros'];
+
+        // estado:eliminada — SOLO el superadministrador ($permitirEliminadas, lo decide el
+        // controlador): lista las notas ELIMINADAS para poder restaurarlas. Para el resto el
+        // filtro sigue su curso y no encuentra nada (no existe ese estado).
+        $soloEliminadas = \App\Helpers\DocumentoEliminadoSri::extraerFiltro($filtros, $permitirEliminadas);
+        if ($soloEliminadas) {
+            $where = str_replace('nc.eliminado = false', 'nc.eliminado = TRUE', $where);
+        }
 
         // Texto libre: las columnas del listado (número, fecha, cliente, identificación,
         // documento modificado, importes, motivo y usuario) más las observaciones.
@@ -201,7 +209,9 @@ class NotaCreditoRepository extends BaseRepository
                        c.email as cliente_email,
                        u.nombre as usuario_nombre,
                        {$selVendedor}
-                       e.tipo_ambiente, e.tipo_emision",
+                       e.tipo_ambiente, e.tipo_emision"
+                       . ($soloEliminadas ? ",
+                       " . \App\Helpers\DocumentoEliminadoSri::sqlUltimaAccion('nota_credito', 'nc') . " AS sri_ultima_accion" : ''),
             ],
             $params
         );
@@ -697,6 +707,40 @@ class NotaCreditoRepository extends BaseRepository
         $sql = "UPDATE notas_credito_cabecera SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = ? WHERE id = ?";
         $st = $this->db->prepare($sql);
         $st->execute([$idUsuario, $id]);
+    }
+
+    /**
+     * Vínculo propio de la NC que su eliminación deshizo y que restaurarla NO rehace (para
+     * DocumentoSriRestauracionService::restaurar()). null = se puede restaurar.
+     *
+     * Devengado de suscripciones: al guardar, la NC toma lo aún no devengado de la factura
+     * (SuscripcionDevengoService::aplicarNotaCredito) y al eliminarla se lo devuelve
+     * (restaurarNotaCredito). Esa devolución deja filas dadas de baja con id_nota_credito o,
+     * cuando la fila vuelve a «pendiente», borra el vínculo; por eso también se mira el log
+     * 'nota_credito_devengo' que registra la aplicación.
+     */
+    public function motivoNoRestaurable(int $id, int $idEmpresa): ?string
+    {
+        if ($this->tablaExiste('suscripciones_devengos')) {
+            $st = $this->db->prepare(
+                "SELECT 1 FROM suscripciones_devengos WHERE id_nota_credito = ? AND id_empresa = ? LIMIT 1"
+            );
+            $st->execute([$id, $idEmpresa]);
+            $afecto = (bool) $st->fetchColumn();
+            if (!$afecto) {
+                $st = $this->db->prepare(
+                    "SELECT 1 FROM log_sistema
+                      WHERE accion = 'nota_credito_devengo' AND tabla_afectada = 'notas_credito_cabecera'
+                        AND id_registro = ? AND id_empresa = ? LIMIT 1"
+                );
+                $st->execute([$id, $idEmpresa]);
+                $afecto = (bool) $st->fetchColumn();
+            }
+            if ($afecto) {
+                return 'la nota de crédito afectó el devengado de suscripciones y al eliminarla se devolvió. Emítala de nuevo.';
+            }
+        }
+        return null;
     }
 
     public function getPorDocumentoModificado(string $numeroFactura, int $idEmpresa): array

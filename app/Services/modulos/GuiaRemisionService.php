@@ -230,6 +230,22 @@ class GuiaRemisionService
         }
     }
 
+    /**
+     * Restaura (des-elimina) una guía que se eliminó en BORRADOR, con su mismo número (p. ej.
+     * NO AUTORIZADA por el SRI, o eliminada sin haberse enviado). La regla común vive en
+     * App\Services\DocumentoSriRestauracionService (estado, período, número ocupado, candado y
+     * auditoría). Las anuladas que se eliminaron no se restauran (solo estado borrador).
+     * eliminar() de la guía no deshace ningún vínculo (no mueve inventario, cartera ni
+     * asiento), así que no hay motivo propio que sumar.
+     *
+     * @return array{id:int, numero:string}
+     */
+    public function restaurar(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        return (new \App\Services\DocumentoSriRestauracionService(null, $this->log))
+            ->restaurar('guia_remision', $id, $idEmpresa, $idUsuario);
+    }
+
     public function anular(int $id, int $idEmpresa, int $idUsuario): void
     {
         $actual = $this->repo->getPorId($id);

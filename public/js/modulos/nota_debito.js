@@ -280,6 +280,7 @@
             document.getElementById('nd_fecha_emision').value = (data.fecha_emision || '').split(' ')[0].split('T')[0];
             document.getElementById('nd_id_punto_emision').value = data.id_punto_emision || '';
             document.getElementById('nd_secuencial').value = data.secuencial != null ? String(data.secuencial).padStart(9, '0') : '';
+            ND_avisoOmitidos([]); // ND existente: sin aviso de números omitidos
             document.getElementById('nd_id_cliente').value = data.id_cliente || '';
             document.getElementById('nd_cliente_search').value = data.cliente_nombre || '';
             ND_setFacturaHabilitada(true);
@@ -528,6 +529,9 @@
                 } else {
                     inputSec.classList.remove('border-danger');
                 }
+                // Números que el generador saltó porque el SRI ya los tiene (ND eliminadas
+                // después de recibidas/autorizadas). Solo en una ND nueva.
+                ND_avisoOmitidos(document.getElementById('nd_id').value ? [] : (data.omitidos || []));
             } else {
                 inputSec.value = '000000001';
                 inputSec.placeholder = '000000001';
@@ -542,6 +546,39 @@
             console.error('Error cargando secuencial ND:', e);
         }
     };
+
+    // Aviso de números omitidos junto al secuencial (CMG_avisoNumerosOmitidos, app.js). Con []
+    // lo quita. Restaurar solo lo ofrece al superadministrador (ND_ES_SUPERADMIN): embebido en
+    // Facturas de Venta esa variable no existe y el aviso queda solo informativo.
+    function ND_avisoOmitidos(omitidos) {
+        const input = document.getElementById('nd_secuencial');
+        if (!input || typeof window.CMG_avisoNumerosOmitidos !== 'function') return;
+        const optSerie = document.getElementById('nd_id_punto_emision')?.selectedOptions?.[0];
+        window.CMG_avisoNumerosOmitidos(input, omitidos, {
+            serie: optSerie ? optSerie.textContent.trim() : '',
+            urlRestaurar: `${BASE_URL}/modulos/nota_debito/restaurarAjax`,
+            esSuperadmin: window.ND_ES_SUPERADMIN === true,
+            target: document.getElementById('modalND') || undefined,
+            onRestaurado: (j) => {
+                if (!j || !j.id) return;
+                // Se descarta la ND nueva y se abre la restaurada (borrador) en el mismo modal.
+                if (document.getElementById('nd-table-body') && typeof window.ND_fetchSearch === 'function') {
+                    window.ND_fetchSearch(1);
+                }
+                window.ND_abrirModalND({ dataset: { row: JSON.stringify({ id: j.id, estado: 'borrador' }) } });
+            },
+        });
+    }
+
+    // Fila de una ND eliminada (estado:eliminada, solo superadmin): tras restaurarla, app.js
+    // emite `documentoSriRestaurado`; aquí se repinta el listado por AJAX en vez de recargar.
+    document.addEventListener('documentoSriRestaurado', (ev) => {
+        const url = ev.detail?.url || '';
+        if (!url.includes('/nota_debito/restaurarAjax')) return;
+        if (!document.getElementById('nd-table-body') || typeof window.ND_fetchSearch !== 'function') return;
+        ev.preventDefault();
+        window.ND_fetchSearch(1);
+    });
 
     // ─── AUTOCOMPLETE CLIENTES ──────────────────────────────────────────────
 

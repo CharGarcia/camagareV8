@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos
-version: 1.29
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos, numero saltado, secuencial saltado, numero omitido, falta un numero, error 45, secuencial registrado, restaurar retencion, recuperar retencion eliminada, retenciones eliminadas, estado:eliminada, no autorizada
+version: 1.30
 orden: 30
 estado: activo
 ---
@@ -376,6 +376,67 @@ Tenga en cuenta:
 - La eliminación queda en el historial como *ELIMINAR_FORZADO_SUPERADMIN*, con el
   estado que tenía la retención.
 
+## Número saltado: retención eliminada que ya pasó por el SRI
+
+La regla es la misma para todos los comprobantes electrónicos: ver
+[Comprobantes eliminados y números del SRI](../conceptos/comprobantes-eliminados-y-secuenciales.md).
+
+El número de una retención nueva no siempre es "la última + 1". Qué pasa con el
+número de una retención eliminada depende de lo **último** que respondió el SRI:
+
+| Último resultado del SRI | ¿Se vuelve a usar el número? |
+|---|---|
+| Nunca se envió, o **DEVUELTA** | Sí: la siguiente retención nueva lo toma. |
+| **NO AUTORIZADA** | Sí: la siguiente retención nueva lo toma (el SRI lo acepta con otra clave de acceso). |
+| **RECIBIDA** o **EN PROCESAMIENTO** (sin resolver) | No: el SRI todavía puede autorizarla. Se salta. |
+| **AUTORIZADA** | No: el número ya es de ese comprobante. Se salta. |
+
+Cuando se salta un número, junto a la etiqueta **Secuencial** de la retención
+nueva aparece un **triángulo amarillo** y el número se ve con borde amarillo. Al
+pulsar el triángulo se ve qué número se omitió, qué respondió el SRI y cuándo se
+eliminó la retención. Una retención nueva con ese número sería rechazada con
+*«ERROR 45 SECUENCIAL REGISTRADO»*, por eso se propone el siguiente libre.
+
+Si es el **superadministrador**, la ventana trae el botón **Restaurar este
+documento**: la retención eliminada vuelve con su mismo número y se abre; la
+retención nueva que estaba abierta se descarta. Los demás usuarios ven el aviso de
+pedírselo al superadministrador. El aviso aparece también al emitir la retención
+desde una compra o una liquidación.
+
+## Ver y restaurar retenciones eliminadas desde el listado
+
+El superadministrador puede ver las retenciones eliminadas escribiendo en el
+buscador del listado:
+
+```
+estado:eliminada
+```
+
+Aparecen las retenciones eliminadas del ambiente actual, atenuadas, con el número
+tachado y dos etiquetas: **Eliminada** (con la fecha) y lo último que respondió el
+SRI (**No enviada al SRI**, **SRI: NO AUTORIZADA**, **SRI: RECIBIDA**, etc.). El
+filtro se combina con los demás, por ejemplo `estado:eliminada proveedor:perez`.
+Para los demás usuarios no muestra nada.
+
+Al hacer clic en una fila se pide confirmación y la retención se **restaura** con
+su mismo número y su mismo estado (borrador o no autorizada), para corregirla y
+reenviarla al SRI.
+
+Qué tener en cuenta:
+
+- Solo se restauran retenciones que se eliminaron en **borrador** o **no
+  autorizada**. Una autorizada eliminada por el superadministrador se vuelve a
+  cargar desde *Descargas del SRI*.
+- No se restaura si su **período contable está cerrado** o si otra retención
+  vigente ya usa ese número.
+- Tampoco si, mientras estuvo eliminada, **la compra o liquidación que retenía se
+  eliminó**, si ese documento **ya tiene otra retención vigente**, o si otra
+  retención vigente del mismo proveedor ya retiene el **mismo documento de
+  sustento** (solo se permite una por documento y proveedor).
+- Se vuelven a generar sus casilleros de la declaración de IVA. El asiento
+  contable se genera cuando la retención se autorice.
+- La restauración queda registrada en el historial del sistema (acción *RESTAURAR*).
+
 ## Documentos del módulo
 
 Desde la retención guardada están disponibles el **PDF** del comprobante, su
@@ -491,6 +552,11 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.30** — **Número saltado**: si el siguiente número de la serie lo tiene el SRI
+  recibido o autorizado de una retención eliminada, el secuencial de la retención
+  nueva muestra un triángulo amarillo que explica el salto. El superadministrador
+  puede ver las retenciones eliminadas con `estado:eliminada` y **restaurarlas**
+  (borrador o no autorizada) con su mismo número.
 - **1.29** — Al emitir la retención desde la compra o la liquidación, los conceptos de
   retención asignados al proveedor (renta e IVA) se cargan como líneas sugeridas con
   la base del documento.

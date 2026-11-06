@@ -940,4 +940,145 @@ window.CMG_Identificacion = (function () {
         if (isNaN(n)) n = 2;
         return Math.max(0, Math.min(6, n));
     };
+
+    // ── Comprobantes electrónicos eliminados: restaurar y números omitidos ─────────────
+    // Servidor: App\Services\DocumentoSriRestauracionService + App\Helpers\DocumentoEliminadoSri.
+    // Solo el superadministrador restaura (lo valida cada endpoint restaurarAjax).
+
+    var cmgEsc = function (s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    };
+    var cmgRestaurando = false;
+
+    /**
+     * Pide confirmación, restaura el documento (POST id a `url`) y avisa. Devuelve la
+     * respuesta del servidor ({ok, id, mensaje}) o null si se canceló o falló.
+     * opciones: { target: elemento donde montar los avisos (p. ej. el modal abierto),
+     *             nota: texto extra para la confirmación }
+     */
+    window.CMG_restaurarDocumentoSri = async function (url, id, numero, opciones) {
+        opciones = opciones || {};
+        if (!url || !id || cmgRestaurando || typeof Swal === 'undefined') return null;
+        cmgRestaurando = true;
+        try {
+            var conf = await Swal.fire({
+                icon: 'question',
+                title: '¿Restaurar el documento ' + numero + '?',
+                html: '<div class="small text-start">Vuelve como <strong>borrador</strong>, con su mismo número, para corregirlo y reenviarlo al SRI.'
+                    + (opciones.nota ? '<br>' + cmgEsc(opciones.nota) : '')
+                    + '<br>Lo que se anuló al eliminarlo (cobros, pagos) no se recupera.</div>',
+                showCancelButton: true,
+                confirmButtonText: 'Restaurar',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#198754',
+                target: opciones.target || undefined,
+            });
+            if (!conf.isConfirmed) return null;
+
+            var fd = new FormData();
+            fd.append('id', String(id));
+            var resp = await fetch(url, { method: 'POST', body: fd });
+            var json = await resp.json();
+            if (!json.ok) {
+                Swal.fire({ icon: 'error', title: 'No se pudo restaurar', text: json.mensaje || 'Error desconocido.', target: opciones.target || undefined });
+                return null;
+            }
+            await Swal.fire({ icon: 'success', title: 'Documento restaurado', text: json.mensaje || '', timer: 1800, showConfirmButton: false, target: opciones.target || undefined });
+            return json;
+        } catch (e) {
+            console.error('CMG_restaurarDocumentoSri', e);
+            Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se pudo restaurar el documento.' });
+            return null;
+        } finally {
+            cmgRestaurando = false;
+        }
+    };
+
+    // Clic en una fila del filtro estado:eliminada (DocumentoEliminadoSri::fila). Tras restaurar
+    // se emite `documentoSriRestaurado` ({url, id}); si ningún módulo lo atiende
+    // (preventDefault), se recarga la página para que la fila desaparezca.
+    document.addEventListener('click', async function (e) {
+        var tr = e.target.closest ? e.target.closest('tr[data-restaurar-sri]') : null;
+        if (!tr) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var estado = tr.dataset.estado || '';
+        if (estado && estado !== 'borrador' && estado !== 'no_autorizada') {
+            if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'No se puede restaurar', text: 'El documento ' + (tr.dataset.numero || '') + ' no se eliminó en borrador (estaba ' + estado + ').' });
+            return;
+        }
+        var json = await window.CMG_restaurarDocumentoSri(tr.dataset.restaurarSri, parseInt(tr.dataset.id, 10) || 0, tr.dataset.numero || '');
+        if (!json) return;
+        var ev = new CustomEvent('documentoSriRestaurado', { cancelable: true, detail: { url: tr.dataset.restaurarSri, id: json.id } });
+        if (document.dispatchEvent(ev)) location.reload();
+    }, true);
+
+    /**
+     * Aviso de números omitidos junto al input del secuencial de un documento NUEVO: el
+     * generador saltó números que el SRI tiene recibidos o autorizados de documentos que
+     * luego se eliminaron (getSecuencialAjax → `omitidos`). Llamarlo SIEMPRE tras cargar el
+     * secuencial (con [] lo quita).
+     * opciones: { serie: '001-001', urlRestaurar, esSuperadmin, target, onRestaurado(json) }
+     */
+    window.CMG_avisoNumerosOmitidos = function (input, omitidos, opciones) {
+        if (!input) return;
+        opciones = opciones || {};
+        omitidos = Array.isArray(omitidos) ? omitidos : [];
+        var idIco = (input.id || 'sec') + '-omitidos';
+        var ico = document.getElementById(idIco);
+        if (!omitidos.length) {
+            if (ico) ico.remove();
+            if (input.dataset.cmgOmitidos) { input.classList.remove('border-warning'); delete input.dataset.cmgOmitidos; }
+            return;
+        }
+        input.classList.add('border-warning');
+        input.dataset.cmgOmitidos = '1';
+        input.title = 'Se omitió ' + omitidos.map(function (o) { return o.secuencial; }).join(', ') + ': el SRI ya lo tiene registrado.';
+        if (!ico) {
+            ico = document.createElement('a');
+            ico.href = '#';
+            ico.id = idIco;
+            ico.className = 'text-warning ms-1';
+            ico.title = 'Se omitieron números de esta serie';
+            ico.innerHTML = '<i class="bi bi-exclamation-triangle-fill"></i>';
+            var cont = input.closest('.col, [class*="col-"], .mb-2, .mb-3, div');
+            var label = cont ? cont.querySelector('label') : null;
+            if (label) label.appendChild(ico); else input.insertAdjacentElement('afterend', ico);
+        }
+        ico.onclick = function (ev) {
+            ev.preventDefault();
+            if (typeof Swal === 'undefined') return;
+            var serie = opciones.serie ? opciones.serie + '-' : '';
+            var puede = !!opciones.esSuperadmin && !!opciones.urlRestaurar;
+            var filas = omitidos.map(function (o) {
+                return '<li class="mb-2"><strong>' + cmgEsc(serie + o.secuencial) + '</strong>: el SRI la respondió como <strong>'
+                    + cmgEsc(o.estado_sri) + '</strong>' + (o.fecha_sri ? ' el ' + cmgEsc(o.fecha_sri) : '')
+                    + (o.eliminado_el ? ' y se eliminó el ' + cmgEsc(o.eliminado_el) : ' y luego se eliminó') + '.'
+                    + (puede && o.id ? '<br><button type="button" class="btn btn-sm btn-outline-success mt-1 cmg-btn-restaurar-omitido" data-id="' + (parseInt(o.id, 10) || 0)
+                        + '" data-num="' + cmgEsc(serie + o.secuencial) + '"><i class="bi bi-arrow-counterclockwise me-1"></i>Restaurar este documento</button>' : '')
+                    + '</li>';
+            }).join('');
+            Swal.fire({
+                icon: 'info',
+                title: 'Números omitidos',
+                html: '<div class="text-start small"><ul class="ps-3 mb-2">' + filas + '</ul>'
+                    + 'El SRI ya tiene registrado ese número (recibido o autorizado), por eso no se puede usar en un documento nuevo: '
+                    + 'lo rechazaría con «ERROR 45 SECUENCIAL REGISTRADO». Se propone el siguiente libre.'
+                    + (puede ? '' : '<br><br>Si necesita ese número, pida al superadministrador que restaure el documento eliminado.') + '</div>',
+                confirmButtonText: 'Entendido',
+                target: opciones.target || undefined,
+                didOpen: function (popup) {
+                    popup.querySelectorAll('.cmg-btn-restaurar-omitido').forEach(function (btn) {
+                        btn.addEventListener('click', async function () {
+                            var json = await window.CMG_restaurarDocumentoSri(opciones.urlRestaurar, parseInt(btn.dataset.id, 10) || 0, btn.dataset.num || '',
+                                { target: opciones.target, nota: 'El documento nuevo que tiene abierto se descarta.' });
+                            if (json && typeof opciones.onRestaurado === 'function') opciones.onRestaurado(json);
+                        });
+                    });
+                },
+            });
+        };
+    };
 })();
