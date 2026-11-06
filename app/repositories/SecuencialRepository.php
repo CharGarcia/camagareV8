@@ -910,27 +910,41 @@ class SecuencialRepository
         $retiene      = self::ACCIONES_SRI_RETIENE_SECUENCIAL;
         $inicial      = max(1, $secuencialInicial);
         $techo        = $techo ?? PHP_INT_MAX;
+        $amb          = $this->getTipoAmbiente($idPuntoEmision);
 
-        // Última acción concluyente del documento: solo cuenta si con ella el SRI retiene el
-        // número (misma regla que getSiguienteDisponible, ver ACCIONES_SRI_CONCLUYENTES).
-        $sql = "WITH vigente AS (
-                    SELECT COALESCE(MAX(CAST(TRIM({$colSec}) AS BIGINT)), 0) AS max_sec
-                      FROM {$tabla}
-                     WHERE {$colPunto} = :id_punto_v
-                       AND tipo_ambiente = :amb_v
-                       AND eliminado = false
-                       AND TRIM({$colSec}) ~ '^[0-9]+$'
-                       AND CAST(TRIM({$colSec}) AS BIGINT) BETWEEN :piso_v AND :techo_v
-                       AND CAST(TRIM({$colSec}) AS BIGINT) < :sig_v
-                )
-                SELECT DISTINCT ON (CAST(TRIM(d.{$colSec}) AS BIGINT))
+        // RENDIMIENTO (incidente 06-11-2026): antes era UNA consulta con `CROSS JOIN vigente`
+        // (el máximo vigente como CTE) + LATERAL al log. En la serie de 32.217 facturas de
+        // producción quedaba corriendo 13+ minutos por llamada y, como se llama al abrir cada
+        // documento nuevo, se acumulaban y saturaban la BD. Ahora son dos pasos simples:
+
+        // 1) Último número vigente por debajo del propuesto: un solo agregado.
+        $st = $this->db->prepare(
+            "SELECT COALESCE(MAX(CAST(TRIM({$colSec}) AS BIGINT)), 0)
+               FROM {$tabla}
+              WHERE {$colPunto} = :id_punto AND tipo_ambiente = :amb AND eliminado = false
+                AND TRIM({$colSec}) ~ '^[0-9]+$'
+                AND CAST(TRIM({$colSec}) AS BIGINT) BETWEEN :piso AND :techo
+                AND CAST(TRIM({$colSec}) AS BIGINT) < :sig"
+        );
+        $st->execute([':id_punto' => $idPuntoEmision, ':amb' => $amb, ':piso' => $inicial, ':techo' => $techo, ':sig' => $siguiente]);
+        $maxVigente = (int) $st->fetchColumn();
+
+        // Sin salto entre el último vigente y el propuesto no hay nada omitido: el caso normal,
+        // que ya no hace ninguna consulta más.
+        $desde = max($inicial, $maxVigente + 1);
+        $hasta = $siguiente - 1;
+        if ($desde > $hasta) {
+            return [];
+        }
+
+        // 2) Solo los documentos ELIMINADOS del tramo saltado, y solo para ellos el log del SRI.
+        $sql = "SELECT DISTINCT ON (CAST(TRIM(d.{$colSec}) AS BIGINT))
                        CAST(TRIM(d.{$colSec}) AS BIGINT) AS sec,
                        d.id,
                        d.deleted_at,
                        l.accion,
                        l.created_at AS fecha_sri
                   FROM {$tabla} d
-                  CROSS JOIN vigente v
                   JOIN LATERAL (
                        SELECT x.accion, x.created_at
                          FROM sri_envio_log x
@@ -942,27 +956,19 @@ class SecuencialRepository
                         LIMIT 1
                   ) l ON l.accion IN ({$retiene})
                  WHERE d.{$colPunto} = :id_punto
+                   AND d.eliminado = TRUE
                    AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
-                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :piso AND :techo
-                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) < :sig
-                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) > v.max_sec
+                   AND CAST(TRIM(d.{$colSec}) AS BIGINT) BETWEEN :desde AND :hasta
                  ORDER BY CAST(TRIM(d.{$colSec}) AS BIGINT), d.deleted_at DESC NULLS LAST
                  LIMIT 20";
 
-        $amb  = $this->getTipoAmbiente($idPuntoEmision);
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
-            ':id_punto_v'   => $idPuntoEmision,
-            ':amb_v'        => $amb,
-            ':piso_v'       => $inicial,
-            ':techo_v'      => $techo,
-            ':sig_v'        => $siguiente,
             ':tipo_sri_log' => $tipoSriLog,
             ':amb_l'        => $amb,
             ':id_punto'     => $idPuntoEmision,
-            ':piso'         => $inicial,
-            ':techo'        => $techo,
-            ':sig'          => $siguiente,
+            ':desde'        => $desde,
+            ':hasta'        => $hasta,
         ]);
 
         return array_map(static fn(array $r): array => [
