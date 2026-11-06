@@ -80,23 +80,29 @@ class SecuencialRepository
     private const ACCIONES_SRI_RETIENE_SECUENCIAL = "'recibida','en_procesamiento','autorizado','autorizada'";
 
     /**
-     * Condición SQL "el SRI retiene el secuencial del documento {$aliasDoc}" (ver la regla en
-     * ACCIONES_SRI_CONCLUYENTES). Usa los parámetros :{$p}tipo y :{$p}amb.
+     * JOIN "el SRI retiene el secuencial del documento {$aliasDoc}" (ver la regla en
+     * ACCIONES_SRI_CONCLUYENTES): deja pasar solo los documentos cuya última acción concluyente
+     * los retiene. Usa los parámetros :{$p}tipo y :{$p}amb.
+     *
+     * RENDIMIENTO — va como JOIN LATERAL y NO como `AND EXISTS (subconsulta)` en el WHERE:
+     * PostgreSQL costea un SubPlan del WHERE como si corriera en CADA fila que recorre el scan
+     * (aunque en la práctica solo corra en las pocas que pasan los demás filtros). En producción
+     * (202.086 facturas) eso estimaba cost ~703.000, superaba jit_above_cost y el JIT gastaba
+     * 9-15 s compilando EN CADA apertura/guardado de un documento nuevo: CPU de la BD saturada y
+     * todo el sistema lento (06-11-2026). Con LATERAL el costo se multiplica solo por las filas
+     * que ya pasaron los filtros (los pocos eliminados de la serie).
      */
-    private function sqlSriRetiene(string $aliasDoc, string $p): string
+    private function sqlJoinSriRetiene(string $aliasDoc, string $p): string
     {
-        return "EXISTS (
-                    SELECT 1 FROM (
-                        SELECT x.accion FROM sri_envio_log x
-                         WHERE x.tipo_comprobante = :{$p}tipo
-                           AND x.id_comprobante   = {$aliasDoc}.id
-                           AND x.tipo_ambiente    = :{$p}amb
-                           AND x.accion IN (" . self::ACCIONES_SRI_CONCLUYENTES . ")
-                         ORDER BY x.id DESC
-                         LIMIT 1
-                    ) ult
-                    WHERE ult.accion IN (" . self::ACCIONES_SRI_RETIENE_SECUENCIAL . ")
-                )";
+        return "JOIN LATERAL (
+                    SELECT x.accion FROM sri_envio_log x
+                     WHERE x.tipo_comprobante = :{$p}tipo
+                       AND x.id_comprobante   = {$aliasDoc}.id
+                       AND x.tipo_ambiente    = :{$p}amb
+                       AND x.accion IN (" . self::ACCIONES_SRI_CONCLUYENTES . ")
+                     ORDER BY x.id DESC
+                     LIMIT 1
+                ) ult_{$p} ON ult_{$p}.accion IN (" . self::ACCIONES_SRI_RETIENE_SECUENCIAL . ")";
     }
 
     /**
@@ -801,6 +807,7 @@ class SecuencialRepository
                     UNION
                     SELECT DISTINCT CAST(TRIM(d.{$colSec}) AS BIGINT) AS sec
                       FROM {$tabla} d
+                      " . $this->sqlJoinSriRetiene('d', 'q_') . "
                      WHERE d.{$colPunto} = :id_punto_q
                        AND d.{$colSec} IS NOT NULL
                        AND TRIM(d.{$colSec}) ~ '^[0-9]+$'
@@ -809,8 +816,7 @@ class SecuencialRepository
                        -- otro ambiente). Los vigentes de este ambiente ya cuentan como usados; mirar su
                        -- historial en sri_envio_log era una subconsulta por CADA documento de la serie
                        -- (miles en cada apertura y guardado de un documento nuevo).
-                       AND (d.eliminado = TRUE OR COALESCE(d.tipo_ambiente, '1') <> :amb_noq)
-                       AND " . $this->sqlSriRetiene('d', 'q_');
+                       AND (d.eliminado = TRUE OR COALESCE(d.tipo_ambiente, '1') <> :amb_noq)";
             $params += [
                 ':id_punto_q' => $idPuntoEmision,
                 ':piso_q'     => $inicial,
