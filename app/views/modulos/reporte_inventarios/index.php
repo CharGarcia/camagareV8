@@ -37,6 +37,11 @@ $riSubtitulo = count($riNombres) > 1
         display: block; overflow: hidden; text-overflow: ellipsis;
         white-space: nowrap; max-width: 100%;
     }
+    /* Ordenar por columna en pantalla (RI_Orden, reporte_inventarios.js): clic en el encabezado. */
+    .ri-ordenable > thead th:not(.ri-no-orden):not(.sortable-header) { cursor: pointer; user-select: none; }
+    .ri-ordenable > thead th:not(.ri-no-orden):not(.sortable-header)::after { content: "\2195"; margin-left: 4px; font-size: .75em; opacity: .35; }
+    .ri-ordenable > thead th.ri-orden-asc::after  { content: "\25B2"; opacity: 1; color: var(--bs-primary); }
+    .ri-ordenable > thead th.ri-orden-desc::after { content: "\25BC"; opacity: 1; color: var(--bs-primary); }
     .ri-kpi-icon { width: 48px; height: 48px; }
     .ri-nav-tabs .nav-link { font-weight: 600; font-size: .85rem; }
     .ri-nav-tabs .nav-link.active { border-bottom: 3px solid var(--bs-primary); }
@@ -254,9 +259,9 @@ $riSubtitulo = count($riNombres) > 1
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
                                 <select id="ri-mv-anio" class="form-select form-select-sm shadow-none border" style="width:90px;" onchange="window.RI_Movimientos.cambiarMesAnio();" title="Arranca en el año más reciente con movimientos: sin acotar la fecha, el saldo corrido obliga a recorrer todo el histórico.">
                                     <option value="TODOS">Todos</option>
-                                    <?php foreach (($anios ?? [date('Y')]) as $__i => $a): ?>
-                                        <option value="<?= htmlspecialchars((string) $a) ?>"<?= $__i === 0 ? ' selected' : '' ?>><?= htmlspecialchars((string) $a) ?></option>
-                                    <?php endforeach; ?>
+                                    <?php /* Arranca con el año en curso; los demás años con movimientos los agrega
+                                             RI_Movimientos.cargarOpciones() cuando la página ya se mostró. */ ?>
+                                    <option value="<?= date('Y') ?>" selected><?= date('Y') ?></option>
                                 </select>
                             </div>
                             <div>
@@ -303,17 +308,12 @@ $riSubtitulo = count($riNombres) > 1
                                 <select id="ri-mv-origen" class="form-select form-select-sm shadow-none border" style="width:150px;">
                                     <option value="">Todos</option>
                                     <option value="ajuste_manual">Ajuste manual</option>
-                                    <?php foreach (($origenes ?? []) as $o): ?>
-                                        <?php if ((string) $o === 'ajuste_manual') continue; ?>
-                                        <option value="<?= htmlspecialchars((string) $o) ?>"><?= htmlspecialchars(\App\repositories\modulos\ReporteInventarioRepository::labelOrigen((string) $o)) ?></option>
-                                    <?php endforeach; ?>
                                 </select>
                             </div>
                             <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Usuario</label>
                                 <select id="ri-mv-usuario" class="form-select form-select-sm shadow-none border" style="width:150px;">
                                     <option value="">Todos</option>
-                                    <?php foreach (($usuarios ?? []) as $u): ?><option value="<?= (int) $u['id'] ?>"><?= htmlspecialchars($u['nombre']) ?></option><?php endforeach; ?>
                                 </select>
                             </div>
                         </div>
@@ -706,7 +706,7 @@ $riSubtitulo = count($riNombres) > 1
                                     <th class="text-end">Guardado</th>
                                     <th class="text-end">Real (Kardex)</th>
                                     <th class="text-end">Diferencia</th>
-                                    <th class="text-center">Acción</th>
+                                    <th class="text-center ri-no-orden">Acción</th>
                                 </tr>
                             </thead>
                             <tbody id="ri-au-tbody">

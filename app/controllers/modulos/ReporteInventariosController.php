@@ -172,10 +172,9 @@ class ReporteInventariosController extends BaseModuloController
         $categorias = (new CategoriaRepository())->getCombo($idEmpresa);
         $marcas     = (new MarcaRepository())->getCombo($idEmpresa);
         $vendedores    = (new VendedorRepository())->getVendedoresActivos($idEmpresa);
-        $inventarioRepo = new InventarioRepository();
-        $usuarios      = $inventarioRepo->getUsuariosConMovimientos($idEmpresa);
-        $origenes      = $inventarioRepo->getTiposReferencia($idEmpresa);
-        $anios         = $this->repository->getAniosMovimientos($idEmpresa);
+        // Año, Origen y Usuario de Movimientos NO se consultan aquí: los tres recorren el
+        // kardex de la empresa y retrasaban la aparición de la página aunque el usuario aún
+        // no hubiera pedido nada. La vista los pide después con opcionesMovimientosAjax().
         $responsables  = (new \App\repositories\modulos\ResponsableTrasladoRepository())->listarPorEmpresa($idEmpresa);
 
         // Pestañas visibles (configuradas por usuario en /config/permisos-modulos) y cuál
@@ -195,15 +194,49 @@ class ReporteInventariosController extends BaseModuloController
             'categorias' => $categorias,
             'marcas'     => $marcas,
             'vendedores' => $vendedores,
-            'usuarios'   => $usuarios,
-            'origenes'   => $origenes,
-            'anios'      => $anios,
             'responsables' => $responsables,
             // Comprobación con Contabilidad (botón de la pestaña Auditoría): con acceso a Estados Financieros.
             'puedeComprobarContabilidad' => !empty($pestanas['auditoria']) && $this->puedeComprobarContabilidad(),
             'fullWidth'  => true,
             'base'       => BASE_URL,
         ]);
+    }
+
+    /**
+     * Opciones de los selectores Año, Origen y Usuario de la pestaña Movimientos. Se piden
+     * por AJAX cuando la página ya está a la vista (RI_Movimientos.cargarOpciones): salen del
+     * kardex de la empresa y, en una base grande sin los índices de
+     * database/20260916_reporte_inventarios_indices_ajuste.sql, cuestan varios recorridos
+     * completos que antes demoraban la apertura del módulo.
+     */
+    public function opcionesMovimientosAjax(): void
+    {
+        $this->requireLeer();
+        $this->requirePestana('movimientos');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->liberarSesion();
+
+        try {
+            $inventarioRepo = new InventarioRepository();
+            $origenes = array_values(array_filter(
+                array_map('strval', $inventarioRepo->getTiposReferencia($idEmpresa)),
+                static fn(string $o) => $o !== 'ajuste_manual'   // ya va fijo en la vista
+            ));
+            $this->json([
+                'ok'       => true,
+                'anios'    => array_map('intval', $this->repository->getAniosMovimientos($idEmpresa)),
+                'origenes' => array_map(static fn(string $o) => [
+                    'valor' => $o,
+                    'label' => ReporteInventarioRepository::labelOrigen($o),
+                ], $origenes),
+                'usuarios' => array_map(static fn(array $u) => [
+                    'id' => (int) $u['id'], 'nombre' => (string) $u['nombre'],
+                ], $inventarioRepo->getUsuariosConMovimientos($idEmpresa)),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['ok' => false, 'error' => 'No se pudieron cargar las opciones de Movimientos.'], 500);
+        }
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -1568,6 +1601,7 @@ class ReporteInventariosController extends BaseModuloController
         }
 
         [$headers, $data] = $this->filasExportLineasConsignacion($idEmpresa, $lineas);
+        $data = self::ordenarExport($headers, $data);
 
         try {
             $empresa  = (new Empresa())->getPorId($idEmpresa) ?? [];
@@ -1959,6 +1993,7 @@ class ReporteInventariosController extends BaseModuloController
         $this->liberarSesion();
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
+        $exportData = self::ordenarExport($headers, $exportData);
 
         $maxFilas = self::maxFilasExcel(count($headers));
         if (count($exportData) > $maxFilas) {
@@ -2052,6 +2087,7 @@ class ReporteInventariosController extends BaseModuloController
         $this->liberarSesion();
 
         [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
+        $exportData = self::ordenarExport($headers, $exportData);
 
         if (count($exportData) > self::PDF_MAX_FILAS) {
             $this->bloquearExportPorVolumen('PDF', $tab, count($exportData), self::PDF_MAX_FILAS);
@@ -2101,6 +2137,101 @@ class ReporteInventariosController extends BaseModuloController
         } catch (\Throwable $e) {
             echo 'Error al generar PDF: ' . $e->getMessage();
         }
+    }
+
+    /**
+     * Títulos de la pantalla que en el archivo se llaman distinto (clave y valor normalizados
+     * con normalizarTitulo). Consignaciones "En general" muestra una fila por documento y
+     * exporta una por línea: "Total productos" de la pantalla es "Consignado" en el archivo.
+     */
+    private const ALIAS_COLUMNA_EXPORT = [
+        'totalproductos'      => 'consignado',
+        'responsabletraslado' => 'responsabledetraslado',
+        'descripcion'         => 'producto',
+    ];
+
+    private static function normalizarTitulo(string $t): string
+    {
+        $t = mb_strtolower(trim($t), 'UTF-8');
+        $t = strtr($t, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n']);
+        return preg_replace('/[^a-z0-9]/', '', $t);
+    }
+
+    /**
+     * Ordena las filas del PDF/Excel igual que la tabla en pantalla (RI_Orden en
+     * reporte_inventarios.js manda orden_columna = título del encabezado y orden_sentido).
+     * Mismas reglas que la pantalla: números como números, fechas d-m-Y [H:i] por fecha,
+     * texto sin distinguir mayúsculas ni tildes ("A2" antes que "A10"), vacíos y "-" al final.
+     * Las filas de cierre (TOTALES, aviso de listado recortado) se quedan al final.
+     * Si la columna no existe en el archivo, se deja el orden del reporte.
+     */
+    private static function ordenarExport(array $headers, array $data): array
+    {
+        $col = self::normalizarTitulo((string) ($_REQUEST['orden_columna'] ?? ''));
+        if ($col === '' || count($data) < 2) {
+            return $data;
+        }
+        $titulos = array_map(fn($h) => self::normalizarTitulo((string) $h), array_values($headers));
+        $idx = array_search($col, $titulos, true);
+        if ($idx === false && isset(self::ALIAS_COLUMNA_EXPORT[$col])) {
+            $idx = array_search(self::ALIAS_COLUMNA_EXPORT[$col], $titulos, true);
+        }
+        if ($idx === false) {
+            return $data;
+        }
+        $dir = strtoupper((string) ($_REQUEST['orden_sentido'] ?? 'ASC')) === 'DESC' ? -1 : 1;
+
+        $fijas = [];
+        $filas = [];
+        foreach (array_values($data) as $i => $fila) {
+            $fila  = array_values($fila);
+            $first = (string) ($fila[0] ?? '');
+            if ($first === 'TOTALES' || str_starts_with($first, '***')) {
+                $fijas[] = $fila;
+                continue;
+            }
+            $filas[] = ['f' => $fila, 'i' => $i, 'k' => self::claveOrdenExport($fila[$idx] ?? null)];
+        }
+
+        usort($filas, function ($a, $b) use ($dir) {
+            [$ta, $va] = $a['k'];
+            [$tb, $vb] = $b['k'];
+            if ($ta === 0 || $tb === 0) {
+                return $ta === $tb ? $a['i'] <=> $b['i'] : ($ta === 0 ? 1 : -1);
+            }
+            if ($ta !== $tb) {
+                $r = $ta <=> $tb;            // números antes que texto
+            } elseif ($ta === 1) {
+                $r = $va <=> $vb;
+            } else {
+                $r = strnatcmp($va, $vb);
+            }
+            return $r !== 0 ? $r * $dir : $a['i'] <=> $b['i'];
+        });
+
+        return array_merge(array_column($filas, 'f'), $fijas);
+    }
+
+    /** @return array{0:int,1:mixed} [0 vacío | 1 número/fecha | 2 texto, valor] */
+    private static function claveOrdenExport($v): array
+    {
+        if (is_int($v) || is_float($v)) {
+            return [1, (float) $v];
+        }
+        $t = trim((string) $v);
+        if ($t === '' || $t === '-' || $t === '—') {
+            return [0, 0];
+        }
+        if (preg_match('/^(\d{2})[-\/](\d{2})[-\/](\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/', $t, $m)) {
+            return [1, (float) ($m[3] . $m[2] . $m[1] . str_pad($m[4] ?? '', 2, '0') . str_pad($m[5] ?? '', 2, '0') . str_pad($m[6] ?? '', 2, '0'))];
+        }
+        $n = str_replace(['$', '%', ' '], '', $t);
+        if (preg_match('/^-?\d{1,3}(,\d{3})*(\.\d+)?$/', $n) || preg_match('/^-?\d+(\.\d+)?$/', $n)) {
+            return [1, (float) str_replace(',', '', $n)];
+        }
+        $t = mb_strtolower($t, 'UTF-8');
+        $t = strtr($t, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n~']);
+        return [2, $t];
     }
 
     /**

@@ -353,6 +353,9 @@ function RI_fetchGenerar(tab, params, onOk, onError, ui) {
  * de detalle de Consignaciones; el PDF de ese modal va por CMG_pdfDocumento, ver descargarPdf).
  */
 function RI_descargarExport(formato, params) {
+    // El archivo sale en el mismo orden que la tabla en pantalla (RI_Orden).
+    const tbody = formato === 'consignacion' ? 'ri-cv-modal-tbody' : RI_Orden.TBODY_POR_TAB[params.get('tab')];
+    if (tbody && typeof RI_Orden !== 'undefined') RI_Orden.aplicarA(params, tbody);
     const esPdf = formato === 'pdf' || formato === 'consignacion-pdf';
     const accion = { pdf: 'exportPdf', consignacion: 'consignacionExcel', 'consignacion-pdf': 'consignacionPdf' }[formato] || 'exportExcel';
     CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/' + accion + '?' + params.toString(), {
@@ -739,13 +742,22 @@ window.RI_Existencias = {
         }, { prefijo: 'ri-ex', colSpan });
     },
 
+    /** En "Detallado" el orden lo aplica el servidor (CMG_initSort): el archivo lo repite. */
+    _ordenServidor(params) {
+        if (this.modoActual() === 'NINGUNO' && this.orden) {
+            params.set('orden', this.orden);
+            params.set('dir', this.dir);
+        }
+        return params;
+    },
+
     exportarExcel() {
-        const params = this._filtros();
+        const params = this._ordenServidor(this._filtros());
         params.set('tab', 'existencias');
         RI_descargarExport('excel', params);
     },
     exportarPDF() {
-        const params = this._filtros();
+        const params = this._ordenServidor(this._filtros());
         params.set('tab', 'existencias');
         RI_descargarExport('pdf', params);
     },
@@ -755,6 +767,47 @@ window.RI_Existencias = {
 // PESTAÑA 2: MOVIMIENTOS (KARDEX)
 // ════════════════════════════════════════════════════════════════════
 window.RI_Movimientos = {
+    /**
+     * Completa Año, Origen y Usuario (ReporteInventariosController::opcionesMovimientosAjax).
+     * Van aparte para que la página se muestre sin esperar esas consultas al kardex. El Año
+     * arranca en el año en curso; si el último año con movimientos es otro, se elige ese y se
+     * rehacen las fechas, salvo que el usuario ya haya tocado Año o Mes.
+     */
+    cargarOpciones() {
+        const selAnio = document.getElementById('ri-mv-anio');
+        if (!selAnio) return;   // sin pestaña Movimientos
+        const selMes = document.getElementById('ri-mv-mes');
+        const anioInicial = selAnio.value, mesInicial = selMes ? selMes.value : '';
+
+        fetch(BASE_URL + '/' + RUTA_MODULO + '/opcionesMovimientosAjax', { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(r => r.json())
+            .then(res => {
+                if (!res || !res.ok) return;
+                const agregar = (sel, valor, texto) => {
+                    if (!sel || Array.from(sel.options).some(o => o.value === String(valor))) return;
+                    sel.add(new Option(texto, valor));
+                };
+
+                const anios = (res.anios || []).map(String);
+                anios.forEach(a => agregar(selAnio, a, a));
+                // Orden: Todos y luego los años de mayor a menor.
+                Array.from(selAnio.options).filter(o => o.value !== 'TODOS')
+                    .sort((a, b) => Number(b.value) - Number(a.value))
+                    .forEach(o => selAnio.appendChild(o));
+                const sinTocar = selAnio.value === anioInicial && (!selMes || selMes.value === mesInicial);
+                if (sinTocar && anios.length && !anios.includes(anioInicial)) {
+                    selAnio.value = anios[0];
+                    this.cambiarMesAnio();
+                }
+
+                const selOrigen = document.getElementById('ri-mv-origen');
+                (res.origenes || []).forEach(o => agregar(selOrigen, o.valor, o.label));
+                const selUsuario = document.getElementById('ri-mv-usuario');
+                (res.usuarios || []).forEach(u => agregar(selUsuario, u.id, u.nombre));
+            })
+            .catch(err => console.error('Opciones de Movimientos:', err));
+    },
+
     limpiarFiltros() {
         RI_limpiarFiltros('ri-mv', ['ri-mv-producto-seleccionado']);
         const resumen = document.getElementById('ri-mv-resumen');
@@ -1174,7 +1227,7 @@ window.RI_Auditoria = {
     dibujarCabecera() {
         const th = `<tr><th>Código</th><th>Producto</th><th>Bodega</th><th class="text-end">Guardado</th>
                <th class="text-end">Real (Kardex)</th><th class="text-end">Diferencia</th>
-               <th class="text-center">Acción</th></tr>`;
+               <th class="text-center ri-no-orden">Acción</th></tr>`;
         document.getElementById('ri-au-thead').innerHTML = th;
     },
 
@@ -1477,6 +1530,135 @@ window.RI_Seguimiento = {
 };
 
 // ════════════════════════════════════════════════════════════════════
+// ORDENAMIENTO POR COLUMNA (todas las pestañas)
+// ════════════════════════════════════════════════════════════════════
+/**
+ * Ordena en pantalla las filas ya cargadas al hacer clic en un encabezado: 1.er clic
+ * ascendente, 2.º descendente. Las filas llegan del servidor como HTML (generarAjax) y
+ * cada pestaña/agrupación tiene columnas distintas, así que se ordena sobre lo que se ve:
+ *  - número con separador de miles (1,234.56) → numérico;
+ *  - fecha d-m-Y [H:i] o d/m/Y → cronológico;
+ *  - lo demás → texto (es, sin distinguir mayúsculas ni acentos, "A2" antes que "A10").
+ * En celdas de dos líneas (fecha + secuencial, cliente + RUC) cuenta la primera línea.
+ * Vacíos y "-" van siempre al final. Las filas de un solo <td> con colspan (sin
+ * resultados, aviso de tope) se quedan abajo.
+ *
+ * No toca los encabezados .sortable-header (Existencias "En general"), que ya ordenan en
+ * el servidor sobre todo el resultado, ni los marcados .ri-no-orden (Acción, PDF).
+ * Las exportaciones (PDF/Excel) no cambian: salen en el orden del servidor.
+ */
+const RI_Orden = {
+    TABLAS: ['ri-ex-tbody', 'ri-mv-tbody', 'ri-va-tbody', 'ri-cv-tbody', 'ri-au-tbody', 'ri-cv-modal-tbody'],
+    TBODY_POR_TAB: { existencias: 'ri-ex-tbody', movimientos: 'ri-mv-tbody', valorizacion: 'ri-va-tbody', consignaciones: 'ri-cv-tbody' },
+
+    /**
+     * Pasa a la exportación la columna (por su título) y el sentido con que está ordenada la
+     * tabla. El servidor busca esa columna entre las del archivo
+     * (ReporteInventariosController::ordenarExport) y, si no existe, deja el orden del reporte.
+     */
+    aplicarA(params, idTbody) {
+        const table = document.getElementById(idTbody)?.closest('table');
+        const th = table && table.querySelector('thead th.ri-orden-asc, thead th.ri-orden-desc');
+        if (!th) return params;
+        params.set('orden_columna', th.textContent.replace(/\s+/g, ' ').trim());
+        params.set('orden_sentido', th.classList.contains('ri-orden-desc') ? 'DESC' : 'ASC');
+        return params;
+    },
+
+    init() {
+        this.TABLAS.forEach(idTbody => {
+            const tbody = document.getElementById(idTbody);
+            const table = tbody && tbody.closest('table');
+            if (!table || table.dataset.riOrden) return;
+            table.dataset.riOrden = '1';
+            table.classList.add('ri-ordenable');
+
+            table.addEventListener('click', (e) => {
+                const th = e.target.closest('thead th');
+                if (!th || !table.tHead.contains(th)) return;
+                if (e.target.closest('.cmg-resizer')) return;
+                if (th.classList.contains('sortable-header') || th.classList.contains('ri-no-orden')) return;
+                this.ordenar(table, tbody, th);
+            });
+
+            // Datos nuevos (Mostrar, otro documento en el modal): el orden anterior ya no aplica.
+            const obs = new MutationObserver(() => this.limpiarIndicadores(table));
+            obs.observe(tbody, { childList: true });
+            table._riObs = obs;
+        });
+    },
+
+    limpiarIndicadores(table) {
+        table.querySelectorAll('thead th.ri-orden-asc, thead th.ri-orden-desc')
+            .forEach(th => th.classList.remove('ri-orden-asc', 'ri-orden-desc'));
+    },
+
+    /** Texto de la celda hasta el primer <br> (la segunda línea es un dato secundario). */
+    textoCelda(td) {
+        if (!td) return '';
+        if (td.dataset.orden !== undefined) return td.dataset.orden;
+        let txt = '';
+        for (const n of td.childNodes) {
+            if (n.nodeName === 'BR') break;
+            txt += n.textContent;
+        }
+        return txt.replace(/\s+/g, ' ').trim();
+    },
+
+    /** { tipo: 0 vacío | 1 número/fecha | 2 texto, v } */
+    clave(txt) {
+        if (txt === '' || txt === '-' || txt === '—') return { tipo: 0, v: 0 };
+        let m = txt.match(/^(\d{2})[-\/](\d{2})[-\/](\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/);
+        if (m) {
+            return { tipo: 1, v: Number(m[3] + m[2] + m[1] + (m[4] || '00') + (m[5] || '00') + (m[6] || '00')) };
+        }
+        const num = txt.replace(/[$%\s]/g, '');
+        if (/^-?\d{1,3}(,\d{3})*(\.\d+)?$/.test(num) || /^-?\d+(\.\d+)?$/.test(num)) {
+            return { tipo: 1, v: parseFloat(num.replace(/,/g, '')) };
+        }
+        return { tipo: 2, v: txt };
+    },
+
+    ordenar(table, tbody, th) {
+        const idx = Array.prototype.indexOf.call(th.parentNode.children, th);
+        const dir = th.classList.contains('ri-orden-asc') ? -1 : 1;
+
+        const filas = Array.from(tbody.rows);
+        const fijas = [];
+        const datos = [];
+        filas.forEach((tr, i) => {
+            const unica = tr.cells.length === 1 && tr.cells[0].colSpan > 1;
+            if (unica) { fijas.push(tr); return; }
+            datos.push({ tr, i, k: this.clave(this.textoCelda(tr.cells[idx])) });
+        });
+        if (datos.length < 2) return;
+
+        const col = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
+        datos.sort((a, b) => {
+            // Vacíos al final en ambos sentidos.
+            if (a.k.tipo === 0 || b.k.tipo === 0) {
+                if (a.k.tipo === b.k.tipo) return a.i - b.i;
+                return a.k.tipo === 0 ? 1 : -1;
+            }
+            let r;
+            if (a.k.tipo === 1 && b.k.tipo === 1) r = a.k.v - b.k.v;
+            else if (a.k.tipo !== b.k.tipo) r = a.k.tipo - b.k.tipo;   // números antes que texto
+            else r = col.compare(a.k.v, b.k.v);
+            return r !== 0 ? r * dir : a.i - b.i;
+        });
+
+        const frag = document.createDocumentFragment();
+        datos.forEach(d => frag.appendChild(d.tr));
+        fijas.forEach(tr => frag.appendChild(tr));
+        tbody.appendChild(frag);
+        if (table._riObs) table._riObs.takeRecords();   // reordenar no es "datos nuevos"
+
+        this.limpiarIndicadores(table);
+        th.classList.add(dir === 1 ? 'ri-orden-asc' : 'ri-orden-desc');
+    },
+};
+
+// ════════════════════════════════════════════════════════════════════
 // INIT
 // ════════════════════════════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', function () {
@@ -1491,7 +1673,10 @@ document.addEventListener('DOMContentLoaded', function () {
     RI_setupAutocomplete('ri-cv-search-cliente', 'ri-cv-dropdown-cliente', 'ri-cv-id-cliente', 'ri-cv-cliente-seleccionado', '/getClientesAjax?q=');
     RI_setupAutocomplete('ri-au-search-producto', 'ri-au-dropdown-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado', '/getProductosAjax?q=');
 
+    RI_Orden.init();
+
     // El selector Año de Movimientos viene con un año elegido; las fechas (el filtro
     // real) hay que derivarlas al cargar, sin lanzar todavía ninguna consulta.
     window.RI_Movimientos.cambiarMesAnio();
+    window.RI_Movimientos.cargarOpciones();
 });
