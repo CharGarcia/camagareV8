@@ -9,6 +9,7 @@
     let sortDir = 'DESC';
     let timerBusqueda = null;
     let modalDetalle = null;
+    let detalleId = null; // id del evento cargado en el modal (para el PDF)
 
     function getBuscar() {
         const el = document.getElementById('logInputBuscar');
@@ -36,7 +37,7 @@
     window.LOGSIS_cargarListado = async function (page = 1) {
         currentPage = page;
         const tbody = document.getElementById('tbodyLogSistema');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</td></tr>';
 
         const params = construirParams({
             action: 'listar',
@@ -56,11 +57,11 @@
                 const pag = document.getElementById('logWrapperPagination');
                 if (pag) pag.innerHTML = res.pagination;
             } else {
-                if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">${res.error || 'Error al cargar'}</td></tr>`;
+                if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">${res.error || 'Error al cargar'}</td></tr>`;
             }
         } catch (e) {
             console.error(e);
-            if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
+            if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
         }
     };
 
@@ -76,6 +77,9 @@
             if (el) modalDetalle = new bootstrap.Modal(el);
         }
         const body = document.getElementById('logDetalleBody');
+        const btnPdf = document.getElementById('btnLogDetallePdf');
+        detalleId = null;
+        if (btnPdf) btnPdf.disabled = true;
         if (body) body.innerHTML = '<div class="text-center py-4"><span class="spinner-border spinner-border-sm text-primary"></span> Cargando...</div>';
         if (modalDetalle) modalDetalle.show();
 
@@ -84,12 +88,26 @@
             const res = await resp.json();
             if (res.ok) {
                 if (body) body.innerHTML = res.html;
+                detalleId = id;
+                if (btnPdf) btnPdf.disabled = false;
             } else {
                 if (body) body.innerHTML = `<div class="alert alert-warning mb-0">${res.error || 'No se pudo cargar el detalle.'}</div>`;
             }
         } catch (e) {
             console.error(e);
             if (body) body.innerHTML = '<div class="alert alert-danger mb-0">Error de conexión.</div>';
+        }
+    };
+
+    // PDF del detalle abierto: mismo flujo que todo PDF de un registro desde un modal
+    // (CMG_pdfDocumento pregunta Imprimir / Descargar / Ver).
+    window.LOGSIS_pdfDetalle = function () {
+        if (!detalleId) return;
+        const url = `${API}?action=pdfDetalle&id=${encodeURIComponent(detalleId)}`;
+        if (typeof window.CMG_pdfDocumento === 'function') {
+            window.CMG_pdfDocumento(url);
+        } else {
+            window.open(url, '_blank');
         }
     };
 

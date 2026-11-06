@@ -876,6 +876,7 @@ class ConfigController extends Controller
             'detalle'        => 'detalleAjax',
             'exportarExcel'  => 'exportarExcel',
             'exportarPdf'    => 'exportarPdf',
+            'pdfDetalle'     => 'exportarPdfDetalle',
             'intentos'       => 'intentosAjax',
             default          => 'index',
         };

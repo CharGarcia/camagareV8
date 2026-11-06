@@ -221,19 +221,20 @@ $verIntentos = $nivel >= 3;
                 <table class="table table-hover table-sm mb-0 align-middle">
                     <thead class="table-light shadow-sm sticky-top" style="z-index: 1;">
                         <tr>
-                            <th class="ps-3 log-sort" data-col="created_at" role="button" style="width: 13%;">Fecha <i class="bi bi-arrow-down-short"></i></th>
-                            <th class="log-sort" data-col="usuario" role="button" style="width: 14%;">Usuario</th>
-                            <th class="log-sort" data-col="empresa" role="button" style="width: 16%;">Empresa</th>
-                            <th class="log-sort" data-col="accion" role="button" style="width: 11%;">Acción</th>
-                            <th class="log-sort" data-col="tabla" role="button" style="width: 15%;">Módulo</th>
-                            <th style="width: 13%;">Documento</th>
-                            <th class="text-center" style="width: 7%;">Registro</th>
-                            <th style="width: 11%;">IP</th>
+                            <th class="ps-3 log-sort" data-col="created_at" role="button" style="width: 12%;">Fecha <i class="bi bi-arrow-down-short"></i></th>
+                            <th class="log-sort" data-col="usuario" role="button" style="width: 11%;">Usuario</th>
+                            <th class="log-sort" data-col="empresa" role="button" style="width: 12%;">Empresa</th>
+                            <th class="log-sort" data-col="accion" role="button" style="width: 9%;">Acción</th>
+                            <th class="log-sort" data-col="tabla" role="button" style="width: 11%;">Módulo</th>
+                            <th style="width: 12%;">Documento</th>
+                            <th style="width: 19%;" title="Cliente, proveedor, empleado o producto del registro (o tercero del documento)">Referencia</th>
+                            <th class="text-center" style="width: 6%;">Registro</th>
+                            <th style="width: 8%;">IP</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyLogSistema">
                         <tr>
-                            <td colspan="8" class="text-center py-5">
+                            <td colspan="9" class="text-center py-5">
                                 <span class="spinner-border spinner-border-sm text-primary me-2"></span> Cargando auditoría...
                             </td>
                         </tr>
@@ -283,6 +284,9 @@ $verIntentos = $nivel >= 3;
                 </div>
             </div>
             <div class="modal-footer bg-light border-top px-4 py-2">
+                <button type="button" class="btn btn-outline-danger btn-sm me-auto" id="btnLogDetallePdf" onclick="LOGSIS_pdfDetalle()" title="Descargar o imprimir este detalle en PDF" disabled>
+                    <i class="bi bi-file-earmark-pdf me-1"></i> PDF
+                </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>

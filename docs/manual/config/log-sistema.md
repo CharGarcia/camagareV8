@@ -1,6 +1,6 @@
 ---
 titulo: Auditoría del sistema
-etiquetas: [auditoría, bitácora, log, historial, quién hizo qué, rastreo, trazabilidad, cambios, log_sistema, intentos de login, buscar por contenido, buscar dentro del mensaje, concepto, proveedor, comprobante, número de documento, número de comprobante, buscar por número de documento, tercero, cliente, detalle del evento, información en detalle, datos del documento]
+etiquetas: [auditoría, bitácora, log, historial, quién hizo qué, rastreo, trazabilidad, cambios, log_sistema, intentos de login, quién creó el cliente, cuándo se creó, referencia, nombre del cliente, PDF del detalle, imprimir evento, buscar por contenido, buscar dentro del mensaje, concepto, proveedor, comprobante, número de documento, número de comprobante, buscar por número de documento, tercero, cliente, detalle del evento, información en detalle, datos del documento]
 visibilidad: superadmin
 ---
 
@@ -40,7 +40,31 @@ pantalla registra **acciones de negocio**.
    (antes / después) y, desplegando **Ver información en detalle**, todo lo que se
    sabe del registro.
 6. Los botones de **PDF** y **Excel** exportan exactamente lo que está filtrado en
-   pantalla, incluida la columna **Documento**.
+   pantalla, incluidas las columnas **Documento** y **Referencia**.
+7. En el detalle del evento, el botón **PDF** (pie del modal, a la izquierda) genera
+   ese mismo detalle en PDF —con *Ver información en detalle* y el JSON original ya
+   desplegados— y pregunta si desea **Imprimir**, **Descargar** o **Ver**.
+
+### Columna Referencia: qué cliente, proveedor o producto es
+
+La columna **Referencia** dice **a quién o a qué** corresponde cada evento, sin tener
+que abrirlo:
+
+- En **Clientes, Proveedores, Empleados y Productos**: el nombre y la identificación
+  (o el código, en productos) del propio registro. Ej.:
+  `ARMIJOS SOLANO LILIBETH FERNANDA · 0705210052001`.
+- En **documentos** (facturas, compras, egresos…): el cliente, proveedor o empleado del
+  documento.
+- En otros módulos, el nombre que haya guardado el evento, si guardó alguno.
+
+Se lee del registro **como está hoy** (si el cliente cambió de nombre, verá el
+nombre actual) y aparece aunque el registro se haya eliminado después.
+
+**Ejemplo — ¿quién creó un cliente y cuándo?** Filtre **Módulo = Clientes** y
+**Acción = Crear**, amplíe **Desde** y busque al cliente en la columna
+**Referencia**: la fila muestra la **Fecha** y el **Usuario** que lo creó. Para ir
+directo a él escriba en el buscador `tercero:"ARMIJOS SOLANO"` o
+`tercero:0705210052001`.
 
 ### Número de documento en el listado y en el detalle
 
@@ -68,8 +92,10 @@ Para ser más preciso use las claves:
 
 - `documento:001-001-000000123` (o su alias `numero:`) busca solo por el número del
   documento.
-- `tercero:"DELIVERY HERO"` busca los eventos sobre documentos de ese **cliente,
-  proveedor o empleado**, por nombre o por identificación (`tercero:1790012345001`).
+- `tercero:"DELIVERY HERO"` busca por la columna **Referencia**: los eventos sobre
+  documentos de ese **cliente, proveedor o empleado** y también los del propio
+  registro de cliente, proveedor, empleado o producto (su creación, sus cambios), por
+  nombre o por identificación (`tercero:1790012345001`). Alias: `referencia:`.
 
 ### Ver información en detalle
 
@@ -151,7 +177,8 @@ Cómo se comporta:
 | `registro:` | `registro:34766` | Filtra por el número del registro afectado |
 | `documento:` | `documento:001-001-000000123` | Filtra por el número del documento afectado |
 | `numero:` | `numero:000000123` | Alias de `documento:` |
-| `tercero:` | `tercero:"DELIVERY HERO"` | Cliente, proveedor o empleado del documento, por nombre o identificación |
+| `tercero:` | `tercero:"DELIVERY HERO"` | Columna Referencia: cliente, proveedor, empleado o producto (del registro o del documento), por nombre o identificación |
+| `referencia:` | `referencia:0705210052001` | Alias de `tercero:` |
 | `ip:` | `ip:190.1` | Filtra por dirección IP |
 | `contenido:` | `contenido:"DELIVERY HERO"` | Busca dentro de los datos del evento |
 | `datos:` | `datos:CO-000039` | Alias de `contenido:` |
@@ -218,6 +245,11 @@ espacios.
 
 ## Historial de cambios
 
+- **1.3** — Columna **Referencia** en el listado, el detalle, el PDF y el Excel: nombre
+  e identificación del cliente, proveedor, empleado o producto afectado (o del tercero
+  del documento), para reconocer el registro sin abrir cada evento. `tercero:` busca
+  también en clientes, proveedores, empleados y productos (alias `referencia:`). Botón
+  **PDF** en el detalle del evento.
 - **1.2** — Número del documento afectado en el listado (columna **Documento**,
   también en PDF y Excel) y en el encabezado del detalle, justo después del módulo;
   si el documento fue eliminado después, se marca como *Eliminado*. El buscador

@@ -224,6 +224,45 @@ class LogSistemaConsultaController extends Controller
         exit;
     }
 
+    /**
+     * PDF del detalle de un evento (lo mismo que el modal "Detalle del evento", desplegado).
+     * Mismo alcance que detalleAjax(): un administrador no obtiene eventos de otra empresa.
+     */
+    public function exportarPdfDetalle(): void
+    {
+        $this->requireAuth();
+        $this->requireNivel(2);
+
+        $esAjax = strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
+        $id = (int) ($_GET['id'] ?? 0);
+        $detalle = $id > 0 ? $this->service->getDetalle($id, $this->getScope()) : null;
+        if ($detalle === null) {
+            if ($esAjax) {
+                $this->json(['ok' => false, 'error' => 'Registro no encontrado o fuera de su alcance.'], 404);
+            }
+            http_response_code(404);
+            echo 'Registro no encontrado o fuera de su alcance.';
+            exit;
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $empresa   = [];
+        if ($idEmpresa > 0) {
+            try {
+                $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?: [];
+            } catch (\Throwable $e) {
+                $empresa = [];
+            }
+        }
+
+        try {
+            (new \App\Services\LogSistemaPdfService())->generarDetalle($detalle, $empresa, (string) ($_SESSION['nombre'] ?? ''), 'I');
+        } catch (\Throwable $e) {
+            $this->json(['ok' => false, 'error' => 'No se pudo generar el PDF: ' . $e->getMessage()], 500);
+        }
+        exit;
+    }
+
     // ─── Helpers privados ────────────────────────────────────────────────────
 
     /** Lee filtros/orden y trae las filas de exportación respetando el alcance. */
@@ -275,7 +314,7 @@ class LogSistemaConsultaController extends Controller
         }
         echo '<table><thead><tr>'
             . '<th>Fecha</th><th>Usuario</th><th>Empresa</th><th>Acción</th>'
-            . '<th>Módulo</th><th>Documento</th><th>Registro</th><th>IP</th>'
+            . '<th>Módulo</th><th>Documento</th><th>Referencia</th><th>Registro</th><th>IP</th>'
             . '</tr></thead><tbody>';
         foreach ($rows as $r) {
             $fecha    = date('d-m-Y H:i:s', strtotime((string) $r['created_at']));
@@ -289,6 +328,7 @@ class LogSistemaConsultaController extends Controller
                 . '<td>' . htmlspecialchars(AuditoriaEtiquetas::accion((string) $r['accion'])) . '</td>'
                 . '<td>' . htmlspecialchars(AuditoriaEtiquetas::tabla((string) ($r['tabla_afectada'] ?? ''))) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($r['numero_documento'] ?? '')) . '</td>'
+                . '<td>' . htmlspecialchars((string) ($r['referencia'] ?? '')) . '</td>'
                 . '<td>' . htmlspecialchars($registro) . '</td>'
                 . '<td>' . htmlspecialchars((string) ($r['ip_usuario'] ?? '-')) . '</td>'
                 . '</tr>';
@@ -341,7 +381,7 @@ class LogSistemaConsultaController extends Controller
     private function renderFilas(array $rows): string
     {
         if (empty($rows)) {
-            return '<tr><td colspan="8" class="text-center py-5 text-muted">No se encontraron registros de auditoría en el rango seleccionado.</td></tr>';
+            return '<tr><td colspan="9" class="text-center py-5 text-muted">No se encontraron registros de auditoría en el rango seleccionado.</td></tr>';
         }
 
         ob_start();
@@ -356,6 +396,10 @@ class LogSistemaConsultaController extends Controller
             $tabla    = htmlspecialchars(AuditoriaEtiquetas::tabla((string) ($r['tabla_afectada'] ?? '')));
             $numDoc   = trim((string) ($r['numero_documento'] ?? ''));
             $documento = $numDoc !== '' ? htmlspecialchars($numDoc) : '<span class="text-muted">-</span>';
+            $refTxt   = trim((string) ($r['referencia'] ?? ''));
+            $referencia = $refTxt !== ''
+                ? '<span class="d-inline-block text-truncate align-bottom" style="max-width:260px;" title="' . htmlspecialchars($refTxt) . '">' . htmlspecialchars($refTxt) . '</span>'
+                : '<span class="text-muted">-</span>';
             $registro = $r['id_registro'] !== null ? (int) $r['id_registro'] : '<span class="text-muted">-</span>';
             $ip       = htmlspecialchars((string) ($r['ip_usuario'] ?? '-'));
 
@@ -366,6 +410,7 @@ class LogSistemaConsultaController extends Controller
                 . '<td>' . $this->badgeAccion((string) $r['accion']) . '</td>'
                 . '<td class="small">' . $tabla . '</td>'
                 . '<td class="small text-nowrap">' . $documento . '</td>'
+                . '<td class="small text-nowrap">' . $referencia . '</td>'
                 . '<td class="text-center small">' . $registro . '</td>'
                 . '<td class="small text-muted text-nowrap">' . $ip . '</td>'
                 . '</tr>';
@@ -446,6 +491,9 @@ class LogSistemaConsultaController extends Controller
                     <span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1">Eliminado</span>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
+            <?php if (trim((string) ($d['referencia'] ?? '')) !== ''): ?>
+            <div class="col-md-6"><span class="text-muted">Referencia:</span> <strong><?= htmlspecialchars(trim((string) $d['referencia'])) ?></strong></div>
             <?php endif; ?>
             <div class="col-md-6"><span class="text-muted">Registro:</span> <strong>#<?= $registro ?></strong></div>
             <div class="col-md-6"><span class="text-muted">IP:</span> <?= $ip ?></div>

@@ -62,8 +62,34 @@ class LogSistemaRepository extends BaseRepository
         'asientos_contables_cabecera' => ['numero' => 't.numero_comprobante', 'tipo' => null, 'entidad' => null],
     ];
 
+    /**
+     * Catálogos por empresa cuyo registro se identifica por nombre (no por número de
+     * documento): tabla => [nombre, identificación] como expresiones sobre el alias `t`.
+     * Alimentan la columna "Referencia" del listado y la clave `tercero:` del buscador,
+     * para reconocer de un vistazo QUÉ cliente/proveedor/… se creó o modificó.
+     */
+    private const CATALOGOS = [
+        'clientes'    => ['nombre' => 't.nombre',            'ident' => 't.identificacion'],
+        'proveedores' => ['nombre' => 't.razon_social',      'ident' => 't.identificacion'],
+        'empleados'   => ['nombre' => 't.nombres_apellidos', 'ident' => 't.identificacion'],
+        'productos'   => ['nombre' => 't.nombre',            'ident' => 't.codigo'],
+    ];
+
+    /**
+     * Respaldo de la Referencia cuando el registro ya no se puede leer (o la tabla no está
+     * mapeada): el nombre que haya guardado el propio evento.
+     */
+    private const EXPR_REFERENCIA_JSON = "COALESCE(
+        NULLIF(l.datos_nuevos->>'nombre', ''), NULLIF(l.datos_nuevos->>'razon_social', ''),
+        NULLIF(l.datos_nuevos->>'nombres_apellidos', ''),
+        NULLIF(l.datos_anteriores->>'nombre', ''), NULLIF(l.datos_anteriores->>'razon_social', ''),
+        NULLIF(l.datos_anteriores->>'nombres_apellidos', ''))";
+
     /** Documentos válidos en esta base (ver documentos()); se calcula una vez por request. */
     private static ?array $documentosCache = null;
+
+    /** Catálogos válidos en esta base (ver catalogos()); se calcula una vez por request. */
+    private static ?array $catalogosCache = null;
 
     public function __construct()
     {
@@ -106,9 +132,11 @@ class LogSistemaRepository extends BaseRepository
         $offset  = max(0, ($page - 1) * $perPage);
 
         $exprNumero = $this->exprNumeroDocumento();
+        $exprRef    = $this->exprReferencia(' · ');
         $sql = "SELECT l.id, l.id_usuario, l.id_empresa, l.accion, l.tabla_afectada,
                        l.id_registro, l.ip_usuario, l.user_agent, l.created_at,
                        {$exprNumero} AS numero_documento,
+                       {$exprRef} AS referencia,
                        u.nombre AS usuario_nombre,
                        e.nombre_comercial AS empresa_nombre,
                        e.nombre AS empresa_razon
@@ -157,9 +185,11 @@ class LogSistemaRepository extends BaseRepository
         $limit  = max(1, min(50000, $limit));
 
         $exprNumero = $this->exprNumeroDocumento();
+        $exprRef    = $this->exprReferencia(' · ');
         $sql = "SELECT l.id, l.id_usuario, l.id_empresa, l.accion, l.tabla_afectada,
                        l.id_registro, l.ip_usuario, l.created_at,
                        {$exprNumero} AS numero_documento,
+                       {$exprRef} AS referencia,
                        u.nombre AS usuario_nombre,
                        e.nombre_comercial AS empresa_nombre
                 FROM log_sistema l
@@ -190,9 +220,11 @@ class LogSistemaRepository extends BaseRepository
         [$where, $params] = $this->whereAlcance($scope);
         $params[':id'] = $id;
 
+        $exprRef = $this->exprReferencia(' · ');
         $sql = "SELECT l.id, l.id_usuario, l.id_empresa, l.accion, l.tabla_afectada,
                        l.id_registro, l.datos_anteriores, l.datos_nuevos,
                        l.ip_usuario, l.user_agent, l.created_at,
+                       {$exprRef} AS referencia,
                        u.nombre AS usuario_nombre,
                        e.nombre_comercial AS empresa_nombre,
                        e.nombre AS empresa_razon
@@ -353,21 +385,73 @@ class LogSistemaRepository extends BaseRepository
         return $ramas ? "COALESCE(CASE l.tabla_afectada " . implode(' ', $ramas) . " END, '')" : "''";
     }
 
-    /** Igual que exprNumeroDocumento(), con el nombre e identificación del tercero del documento. */
-    private function exprTerceroDocumento(): string
+    /**
+     * "Referencia" de cada fila de la bitácora: QUIÉN o QUÉ es el registro afectado, para
+     * distinguir los eventos sin abrirlos.
+     *  - Catálogos (clientes, proveedores, empleados, productos): nombre + identificación/código
+     *    del propio registro.
+     *  - Documentos con tercero (facturas, compras, egresos…): nombre + identificación del
+     *    cliente/proveedor/empleado del documento.
+     *  - Resto, o registro ya ilegible: el nombre que guardó el evento, si guardó alguno.
+     * No filtra `eliminado`: un cliente eliminado debe seguir identificándose. Sí acota a la
+     * empresa del evento. Cada fila evalúa solo la rama de su tabla (lectura por PK).
+     */
+    private function exprReferencia(string $sep): string
     {
+        $sepSql = "'" . str_replace("'", "''", $sep) . "'";
         $ramas = [];
+        foreach ($this->catalogos() as $tabla => $def) {
+            $ramas[] = "WHEN '{$tabla}' THEN (SELECT NULLIF(concat_ws({$sepSql}, NULLIF(({$def['nombre']})::text, ''), NULLIF(({$def['ident']})::text, '')), '')
+                        FROM {$tabla} t WHERE t.id = l.id_registro AND t.id_empresa = l.id_empresa)";
+        }
         foreach ($this->documentos() as $tabla => $def) {
-            if ($def['tipo'] === null) {
+            if ($def['tipo'] === null || isset($this->catalogos()[$tabla])) {
                 continue;
             }
-            $ramas[] = "WHEN '{$tabla}' THEN (SELECT concat_ws(' ',
+            $ramas[] = "WHEN '{$tabla}' THEN (SELECT NULLIF(concat_ws({$sepSql},
                             COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos),
-                            COALESCE(cli.identificacion, prov.identificacion, emp.identificacion))
+                            COALESCE(cli.identificacion, prov.identificacion, emp.identificacion)), '')
                         FROM {$tabla} t " . self::joinsTercero($def) . "
                         WHERE t.id = l.id_registro AND t.id_empresa = l.id_empresa)";
         }
-        return $ramas ? "COALESCE(CASE l.tabla_afectada " . implode(' ', $ramas) . " END, '')" : "''";
+        $case = $ramas ? "CASE l.tabla_afectada " . implode(' ', $ramas) . " END" : "NULL";
+        return "COALESCE({$case}, " . self::EXPR_REFERENCIA_JSON . ", '')";
+    }
+
+    /**
+     * Catálogos de CATALOGOS que existen en ESTA base con todas sus columnas (van dentro del
+     * SQL del listado: una columna que falte rompería la consulta entera).
+     */
+    private function catalogos(): array
+    {
+        if (self::$catalogosCache !== null) {
+            return self::$catalogosCache;
+        }
+
+        $st = $this->db->prepare(
+            "SELECT c.relname AS tabla, a.attname AS columna
+             FROM pg_attribute a
+             JOIN pg_class c ON c.oid = a.attrelid
+             JOIN pg_namespace n ON n.oid = c.relnamespace
+             WHERE n.nspname = 'public' AND c.relname = ANY(CAST(:tablas AS text[]))
+               AND a.attnum > 0 AND NOT a.attisdropped"
+        );
+        $st->execute([':tablas' => '{' . implode(',', array_keys(self::CATALOGOS)) . '}']);
+        $columnas = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $columnas[$r['tabla']][$r['columna']] = true;
+        }
+
+        $validos = [];
+        foreach (self::CATALOGOS as $tabla => $def) {
+            $cols = $columnas[$tabla] ?? [];
+            if (isset($cols['id'], $cols['id_empresa'])
+                && self::columnasExisten($def['nombre'] . ' ' . $def['ident'], $cols)) {
+                $validos[$tabla] = $def;
+            }
+        }
+
+        return self::$catalogosCache = $validos;
     }
 
     /**
@@ -488,8 +572,10 @@ class LogSistemaRepository extends BaseRepository
                 'documento' => $exprNumero,
                 'numero'    => $exprNumero,
                 'número'    => $exprNumero,
-                // Cliente, proveedor o empleado del documento (nombre o identificación).
-                'tercero'   => $this->exprTerceroDocumento(),
+                // Cliente, proveedor, empleado o producto: el propio registro (catálogos)
+                // o el tercero del documento, por nombre o identificación.
+                'tercero'    => $this->exprReferencia(' '),
+                'referencia' => $this->exprReferencia(' '),
             ],
             'numerico' => [
                 'registro' => 'l.id_registro',
