@@ -436,26 +436,30 @@ $pestanasConfigAlu = [
                                 </div>
                                 <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="aluTrxLimpiar" title="Limpiar búsqueda"><i class="bi bi-x-lg me-1"></i>Limpiar</button>
                                 <span class="small text-muted" id="aluTrxConteo"></span>
+                                <?php if ($aluPuedeVerFactura): ?>
+                                <button type="button" class="btn btn-sm btn-outline-info ms-auto" id="aluTrxEnviarMarcados" disabled title="Enviar por correo las facturas marcadas, cada una al correo de su cliente"><i class="bi bi-envelope me-1"></i>Enviar marcados <span id="aluTrxMarcadosN">(0)</span></button>
+                                <?php endif; ?>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-sm table-hover alu-grid mb-0 text-nowrap">
                                     <thead>
                                         <tr class="border-bottom">
+                                            <?php if ($aluPuedeVerFactura): ?><th class="text-center" style="width:30px;"><input type="checkbox" class="form-check-input m-0" id="aluTrxMarcarTodas" title="Marcar todas las facturas autorizadas visibles"></th><?php endif; ?>
                                             <th style="width:28px;"></th>
                                             <th>Mes</th>
                                             <th>Emisión</th>
                                             <th>Factura</th>
+                                            <th>Cliente</th>
                                             <th class="text-end">Total</th>
-                                            <?php if ($aluPuedeVerFactura): ?><th class="text-center" style="width:44px;">PDF</th><?php endif; ?>
+                                            <?php if ($aluPuedeVerFactura): ?><th class="text-center" style="width:44px;">PDF</th><th class="text-center" style="width:50px;">Correo</th><?php endif; ?>
                                         </tr>
                                     </thead>
                                     <tbody id="tbodyFacturasAlumno">
-                                        <tr><td colspan="<?= $aluPuedeVerFactura ? 6 : 5 ?>" class="text-center text-muted py-3 small">Guarde el alumno para ver sus transacciones.</td></tr>
+                                        <tr><td colspan="<?= $aluPuedeVerFactura ? 9 : 6 ?>" class="text-center text-muted py-3 small">Guarde el alumno para ver sus transacciones.</td></tr>
                                     </tbody>
                                     <tfoot id="tfootFacturasAlumno" class="d-none"></tfoot>
                                 </table>
                             </div>
-                            <div class="small text-muted mt-2">Una fila por factura; haga clic sobre ella para ver los productos o servicios facturados. El botón <i class="bi bi-file-earmark-pdf text-danger"></i> imprime, descarga o muestra su PDF. Incluye las facturas generadas desde el alumno y las del representante que lo nombran en su información adicional (migradas del sistema anterior o emitidas en Facturas de Venta), marcadas con <i class="bi bi-person-vcard"></i>. Las facturas se generan con el botón <i class="bi bi-receipt-cutoff"></i> de la barra superior; nacen en borrador y se envían al SRI desde Facturas de Venta. Las anuladas se ven tachadas y no suman.</div>
                         </div>
 
                         <!-- ============ TAB: DOCUMENTOS ============ -->
@@ -585,7 +589,9 @@ $pestanasConfigAlu = [
 <script>
     window.ALU_FACT_CFG = {
         puedeFacturar: <?= $aluPuedeFacturar ? 'true' : 'false' ?>,
-        urlPdfFactura: <?= $aluPuedeVerFactura ? json_encode(BASE_URL . '/modulos/factura-venta/exportarPdfAjax') : 'null' ?>
+        urlPdfFactura: <?= $aluPuedeVerFactura ? json_encode(BASE_URL . '/modulos/factura-venta/exportarPdfAjax') : 'null' ?>,
+        // Mismo envío que Facturas de Venta (PDF + XML al correo del cliente de la factura).
+        urlCorreoFactura: <?= $aluPuedeVerFactura ? json_encode(BASE_URL . '/modulos/factura-venta/reenviarCorreoAjax') : 'null' ?>
     };
 </script>
 

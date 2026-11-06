@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, buscar factura, facturas del año, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente
-version: 1.11
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, buscar factura, facturas del año, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente, enviar factura por correo, correo factura, reenviar factura, enviar marcados, email
+version: 1.12
 orden: 0
 estado: activo
 ---
@@ -360,8 +360,8 @@ alumno, con lo mismo que saldría desde el botón **Generar factura** de su fich
 
 La pestaña **Transacciones**, junto a **Por facturar**, muestra las
 **facturas del alumno, una fila por factura**: mes facturado, fecha de
-emisión, número y total. Al pasar el puntero se ve el cliente, el origen y si
-está anulada.
+emisión, número, **cliente** al que se facturó y total. Al pasar el puntero
+se ve además el origen y si está anulada.
 
 - **Ver el detalle**: haga clic sobre la fila de la factura y debajo se
   despliegan sus productos o servicios (código y descripción con el texto del
@@ -388,6 +388,35 @@ está anulada.
 - Al pie, la cantidad de facturas vigentes y la suma de su total, según el
   año y la búsqueda elegidos. Las facturas **anuladas** se ven tachadas y no
   suman.
+
+### Enviar facturas por correo
+
+Con permiso para **ver** Facturas de Venta, la pestaña Transacciones permite
+enviar el comprobante (PDF y XML) por correo, igual que el botón Correo de
+Facturas de Venta.
+
+- **Una factura**: el botón del sobre de la fila abre una ventana con el
+  cliente de la factura y su correo, que se puede cambiar o completar con
+  otros correos separados por coma antes de enviar. El sobre se ve **verde**
+  cuando la factura ya se envió alguna vez; enviarla de nuevo es un reenvío.
+- **Varias facturas**: marque las casillas de la izquierda (la casilla del
+  encabezado marca todas las visibles) y pulse **Enviar marcados**. Antes de
+  enviar se muestra a quién le llega cada una, **agrupado por cliente**, y se
+  envían una por una con su avance. Al final se ve cuántas se enviaron y el
+  motivo de las que fallaron.
+- **A quién llega**: cada factura va siempre al **correo del cliente de esa
+  factura**, no al del representante actual del alumno. Si el cliente de una
+  factura ya **no es el representante actual** (por ejemplo, una factura de un
+  representante anterior), la ventana lo marca con un aviso amarillo; si las
+  marcadas son de varios clientes, también se avisa. En el envío de varias
+  no se puede cambiar el correo, para que ninguna factura llegue a otra persona.
+- Solo se pueden enviar facturas **autorizadas** por el SRI. Las de borrador y
+  las anuladas tienen la casilla y el sobre desactivados: primero hay que
+  enviarlas al SRI desde Facturas de Venta.
+- Si el cliente **no tiene correo** registrado, sus facturas se omiten en el
+  envío de varias; en el envío de una se puede escribir el correo a mano.
+- Lo que el buscador o el año dejan fuera de la vista se desmarca: **Enviar
+  marcados** solo toma las facturas que se ven.
 
 ## Portal de representantes (QR)
 
@@ -558,6 +587,14 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
   mano y guardar normalmente.
 
 ## Historial de cambios
+
+- **1.12** — La pestaña **Transacciones** agrega la columna **Cliente**, después
+  de Factura, con el nombre del cliente al que se emitió cada factura, y se
+  quita el texto de ayuda que aparecía debajo de la tabla. Nuevo envío por
+  **correo**: botón por factura y **Enviar marcados** con casillas, siempre al
+  correo del cliente de cada factura, con aviso cuando ese cliente no es el
+  representante actual o cuando las marcadas son de varios clientes. Solo
+  facturas autorizadas.
 
 - **1.11** — La pestaña **Facturación** se llama ahora **Por facturar**. La pestaña
   **Transacciones** muestra también las facturas del representante que son del

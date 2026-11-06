@@ -521,13 +521,17 @@ class AlumnoRepository extends BaseRepository
      */
     public function getFacturasAlumno(int $idAlumno, int $idEmpresa, ?string $periodo = null): array
     {
+        // Cliente y correo: los de la FACTURA (v.id_cliente), que es a quien se le
+        // envía el comprobante; es_representante = sigue siendo el cliente del alumno.
         $sql = "SELECT af.id, af.id_factura, af.id_cliente, af.periodo, af.importe, af.items, af.created_at,
-                       c.nombre AS cliente_nombre,
+                       c.nombre AS cliente_nombre, c.email AS cliente_email,
+                       (v.id_cliente = a.id_cliente) AS es_representante,
                        v.establecimiento, v.punto_emision, v.secuencial, v.fecha_emision,
-                       v.estado AS estado_factura, v.importe_total
+                       v.estado AS estado_factura, v.importe_total, v.estado_correo
                 FROM alumnos_facturas af
                 JOIN ventas_cabecera v ON v.id = af.id_factura AND v.id_empresa = af.id_empresa
-                LEFT JOIN clientes c ON c.id = af.id_cliente
+                JOIN alumnos a ON a.id = af.id_alumno AND a.id_empresa = af.id_empresa
+                LEFT JOIN clientes c ON c.id = v.id_cliente AND c.id_empresa = v.id_empresa
                 WHERE af.id_alumno = :a AND af.id_empresa = :e AND af.eliminado = false
                   AND v.eliminado = false";
         $params = [':a' => $idAlumno, ':e' => $idEmpresa];
@@ -563,13 +567,14 @@ class AlumnoRepository extends BaseRepository
         $sql = "SELECT NULL AS id, v.id AS id_factura, v.id_cliente,
                        date_trunc('month', v.fecha_emision)::date AS periodo,
                        v.importe_total AS importe, NULL AS items, v.created_at,
-                       c.nombre AS cliente_nombre,
+                       c.nombre AS cliente_nombre, c.email AS cliente_email,
+                       true AS es_representante,
                        v.establecimiento, v.punto_emision, v.secuencial, v.fecha_emision,
-                       v.estado AS estado_factura, v.importe_total
+                       v.estado AS estado_factura, v.importe_total, v.estado_correo
                 FROM alumnos a
                 JOIN ventas_cabecera v ON v.id_cliente = a.id_cliente AND v.id_empresa = a.id_empresa
                                       AND v.eliminado = false
-                LEFT JOIN clientes c ON c.id = v.id_cliente
+                LEFT JOIN clientes c ON c.id = v.id_cliente AND c.id_empresa = v.id_empresa
                 WHERE a.id = :a AND a.id_empresa = :e AND a.eliminado = false
                   AND NOT EXISTS (SELECT 1 FROM alumnos_facturas af
                                   WHERE af.id_factura = v.id AND af.id_empresa = v.id_empresa

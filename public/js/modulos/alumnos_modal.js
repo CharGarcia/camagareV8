@@ -1126,7 +1126,10 @@
     const aluNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
     let aluTrxTimer = null;
     let aluTrxAlumno = null;
-    function aluTrxCols() { return CFG_FACT.urlPdfFactura ? 6 : 5; }
+    // Con permiso de ver facturas: casilla + chevron + 5 datos + PDF + Correo.
+    function aluTrxCols() { return CFG_FACT.urlPdfFactura ? 9 : 6; }
+    // Facturas cargadas del alumno actual, por id (para el envío por correo).
+    const aluTrxFacturas = new Map();
     function aluTrxChevron(tr, abierto) {
         const i = tr.querySelector('i.alu-trx-chev');
         if (i) i.className = 'bi small alu-trx-chev ' + (abierto ? 'bi-chevron-down' : 'bi-chevron-right');
@@ -1151,6 +1154,7 @@
             // Fuera del año elegido: ni se cuenta ni se ve.
             if (anio !== '' && tr.dataset.anio !== anio) {
                 tr.classList.add('d-none');
+                aluTrxDesmarcar(tr);
                 if (det0) { det0.classList.add('d-none'); aluTrxChevron(tr, false); }
                 return;
             }
@@ -1167,6 +1171,8 @@
             const muestra = !hayFiltro || coinciden > 0 || porFactura;
             lineas.forEach(l => l.classList.toggle('d-none', hayFiltro && !porFactura && !l.classList.contains('alu-trx-coincide')));
             tr.classList.toggle('d-none', !muestra);
+            // Lo que no se ve no se envía: «Enviar marcados» solo toma filas visibles.
+            if (!muestra) aluTrxDesmarcar(tr);
             if (muestra) {
                 visibles++;
                 if (tr.dataset.anulada !== '1') { docs++; suma += parseFloat(tr.dataset.total) || 0; }
@@ -1189,13 +1195,176 @@
         const tfoot = document.getElementById('tfootFacturasAlumno');
         if (tfoot && hayFacturas) {
             tfoot.innerHTML = `<tr class="fw-bold bg-light">
-                <td colspan="4">${docs} factura(s) vigente(s)</td>
+                <td colspan="${CFG_FACT.urlPdfFactura ? 6 : 5}">${docs} factura(s) vigente(s)</td>
                 <td class="text-end">${fmt(suma)}</td>
-                ${CFG_FACT.urlPdfFactura ? '<td></td>' : ''}
+                ${CFG_FACT.urlPdfFactura ? '<td></td><td></td>' : ''}
             </tr>`;
             tfoot.classList.remove('d-none');
         }
+        aluTrxActualizarMarcados();
     }
+
+    // ── Envío por correo (por fila o de los marcados) ──
+    // Cada factura va SIEMPRE al correo de su propio cliente (el de la factura, no el
+    // representante actual del alumno); el servidor es el de Facturas de Venta, que
+    // exige factura autorizada y adjunta PDF + XML.
+    const aluTrxEnviable = f => f && f.estado === 'autorizado';
+    function aluTrxDesmarcar(tr) {
+        const chk = tr.querySelector('input.alu-trx-chk');
+        if (chk) chk.checked = false;
+    }
+    function aluTrxMarcadas() {
+        return [...document.querySelectorAll('#tbodyFacturasAlumno input.alu-trx-chk:checked')]
+            .map(c => aluTrxFacturas.get(Number(c.dataset.id))).filter(aluTrxEnviable);
+    }
+    function aluTrxActualizarMarcados() {
+        const n = aluTrxMarcadas().length;
+        const btn = document.getElementById('aluTrxEnviarMarcados');
+        if (btn) btn.disabled = n === 0;
+        const sp = document.getElementById('aluTrxMarcadosN');
+        if (sp) sp.textContent = `(${n})`;
+        const todas = document.getElementById('aluTrxMarcarTodas');
+        if (todas) {
+            const visibles = [...document.querySelectorAll('#tbodyFacturasAlumno tr.alu-trx-fact:not(.d-none) input.alu-trx-chk:not(:disabled)')];
+            todas.checked = visibles.length > 0 && visibles.every(c => c.checked);
+            todas.indeterminate = !todas.checked && visibles.some(c => c.checked);
+        }
+    }
+    function aluTrxPintarEnviado(f) {
+        const b = document.querySelector(`#tbodyFacturasAlumno button.alu-trx-correo[data-id="${f.id_factura}"]`);
+        if (b) { b.classList.remove('btn-outline-info'); b.classList.add('btn-outline-success'); b.title = `Ya enviada por correo. Reenviar la factura ${f.numero}`; }
+    }
+    async function aluTrxEnviarUna(f, correos) {
+        const fd = new FormData();
+        fd.append('id', f.id_factura);
+        if (correos) fd.append('correos', correos);
+        try {
+            const r = await fetchJson(CFG_FACT.urlCorreoFactura, { method: 'POST', body: fd });
+            if (r && r.ok) { f.correo_enviado = true; aluTrxPintarEnviado(f); return { ok: true }; }
+            return { ok: false, mensaje: (r && (r.mensaje || r.error)) || 'No se pudo enviar.' };
+        } catch (e) {
+            return { ok: false, mensaje: 'Error de conexión.' };
+        }
+    }
+    const aluTrxAvisoNoRepresentante = '<div class="alert alert-warning py-1 px-2 small mb-2"><i class="bi bi-exclamation-triangle me-1"></i>Este cliente <b>no es el representante actual</b> del alumno.</div>';
+
+    async function aluTrxCorreoFila(f) {
+        if (!aluTrxEnviable(f)) return;
+        const r = await Swal.fire({
+            title: `Enviar factura ${escHtml(f.numero)}`,
+            html: `<div class="text-start small">
+                       <div class="mb-2">Cliente de la factura: <b>${escHtml(f.cliente || '—')}</b></div>
+                       ${f.es_representante ? '' : aluTrxAvisoNoRepresentante}
+                       ${f.correo_enviado ? '<div class="text-success mb-2"><i class="bi bi-check2-circle me-1"></i>Ya se envió antes; se enviará de nuevo.</div>' : ''}
+                       <label class="form-label mb-1">Correo(s) de destino <span class="text-muted">(separe con coma)</span></label>
+                   </div>`,
+            input: 'text',
+            inputValue: f.email || '',
+            inputPlaceholder: 'correo@ejemplo.com',
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-envelope me-1"></i>Enviar',
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            target: swalTarget(),
+            heightAuto: false,
+            inputValidator: v => {
+                const lista = String(v || '').split(/[\s,;]+/).filter(Boolean);
+                if (!lista.length) return 'Escriba al menos un correo.';
+                const malo = lista.find(c => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c));
+                return malo ? `Correo no válido: ${malo}` : undefined;
+            },
+            showLoaderOnConfirm: true,
+            allowOutsideClick: () => !Swal.isLoading(),
+            preConfirm: async v => {
+                const valor = String(v || '').trim();
+                // Solo se manda «correos» si cambió: si no, el servidor usa el del cliente.
+                const res = await aluTrxEnviarUna(f, valor === (f.email || '').trim() ? '' : valor);
+                if (!res.ok) Swal.showValidationMessage(res.mensaje);
+                return res.ok;
+            },
+        });
+        if (r.isConfirmed) aviso('success', `Factura ${f.numero} enviada por correo.`);
+    }
+
+    async function aluTrxEnviarMarcados() {
+        const marcadas = aluTrxMarcadas();
+        if (!marcadas.length) return;
+        // Agrupadas por cliente + correo: así se ve a quién le llega cada una.
+        const grupos = new Map();
+        marcadas.forEach(f => {
+            const k = `${f.cliente}\u0001${f.email}`;
+            if (!grupos.has(k)) grupos.set(k, { cliente: f.cliente, email: f.email, rep: f.es_representante, facturas: [] });
+            const g = grupos.get(k);
+            g.rep = g.rep && f.es_representante;
+            g.facturas.push(f);
+        });
+        const conCorreo = marcadas.filter(f => f.email);
+        const sinCorreo = marcadas.length - conCorreo.length;
+        const filas = [...grupos.values()].map(g => `<tr>
+                <td>${escHtml(g.cliente || '—')}${g.rep ? '' : ' <span class="badge bg-warning bg-opacity-25 text-warning-emphasis border border-warning" title="El cliente de estas facturas no es el representante actual del alumno">No es el representante actual</span>'}</td>
+                <td>${g.email ? escHtml(g.email) : '<span class="text-danger">Sin correo: se omiten</span>'}</td>
+                <td class="text-end">${g.facturas.length}</td>
+            </tr>`).join('');
+        const varios = grupos.size > 1;
+        const r = await Swal.fire({
+            icon: varios ? 'warning' : 'question',
+            title: 'Enviar facturas por correo',
+            width: 720,
+            html: `<div class="text-start small">
+                       <p class="mb-2">Cada factura se envía <b>al correo de su propio cliente</b>.${varios ? ' Las marcadas son de <b>' + grupos.size + ' clientes distintos</b>: revise los destinatarios.' : ''}</p>
+                       <table class="table table-sm table-bordered mb-2"><thead class="table-light"><tr><th>Cliente</th><th>Correo</th><th class="text-end">Facturas</th></tr></thead><tbody>${filas}</tbody></table>
+                       ${sinCorreo ? `<div class="text-danger">${sinCorreo} factura(s) sin correo del cliente no se enviarán.</div>` : ''}
+                   </div>`,
+            showCancelButton: true,
+            confirmButtonText: `<i class="bi bi-envelope me-1"></i>Enviar ${conCorreo.length}`,
+            cancelButtonText: 'Cancelar',
+            reverseButtons: true,
+            showConfirmButton: conCorreo.length > 0,
+            target: swalTarget(),
+            heightAuto: false,
+        });
+        if (!r.isConfirmed) return;
+
+        const btn = document.getElementById('aluTrxEnviarMarcados');
+        if (btn) btn.disabled = true;
+        Swal.fire({
+            title: 'Enviando correos…', html: `<span id="aluTrxProg">0 de ${conCorreo.length}</span>`,
+            allowOutsideClick: false, showConfirmButton: false, target: swalTarget(), heightAuto: false,
+            didOpen: () => Swal.showLoading(),
+        });
+        const fallos = [];
+        let enviadas = 0;
+        for (let i = 0; i < conCorreo.length; i++) {
+            const f = conCorreo[i];
+            const res = await aluTrxEnviarUna(f, '');
+            if (res.ok) {
+                enviadas++;
+                const chk = document.querySelector(`#tbodyFacturasAlumno input.alu-trx-chk[data-id="${f.id_factura}"]`);
+                if (chk) chk.checked = false;
+            } else {
+                fallos.push(`${f.numero} (${f.cliente}): ${res.mensaje}`);
+            }
+            const p = document.getElementById('aluTrxProg');
+            if (p) p.textContent = `${i + 1} de ${conCorreo.length}`;
+        }
+        aluTrxActualizarMarcados();
+        const omitidas = sinCorreo ? `<div class="text-muted">${sinCorreo} omitida(s) por no tener correo el cliente.</div>` : '';
+        const errores = fallos.length
+            ? `<div class="text-danger mt-2">No se enviaron ${fallos.length}:</div><ul class="small text-danger mb-0">${fallos.map(x => `<li>${escHtml(x)}</li>`).join('')}</ul>`
+            : '';
+        Swal.fire({
+            icon: fallos.length ? (enviadas ? 'warning' : 'error') : 'success',
+            title: fallos.length ? 'Envío con observaciones' : 'Listo',
+            html: `<div class="text-start small"><div>${enviadas} factura(s) enviada(s).</div>${omitidas}${errores}</div>`,
+            confirmButtonText: 'Aceptar', target: swalTarget(), heightAuto: false,
+        });
+    }
+    document.getElementById('aluTrxEnviarMarcados')?.addEventListener('click', aluTrxEnviarMarcados);
+    document.getElementById('aluTrxMarcarTodas')?.addEventListener('change', e => {
+        document.querySelectorAll('#tbodyFacturasAlumno tr.alu-trx-fact:not(.d-none) input.alu-trx-chk:not(:disabled)')
+            .forEach(c => { c.checked = e.target.checked; });
+        aluTrxActualizarMarcados();
+    });
     document.getElementById('aluTrxAnio')?.addEventListener('change', filtrarTransaccionesAlumno);
     // Años con facturas (más el actual, que es el de por defecto) + «Todos».
     function aluTrxLlenarAnios(facturas, conservar) {
@@ -1235,6 +1404,8 @@
         const mensaje = (txt, cls = 'text-muted') => {
             tbody.innerHTML = `<tr><td colspan="${COLS}" class="text-center ${cls} py-3 small">${escHtml(txt)}</td></tr>`;
             tfoot?.classList.add('d-none');
+            aluTrxFacturas.clear();
+            aluTrxActualizarMarcados();
         };
         if (!idAlumnoActual) { mensaje('Guarde el alumno para ver sus transacciones.'); return; }
         mensaje('Cargando…');
@@ -1246,6 +1417,8 @@
             // Año de emisión (d-m-Y); sin fecha, el del mes facturado (m-Y).
             json.data.forEach(f => { f.anio = String(f.fecha || f.periodo || '').slice(-4); });
             aluTrxLlenarAnios(json.data, mismoAlumno);
+            aluTrxFacturas.clear();
+            json.data.forEach(f => aluTrxFacturas.set(Number(f.id_factura), f));
             tbody.innerHTML = json.data.map(f => {
                 const anulada = f.estado === 'anulado';
                 const cls = anulada ? 'text-decoration-line-through text-muted' : '';
@@ -1258,6 +1431,19 @@
                 const pdf = conPdf
                     ? `<td class="text-center"><a href="${escAttr(urlPdf)}" data-pdf-documento class="btn btn-sm btn-outline-danger py-0 px-1" title="PDF de la factura ${escAttr(f.numero)}" onclick="event.stopPropagation()"><i class="bi bi-file-earmark-pdf"></i></a></td>`
                     : '';
+                // Casilla y sobre: solo facturas autorizadas (el SRI ya las aceptó).
+                const enviable = aluTrxEnviable(f);
+                const motivoNo = anulada ? 'Anulada: no se envía por correo.'
+                    : 'Solo se envían por correo las facturas autorizadas por el SRI (envíela al SRI desde Facturas de Venta).';
+                const chk = conPdf
+                    ? `<td class="text-center" onclick="event.stopPropagation()"><input type="checkbox" class="form-check-input m-0 alu-trx-chk" data-id="${f.id_factura}" ${enviable ? '' : 'disabled'} title="${escAttr(enviable ? 'Marcar para enviar por correo' : motivoNo)}"></td>`
+                    : '';
+                const correoTitulo = !enviable ? motivoNo
+                    : (f.correo_enviado ? `Ya enviada por correo. Reenviar la factura ${f.numero}` : `Enviar la factura ${f.numero} por correo`)
+                      + (f.email ? ` a ${f.email}` : ' (el cliente no tiene correo)');
+                const correo = conPdf
+                    ? `<td class="text-center"><button type="button" class="btn btn-sm ${enviable && f.correo_enviado ? 'btn-outline-success' : 'btn-outline-info'} py-0 px-1 alu-trx-correo" data-id="${f.id_factura}" ${enviable ? '' : 'disabled'} title="${escAttr(correoTitulo)}"><i class="bi bi-envelope"></i></button></td>`
+                    : '';
                 const lineas = (f.lineas || []).map(l => `<tr data-txt="${escAttr(aluNorm([l.codigo, l.descripcion, l.detalle].filter(Boolean).join(' ')))}">
                         <td class="ps-4" style="white-space:normal;">${escHtml(l.codigo ? l.codigo + ' - ' : '')}${escHtml(l.descripcion)}${l.detalle ? `<div class="text-muted" style="font-size:.72rem;">${escHtml(l.detalle)}</div>` : ''}</td>
                         <td class="text-end">${fmt(l.cantidad)} × ${fmt(l.precio)}${l.descuento ? ' − ' + fmt(l.descuento) : ''}</td>
@@ -1267,12 +1453,15 @@
                 return `<tr class="alu-trx-fact ${cls}" data-id="${f.id_factura}" title="${escAttr(titulo)}"
                             data-anio="${escAttr(f.anio)}" data-total="${f.total}" data-anulada="${anulada ? 1 : 0}"
                             data-txt="${escAttr(aluNorm([f.numero, f.periodo, f.fecha, f.cliente].join(' ')))}">
+                        ${chk}
                         <td class="text-center"><i class="bi bi-chevron-right small alu-trx-chev"></i></td>
                         <td>${escHtml(f.periodo)}</td>
                         <td>${escHtml(f.fecha)}</td>
                         <td class="fw-semibold">${escHtml(f.numero)}${marca}</td>
+                        <td class="text-truncate" style="max-width:260px;">${escHtml(f.cliente || '')}</td>
                         <td class="text-end">${fmt(f.total)}</td>
                         ${pdf}
+                        ${correo}
                     </tr>
                     <tr class="alu-trx-det d-none" data-det="${f.id_factura}"><td colspan="${COLS}" class="p-0">
                         <table class="table table-sm mb-0 bg-light ${cls}" style="font-size:.75rem;"><tbody>${lineas || '<tr><td class="ps-4 text-muted">Sin detalle.</td></tr>'}</tbody></table>
@@ -1282,6 +1471,11 @@
                 const det = tbody.querySelector(`tr[data-det="${tr.dataset.id}"]`);
                 if (!det) return;
                 aluTrxChevron(tr, det.classList.toggle('d-none') === false);
+            }));
+            tbody.querySelectorAll('input.alu-trx-chk').forEach(c => c.addEventListener('change', aluTrxActualizarMarcados));
+            tbody.querySelectorAll('button.alu-trx-correo').forEach(b => b.addEventListener('click', e => {
+                e.stopPropagation();
+                aluTrxCorreoFila(aluTrxFacturas.get(Number(b.dataset.id)));
             }));
             // Aplica el año y la búsqueda, y arma el pie con lo que queda a la vista.
             filtrarTransaccionesAlumno();
