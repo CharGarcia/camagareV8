@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 2.13
+version: 2.14
 orden: 10
 estado: activo
 ---
@@ -121,6 +121,11 @@ configuró después de que ya habían entrado facturas.
 
 Antes de hacer nada le muestra **cuántos pagos son y por qué monto total**, con el
 detalle de los documentos, y pide confirmación.
+
+Mientras el sistema trabaja, en pantalla aparece un aviso con un indicador de
+carga: primero *Revisando compras pendientes…* (al buscar las facturas) y, tras
+confirmar, *Generando N pago(s)…*. Si son muchos documentos puede tardar; no
+cierre la ventana hasta que el aviso se reemplace por el resultado.
 
 A diferencia del pago automático en caliente, aquí se paga el **saldo real** de
 cada factura (total + valores de terceros − retenciones − notas de crédito +
@@ -496,6 +501,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.14** — *Generar pagos pendientes* muestra un aviso de progreso mientras revisa las compras y mientras genera los pagos, para que se sepa que el sistema está trabajando.
 - **2.13** — El **Plazo** admite como máximo **3.650 días (10 años)** o su equivalente en meses o años; un valor mayor se rechaza al guardar. Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **2.12** — Creado desde un documento (compra, egreso, retención, importación…), el proveedor nuevo **se cierra solo y queda seleccionado** en el documento. Desde el listado la ficha sigue sin cerrarse al guardar.
 - **2.11** — Anticipos: solo cuentan los egresos del ambiente de la empresa

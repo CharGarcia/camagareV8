@@ -865,6 +865,21 @@
     };
     
     /**
+     * Aviso bloqueante con spinner mientras se revisan/generan los pagos pendientes.
+     * Lo reemplaza el siguiente Swal.fire (confirmación, resultado o error).
+     */
+    function provMostrarProgresoPagos(titulo, texto) {
+        Swal.fire({
+            title: titulo,
+            html: `<div class="small text-muted">${texto}</div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
+    }
+
+    /**
      * Genera los egresos de las compras del proveedor emitidas hasta hoy que aún
      * no tienen pago. Primero previsualiza (cuántos y por cuánto) y pide confirmar.
      */
@@ -876,6 +891,10 @@
         const htmlOriginal = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Revisando...';
+        provMostrarProgresoPagos(
+            'Revisando compras pendientes…',
+            'Buscando las compras de este proveedor emitidas hasta hoy que aún no tienen pago registrado. Espere un momento.'
+        );
 
         let prev;
         try {
@@ -934,6 +953,11 @@
 
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
+        provMostrarProgresoPagos(
+            `Generando ${prev.cantidad} pago(s)…`,
+            'Se están creando los egresos de cada compra con la forma de pago y el concepto configurados. '
+            + 'Esto puede tardar si son muchos documentos; no cierre esta ventana hasta que termine.'
+        );
 
         try {
             const fd = new FormData();
