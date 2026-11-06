@@ -298,8 +298,8 @@ En la pestaña **Historial** elija **Buscar por**: *Vehículo* o *Cliente*.
   guardado). Al volver a la pestaña se actualiza.
 - **Buscar un producto o servicio dentro de las órdenes**: en el campo **Producto o
   servicio** escriba el código o parte de la descripción (p. ej. *aceite 20w50*,
-  *pulverizado*). Quedan solo las órdenes que tienen esa línea, ya desplegadas y con la
-  línea resaltada; el resumen indica cuántas órdenes de las cargadas la tienen y la
+  *pulverizado*). Quedan solo las órdenes que tienen esa línea, ya desplegadas y
+  mostrando únicamente las líneas que coinciden (el Total de la fila sigue siendo el de toda la orden); el resumen indica cuántas órdenes de las cargadas la tienen y la
   cantidad y el valor de esas líneas (sin las órdenes anuladas). Se aceptan varias
   palabras en cualquier orden y no importan mayúsculas ni tildes. Al borrar el campo
   vuelven todas. El filtro se mantiene si cambia de vehículo o cliente.
@@ -525,7 +525,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
-- **1.30** — Pestaña **Historial**: nuevo campo **Producto o servicio** para ver solo las órdenes que tienen un producto o servicio (por código o descripción), con la línea resaltada y su cantidad y valor en el resumen.
+- **1.30** — Pestaña **Historial**: nuevo campo **Producto o servicio** para ver solo las órdenes que tienen un producto o servicio (por código o descripción), mostrando solo las líneas que coinciden y su cantidad y valor en el resumen.
 - **1.29** — Al guardar, una línea con descripción y sin cantidad ya no se descarta sin aviso: se muestra *Falta la cantidad* con la lista de líneas y se marca la celda. Las filas sin descripción no se guardan (antes el servidor rechazaba la orden si alguna traía cantidad sin descripción).
 - **1.28** — Al pulsar **Guardar**, la orden ya no se cierra: queda abierta y guardada (con su número) en la misma pestaña; se cierra con **Cerrar**.
 - **1.27** — Pestaña Mantenimiento: botón **No aplica a este vehículo** por servicio (reversible).

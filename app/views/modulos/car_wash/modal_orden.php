@@ -2238,7 +2238,8 @@
                 const doc = r.numero_documento
                     ? `${r.tipo_documento === 'FACTURA' ? 'Fact.' : 'Rec.'} ${esc(r.numero_documento)}${r.id_documento && !docVigente ? ' <span class="text-danger fw-normal">(anulado)</span>' : ''}`
                     : '<span class="text-muted">—</span>';
-                const lineas = (r.lineas || []).map(l => `<tr class="${coincide(l) ? 'table-warning fw-semibold' : ''}">
+                // Con el filtro de producto/servicio solo se muestran las líneas que coinciden.
+                const lineas = (r.lineas || []).filter(l => !palabras.length || coincide(l)).map(l => `<tr>
                         <td class="ps-4 text-muted" style="width:40px">${l.tipo_linea === 'producto' ? '<i class="bi bi-box-seam"></i>' : '<i class="bi bi-tools"></i>'}</td>
                         <td>${esc(l.producto_codigo ? l.producto_codigo + ' - ' : '')}${esc(l.descripcion)}</td>
                         <td class="text-end">${num(l.cantidad).toLocaleString('en-US', { maximumFractionDigits: 6 })} × ${fmt(l.precio_unitario, 2)}${num(l.descuento) > 0 ? ' − ' + fmt(l.descuento, 2) : ''}</td>
