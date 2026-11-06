@@ -3373,17 +3373,25 @@ $totalPages = $totalPagesOriginal;
             && APP_FAVORITOS['id_forma_pago_sri'] != null
             && APP_FAVORITOS['id_forma_pago_sri'] !== '')
             ? APP_FAVORITOS['id_forma_pago_sri'] : null;
-        const idFpSri = c.id_forma_pago_sri || favPagoSri || EMPRESA_CONFIG.id_forma_pago_sri_def;
-        if (idFpSri) {
-            const selectPagoSri = document.querySelector('select[name="f_pago_id[]"]');
-            if (selectPagoSri) {
-                const targetId = String(idFpSri);
-                for (let i = 0; i < selectPagoSri.options.length; i++) {
-                    if (selectPagoSri.options[i].getAttribute('data-id') === targetId || selectPagoSri.options[i].value === targetId) {
-                        selectPagoSri.selectedIndex = i;
-                        selectPagoSri.dispatchEvent(new Event('change'));
-                        break;
-                    }
+        // Cliente y empresa guardan el ID (data-id); el favorito, el CÓDIGO SRI (value).
+        // Cada uno se cruza solo por su campo: varios ids coinciden con el código de otra
+        // forma de pago y mezclarlos elegía la equivocada (mismo arreglo que Factura de Venta).
+        const selectPagoSri = document.querySelector('select[name="f_pago_id[]"]');
+        if (selectPagoSri) {
+            const candidatos = [
+                ['data-id', c.id_forma_pago_sri],
+                ['value',   favPagoSri],
+                ['data-id', EMPRESA_CONFIG.id_forma_pago_sri_def],
+            ];
+            for (const [campo, valor] of candidatos) {
+                if (valor == null || valor === '') continue;
+                const objetivo = String(valor);
+                const opt = Array.from(selectPagoSri.options).find(o =>
+                    o.value !== '' && (campo === 'value' ? o.value : o.getAttribute('data-id')) === objetivo);
+                if (opt) {
+                    selectPagoSri.value = opt.value;
+                    selectPagoSri.dispatchEvent(new Event('change'));
+                    break;
                 }
             }
         }

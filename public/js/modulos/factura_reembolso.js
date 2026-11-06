@@ -445,17 +445,26 @@
             && APP_FAVORITOS['id_forma_pago_sri'] != null
             && APP_FAVORITOS['id_forma_pago_sri'] !== '')
             ? APP_FAVORITOS['id_forma_pago_sri'] : null;
-        const idFpSri = idFpCliente || favPagoSri || window.FR_ID_FORMA_PAGO_SRI_DEF;
-        if (!idFpSri) return;
-
         const selectPagoSri = document.querySelector('#fr_pagos_body select[name="fp_forma_pago[]"]');
         if (!selectPagoSri) return;
 
-        const targetId = String(idFpSri);
-        for (let i = 0; i < selectPagoSri.options.length; i++) {
-            if (selectPagoSri.options[i].getAttribute('data-id') === targetId || selectPagoSri.options[i].value === targetId) {
-                selectPagoSri.selectedIndex = i;
-                break;
+        // Cliente y empresa guardan el ID (data-id); el favorito, el CÓDIGO SRI (value).
+        // Cada uno se cruza solo por su campo: varios ids coinciden con el código de otra
+        // forma de pago (id 20 "Sin utilización" vs. código 20 "Otros con utilización"…)
+        // y mezclarlos elegía la equivocada.
+        const candidatos = [
+            ['data-id', idFpCliente],
+            ['value',   favPagoSri],
+            ['data-id', window.FR_ID_FORMA_PAGO_SRI_DEF],
+        ];
+        for (const [campo, valor] of candidatos) {
+            if (valor == null || valor === '') continue;
+            const objetivo = String(valor);
+            const opt = Array.from(selectPagoSri.options).find(o =>
+                o.value !== '' && (campo === 'value' ? o.value : o.getAttribute('data-id')) === objetivo);
+            if (opt) {
+                selectPagoSri.value = opt.value;
+                return;
             }
         }
     }

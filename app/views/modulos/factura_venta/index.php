@@ -4356,17 +4356,27 @@ $totalPages = $totalPagesOriginal;
             && APP_FAVORITOS['id_forma_pago_sri'] != null
             && APP_FAVORITOS['id_forma_pago_sri'] !== '')
             ? APP_FAVORITOS['id_forma_pago_sri'] : null;
-        const idFpSri = c.id_forma_pago_sri || favPagoSri || EMPRESA_CONFIG.id_forma_pago_sri_def;
-        if (idFpSri) {
-            const selectPagoSri = document.querySelector('select[name="f_pago_id[]"]');
-            if (selectPagoSri) {
-                const targetId = String(idFpSri);
-                for (let i = 0; i < selectPagoSri.options.length; i++) {
-                    if (selectPagoSri.options[i].getAttribute('data-id') === targetId || selectPagoSri.options[i].value === targetId) {
-                        selectPagoSri.selectedIndex = i;
-                        selectPagoSri.dispatchEvent(new Event('change'));
-                        break;
-                    }
+        // El cliente y la empresa guardan el ID de formas_pago_sri (data-id de la opción);
+        // el favorito guarda el CÓDIGO SRI (value del select). Se cruza cada uno SOLO por
+        // su campo: varios ids coinciden con el código de OTRA forma (id 20 "Sin utilización"
+        // vs. código 20 "Otros con utilización", id 17 "Tarjeta de crédito" vs. código 17
+        // "Dinero electrónico"…) y mezclar ambos elegía la forma equivocada.
+        const selectPagoSri = document.getElementById('m-select-pago-sri');
+        if (selectPagoSri) {
+            const candidatos = [
+                ['data-id', c.id_forma_pago_sri],
+                ['value',   favPagoSri],
+                ['data-id', EMPRESA_CONFIG.id_forma_pago_sri_def],
+            ];
+            for (const [campo, valor] of candidatos) {
+                if (valor == null || valor === '') continue;
+                const objetivo = String(valor);
+                const opt = Array.from(selectPagoSri.options).find(o =>
+                    o.value !== '' && (campo === 'value' ? o.value : o.getAttribute('data-id')) === objetivo);
+                if (opt) {
+                    selectPagoSri.value = opt.value;
+                    selectPagoSri.dispatchEvent(new Event('change'));
+                    break;
                 }
             }
         }
