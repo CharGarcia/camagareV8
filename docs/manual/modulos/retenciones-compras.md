@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos, numero saltado, secuencial saltado, falta un numero, error 45, secuencial registrado, restaurar retencion, recuperar retencion eliminada, retenciones eliminadas, estado:eliminada, no autorizada
-version: 1.31
+etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos, numero saltado, secuencial saltado, falta un numero, error 45, secuencial registrado, restaurar retencion, recuperar retencion eliminada, retenciones eliminadas, estado:eliminada, no autorizada, anular retencion, anular fuera de plazo, dia 7, plazo para anular, motivo de la excepcion
+version: 1.32
 orden: 30
 estado: activo
 ---
@@ -353,6 +353,23 @@ Una compra que ya tiene retención **no se puede eliminar**: primero hay que
 eliminar la retención. Es una protección deliberada, porque la retención declara
 al SRI una compra que dejaría de existir.
 
+## Anular una retención y el plazo del día 7
+
+El SRI permite anular una retención hasta el **día 7 del mes siguiente** a su
+emisión (o el lunes siguiente si ese día cae en fin de semana). Igual que en
+Facturas de Venta:
+
+- **Dentro del plazo**, cualquier usuario con permiso de *Modificar* la anula con
+  el botón **Anular**.
+- **Fuera del plazo**, el sistema avisa *Fuera de plazo* y no deja anularla.
+- El **superadministrador** (nivel 3) sí puede anularla fuera de plazo. El aviso le
+  indica qué norma está omitiendo y le pide el **motivo de la excepción**, que es
+  obligatorio y queda en el historial de la retención (auditoría, acción *ANULAR*).
+
+En todos los casos, si la retención está **autorizada**, primero debe anularse en el
+portal del SRI: mientras el SRI la siga mostrando como autorizada, el sistema no la
+anula. Tampoco se anula si su período contable está cerrado.
+
 ## Eliminar una retención autorizada (solo superadministrador)
 
 Por regla, una retención **autorizada** no se elimina: se anula. El
@@ -547,6 +564,7 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.32** — El superadministrador puede **anular una retención fuera del plazo** del día 7 del mes siguiente, como en Facturas de Venta: debe indicar el motivo, que queda en la auditoría. Para los demás usuarios el plazo sigue bloqueando.
 - **1.31** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.30** — **Número saltado**: si el siguiente número de la serie lo tiene el SRI
   recibido o autorizado de una retención eliminada, el secuencial de la retención

@@ -251,7 +251,12 @@ class RetencionCompraService
     // ANULAR
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function anular(int $id, int $idEmpresa, int $idUsuario): void
+    /**
+     * @param string|null $observacionExcepcion Motivo cuando el superadmin anula fuera del plazo
+     *        del SRI (lo controla la vista, como en Facturas de Venta). La retención no tiene
+     *        columna de observaciones: el motivo queda en log_sistema (acción ANULAR).
+     */
+    public function anular(int $id, int $idEmpresa, int $idUsuario, ?string $observacionExcepcion = null): void
     {
         $cabecera = $this->repository->getPorId($id, $idEmpresa);
         if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
@@ -310,7 +315,12 @@ class RetencionCompraService
             $this->logService->registrar(
                 $idUsuario, $idEmpresa,
                 'ANULAR', 'retencion_compra_cabecera', $id,
-                $cabecera, ['nuevo_estado' => 'anulada']
+                $cabecera, array_filter([
+                    'nuevo_estado' => 'anulada',
+                    'observacion_excepcion' => $observacionExcepcion !== null && trim($observacionExcepcion) !== ''
+                        ? '[Anulación fuera de plazo - excepción superadmin] ' . trim($observacionExcepcion)
+                        : null,
+                ], fn($v) => $v !== null)
             );
 
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();

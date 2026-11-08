@@ -437,6 +437,11 @@
     window.RET_anular = async () => {
         if (!retIdActual) return;
 
+        // Igual que Facturas de Venta: el plazo es normativa SRI, así que solo el superadmin
+        // (nivel 3) puede saltárselo; se le avisa qué omite y debe dejar el motivo, que queda
+        // en la auditoría de la anulación. Para el resto sigue bloqueando.
+        const infraccionesNormativa = [];
+
         // ── Regla: Plazo del día 7 del mes siguiente ─────────────────────────
         if (window.RET_FECHA_EMISION) {
             const hoy = new Date();
@@ -446,22 +451,32 @@
 
             if (hoy > limiteAnulacion) {
                 const fmtLimite = limiteAnulacion.toLocaleDateString('es-EC', { day: '2-digit', month: '2-digit', year: 'numeric' });
-                await Swal.fire({
-                    icon: 'error',
-                    title: 'Fuera de plazo',
-                    html: `El plazo para anular esta retención venció el <strong>${fmtLimite}</strong>.<br>
-                           <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
-                           (o el siguiente día hábil si cae en fin de semana).</small>`,
-                    confirmButtonText: 'Entendido',
-                    confirmButtonColor: '#dc3545'
-                });
-                return;
+                if (!window.RET_ES_SUPERADMIN) {
+                    await Swal.fire({
+                        icon: 'error',
+                        title: 'Fuera de plazo',
+                        html: `El plazo para anular esta retención venció el <strong>${fmtLimite}</strong>.<br>
+                               <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
+                               (o el siguiente día hábil si cae en fin de semana).</small>`,
+                        confirmButtonText: 'Entendido',
+                        confirmButtonColor: '#dc3545'
+                    });
+                    return;
+                }
+                infraccionesNormativa.push(`El plazo del SRI para anular venció el <strong>${fmtLimite}</strong> (día 7 del mes siguiente a la emisión).`);
             }
         }
 
-        const result = await Swal.fire({
+        const avisoNormativa = infraccionesNormativa.length
+            ? `<div class="alert alert-danger text-start small mb-3">
+                   <strong><i class="bi bi-exclamation-triangle-fill me-1"></i>Como superadmin estás omitiendo estas restricciones de normativa SRI:</strong>
+                   <ul class="mb-0 mt-1">${infraccionesNormativa.map(t => `<li>${t}</li>`).join('')}</ul>
+               </div>`
+            : '';
+
+        const swalAnularOpts = {
             title: '¿Anular esta retención?',
-            text: 'Esta acción anulará el comprobante. No se podrá reactivar.',
+            html: avisoNormativa + 'Esta acción anulará el comprobante. No se podrá reactivar.',
             icon: 'warning',
             showCancelButton: true,
             confirmButtonColor: '#f59e0b',
@@ -469,9 +484,18 @@
             confirmButtonText: '<i class="bi bi-slash-circle me-2"></i>Sí, anular',
             cancelButtonText: 'Cancelar',
             reverseButtons: true
-        });
+        };
+        if (infraccionesNormativa.length) {
+            swalAnularOpts.input = 'text';
+            swalAnularOpts.inputLabel = 'Motivo de la excepción (queda en la auditoría)';
+            swalAnularOpts.inputPlaceholder = 'Ej: Solicitado por el proveedor';
+            swalAnularOpts.inputValidator = (v) => (!v || !v.trim()) ? 'Debes indicar el motivo de la excepción.' : undefined;
+        }
+
+        const result = await Swal.fire(swalAnularOpts);
 
         if (!result.isConfirmed) return;
+        const motivoExcepcion = infraccionesNormativa.length ? (result.value || '').trim() : '';
 
         const btn = document.getElementById('ret-btn-anular');
         const btnOrigHtml = btn?.innerHTML;
@@ -490,7 +514,7 @@
             const res = await fetch(`${BASE}/anularAjax`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: `id=${retIdActual}`,
+                body: new URLSearchParams({ id: retIdActual, observacion_excepcion: motivoExcepcion }).toString(),
             });
             const data = await res.json();
             if (data.ok) {
