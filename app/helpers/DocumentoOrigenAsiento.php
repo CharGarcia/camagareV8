@@ -90,6 +90,9 @@ class DocumentoOrigenAsiento
             'numero' => "concat_ws('-', t.establecimiento_prov, t.punto_emision_prov, t.secuencial_prov)",
             'col_asiento' => 'id_asiento_contable',
             'etiqueta' => 'Compra',
+            // Compras guarda facturas, notas de crédito/débito recibidas, notas de venta…: el
+            // tipo de comprobante (tabla 4 del ATS) afina la etiqueta (ver etiquetaDocumento()).
+            'subtipo' => 't.tipo_comprobante',
             'fecha' => 'fecha_emision',
             'estado' => null,
             'observaciones' => 'observaciones',
@@ -365,6 +368,32 @@ class DocumentoOrigenAsiento
     {
         $modulo = trim((string) $moduloOrigen);
         return self::DOCUMENTOS[$modulo] ?? null;
+    }
+
+    /**
+     * Nombre del documento para mostrarlo junto al asiento. En compras distingue el tipo de
+     * comprobante (factura, nota de crédito o de débito recibida, nota de venta…); en ventas
+     * aclara que la nota de crédito/débito es de ventas, para no confundirla con la de compras.
+     */
+    public static function etiquetaDocumento(string $moduloOrigen, ?string $subtipo = null): string
+    {
+        $doc = self::paraModulo($moduloOrigen);
+        $etiqueta = $doc['etiqueta'] ?? OrigenAsiento::etiqueta($moduloOrigen);
+
+        if ($moduloOrigen === 'compra') {
+            $cod = trim((string) $subtipo);
+            if (in_array($cod, TiposComprobanteCompra::NOTAS_CREDITO, true)) return 'Nota de crédito en compras';
+            if (in_array($cod, TiposComprobanteCompra::NOTAS_DEBITO, true))  return 'Nota de débito en compras';
+            if ($cod === '01') return 'Factura de compra';
+            if ($cod !== '' && isset(TiposComprobanteCompra::NOMBRES[$cod])) {
+                return 'Compra: ' . TiposComprobanteCompra::NOMBRES[$cod];
+            }
+            return $cod !== '' ? 'Compra: comprobante ' . $cod : $etiqueta;
+        }
+        if ($moduloOrigen === 'nota_credito') return 'Nota de crédito en ventas';
+        if ($moduloOrigen === 'nota_debito')  return 'Nota de débito en ventas';
+
+        return $etiqueta;
     }
 
     /** Nombres de tabla de todos los documentos del mapa (para verificar cuáles existen en la BD). */

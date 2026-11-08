@@ -309,11 +309,21 @@ class AsientosContablesController extends BaseModuloController
                 'cuadre_documento' => $modulo !== '' && $idRef > 0
                     ? $this->service->getContextoCuadreDocumento($modulo, $idRef, $idEmpresa)
                     : null,
+                'documento_origen' => $modulo !== '' && $idRef > 0
+                    ? (new \App\Services\modulos\DocumentoOrigenService())->resumen($modulo, $idRef, $idEmpresa)
+                    : null,
             ]);
         } else {
             // Importe del documento origen: el modal lo muestra y avisa en vivo si el asiento
             // deja de reflejarlo mientras se edita.
             $data['cuadre_documento'] = $this->service->getContextoCuadreDocumento(
+                $data['modulo_origen'] ?? null,
+                (int) ($data['id_referencia_origen'] ?? 0),
+                $idEmpresa
+            );
+            // Qué documento originó el asiento (factura de compra, nota de crédito en compras…),
+            // para mostrarlo en la cabecera del modal.
+            $data['documento_origen'] = (new \App\Services\modulos\DocumentoOrigenService())->resumen(
                 $data['modulo_origen'] ?? null,
                 (int) ($data['id_referencia_origen'] ?? 0),
                 $idEmpresa

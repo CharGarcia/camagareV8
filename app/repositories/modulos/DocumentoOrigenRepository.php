@@ -44,6 +44,7 @@ class DocumentoOrigenRepository
             "t.{$doc['fecha']}::date AS fecha",
             $doc['estado'] ? "t.{$doc['estado']}::varchar AS estado" : "NULL::varchar AS estado",
             $doc['observaciones'] ? "t.{$doc['observaciones']}::text AS observaciones" : "NULL::text AS observaciones",
+            !empty($doc['subtipo']) ? "({$doc['subtipo']})::varchar AS subtipo" : "NULL::varchar AS subtipo",
             "({$tipo})::varchar AS tipo_entidad",
             "COALESCE(cli.nombre, prov.razon_social, emp.nombres_apellidos) AS tercero",
             "COALESCE(cli.identificacion, prov.identificacion, emp.identificacion) AS tercero_identificacion",

@@ -151,9 +151,18 @@ class PlanCuentasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Buscador de cuentas que comparten el Plan de Cuentas y el modal de Asientos Contables
+     * (también la pestaña «Asiento contable» de los documentos). Basta VER cualquiera de los
+     * dos módulos: quien puede editar asientos tiene que poder elegir sus cuentas aunque no
+     * tenga acceso a la pantalla del Plan de Cuentas. Solo lectura y de la empresa activa.
+     */
     public function searchAjaxCuentas(): void
     {
-        $this->requireLeer();
+        $this->requireEmpresaSesion();
+        if (!\App\Helpers\Permisos::puedeVerAlguna([self::RUTA_MODULO, \App\Helpers\AsientoPestana::RUTA_MODULO])) {
+            $this->json(['ok' => false, 'error' => 'No tiene permiso para esta acción.'], 403);
+        }
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];

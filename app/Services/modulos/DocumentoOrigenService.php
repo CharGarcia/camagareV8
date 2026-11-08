@@ -70,7 +70,7 @@ class DocumentoOrigenService
         }
 
         return [
-            'etiqueta' => $doc['etiqueta'],
+            'etiqueta' => DocumentoOrigenAsiento::etiquetaDocumento($modulo, $cab['subtipo'] ?? null),
             'numero' => (string) ($cab['numero'] ?? ''),
             'fecha' => $this->fecha($cab['fecha'] ?? null),
             'estado' => $cab['estado'] !== null && $cab['estado'] !== '' ? (string) $cab['estado'] : null,
@@ -81,6 +81,44 @@ class DocumentoOrigenService
             'totales' => $totales,
             'columnas' => $columnas,
             'lineas' => $lineas,
+        ];
+    }
+
+    /**
+     * Qué documento originó un asiento, para la cabecera del modal de Asientos: nombre del
+     * documento, número y tercero. Sin las líneas. Nunca lanza: si el origen no tiene
+     * documento (manual, nómina, declaraciones…) o el documento ya no existe, devuelve solo el
+     * nombre del origen.
+     *
+     * @return array{etiqueta: string, numero: string, tercero: ?string, encontrado: bool}
+     */
+    public function resumen(?string $modulo, int $idDocumento, int $idEmpresa): array
+    {
+        $modulo = trim((string) $modulo);
+        if ($modulo === '' || $modulo === 'manual') {
+            return ['etiqueta' => 'Asiento manual (sin documento)', 'numero' => '', 'tercero' => null, 'encontrado' => false];
+        }
+
+        $base = ['etiqueta' => DocumentoOrigenAsiento::etiquetaDocumento($modulo), 'numero' => '', 'tercero' => null, 'encontrado' => false];
+        if ($idDocumento <= 0 || DocumentoOrigenAsiento::paraModulo($modulo) === null) {
+            return $base;
+        }
+
+        try {
+            $cab = $this->repository->getCabecera($modulo, $idDocumento, $idEmpresa);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return $base;
+        }
+        if ($cab === null) {
+            return $base;
+        }
+
+        return [
+            'etiqueta' => DocumentoOrigenAsiento::etiquetaDocumento($modulo, $cab['subtipo'] ?? null),
+            'numero' => trim((string) ($cab['numero'] ?? ''), " -"),
+            'tercero' => $cab['tercero'] !== null && $cab['tercero'] !== '' ? (string) $cab['tercero'] : null,
+            'encontrado' => true,
         ];
     }
 

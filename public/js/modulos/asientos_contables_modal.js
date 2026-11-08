@@ -122,6 +122,7 @@
         document.getElementById('asiento_estado').value       = 'contabilizado';
         document.getElementById('asiento_estado_label').value = 'Contabilizado';
         document.getElementById('asiento_numero').value       = '';
+        pintarDocumentoOrigen(null);
 
         await cargarDatosAuxiliares();
         aplicarColumnasOpcionales();
@@ -186,6 +187,7 @@
                 // El backend manda igual el importe del documento, así que el pie del modal
                 // puede ir avisando en vivo si lo que se está armando lo refleja o no.
                 cuadreDocumento = res.cuadre_documento || null;
+                pintarDocumentoOrigen(res.documento_origen || null);
                 document.getElementById('asientoModalTitle').textContent = `Nuevo Asiento - ${modulo.replace('_', ' ').toUpperCase()}`;
                 document.getElementById('asiento_tipo').value = modulo;
                 document.getElementById('asiento_tipo_label').value = modulo.replace(/_/g, ' ');
@@ -219,6 +221,7 @@
 
         if (data.modulo_origen) document.getElementById('asiento_modulo_origen').value = data.modulo_origen;
         if (data.id_referencia_origen) document.getElementById('asiento_id_referencia_origen').value = data.id_referencia_origen;
+        pintarDocumentoOrigen(data.documento_origen || null);
 
         const esAnulado = estadoVal === 'anulado';
         const esDiario  = tipoVal === 'diario';
@@ -250,6 +253,21 @@
         }
 
         aplicarModoLecturaAsiento(soloLectura);
+    }
+
+    /**
+     * Campo «Documento origen» de la cabecera: «Nota de crédito en compras 001-001-000123 ·
+     * PROVEEDOR S.A.». Lo resuelve el servidor (DocumentoOrigenService::resumen); sin dato
+     * (asiento nuevo o manual) muestra «Asiento manual (sin documento)».
+     */
+    function pintarDocumentoOrigen(doc) {
+        const input = document.getElementById('asiento_documento_origen');
+        if (!input) return;
+        const texto = doc
+            ? [doc.etiqueta, doc.numero].filter(Boolean).join(' ') + (doc.tercero ? ` · ${doc.tercero}` : '')
+            : 'Asiento manual (sin documento)';
+        input.value = texto;
+        input.title = texto;
     }
 
     function reiniciarDuplicado() {

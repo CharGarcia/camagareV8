@@ -43,9 +43,15 @@
                             <input type="text" class="form-control form-control-sm bg-light text-capitalize" id="asiento_estado_label" readonly tabindex="-1">
                             <input type="hidden" id="asiento_estado" name="estado">
                         </div>
-                        <div class="col-md-12">
+                        <div class="col-md-7">
                             <label class="form-label small fw-medium mb-1">Concepto / Glosa <span class="text-danger">*</span></label>
                             <input type="text" class="form-control form-control-sm" id="asiento_concepto" name="concepto" required placeholder="Concepto general del asiento...">
+                        </div>
+                        <!-- Documento que originó el asiento (solo lectura): factura de compra,
+                             nota de crédito en compras, ingreso… con su número y tercero. -->
+                        <div class="col-md-5">
+                            <label class="form-label small fw-medium mb-1">Documento origen</label>
+                            <input type="text" class="form-control form-control-sm bg-light fw-semibold text-truncate" id="asiento_documento_origen" readonly tabindex="-1" value="Asiento manual (sin documento)">
                         </div>
                     </div>
 

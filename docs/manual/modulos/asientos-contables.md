@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes
-version: 1.47
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra
+version: 1.49
 orden: 20
 estado: activo
 ---
@@ -602,6 +602,14 @@ arriba, pulse **Duplicar**.
 
 ## Ver el documento que originó el asiento
 
+En la cabecera del asiento, junto al concepto, el campo **Documento origen**
+dice de qué documento salió, con su número y el cliente o proveedor. Por ejemplo:
+*Factura de compra 001-001-000123 · PROVEEDOR S.A.*, *Nota de crédito en compras …*,
+*Nota de crédito en ventas …*, *Ingreso …*. En compras distingue el tipo de
+comprobante (factura, nota de crédito, nota de débito, nota de venta, etc.). Los
+asientos escritos a mano dicen *Asiento manual (sin documento)*; los de nómina,
+declaraciones o migrados muestran el nombre de ese proceso.
+
 Cuando el asiento nace de un documento (factura de venta, compra, ingreso,
 egreso, nota de crédito/débito, retención, liquidación de compra, importación,
 consignación, etc.), la misma barra muestra el botón **Ver Documento**: abre
@@ -634,6 +642,9 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
   *Ver* sobre Asientos Contables. Se asigna en `/config/permisos-modulos`.
 - **Veo la pestaña pero no puedo escribir en ella**: tiene *Ver* pero no
   *Modificar* sobre Asientos Contables.
+- **Al escribir la cuenta en una línea no aparece ninguna sugerencia** (y por eso
+  no se puede corregir el asiento): basta con poder *Ver* Asientos Contables o el
+  Plan de Cuentas. Antes hacía falta, sin avisarlo, permiso sobre el Plan de Cuentas.
 - **Corregí el asiento y al reguardar el documento volvió a cambiar**: ya no
   ocurre. Desde que un asiento se guarda a mano queda marcado y el sistema no lo
   regenera. Si lo que quiere es justo lo contrario, use **Restaurar automático**.
@@ -642,6 +653,8 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.49** — Campo *Documento origen* en la cabecera del asiento: tipo de documento (factura de compra, nota de crédito en compras o en ventas, ingreso, etc.), número y tercero.
+- **1.48** — El buscador de cuentas del asiento (en este módulo y en la pestaña *Asiento contable* de los documentos) funciona con permiso sobre Asientos Contables, aunque el usuario no tenga acceso al Plan de Cuentas. Antes no mostraba ninguna cuenta y el asiento no se podía editar.
 - **1.47** — Si a un documento le faltan cuentas contables para su asiento, la pestaña *Asiento contable* ya no muestra el error en rojo: indica en gris que el asiento se generará automáticamente cuando la configuración esté completa, y no se anota en *Errores del sistema*. Aplica a facturas, recibos, notas de crédito y débito, compras, reembolsos, importaciones, ingresos, egresos, inventario y consignaciones.
 - **1.46** — Al generar, un documento que ya tenía asiento y sigue pendiente (costo de venta sin
   cuenta) ya no se cuenta como generado: queda en *Quedan pendientes* con la cuenta que falta y
