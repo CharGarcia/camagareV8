@@ -252,11 +252,14 @@ class RetencionCompraService
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @param string|null $observacionExcepcion Motivo cuando el superadmin anula fuera del plazo
-     *        del SRI (lo controla la vista, como en Facturas de Venta). La retención no tiene
-     *        columna de observaciones: el motivo queda en log_sistema (acción ANULAR).
+     * @param string|null $observacionExcepcion Motivo de la excepción cuando se anula fuera del
+     *        plazo del SRI. La retención no tiene columna de observaciones: el motivo queda en
+     *        log_sistema (acción ANULAR).
+     * @param bool $esSuperAdmin Nivel 3: el único que puede anular fuera del plazo del SRI
+     *        (RetencionCompraRules::validarPlazoAnulacion). Lo decide el servidor, no la vista.
+     * @return string|null Fecha límite vencida (d-m-Y) si se anuló fuera de plazo; null si no.
      */
-    public function anular(int $id, int $idEmpresa, int $idUsuario, ?string $observacionExcepcion = null): void
+    public function anular(int $id, int $idEmpresa, int $idUsuario, ?string $observacionExcepcion = null, bool $esSuperAdmin = false): ?string
     {
         $cabecera = $this->repository->getPorId($id, $idEmpresa);
         if (!$cabecera || (int)($cabecera['id_empresa'] ?? 0) !== $idEmpresa) {
@@ -264,6 +267,17 @@ class RetencionCompraService
         }
         if (($cabecera['estado'] ?? '') === 'anulada') {
             throw new \Exception('La retención ya está anulada.');
+        }
+
+        // Plazo del SRI (día 7 del mes siguiente): fuera de él solo el superadmin, con motivo.
+        $limiteVencido = $this->rules->validarPlazoAnulacion(
+            (string) ($cabecera['fecha_emision'] ?? ''),
+            $esSuperAdmin,
+            $observacionExcepcion
+        );
+        // Dentro del plazo no hay excepción que registrar aunque llegue texto.
+        if ($limiteVencido === null) {
+            $observacionExcepcion = null;
         }
 
         // Anular revierte el asiento contable de la retención: si su período ya está
@@ -318,7 +332,7 @@ class RetencionCompraService
                 $cabecera, array_filter([
                     'nuevo_estado' => 'anulada',
                     'observacion_excepcion' => $observacionExcepcion !== null && trim($observacionExcepcion) !== ''
-                        ? '[Anulación fuera de plazo - excepción superadmin] ' . trim($observacionExcepcion)
+                        ? "[Anulación fuera de plazo (venció el {$limiteVencido}) - excepción superadmin] " . trim($observacionExcepcion)
                         : null,
                 ], fn($v) => $v !== null)
             );
@@ -331,6 +345,8 @@ class RetencionCompraService
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
+
+        return $limiteVencido;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

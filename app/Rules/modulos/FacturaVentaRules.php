@@ -6,6 +6,56 @@ namespace App\Rules\modulos;
 
 class FacturaVentaRules
 {
+    /** Identificación del Consumidor Final (SRI). */
+    public const CONSUMIDOR_FINAL = '9999999999999';
+
+    /**
+     * Reglas de normativa SRI para anular una factura emitida:
+     *  - Consumidor Final: no se anula ni admite nota de crédito una vez transmitida.
+     *  - Plazo: hasta el día 7 del mes siguiente a la emisión (App\Helpers\PlazoAnulacionSri).
+     *
+     * Fuera de estas reglas solo el superadministrador puede anular, y siempre con el motivo de
+     * la excepción. La pantalla ya lo avisa; aquí se impone para que no dependa de ella. Un
+     * borrador nunca se transmitió: no le aplican.
+     *
+     * @param array       $cabecera     Fila de FacturaVentaRepository::getPorId (estado, fecha_emision, cliente_ruc).
+     * @param string|null $hoy          Y-m-d; solo para pruebas.
+     * @return string[] Reglas omitidas (texto para la auditoría) cuando el superadmin anula fuera
+     *                  de ellas; vacío si la anulación está dentro de las reglas.
+     * @throws \Exception Fuera de las reglas sin ser superadmin, o sin motivo.
+     */
+    public function validarReglasAnulacion(array $cabecera, bool $esSuperAdmin, ?string $motivo, ?string $hoy = null): array
+    {
+        if (strtolower(trim((string) ($cabecera['estado'] ?? ''))) === 'borrador') {
+            return [];
+        }
+
+        $infracciones = [];
+        if (trim((string) ($cabecera['cliente_ruc'] ?? '')) === self::CONSUMIDOR_FINAL) {
+            $infracciones[] = 'Facturada a Consumidor Final: el SRI no permite anularla ni emitir nota de crédito una vez transmitida.';
+        }
+        $vencio = \App\Helpers\PlazoAnulacionSri::vencido((string) ($cabecera['fecha_emision'] ?? ''), $hoy);
+        if ($vencio !== null) {
+            $infracciones[] = "El plazo del SRI para anular venció el {$vencio} (día 7 del mes siguiente a la emisión).";
+        }
+
+        if ($infracciones === []) {
+            return [];
+        }
+        if (!$esSuperAdmin) {
+            throw new \Exception(
+                'No se puede anular: está fuera de las reglas de anulación del SRI. ' . implode(' ', $infracciones)
+                . ' Solo un superadministrador puede anularla fuera de las reglas.'
+            );
+        }
+        if ($motivo === null || trim($motivo) === '') {
+            throw new \Exception(
+                'Se está anulando fuera de las reglas del SRI (' . implode(' ', $infracciones) . '): '
+                . 'debe indicar el motivo de la excepción.'
+            );
+        }
+        return $infracciones;
+    }
     /**
      * Valida la creación/edición de una factura aplicando todas las reglas
      * de cabecera, detalle y configuración del establecimiento.

@@ -2253,9 +2253,20 @@ class FacturaVentaController extends BaseModuloController
             exit;
         }
 
+        // Las reglas (Consumidor Final / plazo del día 7) las impone el Service: fuera de ellas
+        // solo el superadmin y con motivo.
+        $esSuperAdmin = (int) ($_SESSION['nivel'] ?? 1) === 3;
+
         try {
-            $this->service->anular($id, $idEmpresa, $idUsuario, true, $observacionExcepcion !== '' ? $observacionExcepcion : null);
-            echo json_encode(['ok' => true, 'mensaje' => 'Factura anulada correctamente e inventario reintegrado.']);
+            $omitidas = $this->service->anular($id, $idEmpresa, $idUsuario, true, $observacionExcepcion !== '' ? $observacionExcepcion : null, $esSuperAdmin);
+            echo json_encode([
+                'ok' => true,
+                'fuera_de_reglas' => $omitidas !== [],
+                'mensaje' => $omitidas !== []
+                    ? 'Factura anulada FUERA de las reglas de anulación del SRI (' . implode(' ', $omitidas) . ') '
+                        . 'El motivo quedó en Observaciones y en la auditoría. Inventario reintegrado.'
+                    : 'Factura anulada correctamente e inventario reintegrado.',
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

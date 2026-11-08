@@ -399,14 +399,21 @@ class RetencionesComprasController extends BaseModuloController
         $id        = (int) ($_POST['id'] ?? 0);
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $idUsuario = (int) $_SESSION['id_usuario'];
-        // Motivo cuando el superadmin anula fuera del plazo del SRI (día 7 del mes siguiente);
-        // la vista solo lo envía en ese caso. Igual que Facturas de Venta, es solo una nota:
-        // queda en la auditoría de la anulación.
+        // Motivo cuando el superadmin anula fuera del plazo del SRI (día 7 del mes siguiente).
+        // El Service decide si se está fuera de plazo y exige nivel 3 + motivo; queda en la
+        // auditoría de la anulación.
         $observacionExcepcion = trim((string) ($_POST['observacion_excepcion'] ?? ''));
+        $esSuperAdmin = (int) ($_SESSION['nivel'] ?? 1) === 3;
 
         try {
-            $this->service->anular($id, $idEmpresa, $idUsuario, $observacionExcepcion !== '' ? $observacionExcepcion : null);
-            echo json_encode(['ok' => true, 'mensaje' => 'Retención anulada correctamente.']);
+            $fueraDePlazo = $this->service->anular($id, $idEmpresa, $idUsuario, $observacionExcepcion !== '' ? $observacionExcepcion : null, $esSuperAdmin);
+            echo json_encode([
+                'ok' => true,
+                'fuera_de_reglas' => $fueraDePlazo !== null,
+                'mensaje' => $fueraDePlazo !== null
+                    ? "Retención anulada FUERA de las reglas de anulación del SRI (el plazo venció el {$fueraDePlazo}). La excepción y su motivo quedaron registrados en la auditoría."
+                    : 'Retención anulada correctamente.',
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

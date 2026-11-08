@@ -17,6 +17,13 @@ use Exception;
 class AsientoBuilderService
 {
     /**
+     * Tipos de comprobante de compra que son notas de crédito (incluye TC, reembolso e
+     * instituciones del Estado): su asiento invierte Debe/Haber — la Cuenta por Pagar va al
+     * DEBE. Lo usa también el cuadre asiento↔documento (AsientoContableService).
+     */
+    public const TIPOS_COMPRA_REVERSA = ['04', '23', '47', '51'];
+
+    /**
      * Diferencia máxima (en valor absoluto) que se acepta como redondeo y se lleva a la
      * cuenta de Ajuste por redondeo. Un descuadre mayor se considera error real de
      * configuración (cuenta/impuesto faltante) y lanza excepción.
@@ -2948,13 +2955,11 @@ class AsientoBuilderService
     private function clasificarDireccionCompra(string $tipoComprobante): string
     {
         $tipo = trim($tipoComprobante);
-        // Notas de crédito (incluye TC, reembolso e instituciones del Estado)
-        $reversa  = ['04', '23', '47', '51'];
         // Comprobante de retención: no genera asiento de compra
         $excluido = ['07'];
 
         if (in_array($tipo, $excluido, true)) return 'excluido';
-        if (in_array($tipo, $reversa, true))  return 'reversa';
+        if (in_array($tipo, self::TIPOS_COMPRA_REVERSA, true))  return 'reversa';
         return 'normal';
     }
 

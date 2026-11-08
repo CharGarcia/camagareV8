@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra
-version: 1.49
+version: 1.50
 orden: 20
 estado: activo
 ---
@@ -635,6 +635,8 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 - **"El asiento no cuadra con el documento"**: la cartera del asiento (o su total
   Debe) dejó de coincidir con el importe del documento. Revise la línea que
   cambió; si el ajuste es correcto, confirme con "Guardar de todos modos".
+  En una **nota de crédito de compra** la cuenta por pagar va al **Debe** (es
+  el reverso de la compra), y así se compara.
 - **"El asiento no tiene ninguna línea con la cuenta de cartera configurada"**:
   falta la línea de la cuenta por cobrar/pagar del documento. Agréguela y
   vuelva a guardar.
@@ -653,6 +655,7 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.50** — Notas de crédito de compra: el cuadre contra el documento mide la cuenta por pagar en el **Debe**, donde la lleva su asiento. Antes la buscaba en el Haber y avisaba «la cartera del asiento es 0.00» con el asiento bien armado.
 - **1.49** — Campo *Documento origen* en la cabecera del asiento: tipo de documento (factura de compra, nota de crédito en compras o en ventas, ingreso, etc.), número y tercero.
 - **1.48** — El buscador de cuentas del asiento (en este módulo y en la pestaña *Asiento contable* de los documentos) funciona con permiso sobre Asientos Contables, aunque el usuario no tenga acceso al Plan de Cuentas. Antes no mostraba ninguna cuenta y el asiento no se podía editar.
 - **1.47** — Si a un documento le faltan cuentas contables para su asiento, la pestaña *Asiento contable* ya no muestra el error en rojo: indica en gris que el asiento se generará automáticamente cuando la configuración esté completa, y no se anota en *Errores del sistema*. Aplica a facturas, recibos, notas de crédito y débito, compras, reembolsos, importaciones, ingresos, egresos, inventario y consignaciones.

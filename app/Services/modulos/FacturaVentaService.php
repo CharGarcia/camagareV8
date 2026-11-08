@@ -1330,7 +1330,14 @@ class FacturaVentaService
         return $res;
     }
 
-    public function anular(int $id, int $idEmpresa, int $idUsuario, bool $verificarSri = true, ?string $observacionExcepcion = null): void
+    /**
+     * @param bool|null $esSuperAdmin Quién anula, para las reglas de normativa SRI (Consumidor
+     *        Final y plazo del día 7, FacturaVentaRules::validarReglasAnulacion): fuera de ellas
+     *        solo el nivel 3 y con motivo. null = flujo interno (migración, facturación de
+     *        consignaciones) que no pasa por esas reglas, como hasta ahora.
+     * @return string[] Reglas omitidas por el superadmin (vacío si se anuló dentro de las reglas).
+     */
+    public function anular(int $id, int $idEmpresa, int $idUsuario, bool $verificarSri = true, ?string $observacionExcepcion = null, ?bool $esSuperAdmin = null): array
     {
         $cabecera = $this->repository->getPorId($id);
         if (!$cabecera || (int)$cabecera['id_empresa'] !== $idEmpresa) {
@@ -1339,6 +1346,15 @@ class FacturaVentaService
 
         if (($cabecera['estado'] ?? '') === 'anulado') {
             throw new \Exception('La factura ya está anulada.');
+        }
+
+        // Reglas de normativa SRI: fuera de ellas solo el superadmin, con motivo.
+        $reglasOmitidas = $esSuperAdmin !== null
+            ? $this->rules->validarReglasAnulacion($cabecera, $esSuperAdmin, $observacionExcepcion)
+            : [];
+        // Dentro de las reglas no hay excepción que dejar escrita aunque llegue texto.
+        if ($esSuperAdmin !== null && $reglasOmitidas === []) {
+            $observacionExcepcion = null;
         }
 
         // Anular revierte el asiento, el inventario y los cobros de la factura: si su
@@ -1433,7 +1449,10 @@ class FacturaVentaService
             // Observaciones, sin borrar lo que ya hubiera escrito el usuario.
             if ($observacionExcepcion !== null && trim($observacionExcepcion) !== '') {
                 $observacionesPrevias = trim((string) ($cabecera['observaciones'] ?? ''));
-                $nota = '[Anulación - excepción superadmin] ' . trim($observacionExcepcion);
+                $nota = ($reglasOmitidas !== []
+                        ? '[Anulación fuera de las reglas del SRI - excepción superadmin: ' . implode(' ', $reglasOmitidas) . '] '
+                        : '[Anulación - excepción superadmin] ')
+                    . trim($observacionExcepcion);
                 $nuevasObservaciones = $observacionesPrevias !== ''
                     ? $observacionesPrevias . "\n" . $nota
                     : $nota;
@@ -1467,6 +1486,7 @@ class FacturaVentaService
                     'id_venta'    => $id,
                     'nuevo_estado' => 'anulado',
                     'observacion_excepcion' => $observacionExcepcion,
+                    'reglas_omitidas' => $reglasOmitidas !== [] ? $reglasOmitidas : null,
                 ], fn($v) => $v !== null)
             );
 
@@ -1483,6 +1503,8 @@ class FacturaVentaService
         } catch (\Throwable $eMail) {
             error_log('[Anulación] No se pudo enviar el correo de aviso de anulación (factura #' . $id . '): ' . $eMail->getMessage());
         }
+
+        return $reglasOmitidas;
     }
 
     /**

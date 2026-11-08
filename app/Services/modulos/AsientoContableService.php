@@ -160,8 +160,8 @@ class AsientoContableService
         $moduloOrigen = (string) ($cabeceraData['modulo_origen'] ?? 'manual');
         $idRefOrigen  = (int) ($cabeceraData['id_referencia_origen'] ?? 0);
 
-        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
-        if ($cfg === null || $idRefOrigen <= 0) {
+        $cfg = $this->cfgCuadreDocumento($moduloOrigen, $idRefOrigen, $idEmpresa);
+        if ($cfg === null) {
             return null;
         }
 
@@ -191,8 +191,8 @@ class AsientoContableService
      */
     public function getContextoCuadreDocumento(?string $moduloOrigen, int $idRefOrigen, int $idEmpresa): ?array
     {
-        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
-        if ($cfg === null || $idRefOrigen <= 0) {
+        $cfg = $this->cfgCuadreDocumento((string) $moduloOrigen, $idRefOrigen, $idEmpresa);
+        if ($cfg === null) {
             return null;
         }
 
@@ -209,6 +209,28 @@ class AsientoContableService
             'cuentas_cartera' => $this->repository->getCuentasSlotCartera($idEmpresa, (array) ($cfg['slots'] ?? [])),
             'tolerancia' => \App\Helpers\CuadreDocumentoAsiento::TOLERANCIA,
         ];
+    }
+
+    /**
+     * Definición del cuadre para ESTE documento: la del mapa CuadreDocumentoAsiento, con el lado de
+     * la cartera invertido cuando el documento es una nota de crédito de compra (su asiento lleva
+     * la Cuenta por Pagar al Debe). Sin esto, la cartera de una NC de compra se medía en el Haber
+     * y daba 0.00 con el asiento bien armado.
+     */
+    private function cfgCuadreDocumento(string $moduloOrigen, int $idRefOrigen, int $idEmpresa): ?array
+    {
+        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
+        if ($cfg === null || $idRefOrigen <= 0) {
+            return null;
+        }
+
+        if (!empty($cfg['reversa'])
+            && $this->repository->esDocumentoOrigenReversa($moduloOrigen, $idRefOrigen, $idEmpresa)) {
+            $cfg['lado'] = ($cfg['lado'] ?? 'debe') === 'haber' ? 'debe' : 'haber';
+            $cfg['etiqueta'] = (string) ($cfg['reversa']['etiqueta'] ?? $cfg['etiqueta']);
+        }
+
+        return $cfg;
     }
 
     /**

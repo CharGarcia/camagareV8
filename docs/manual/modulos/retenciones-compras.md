@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos, numero saltado, secuencial saltado, falta un numero, error 45, secuencial registrado, restaurar retencion, recuperar retencion eliminada, retenciones eliminadas, estado:eliminada, no autorizada, anular retencion, anular fuera de plazo, dia 7, plazo para anular, motivo de la excepcion, codigo repetido, codigo duplicado, mismo codigo dos veces
-version: 1.34
+version: 1.35
 orden: 30
 estado: activo
 ---
@@ -365,10 +365,16 @@ Facturas de Venta:
 
 - **Dentro del plazo**, cualquier usuario con permiso de *Modificar* la anula con
   el botón **Anular**.
-- **Fuera del plazo**, el sistema avisa *Fuera de plazo* y no deja anularla.
-- El **superadministrador** (nivel 3) sí puede anularla fuera de plazo. El aviso le
-  indica qué norma está omitiendo y le pide el **motivo de la excepción**, que es
-  obligatorio y queda en el historial de la retención (auditoría, acción *ANULAR*).
+- **Fuera del plazo**, el sistema avisa *Fuera de las reglas de anulación*, indica
+  la fecha en que venció el plazo y no deja anularla: **solo un superadministrador**
+  puede hacerlo. La regla la aplica también el servidor, así que no depende de la
+  pantalla.
+- El **superadministrador** (nivel 3) sí puede anularla fuera de plazo. La
+  confirmación se titula *Anulación fuera de las reglas del SRI*, indica qué norma
+  está omitiendo y le pide el **motivo de la excepción**, que es obligatorio. Al
+  terminar, el mensaje confirma que la retención se anuló **fuera de las reglas**, y
+  la excepción queda en el historial de la retención con la fecha vencida y el
+  motivo (auditoría, acción *ANULAR*).
 
 En todos los casos, si la retención está **autorizada**, primero debe anularse en el
 portal del SRI: mientras el SRI la siga mostrando como autorizada, el sistema no la
@@ -568,6 +574,7 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.35** — Anular fuera del plazo del SRI: el servidor solo lo permite al superadministrador y con motivo (antes lo controlaba solo la pantalla). Los avisos dicen claramente que se está anulando **fuera de las reglas de anulación**.
 - **1.34** — No se puede ingresar el **mismo código de retención en dos líneas** (del mismo impuesto): se avisa al elegirlo y el servidor lo rechaza al guardar.
 - **1.33** — Se corrigió el botón **Anular** de las retenciones autorizadas: aparecía deshabilitado y no se podía usar.
 - **1.32** — El superadministrador puede **anular una retención fuera del plazo** del día 7 del mes siguiente, como en Facturas de Venta: debe indicar el motivo, que queda en la auditoría. Para los demás usuarios el plazo sigue bloqueando.

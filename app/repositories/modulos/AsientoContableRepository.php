@@ -968,6 +968,47 @@ class AsientoContableRepository
     }
 
     /**
+     * ¿El documento origen es una nota de crédito de compra, cuyo asiento invierte Debe/Haber?
+     * Solo aplica a los orígenes con `reversa` en App\Helpers\CuadreDocumentoAsiento (hoy,
+     * `compra`); los tipos salen de AsientoBuilderService::TIPOS_COMPRA_REVERSA, la misma lista
+     * con la que se arma el asiento.
+     */
+    public function esDocumentoOrigenReversa(?string $moduloOrigen, int $idReferenciaOrigen, int $idEmpresa): bool
+    {
+        $cfg = \App\Helpers\CuadreDocumentoAsiento::paraModulo($moduloOrigen);
+        if ($cfg === null || empty($cfg['reversa']['campo']) || $idReferenciaOrigen <= 0) {
+            return false;
+        }
+
+        $tipos = \App\Services\modulos\AsientoBuilderService::TIPOS_COMPRA_REVERSA;
+        $placeholders = [];
+        $params = [':id' => $idReferenciaOrigen, ':id_empresa' => $idEmpresa];
+        foreach ($tipos as $i => $tipo) {
+            $placeholders[] = ':tipo' . $i;
+            $params[':tipo' . $i] = $tipo;
+        }
+
+        return (bool) $this->consultaTolerante(
+            function (\PDO $pdo) use ($cfg, $placeholders, $params) {
+                // Tabla y columna son constantes del código; los valores van preparados.
+                $stmt = $pdo->prepare(
+                    "SELECT 1
+                       FROM {$cfg['tabla']} t
+                      WHERE t.id = :id AND t.id_empresa = :id_empresa AND t.eliminado = false
+                        AND TRIM(COALESCE(t.{$cfg['reversa']['campo']}::text, '')) IN (" . implode(', ', $placeholders) . ")
+                      LIMIT 1"
+                );
+                $stmt->execute($params);
+                return $stmt->fetchColumn() !== false;
+            },
+            function (\Throwable $e) use ($moduloOrigen) {
+                error_log('Asientos: no se pudo leer el tipo de comprobante del documento origen (' . $moduloOrigen . '). ' . $e->getMessage());
+                return false;
+            }
+        );
+    }
+
+    /**
      * Cuentas contables con las que la empresa resuelve uno o varios slots de cartera
      * (PORCOBRARFACTURAVENTA, PORPAGARFACTURACOMPRA, FACTREEMB_CXC_CLIENTE…), según su
      * configuración contable. Mismo criterio que AsientoBuilderService::cuentasDelSlot(): sirve

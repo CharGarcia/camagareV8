@@ -71,6 +71,51 @@ class RetencionCompraRules
         $this->repo = $repo ?? new RetencionCompraRepository();
     }
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // ANULACIÓN: PLAZO DEL SRI
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Último día en que el SRI permite anular: el 7 del mes siguiente a la emisión; si cae
+     * en sábado o domingo, el lunes siguiente (sin feriados). Mismo cálculo que la pantalla
+     * (retFechaLimiteAnulacion en retenciones_compras.js) y que Facturas de Venta.
+     */
+    public static function fechaLimiteAnulacion(string $fechaEmision): ?\DateTimeImmutable
+    {
+        return \App\Helpers\PlazoAnulacionSri::fechaLimite($fechaEmision);
+    }
+
+    /**
+     * Fuera del plazo del SRI solo anula el superadministrador, y siempre con el motivo de la
+     * excepción. La pantalla ya lo avisa; aquí se impone para que no dependa de ella.
+     *
+     * @return string|null La fecha límite vencida (d-m-Y) si se está anulando fuera de plazo
+     *                     (como superadmin y con motivo); null si está dentro del plazo.
+     * @throws Exception Fuera de plazo sin ser superadmin, o sin motivo.
+     */
+    public function validarPlazoAnulacion(string $fechaEmision, bool $esSuperAdmin, ?string $motivo, ?string $hoy = null): ?string
+    {
+        $fmt = \App\Helpers\PlazoAnulacionSri::vencido($fechaEmision, $hoy);
+        if ($fmt === null) {
+            return null;
+        }
+
+        if (!$esSuperAdmin) {
+            throw new Exception(
+                "Fuera de plazo: el plazo para anular esta retención venció el {$fmt} "
+                . '(el SRI permite anular hasta el día 7 del mes siguiente a la emisión). '
+                . 'Solo un superadministrador puede anularla fuera de plazo.'
+            );
+        }
+        if ($motivo === null || trim($motivo) === '') {
+            throw new Exception(
+                "Se está anulando fuera de las reglas del SRI (el plazo venció el {$fmt}): "
+                . 'debe indicar el motivo de la excepción.'
+            );
+        }
+        return $fmt;
+    }
+
     /**
      * Arma una advertencia con su sustento normativo.
      *

@@ -7012,10 +7012,11 @@ $totalPages = $totalPagesOriginal;
             if (!ES_SUPERADMIN) {
                 await Swal.fire({
                     icon: 'error',
-                    title: 'No se puede anular',
+                    title: 'Fuera de las reglas de anulación',
                     html: `Las facturas emitidas a <strong>Consumidor Final</strong> no se pueden anular<br>
                            ni tampoco se les puede emitir una nota de crédito una vez transmitidas.<br>
-                           <small class="text-muted">(Normativa SRI)</small>`,
+                           <small class="text-muted">(Normativa SRI)</small>
+                           <div class="mt-2">Fuera de las reglas solo un <strong>superadministrador</strong> puede anularla.</div>`,
                     confirmButtonText: 'Entendido',
                     confirmButtonColor: '#dc3545'
                 });
@@ -7036,10 +7037,11 @@ $totalPages = $totalPagesOriginal;
                 if (!ES_SUPERADMIN) {
                     await Swal.fire({
                         icon: 'error',
-                        title: 'Fuera de plazo',
+                        title: 'Fuera de las reglas de anulación',
                         html: `El plazo para anular esta factura venció el <strong>${fmtLimite}</strong>.<br>
                                <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
-                               (o el siguiente día hábil si cae en fin de semana).</small>`,
+                               (o el siguiente día hábil si cae en fin de semana).</small>
+                               <div class="mt-2">Fuera de las reglas solo un <strong>superadministrador</strong> puede anularla.</div>`,
                         confirmButtonText: 'Entendido',
                         confirmButtonColor: '#dc3545'
                     });
@@ -7056,14 +7058,19 @@ $totalPages = $totalPagesOriginal;
                </div>`
             : '';
 
+        const fueraDeReglas = infraccionesNormativa.length > 0;
         const swalAnularOpts = {
-            title: '¿Anular Factura?',
-            html: avisoNormativa + "Esta acción marcará la factura como ANULADA y reintegrará todo el stock al inventario. No se puede revertir.",
-            icon: 'warning',
+            title: fueraDeReglas ? 'Anulación fuera de las reglas del SRI' : '¿Anular Factura?',
+            html: avisoNormativa + (fueraDeReglas
+                ? 'Está anulando esta factura <strong>fuera de las reglas de anulación permitidas</strong>. Se marcará como ANULADA y se reintegrará todo el stock al inventario. No se puede revertir.'
+                : "Esta acción marcará la factura como ANULADA y reintegrará todo el stock al inventario. No se puede revertir."),
+            icon: fueraDeReglas ? 'error' : 'warning',
             showCancelButton: true,
             confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#6c757d',
-            confirmButtonText: '<i class="bi bi-slash-circle me-2"></i>Sí, anular factura',
+            confirmButtonText: fueraDeReglas
+                ? '<i class="bi bi-slash-circle me-2"></i>Sí, anular fuera de las reglas'
+                : '<i class="bi bi-slash-circle me-2"></i>Sí, anular factura',
             cancelButtonText: 'Cancelar',
             reverseButtons: true,
             target: document.getElementById('modalNuevaFactura')
@@ -7113,12 +7120,19 @@ $totalPages = $totalPagesOriginal;
             if (json.ok) {
                 modalMain.hide();
 
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Anulada',
-                    text: json.mensaje || 'Factura anulada e inventario actualizado.',
-                    timer: 3000
-                });
+                Swal.fire((fueraDeReglas || json.fuera_de_reglas)
+                    ? {
+                        icon: 'warning',
+                        title: 'Factura anulada fuera de las reglas',
+                        text: json.mensaje || 'La factura fue anulada como excepción del superadministrador.',
+                        confirmButtonText: 'Entendido'
+                    }
+                    : {
+                        icon: 'success',
+                        title: 'Anulada',
+                        text: json.mensaje || 'Factura anulada e inventario actualizado.',
+                        timer: 3000
+                    });
 
                 if (typeof window.FV_fetchSearch === 'function') {
                     window.FV_fetchSearch(window.FV_currentPage || 1);

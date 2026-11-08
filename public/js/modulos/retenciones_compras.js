@@ -484,10 +484,11 @@
                 if (!window.RET_ES_SUPERADMIN) {
                     await Swal.fire({
                         icon: 'error',
-                        title: 'Fuera de plazo',
+                        title: 'Fuera de las reglas de anulación',
                         html: `El plazo para anular esta retención venció el <strong>${fmtLimite}</strong>.<br>
                                <small class="text-muted">El SRI permite anular hasta el día 7 del mes siguiente a la emisión<br>
-                               (o el siguiente día hábil si cae en fin de semana).</small>`,
+                               (o el siguiente día hábil si cae en fin de semana).</small>
+                               <div class="mt-2">Fuera de plazo solo un <strong>superadministrador</strong> puede anularla.</div>`,
                         confirmButtonText: 'Entendido',
                         confirmButtonColor: '#dc3545'
                     });
@@ -504,14 +505,19 @@
                </div>`
             : '';
 
+        const fueraDeReglas = infraccionesNormativa.length > 0;
         const swalAnularOpts = {
-            title: '¿Anular esta retención?',
-            html: avisoNormativa + 'Esta acción anulará el comprobante. No se podrá reactivar.',
-            icon: 'warning',
+            title: fueraDeReglas ? 'Anulación fuera de las reglas del SRI' : '¿Anular esta retención?',
+            html: avisoNormativa + (fueraDeReglas
+                ? 'Está anulando esta retención <strong>fuera de las reglas de anulación permitidas</strong>. Esta acción anulará el comprobante y no se podrá reactivar.'
+                : 'Esta acción anulará el comprobante. No se podrá reactivar.'),
+            icon: fueraDeReglas ? 'error' : 'warning',
             showCancelButton: true,
             confirmButtonColor: '#f59e0b',
             cancelButtonColor: '#6c757d',
-            confirmButtonText: '<i class="bi bi-slash-circle me-2"></i>Sí, anular',
+            confirmButtonText: fueraDeReglas
+                ? '<i class="bi bi-slash-circle me-2"></i>Sí, anular fuera de las reglas'
+                : '<i class="bi bi-slash-circle me-2"></i>Sí, anular',
             cancelButtonText: 'Cancelar',
             reverseButtons: true
         };
@@ -548,7 +554,9 @@
             });
             const data = await res.json();
             if (data.ok) {
-                await Swal.fire({ icon: 'success', title: 'Retención anulada', text: data.mensaje || 'La retención fue anulada.', timer: 2200, showConfirmButton: false });
+                await Swal.fire((fueraDeReglas || data.fuera_de_reglas)
+                    ? { icon: 'warning', title: 'Retención anulada fuera de las reglas', text: data.mensaje || 'La retención fue anulada como excepción del superadministrador.', confirmButtonText: 'Entendido' }
+                    : { icon: 'success', title: 'Retención anulada', text: data.mensaje || 'La retención fue anulada.', timer: 2200, showConfirmButton: false });
                 RET_fetchSearch(1);
                 const row = { dataset: { row: JSON.stringify({ id: retIdActual }) } };
                 window.RET_abrirModal(row);

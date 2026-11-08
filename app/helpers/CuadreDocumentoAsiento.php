@@ -46,6 +46,8 @@ class CuadreDocumentoAsiento
      *   contra el total Debe.
      * - `lado`: lado del asiento en el que vive la cartera (`debe` en ventas, `haber` en compras).
      * - `etiqueta`: nombre del documento, para los mensajes.
+     * - `reversa` (opcional): `{campo, etiqueta}` — si la columna `campo` del documento es uno de
+     *   AsientoBuilderService::TIPOS_COMPRA_REVERSA, la cartera vive en el lado contrario a `lado`.
      */
     public const CUADRES = [
         'factura_venta' => [
@@ -62,12 +64,17 @@ class CuadreDocumentoAsiento
             'lado' => 'debe',
             'etiqueta' => 'Recibo de venta',
         ],
+        // Una nota de crédito de compra (tipo 04/23/47/51) también se guarda en compras_cabecera y
+        // su asiento invierte Debe/Haber: la Cuenta por Pagar va al DEBE. `reversa` dice qué
+        // columna mirar y con qué etiqueta nombrarla; los tipos salen de
+        // AsientoBuilderService::TIPOS_COMPRA_REVERSA (misma fuente que arma el asiento).
         'compra' => [
             'tabla' => 'compras_cabecera',
             'total' => 't.importe_total',
             'slots' => ['PORPAGARFACTURACOMPRA'],
             'lado' => 'haber',
             'etiqueta' => 'Compra',
+            'reversa' => ['campo' => 'tipo_comprobante', 'etiqueta' => 'Nota de crédito de compra'],
         ],
         'liquidacion_compra' => [
             'tabla' => 'liquidaciones_cabecera',
