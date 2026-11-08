@@ -143,7 +143,8 @@
                 // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
                 const idCuenta = parseInt(id || json.id, 10);
                 if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
-                const dim = await window.PCDIM_guardar(idCuenta);
+                // Sin centros de costo ni proyectos en la empresa no se incluye _dimensiones.php.
+                const dim = window.PCDIM_guardar ? await window.PCDIM_guardar(idCuenta) : { ok: true };
 
                 // El modal sigue abierto, ya sobre la cuenta guardada.
                 document.getElementById('tituloModalPC').textContent =
@@ -159,7 +160,7 @@
                     await window.PCDIM_cargar(idCuenta, false);
                 }
                 // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
-                const avisado = await window.PCDIM_ofrecerRelleno(idCuenta);
+                const avisado = window.PCDIM_ofrecerRelleno ? await window.PCDIM_ofrecerRelleno(idCuenta) : false;
                 // La página que incluye el modal puede reaccionar (Estados Financieros regenera el
                 // reporte y muestra su propio aviso); si no, el aviso es de aquí.
                 if (window.onAccountSaved) window.onAccountSaved(json);

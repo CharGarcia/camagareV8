@@ -544,7 +544,8 @@ $proyectos  = $proyectos ?? [];
                 // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
                 const idCuenta = parseInt(id || json.id, 10);
                 if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
-                const dim = await window.PCDIM_guardar(idCuenta);
+                // Sin centros de costo ni proyectos en la empresa no se incluye _dimensiones.php.
+                const dim = window.PCDIM_guardar ? await window.PCDIM_guardar(idCuenta) : { ok: true };
 
                 // El modal sigue abierto, ya sobre la cuenta guardada.
                 await fetchTree();
@@ -557,9 +558,9 @@ $proyectos  = $proyectos ?? [];
                 const nivel = document.getElementById('pc_nivel_edit').value;
                 if (parseInt(nivel, 10) === 5 && window.PCDIM_cargar) await window.PCDIM_cargar(idCuenta, false);
                 // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
-                if (await window.PCDIM_ofrecerRelleno(idCuenta)) return;
+                if (window.PCDIM_ofrecerRelleno && await window.PCDIM_ofrecerRelleno(idCuenta)) return;
                 Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg, timer: 1800, showConfirmButton: false });
-            } catch (err) { Swal.fire('Error', 'Error de red', 'error'); }
+            } catch (err) { console.error(err); Swal.fire('Error', 'Error de red', 'error'); }
             finally { btn.disabled = false; guardandoPC = false; }
         });
 
