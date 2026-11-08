@@ -268,9 +268,25 @@ class RetencionCompraRules
         }
 
         $fechaRet = substr(trim((string) ($data['fecha_emision'] ?? '')), 0, 10);
+        $vistos   = []; // impuesto|código => número de la primera línea que lo usa
 
         foreach ($data['lineas'] as $i => $linea) {
             $n = $i + 1;
+
+            // Un mismo código de retención (del mismo impuesto) no se repite en la retención:
+            // duplicaría la base y el valor retenido en el XML y en el Formulario 103. Se
+            // compara con el impuesto porque un mismo número puede existir en IVA y en Renta.
+            // Las importadas del SRI se registran tal cual llegan (ver validar()).
+            $codigoLinea = trim((string) ($linea['codigo_retencion'] ?? ''));
+            if (!$esElectronico && $codigoLinea !== '') {
+                $clave = $this->normalizarImpuesto((string) ($linea['codigo_impuesto'] ?? '')) . '|' . $codigoLinea;
+                if (isset($vistos[$clave])) {
+                    $errores[] = "Línea {$n}: el código de retención {$codigoLinea} ya está en la línea {$vistos[$clave]}. "
+                        . 'No se puede ingresar el mismo código más de una vez; sume las bases en una sola línea.';
+                } else {
+                    $vistos[$clave] = $n;
+                }
+            }
 
             // Documentos importados desde el SRI (XML autorizado) se registran tal cual
             // llegan: el SRI permite líneas de retención con base imponible 0 (p. ej. ISD,

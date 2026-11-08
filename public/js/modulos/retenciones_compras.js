@@ -282,6 +282,14 @@
             mostrarAlerta('Debe agregar al menos una línea de retención.', 'warning');
             return;
         }
+        // Código escrito a mano (sin elegirlo del buscador) que repite otra línea.
+        for (let i = 0; i < lineasData.length; i++) {
+            const j = retLineaConCodigo(lineasData[i].codigo_retencion, lineasData[i].codigo_impuesto, i);
+            if (j >= 0 && j < i) {
+                mostrarAlerta(`Línea ${i + 1}: el código de retención ${lineasData[i].codigo_retencion} ya está en la línea ${j + 1}. No se puede ingresar el mismo código más de una vez.`, 'warning');
+                return;
+            }
+        }
 
         // El período fiscal es el mes de la fecha de emisión y el servidor lo exige
         // así. Se recalcula aquí porque el campo es readonly: si viene desfasado de
@@ -423,6 +431,28 @@
             mostrarAlerta('Error al eliminar.', 'danger');
         }
     };
+
+    /** Impuesto normalizado (mismo criterio que RetencionCompraRules::normalizarImpuesto). */
+    function retImpuestoNorm(imp) {
+        const c = String(imp ?? '').trim().toUpperCase();
+        if (c === '1' || c === 'RENTA') return 'RENTA';
+        if (c === '2' || c === 'IVA') return 'IVA';
+        if (c === '3' || c === '6' || c === 'ISD') return 'ISD';
+        return c;
+    }
+
+    /**
+     * Índice de otra línea (distinta de `excepto`) con el mismo código de retención del mismo
+     * impuesto, o -1. Un mismo número puede existir en IVA y en Renta, por eso va con el impuesto.
+     */
+    function retLineaConCodigo(codigo, impuesto, excepto) {
+        const cod = String(codigo ?? '').trim();
+        if (cod === '') return -1;
+        const imp = retImpuestoNorm(impuesto);
+        return lineasData.findIndex((l, k) => k !== excepto
+            && String(l.codigo_retencion ?? '').trim() === cod
+            && retImpuestoNorm(l.codigo_impuesto) === imp);
+    }
 
     function retFechaLimiteAnulacion(fechaEmision) {
         const [y, m] = fechaEmision.split('-').map(Number);
@@ -874,6 +904,20 @@
             </div>`;
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
+                // El mismo código (del mismo impuesto) no puede ir en dos líneas; el servidor
+                // también lo rechaza al guardar (RetencionCompraRules::validarLineas).
+                const repetida = retLineaConCodigo(item.codigo_sri || item.codigo_ret, item.impuesto_ret, idx);
+                if (repetida >= 0) {
+                    drop.remove();
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Código repetido',
+                        html: `El código <strong>${escHtml(item.codigo_sri || item.codigo_ret)}</strong> ya está en la línea ${repetida + 1}.<br>
+                               <small class="text-muted">No se puede ingresar el mismo código de retención más de una vez; sume las bases en esa línea.</small>`,
+                        confirmButtonText: 'Entendido',
+                    });
+                    return;
+                }
                 lineasData[idx].codigo_retencion   = item.codigo_sri || item.codigo_ret;   // renta: código ATS (ficha técnica)
                 lineasData[idx].concepto           = item.concepto_ret;
                 lineasData[idx].porcentaje_retener = item.porcentaje_ret;
@@ -1453,6 +1497,9 @@
         if (btnAnular) {
             const puedeAnular = tieneId && cab.estado === 'autorizada';
             btnAnular.classList.toggle('d-none', !puedeAnular);
+            // Está dentro de #formRetencion: bloquearFormularioRet() acaba de deshabilitarlo (una
+            // autorizada no es editable), así que se reactiva aquí como PDF/XML/Correo.
+            btnAnular.disabled = !puedeAnular;
         }
     }
 
