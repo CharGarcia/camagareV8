@@ -469,6 +469,9 @@ class DocumentoAutomatedRegisterService
             $db->prepare("UPDATE ventas_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idVenta]);
 
+            $this->registrarCarga($idUsuario, $idEmpresa, 'ventas_cabecera', $idVenta,
+                ['id_venta' => $idVenta], (string) $xml->infoTributaria->claveAcceso);
+
             $db->commit();
             return $idVenta;
         } catch (Exception $e) {
@@ -950,12 +953,33 @@ class DocumentoAutomatedRegisterService
                 );
             }
 
+            $this->registrarCarga($idUsuario, $idEmpresa, 'compras_cabecera', $idCompra, [
+                'id_compra' => $idCompra,
+                'total'     => $total,
+            ], $claveAcceso);
+
             $db->commit();
             return $idCompra;
         } catch (Exception $e) {
             $db->rollBack();
             throw $e;
         }
+    }
+
+    /**
+     * Deja en log_sistema el evento CREAR de un documento que entró por XML (carga
+     * manual de XML o descarga automática del SRI). Estos documentos se insertan
+     * directo por el repository, sin pasar por el Service de su módulo, así que sin
+     * esto no aparecían en /config/log-sistema (no se podía saber cuándo se cargaron).
+     * Se llama dentro de la transacción del documento, justo antes del commit.
+     */
+    private function registrarCarga(int $idUsuario, int $idEmpresa, string $tabla, int $idRegistro, array $datos, string $claveAcceso = ''): void
+    {
+        $datos['origen'] = 'Documento electrónico (XML / descarga SRI)';
+        if ($claveAcceso !== '') {
+            $datos['clave_acceso'] = $claveAcceso;
+        }
+        (new LogSistemaService())->registrar($idUsuario, $idEmpresa, 'CREAR', $tabla, $idRegistro, null, $datos);
     }
 
     private function getEstablecimientoId(int $idEmpresa, string $cod, ?int $idUsuario = null): ?int
@@ -1406,6 +1430,9 @@ class DocumentoAutomatedRegisterService
             $db->prepare("UPDATE liquidaciones_cabecera SET clave_acceso = ?, detalle_xml = ? WHERE id = ?")
                ->execute([(string)$it->claveAcceso, $xmlStr, $idLiq]);
 
+            $this->registrarCarga($idUsuario, $idEmpresa, 'liquidaciones_cabecera', $idLiq,
+                ['id_liquidacion' => $idLiq], (string) $xml->infoTributaria->claveAcceso);
+
             $db->commit();
             return $idLiq;
         } catch (Exception $e) {
@@ -1569,6 +1596,9 @@ class DocumentoAutomatedRegisterService
             $db->prepare("UPDATE notas_credito_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idNC]);
 
+            $this->registrarCarga($idUsuario, $idEmpresa, 'notas_credito_cabecera', $idNC,
+                ['id_nota_credito' => $idNC], (string) $xml->infoTributaria->claveAcceso);
+
             $db->commit();
             return $idNC;
         } catch (Exception $e) { $db->rollBack(); throw $e; }
@@ -1628,6 +1658,9 @@ class DocumentoAutomatedRegisterService
             // pero se guarda igual para consistencia)
             $db->prepare("UPDATE nota_debito_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idND]);
+
+            $this->registrarCarga($idUsuario, $idEmpresa, 'nota_debito_cabecera', $idND,
+                ['id_nota_debito' => $idND], (string) $xml->infoTributaria->claveAcceso);
 
             $db->commit();
             return $idND;

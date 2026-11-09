@@ -97,6 +97,22 @@ Para ser más preciso use las claves:
   registro de cliente, proveedor, empleado o producto (su creación, sus cambios), por
   nombre o por identificación (`tercero:1790012345001`). Alias: `referencia:`.
 
+### Cuándo se cargó un documento recibido por XML o por la descarga del SRI
+
+Las compras, liquidaciones, notas de crédito y débito y facturas de venta que entran
+por un **XML** o por la **descarga automática del SRI** dejan su evento **Crear**
+igual que las registradas a mano. Filtre **Módulo = Compras** y **Acción = Crear** y
+busque el número del documento (`documento:001-003-048182378`): la **Fecha** del
+evento es el momento en que se cargó al sistema, no la fecha de emisión.
+
+- El detalle del evento indica el origen (*Documento electrónico (XML / descarga
+  SRI)*) y la clave de acceso.
+- Las **retenciones** recibidas por esta vía también tienen su evento Crear (módulos
+  Retenciones de compra / de venta).
+- Los documentos cargados por esta vía **antes de la versión 1.4** se incorporaron
+  después a la bitácora con la fecha de carga que guardaba el propio documento; en el
+  detalle se reconocen por el dato *reconstruido*.
+
 ### Ver información en detalle
 
 En el detalle del evento, el botón **Ver información en detalle** despliega:
@@ -245,6 +261,10 @@ espacios.
 
 ## Historial de cambios
 
+- **1.4** — Los documentos que entran por XML o por la descarga automática del SRI
+  (compras, liquidaciones, notas de crédito y débito, facturas de venta) ahora
+  registran su evento **Crear**, con el origen y la clave de acceso; antes no
+  aparecían en la bitácora.
 - **1.3** — Columna **Referencia** en el listado, el detalle, el PDF y el Excel: nombre
   e identificación del cliente, proveedor, empleado o producto afectado (o del tercero
   del documento), para reconocer el registro sin abrir cada evento. `tercero:` busca
