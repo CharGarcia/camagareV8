@@ -10,7 +10,7 @@
 --  - El modo y el portafolio del cliente de cada cuenta van en crm_canales.config
 --    (JSONB que ya existe): no hay columnas nuevas ahí.
 --
---  Toca datos: no (una columna nula).
+--  Toca datos: no (una columna nula y ampliar crm_mensajes.id_externo a 500).
 --  Reversible: sí →  ALTER TABLE crm_meta_apps DROP COLUMN IF EXISTS config_id;
 --  Idempotente: se puede ejecutar varias veces sin efecto.
 --  Listo para pegar en el Query Tool de pgAdmin y ejecutar de una vez (F5).
@@ -23,3 +23,14 @@ COMMENT ON COLUMN crm_meta_apps.config_id IS
 -- Comprobación (debe salir 1 fila):
 -- SELECT column_name, data_type FROM information_schema.columns
 --  WHERE table_name = 'crm_meta_apps' AND column_name = 'config_id';
+
+-- ── Identificador de los mensajes ───────────────────────────────────────────
+-- Con Unified login el id de cada mensaje (mid) mide ~164 caracteres y la columna
+-- admitía 150: los mensajes entrantes quedaban en error en crm_webhook_eventos
+-- («value too long for type character varying(150)»). Ampliar es inmediato (no
+-- reescribe la tabla) y el índice único se conserva.
+ALTER TABLE crm_mensajes ALTER COLUMN id_externo TYPE VARCHAR(500);
+
+-- Comprobación (debe decir 500):
+-- SELECT character_maximum_length FROM information_schema.columns
+--  WHERE table_name = 'crm_mensajes' AND column_name = 'id_externo';

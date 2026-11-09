@@ -28,12 +28,23 @@ class CrmPublicacionService
 {
     public const MODULO_GUARDADO = 'crm_publicaciones';
 
-    /** Permiso que exige cada red para publicar (lo que concedió la cuenta al conectarse). */
+    /**
+     * Permiso que exige cada red para publicar (lo que concedió la cuenta al conectarse).
+     * Instagram tiene dos nombres según la forma de conexión: Instagram Login
+     * (`instagram_business_content_publish`) y Unified login (`instagram_content_publish`).
+     */
     private const PERMISO_PUBLICAR = [
-        'instagram'       => 'instagram_business_content_publish',
-        'linkedin_perfil' => 'w_member_social',
-        'linkedin_pagina' => 'w_organization_social',
+        'instagram'       => ['instagram_business_content_publish', 'instagram_content_publish'],
+        'linkedin_perfil' => ['w_member_social'],
+        'linkedin_pagina' => ['w_organization_social'],
     ];
+
+    /** ¿La cuenta concedió el permiso de publicar? Una red sin permiso definido no exige ninguno. */
+    private static function puedePublicar(string $tipo, array $permisos): bool
+    {
+        $necesarios = self::PERMISO_PUBLICAR[$tipo] ?? null;
+        return $necesarios === null || array_intersect($necesarios, $permisos) !== [];
+    }
 
     public bool $ultimoGuardadoPrevio = false;
 
@@ -81,7 +92,7 @@ class CrmPublicacionService
         return array_map(function ($c) {
             $permisos = json_decode((string) ($c['permisos'] ?? '[]'), true) ?: [];
             unset($c['permisos']);
-            $c['puede_publicar'] = in_array(self::PERMISO_PUBLICAR[$c['tipo']] ?? '-', $permisos, true);
+            $c['puede_publicar'] = isset(self::PERMISO_PUBLICAR[$c['tipo']]) && self::puedePublicar((string) $c['tipo'], $permisos);
             return $c;
         }, $this->repo->canalesPublicables($idEmpresa));
     }
@@ -357,8 +368,7 @@ class CrmPublicacionService
             throw new \InvalidArgumentException("La cuenta {$nombre} está desconectada o con el acceso vencido. Reconéctela en Configuración del CRM.");
         }
         $permisos = json_decode((string) ($d['canal_permisos'] ?? '[]'), true) ?: [];
-        $necesario = self::PERMISO_PUBLICAR[$d['canal_tipo']] ?? null;
-        if ($necesario && !in_array($necesario, $permisos, true)) {
+        if (!self::puedePublicar((string) $d['canal_tipo'], $permisos)) {
             throw new \InvalidArgumentException("La cuenta {$nombre} no dio permiso para publicar. Reconéctela en Configuración del CRM y acepte todos los permisos.");
         }
     }

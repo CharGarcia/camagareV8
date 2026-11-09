@@ -266,7 +266,7 @@ CREATE TABLE IF NOT EXISTS crm_mensajes (
     tipo              VARCHAR(20) NOT NULL DEFAULT 'text',
     texto             TEXT NULL,
     adjunto_ruta      VARCHAR(300) NULL,
-    id_externo        VARCHAR(150) NULL,      -- mid del mensaje / id del comentario
+    id_externo        VARCHAR(500) NULL,      -- mid del mensaje / id del comentario (Unified login: ~164 caracteres)
     estado_envio      VARCHAR(15) NULL,       -- enviando / enviado / leido / fallido
     error             TEXT NULL,
     contenido         JSONB NULL,             -- payload crudo de Meta
@@ -282,6 +282,8 @@ CREATE TABLE IF NOT EXISTS crm_mensajes (
 -- Primera versión de este archivo la creó como CHAR(3) ('IN ' con espacio al leerla):
 -- si ya se aplicó, esto la corrige; si no, no hace nada.
 ALTER TABLE crm_mensajes ALTER COLUMN direccion TYPE VARCHAR(3);
+-- Con Unified login (apps de Meta nuevas) el mid mide ~164 caracteres: antes era VARCHAR(150).
+ALTER TABLE crm_mensajes ALTER COLUMN id_externo TYPE VARCHAR(500);
 COMMENT ON TABLE crm_mensajes IS 'CRM: mensajes entrantes y salientes. id_externo único evita duplicar los reintentos de Meta.';
 -- Deduplicación de reintentos de Meta (INSERT ... ON CONFLICT DO NOTHING).
 CREATE UNIQUE INDEX IF NOT EXISTS ux_crm_mensajes_externo

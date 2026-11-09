@@ -135,7 +135,7 @@ host), webhook público y su firma, LinkedIn.
 | 2 Servicio de API | **Hecho** (09-11-2026): SQL `2026-11-09_crm_unified_login.sql` (`crm_meta_apps.config_id`); `InstagramApiService` en dos modos (`unificado()` = hay config_id): diálogo de Facebook con config_id, canje en graph.facebook.com, `cuentasAsignadas()`, `permisosConcedidos()`, `clienteBusinessId()`, todo por `/{id-cuenta}` (`nodo()`), token como access_token; error 190 → `InstagramTokenInvalidoException`; 2534022 con mensaje claro; `taparTokens()` (EAA…/IGAA…); red aislada en `transporte()`. `config/app.php` → `scopes_unificado`. Pruebas: `test_unified_paso2.php` 46/46 + suites anteriores en verde; token falso contra Meta real → 190 en los dos hosts |
 | 3 Conexión y llamadores | **Hecho** (09-11-2026): `CrmCanalService::completarConexionUnificada()` (canje → permisos → portafolio → cuentas; un canal por cuenta con el mismo token, `token_expira_at` NULL, `config.modo=unificado` + `client_business_id`; cuentas de otra empresa se omiten con aviso; si todas, error); alta/reconexión común en `guardarCuenta()`; `getCanales()` mide permisos según el modo de cada canal (`unificada`); `accesoRevocado()` + `CrmCanalRepository::marcarRevocado()` (activo → token_vencido, una vez, log `TOKEN_REVOCADO`) desde Bandeja, publicador, seguidores y «Probar»; Bandeja/métricas pasan el id de la cuenta. Pruebas: `test_unified_paso3.php` 28/28 + 13 suites anteriores en verde |
 | 4 Pantalla y manuales | **Hecho** (09-11-2026): campo **ID de configuración** en Canales → App de Meta (etiqueta del modo, direcciones con su lugar en Meta según el modo); `CrmMetaAppService::guardar(…, $configId)` + `CrmCanalRules::validarConfigId/validarCambioModo` (poner/quitar el ID solo sin cuentas conectadas) + `CrmMetaAppRepository::admiteConfigId/guardarConfigId`; tarjeta de la cuenta: «acceso del portafolio (no vence)», permisos que faltan en la configuración, acceso revocado. Manuales: `guias/instagram-app-meta` 3.0, `crm-configuracion` 1.4, `bandeja-social` 1.5. Pruebas: `test_unified_paso4.php` 12/12 + vista en los dos modos |
-| 5 Prueba real | pendiente |
+| 5 Prueba real | En curso (09-11-2026): @camagare.ec conectada por Unified login (evaluadora, modo desarrollo), con `instagram_manage_insights` agregado a la configuración; DM entrante llega a la Bandeja y la respuesta desde la Bandeja llega a Instagram. Falta: publicar una imagen |
 
 ### 6.1 Resultado de la verificación (09-11-2026, app `2284857582363461`, config `1455752466529399`)
 
@@ -168,3 +168,8 @@ Conclusiones para programar:
   09-11-2026 quitando la integración «CaMaGaRe CRM» del portafolio de camagare (Configuración del
   negocio → Integraciones). La app y su configuración siguen; al conectar desde el sistema se
   vuelve a agregar con un token nuevo.
+- **Puesta en marcha (09-11-2026, producción)**: los primeros DM entrantes quedaron en error en
+  `crm_webhook_eventos` («value too long for type character varying(150)»): con Unified login el
+  `mid` mide **164** caracteres. `crm_mensajes.id_externo` pasa a `VARCHAR(500)` (agregado a
+  `2026-11-09_crm_unified_login.sql` y a la definición de la fase 1). En producción se aplicó el
+  ALTER y se reencolaron los eventos (`estado='pendiente', intentos=0`): llegaron a la Bandeja.
