@@ -373,7 +373,16 @@ class CrmConversacionRepository extends BaseRepository
     /** También los del asistente virtual: su eco no debe contarse como respuesta de una persona. */
     public function adoptarEco(int $idConversacion, string $idExterno, ?string $texto, string $tipo = 'text'): bool
     {
-        $p = [':x' => $idExterno, ':c' => $idConversacion];
+        // Reintento de Meta de un eco ya reconocido (guardado como id o en contenido.eco_mid).
+        $ya = $this->db->prepare(
+            "SELECT 1 FROM crm_mensajes WHERE id_conversacion = :c AND direccion = 'OUT'
+                AND (id_externo = :x OR contenido->>'eco_mid' = :x2) LIMIT 1"
+        );
+        $ya->execute([':c' => $idConversacion, ':x' => $idExterno, ':x2' => $idExterno]);
+        if ($ya->fetchColumn()) {
+            return true;
+        }
+        $p = [':x' => $idExterno, ':x2' => $idExterno, ':c' => $idConversacion];
         if ($texto !== null && $texto !== '') {
             $cond = 'texto = :t';
             $p[':t'] = $texto;
@@ -383,13 +392,21 @@ class CrmConversacionRepository extends BaseRepository
         } else {
             return false;
         }
+        // El mensaje enviado por el sistema (persona en la Bandeja o asistente) puede tener
+        // ya su id: con Unified login el id que devuelve el envío y el «mid» del eco son el
+        // mismo mensaje con otra codificación (verificado 09-11-2026), así que no coinciden.
+        // Se reconoce por texto/tipo entre los salientes sin eco de los últimos 10 minutos;
+        // si no tenía id se le pone el del eco, y si ya tenía, el del eco queda en contenido.
         $st = $this->db->prepare(
-            "UPDATE crm_mensajes SET id_externo = :x, estado_envio = CASE WHEN estado_envio = 'enviando' THEN 'enviado' ELSE estado_envio END,
+            "UPDATE crm_mensajes SET id_externo = COALESCE(id_externo, :x),
+                    contenido = COALESCE(contenido, '{}'::jsonb) || jsonb_build_object('eco_mid', CAST(:x2 AS text)),
+                    estado_envio = CASE WHEN estado_envio = 'enviando' THEN 'enviado' ELSE estado_envio END,
                     updated_at = NOW()
               WHERE id = (SELECT id FROM crm_mensajes
-                           WHERE id_conversacion = :c AND direccion = 'OUT' AND autor IN ('usuario', 'bot') AND id_externo IS NULL
+                           WHERE id_conversacion = :c AND direccion = 'OUT' AND autor IN ('usuario', 'bot')
+                             AND contenido->>'eco_mid' IS NULL
                              AND {$cond} AND fecha > NOW() - INTERVAL '10 minutes'
-                           ORDER BY fecha, id LIMIT 1)"
+                           ORDER BY (id_externo IS NULL) DESC, fecha, id LIMIT 1)"   // primero el que aún espera su id
         );
         $st->execute($p);
         return $st->rowCount() > 0;

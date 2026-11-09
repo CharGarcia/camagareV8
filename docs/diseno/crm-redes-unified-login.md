@@ -173,3 +173,10 @@ Conclusiones para programar:
   `mid` mide **164** caracteres. `crm_mensajes.id_externo` pasa a `VARCHAR(500)` (agregado a
   `2026-11-09_crm_unified_login.sql` y a la definición de la fase 1). En producción se aplicó el
   ALTER y se reencolaron los eventos (`estado='pendiente', intentos=0`): llegaron a la Bandeja.
+- **Eco de los mensajes propios (09-11-2026)**: con Unified login el `message_id` que devuelve
+  `POST /{ig}/messages` y el `mid` del eco que llega por el webhook son el **mismo mensaje con otra
+  codificación** (base64 de `new_ig_dm_item:…` vs `ig_dm_item:…`), así que no coinciden. El eco de
+  cada respuesta del asistente se tomaba como «respondió una persona desde la app» y lo **pausaba**.
+  `CrmConversacionRepository::adoptarEco()` ahora reconoce el eco por texto/tipo entre los salientes
+  del sistema de los últimos 10 min sin eco (`contenido.eco_mid`), aunque ya tengan id; guarda el
+  `mid` del eco en `contenido.eco_mid` y reconoce sus reintentos. Prueba: `test_eco_unified.php`.
