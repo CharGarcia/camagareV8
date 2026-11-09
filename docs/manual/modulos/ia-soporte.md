@@ -6,7 +6,7 @@ ruta_modulo: modulos/ia-soporte
 tipo: modulo
 visibilidad: todos
 etiquetas: ia, inteligencia artificial, asistente, chat, preguntar, documentos, consultas legales, tributarias, contables, proveedor de ia, openai, chatgpt, anthropic, claude, api key, clave de ia, modelo, nivel de razonamiento, asistente virtual instagram
-version: 1.1
+version: 1.2
 orden: 10
 estado: activo
 ---
@@ -83,8 +83,19 @@ respuestas distintas a la misma pregunta, y es correcto.
   `claude-opus-5-5`.
 - **«La clave de Anthropic configurada no es válida…»** o **«…no tiene saldo»**:
   revísela en console.anthropic.com.
+- **«Anthropic rechazó la solicitud (datos no válidos): This API key is not scoped
+  to a workspace…»**: la clave no pertenece a un espacio de trabajo. En la consola
+  de Anthropic cree un espacio de trabajo propio (*Settings → Workspaces → Create
+  Workspace*; el «Default» puede no servir), cree la clave **dentro** de él,
+  reemplácela aquí y revoque la anterior.
+- **«Anthropic rechazó la solicitud (datos no válidos): …»** con otro texto: el
+  motivo que sigue a los dos puntos es el que da Anthropic; con él se sabe qué
+  corregir.
 
 ## Historial de cambios
+
+- **1.2** — Los rechazos de Anthropic muestran su motivo; error de clave sin espacio
+  de trabajo.
 
 - **1.1** — Proveedor **Anthropic (Claude)** con nivel de razonamiento; al cambiar
   de proveedor se exige la clave nueva. La configuración la usa también el

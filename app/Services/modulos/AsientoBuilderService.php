@@ -4633,6 +4633,7 @@ class AsientoBuilderService
         // asientos_programados) se veía configurada pero no llegaba al asiento.
         $sqlCab = "SELECT i.id,
                           i.id_cliente,
+                          i.tipo_ingreso,
                           COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
                           o.estado             AS concepto_estado,
@@ -4729,7 +4730,8 @@ class AsientoBuilderService
             if ($cubierto < round($restante, 2) - 0.005) {
                 $this->registrarFaltanteContrapartida(
                     'ingreso',
-                    (string) ($ingreso['concepto_comportamiento'] ?? ''),
+                    // Sin concepto de cabecera (migrados): el tipo del documento dice de qué sección sale la cuenta.
+                    (string) (($ingreso['concepto_comportamiento'] ?? '') ?: ($ingreso['tipo_ingreso'] ?? '')),
                     (string) ($ingreso['concepto_nombre'] ?? ''),
                     strtoupper(trim((string) ($ingreso['concepto_estado'] ?? 'ACTIVO'))) === 'INACTIVO'
                 );
@@ -4762,6 +4764,7 @@ class AsientoBuilderService
         // concepto ('opcion_egreso') y la columna del módulo queda de respaldo.
         $sqlCab = "SELECT e.id,
                           e.id_proveedor,
+                          e.tipo_egreso,
                           COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS concepto_id_cuenta,
                           o.nombre             AS concepto_nombre,
                           o.estado             AS concepto_estado,
@@ -4927,7 +4930,8 @@ class AsientoBuilderService
             if ($cubierto < round($restante, 2) - 0.005) {
                 $this->registrarFaltanteContrapartida(
                     'egreso',
-                    (string) ($egreso['concepto_comportamiento'] ?? ''),
+                    // Sin concepto de cabecera (migrados): el tipo del documento dice de qué sección sale la cuenta.
+                    (string) (($egreso['concepto_comportamiento'] ?? '') ?: ($egreso['tipo_egreso'] ?? '')),
                     (string) ($egreso['concepto_nombre'] ?? ''),
                     strtoupper(trim((string) ($egreso['concepto_estado'] ?? 'ACTIVO'))) === 'INACTIVO'
                 );
@@ -5296,6 +5300,7 @@ class AsientoBuilderService
 
         // Tercer elemento: referencia para el tramo que cae al concepto ("Pago factura de compra
         // 42869") o '' si todos los documentos resolvieron por su propio asiento.
+        $this->sumarCarteraSinReferencia($db, 'egreso', $idEgreso, $montoNoResuelto, $docsNoResueltos);
         $refNoResueltos = self::referenciaCartera('Pago', self::ETIQUETA_DOC_CARTERA_COMPRAS, $docsNoResueltos);
 
         return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos, $montoNoResuelto, $docsNoResueltos];
@@ -5487,9 +5492,53 @@ class AsientoBuilderService
 
         // Tercer elemento: referencia para el tramo que cae al concepto ("Cobro factura de venta
         // 123") o '' si todos los documentos resolvieron por su propio asiento.
+        $this->sumarCarteraSinReferencia($db, 'ingreso', $idIngreso, $montoNoResuelto, $docsNoResueltos);
         $refNoResueltos = self::referenciaCartera('Cobro', self::ETIQUETA_DOC_CARTERA_VENTAS, $docsNoResueltos);
 
         return [array_values($lineasPorCuenta), $totalResuelto, $refNoResueltos, $montoNoResuelto, $docsNoResueltos];
+    }
+
+    /**
+     * Líneas de cartera SIN documento enlazado (id_referencia_documento NULL): cobros/pagos
+     * migrados de una factura que no se migró (anterior al rango elegido). No tienen asiento
+     * propio que reflejar, pero siguen siendo cartera: se suman a los "no resueltos" para que el
+     * llamador las mande a la Cuenta por Cobrar/Pagar oficial (lineasCarteraNoResuelta). Antes
+     * quedaban fuera de todo y su monto caía a la cuenta del concepto de cabecera, que en esos
+     * ingresos/egresos migrados es NULL: el asiento salía con el hueco y el aviso «El concepto
+     * de este ingreso no tiene cuenta contable asignada», aunque la cartera estuviera configurada.
+     *
+     * @param string $flujo 'ingreso' | 'egreso'
+     */
+    private function sumarCarteraSinReferencia(\PDO $db, string $flujo, int $idDocumento, array &$montoNoResuelto, array &$docsNoResueltos): void
+    {
+        // egresos_detalle tiene 'eliminado'; ingresos_detalle no (ver contrapartidaPorCuenta).
+        $sql = $flujo === 'egreso'
+            ? "SELECT tipo_documento, numero_documento, SUM(monto_pagado) AS monto
+                 FROM egresos_detalle
+                WHERE id_egreso = :id AND eliminado = FALSE
+                  AND tipo_documento IN ('COMPRA','LIQUIDACION')
+                  AND id_referencia_documento IS NULL
+                GROUP BY tipo_documento, numero_documento"
+            : "SELECT tipo_documento, numero_documento, SUM(monto_cobrado) AS monto
+                 FROM ingresos_detalle
+                WHERE id_ingreso = :id
+                  AND tipo_documento IN ('FACTURA','RECIBO','FACTURA_REEMBOLSO')
+                  AND id_referencia_documento IS NULL
+                GROUP BY tipo_documento, numero_documento";
+        $st = $db->prepare($sql);
+        $st->execute([':id' => $idDocumento]);
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $tipoDoc = (string) $r['tipo_documento'];
+            $monto   = round((float) $r['monto'], 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $nc = self::secuencialCorto((string) ($r['numero_documento'] ?? ''));
+            if ($nc !== '') {
+                $docsNoResueltos[$tipoDoc][$nc] = true;
+            }
+            $montoNoResuelto[$tipoDoc] = round(($montoNoResuelto[$tipoDoc] ?? 0) + $monto, 2);
+        }
     }
 
     /**

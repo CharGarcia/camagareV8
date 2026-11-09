@@ -73,6 +73,19 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                 'eliminar'     => ['URL de solicitud de eliminación de datos', 'Inicio de sesión empresarial → Solicitud de eliminación de datos'],
             ];
             ?>
+            <!-- Canales en acordeón: Instagram (Meta) y LinkedIn; cada sección guarda si quedó abierta (crm_configuracion.js). -->
+            <div class="accordion" id="crmc-acordeon-canales">
+            <div class="accordion-item border-0 shadow-sm mb-2" data-seccion="instagram">
+                <h2 class="accordion-header">
+                    <button class="accordion-button fw-bold py-2" type="button" data-bs-toggle="collapse" data-bs-target="#crmc-sec-instagram"
+                            aria-expanded="true" aria-controls="crmc-sec-instagram">
+                        <i class="bi bi-instagram text-danger me-2"></i>Instagram (Meta)
+                        <span class="badge <?= $app['configurada'] ? 'bg-success' : 'bg-secondary' ?> ms-2 fw-normal"><?= $app['configurada'] ? 'App registrada' : 'Sin app' ?></span>
+                        <span class="badge bg-light text-dark border ms-1 fw-normal d-none" id="crmc-badge-instagram"></span>
+                    </button>
+                </h2>
+                <div id="crmc-sec-instagram" class="accordion-collapse collapse show">
+                <div class="accordion-body px-2 px-md-3">
             <!-- App de Meta de ESTA empresa (crm_meta_apps). El App Secret nunca vuelve al navegador. -->
             <div class="card border-0 shadow-sm mb-3" id="crmc-app-meta">
                 <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
@@ -170,11 +183,30 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                 <?php endif; ?>
             </div>
             <div id="crmc-lista-canales" class="d-flex flex-column gap-2"></div>
+                </div>
+                </div>
+            </div>
 
+            <div class="accordion-item border-0 shadow-sm mb-2" data-seccion="linkedin">
+                <h2 class="accordion-header">
+                    <button class="accordion-button fw-bold py-2" type="button" data-bs-toggle="collapse" data-bs-target="#crmc-sec-linkedin"
+                            aria-expanded="true" aria-controls="crmc-sec-linkedin">
+                        <i class="bi bi-linkedin text-primary me-2"></i>LinkedIn
+                        <span class="badge bg-light text-dark border ms-2 fw-normal d-none" id="crmc-badge-linkedin"></span>
+                    </button>
+                </h2>
+                <div id="crmc-sec-linkedin" class="accordion-collapse collapse show">
+                <div class="accordion-body px-2 px-md-3">
             <!-- LinkedIn (fase 3): app de la empresa y conexión de perfil/páginas; lo pinta crm_configuracion.js -->
-            <div class="card border-0 shadow-sm mt-3"><div class="card-body" id="crmc-li-app">
+            <div class="card border-0 shadow-sm mb-3"><div class="card-body" id="crmc-li-app">
                 <div class="small text-muted">Cargando LinkedIn…</div>
             </div></div>
+            <div class="small text-muted mb-2">Cuentas de LinkedIn de esta empresa (solo para publicar).</div>
+            <div id="crmc-lista-linkedin" class="d-flex flex-column gap-2"></div>
+                </div>
+                </div>
+            </div>
+            </div>
         </div>
 
         <!-- Embudos y etapas -->

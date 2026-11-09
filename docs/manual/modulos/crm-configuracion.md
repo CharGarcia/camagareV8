@@ -47,6 +47,11 @@ Para conectar Instagram:
 
 ## Cómo se usa
 
+La pestaña **Canales** tiene dos secciones plegables: **Instagram (Meta)** y
+**LinkedIn**. Cada una reúne la app de la empresa y sus cuentas conectadas, y su
+encabezado resume cuántas hay conectadas (y si alguna tiene el acceso vencido)
+aunque esté cerrada. El sistema recuerda en ese navegador qué sección dejó cerrada.
+
 ### Registrar la app de Meta de la empresa
 
 La tarjeta trae el botón **Paso a paso para configurar la app en Meta**. Abre una
@@ -250,7 +255,7 @@ catálogos.
 
 ## Historial de cambios
 
-- **1.4** — **Unified login** (apps de Meta nuevas): **paso a paso en un modal** (una tarjeta por paso, con la ruta de menús y los campos como en Meta), **Conectar** Instagram y LinkedIn en una **ventana aparte** que se cierra sola y devuelve el resultado al sistema, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
+- **1.4** — Canales en **secciones plegables** (Instagram y LinkedIn). **Unified login** (apps de Meta nuevas): **paso a paso en un modal** (una tarjeta por paso, con la ruta de menús y los campos como en Meta), **Conectar** Instagram y LinkedIn en una **ventana aparte** que se cierra sola y devuelve el resultado al sistema, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
 - **1.3** — **LinkedIn**: app de la empresa y conexión de perfil y páginas (solo
   para publicar). Aviso para reconectar Instagram y dar los permisos de publicar y
   de estadísticas.

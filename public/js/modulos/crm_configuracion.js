@@ -68,8 +68,50 @@
     async function cargarCanales() {
         const d = await api('canalesAjax');
         const usuarios = st.datos ? st.datos.usuarios : [];
-        $('crmc-lista-canales').innerHTML = d.canales.length ? d.canales.map((c) => canalHtml(c, usuarios)).join('')
-            : '<div class="text-muted small border rounded p-3 bg-white">No hay cuentas conectadas.</div>';
+        // Cada red en su sección del acordeón (Instagram / LinkedIn).
+        const ig = d.canales.filter((c) => c.tipo === 'instagram');
+        const li = d.canales.filter((c) => c.tipo !== 'instagram');
+        const vacio = (t) => `<div class="text-muted small border rounded p-3 bg-white">${t}</div>`;
+        $('crmc-lista-canales').innerHTML = ig.length ? ig.map((c) => canalHtml(c, usuarios)).join('') : vacio('No hay cuentas de Instagram conectadas.');
+        const cajaLi = $('crmc-lista-linkedin');
+        if (cajaLi) cajaLi.innerHTML = li.length ? li.map((c) => canalHtml(c, usuarios)).join('') : vacio('No hay cuentas de LinkedIn conectadas.');
+        // Resumen en el encabezado de cada sección (se ve aunque esté cerrada).
+        const resumen = (lista, id) => {
+            const b = $(id);
+            if (!b) return;
+            const activas = lista.filter((c) => c.estado === 'activo').length;
+            const vencidas = lista.filter((c) => c.estado === 'token_vencido').length;
+            b.textContent = lista.length ? `${activas} conectada(s)${vencidas ? ` · ${vencidas} con acceso vencido` : ''}` : '';
+            b.classList.toggle('d-none', !lista.length);
+            b.classList.toggle('text-danger', vencidas > 0);
+        };
+        resumen(ig, 'crmc-badge-instagram');
+        resumen(li, 'crmc-badge-linkedin');
+    }
+
+    /** Recuerda en este navegador qué secciones del acordeón de Canales dejó cerradas el usuario. */
+    function iniciarAcordeon() {
+        const CLAVE = 'crmc_canales_cerradas';
+        let cerradas = [];
+        try { cerradas = JSON.parse(localStorage.getItem(CLAVE) || '[]') || []; } catch (e) { cerradas = []; }
+        document.querySelectorAll('#crmc-acordeon-canales .accordion-item').forEach((item) => {
+            const sec = item.dataset.seccion;
+            const panel = item.querySelector('.accordion-collapse');
+            const boton = item.querySelector('.accordion-button');
+            if (!panel || !boton) return;
+            if (cerradas.includes(sec)) {
+                panel.classList.remove('show');
+                boton.classList.add('collapsed');
+                boton.setAttribute('aria-expanded', 'false');
+            }
+            const guardar = (abierta) => {
+                cerradas = cerradas.filter((s) => s !== sec);
+                if (!abierta) cerradas.push(sec);
+                try { localStorage.setItem(CLAVE, JSON.stringify(cerradas)); } catch (e) { /* sin almacenamiento */ }
+            };
+            panel.addEventListener('shown.bs.collapse', () => guardar(true));
+            panel.addEventListener('hidden.bs.collapse', () => guardar(false));
+        });
     }
 
     /** Cuenta de LinkedIn (perfil o página): solo para publicar; sin mensajes ni reparto. */
@@ -706,6 +748,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
         if (!$('crmc-lista-canales')) return;
         if (await soyVentanaDeAutorizacion()) return;   // ventana de Meta/LinkedIn que volvió: avisa y se cierra
+        iniciarAcordeon();
         try {
             await cargarDatos();
             await cargarCanales();
