@@ -4395,7 +4395,10 @@ window.CMG_cargarPagosTab = async function(opts = {}) {
             const montoInput = document.getElementById('pagoMontoPagar');
             if (montoInput) {
                 montoInput.value = opts.sinMonto ? '' : saldo.toFixed(2);
-                montoInput.max = saldo;
+                // Mismo redondeo que el valor precargado: con el saldo crudo
+                // (p. ej. 123.4499999998) el navegador rechaza 123.45 con
+                // "el valor debe ser menor o igual a 123.45".
+                montoInput.max = saldo.toFixed(2);
             }
             
             const obsInput = document.getElementById('pagoObservaciones');
