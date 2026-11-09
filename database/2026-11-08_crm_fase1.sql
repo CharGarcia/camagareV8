@@ -17,7 +17,7 @@
 --      ALTER TABLE proformas_cabecera DROP COLUMN IF EXISTS id_oportunidad;
 --      DROP TABLE IF EXISTS crm_eliminaciones_datos, crm_webhook_eventos, crm_actividades,
 --          crm_oportunidades_etapas_log, crm_oportunidades, crm_mensajes,
---          crm_conversaciones, crm_contactos, crm_canales, crm_meta_apps, crm_motivos_perdida,
+--          crm_conversaciones, crm_contactos_alias, crm_contactos, crm_canales, crm_meta_apps, crm_motivos_perdida,
 --          crm_origenes, crm_etapas, crm_embudos;
 --  Idempotente: se puede ejecutar varias veces sin efecto.
 --  Listo para pegar en el Query Tool de pgAdmin y ejecutar de una vez (F5).
@@ -197,6 +197,29 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_crm_contactos_instagram
     ON crm_contactos (id_empresa, instagram_id) WHERE eliminado = false AND instagram_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS ix_crm_contactos_cliente
     ON crm_contactos (id_empresa, id_cliente) WHERE eliminado = false AND id_cliente IS NOT NULL;
+
+
+-- Otros ids de Instagram de un contacto. Al UNIR dos contactos que tenían cada uno
+-- su id (la misma persona por mensaje directo y por comentario llega con ids
+-- distintos), el que queda conserva el suyo y el del otro se anota aquí, para que
+-- el webhook siga reconociéndolo y no vuelva a crear un contacto duplicado.
+CREATE TABLE IF NOT EXISTS crm_contactos_alias (
+    id             SERIAL PRIMARY KEY,
+    id_empresa     INT NOT NULL,
+    id_contacto    INT NOT NULL REFERENCES crm_contactos(id),
+    instagram_id   VARCHAR(64) NOT NULL,
+    created_at     TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMP NULL,
+    created_by     INT NULL,
+    updated_by     INT NULL,
+    eliminado      BOOLEAN NOT NULL DEFAULT false,
+    deleted_at     TIMESTAMP NULL,
+    deleted_by     INT NULL
+);
+COMMENT ON TABLE crm_contactos_alias IS 'CRM: ids de Instagram adicionales de un contacto (quedan al unir contactos duplicados).';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_crm_contactos_alias_ig
+    ON crm_contactos_alias (id_empresa, instagram_id) WHERE eliminado = false;
+CREATE INDEX IF NOT EXISTS ix_crm_contactos_alias_contacto ON crm_contactos_alias (id_contacto) WHERE eliminado = false;
 
 
 -- ── 5. Conversaciones y mensajes ────────────────────────────────────────────
@@ -414,7 +437,7 @@ CREATE INDEX IF NOT EXISTS ix_proformas_cabecera_oportunidad
     ON proformas_cabecera (id_oportunidad) WHERE id_oportunidad IS NOT NULL;
 
 
--- Comprobación (deben salir 14 filas y la columna de proformas):
+-- Comprobación (deben salir 15 filas y la columna de proformas):
 -- SELECT tablename FROM pg_tables WHERE tablename LIKE 'crm\_%' ORDER BY 1;
 -- SELECT column_name FROM information_schema.columns
 --  WHERE table_name = 'proformas_cabecera' AND column_name = 'id_oportunidad';

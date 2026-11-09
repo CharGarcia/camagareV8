@@ -63,7 +63,8 @@
 
     // ── Lista ────────────────────────────────────────────────────────────────
     function filtros() {
-        return { alcance: st.alcance, tipo: $('bs-f-tipo').value, estado: $('bs-f-estado').value, b: $('bs-f-buscar').value.trim() };
+        return { alcance: st.alcance, tipo: $('bs-f-tipo').value, estado: $('bs-f-estado').value, b: $('bs-f-buscar').value.trim(),
+                 bot: $('bs-f-bot') ? $('bs-f-bot').value : '' };
     }
 
     async function cargarLista() {
@@ -91,7 +92,8 @@
             </div>
             <div class="small text-muted text-truncate">${c.responsable ? '<i class="bi bi-person me-1"></i>' + esc(c.responsable) : '<span class="text-warning-emphasis">Sin asignar</span>'}
                 ${vencida ? ' · <span title="Pasaron más de 24 h desde su último mensaje">ventana cerrada</span>' : ''}
-                ${c.estado === 'cerrada' ? ' · cerrada' : ''}</div>
+                ${c.estado === 'cerrada' ? ' · cerrada' : ''}
+                ${c.bot_estado === 'traspasada' ? ' · <span class="text-warning-emphasis" title="El asistente la pasó a una persona"><i class="bi bi-person-raised-hand"></i> del asistente</span>' : ''}</div>
         </div>`;
     }
 
@@ -164,7 +166,9 @@
                 <div class="bs-meta">${fecha(m.fecha)}</div></div>`;
         }
         const etiqueta = ETIQUETA_TIPO[m.tipo] ? `<div class="small text-muted mb-1">${ETIQUETA_TIPO[m.tipo]}</div>` : '';
-        const quien = m.direccion === 'OUT' ? (m.usuario ? esc(m.usuario) : 'Desde Instagram') : '';
+        const quien = m.direccion !== 'OUT' ? ''
+            : m.autor === 'bot' ? '<i class="bi bi-robot me-1"></i>Asistente'
+            : (m.usuario ? esc(m.usuario) : 'Desde Instagram');
         return `<div class="bs-msg ${lado} ${m.estado_envio === 'fallido' ? 'fallido' : ''}" data-id="${m.id}">
             ${etiqueta}${adjuntoHtml(m)}${m.texto ? esc(m.texto) : (m.adjunto_ruta ? '' : '<span class="text-muted">[Contenido no disponible]</span>')}
             <div class="bs-meta">${quien ? quien + ' · ' : ''}${fecha(m.fecha)}${estadoHtml(m)}</div>
@@ -218,6 +222,40 @@
         $('bs-ventana').innerHTML = aviso;
         texto.disabled = !puede;
         if (btn) btn.disabled = !puede;
+        // Imágenes: solo por mensaje directo (Instagram no las admite en respuestas a comentarios).
+        const bImg = $('bs-btn-imagen');
+        if (bImg) {
+            bImg.classList.toggle('d-none', c.tipo !== 'dm');
+            bImg.disabled = !puede;
+        }
+    }
+
+    async function enviarImagen(input) {
+        const archivo = input.files && input.files[0];
+        input.value = '';   // permite volver a elegir el mismo archivo
+        if (!archivo || st.enviando || !st.conv || st.conv.tipo !== 'dm') return;
+        if (!['image/jpeg', 'image/png', 'image/gif'].includes(archivo.type)) {
+            aviso('warning', 'Formato no admitido', 'Solo se pueden enviar imágenes JPG, PNG o GIF.');
+            return;
+        }
+        if (archivo.size > 8 * 1024 * 1024) {
+            aviso('warning', 'Imagen muy grande', 'Instagram acepta imágenes de hasta 8 MB.');
+            return;
+        }
+        st.enviando = true;
+        const btns = [$('bs-btn-imagen'), $('bs-btn-enviar')].filter(Boolean);
+        btns.forEach((b) => { b.disabled = true; });
+        try {
+            const r = await api('enviarImagenAjax', { post: { id: st.conv.id, imagen: archivo } });
+            agregarMensajes([r.mensaje]);
+            if (!r.enviado) aviso('error', 'Instagram no aceptó la imagen', r.error_envio || '');
+            await refrescarConversacion();
+        } catch (e) {
+            aviso('error', 'No se pudo enviar la imagen', e.message);
+        } finally {
+            st.enviando = false;
+            btns.forEach((b) => { b.disabled = $('bs-texto').disabled; });
+        }
     }
 
     function pintarPanel(oportunidades) {
@@ -229,6 +267,7 @@
             <div class="fw-bold">${esc(c.contacto || 'Sin contacto')}</div>
             ${c.instagram_usuario ? `<div class="small"><a href="https://www.instagram.com/${encodeURIComponent(c.instagram_usuario)}/" target="_blank" rel="noopener">@${esc(c.instagram_usuario)}</a></div>` : ''}
             <div class="small text-muted mb-2">${c.id_cliente ? '<i class="bi bi-check-circle text-success me-1"></i>Ya es cliente' : 'Aún no es cliente'}</div>
+            ${panelBot(c)}
 
             <label class="form-label small fw-bold mb-1">Responsable</label>
             <div class="d-flex gap-1 mb-2">
@@ -330,6 +369,44 @@
         });
     }
 
+    /** Asistente virtual en esta conversación: pausar o reactivar. */
+    function bot(nuevo) {
+        accion(async () => {
+            const r = await api('botEstadoAjax', { post: { id: st.conv.id, estado: nuevo } });
+            toast(r.mensaje);
+            await abrir(st.conv.id);
+        });
+    }
+
+    /** Bloque del panel con el estado del asistente (solo si está instalado y es un DM). */
+    function panelBot(c) {
+        if (!c.bot_estado || c.tipo !== 'dm') return '';
+        const ESTADOS = {
+            activo: ['<i class="bi bi-robot me-1 text-success"></i>Responde el asistente', ''],
+            pausado: ['<i class="bi bi-pause-circle me-1 text-secondary"></i>Asistente pausado', 'Responde el equipo.'],
+            traspasada: ['<i class="bi bi-person-raised-hand me-1 text-warning"></i>El asistente la pasó a una persona', ''],
+        };
+        const cuentaActiva = c.bot_cuenta_activa === true || c.bot_cuenta_activa === 't';
+        let [titulo, sub] = ESTADOS[c.bot_estado] || ['', ''];
+        if (c.bot_estado === 'activo' && !cuentaActiva) {
+            titulo = '<i class="bi bi-robot me-1 text-secondary"></i>Asistente apagado en esta cuenta';
+            sub = 'Se activa en Configuración del CRM → Asistente virtual.';
+        }
+        if (c.bot_estado === 'traspasada' && c.bot_motivo_traspaso) sub = 'Motivo: ' + esc(c.bot_motivo_traspaso);
+        let boton = '';
+        if (cfg.perm.actualizar) {
+            boton = c.bot_estado === 'activo'
+                ? (cuentaActiva ? '<button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-1" onclick="BS.bot(\'pausado\')"><i class="bi bi-pause-circle me-1"></i>Pausar asistente</button>' : '')
+                : '<button type="button" class="btn btn-outline-success btn-sm w-100 mt-1" onclick="BS.bot(\'activo\')" title="Vuelve a responder y reinicia su contador"><i class="bi bi-robot me-1"></i>Reactivar asistente</button>';
+        }
+        return `<div class="border rounded-3 p-2 mb-3 small">
+            <div class="fw-bold">${titulo}</div>
+            ${sub ? `<div class="text-muted">${sub}</div>` : ''}
+            ${+c.bot_respuestas > 0 ? `<div class="text-muted">${+c.bot_respuestas} respuesta(s) del asistente.</div>` : ''}
+            ${boton}
+        </div>`;
+    }
+
     function nuevaOportunidad() {
         $('bs-op-token').value = window.CMG_nuevoTokenGuardado ? CMG_nuevoTokenGuardado() : '';
         $('bs-op-titulo').value = (st.conv.contacto ? st.conv.contacto + ' · ' : '') + 'Instagram';
@@ -427,7 +504,7 @@
             document.querySelectorAll('#bs-alcance [data-alcance]').forEach((x) => x.classList.toggle('active', x === b));
             cargarLista().catch((e) => aviso('error', 'No se pudo cargar', e.message));
         }));
-        ['bs-f-tipo', 'bs-f-estado'].forEach((id) => $(id).addEventListener('change', () => cargarLista().catch(() => {})));
+        ['bs-f-tipo', 'bs-f-estado', 'bs-f-bot'].forEach((id) => $(id) && $(id).addEventListener('change', () => cargarLista().catch(() => {})));
         let tb = null;
         $('bs-f-buscar').addEventListener('input', () => { clearTimeout(tb); tb = setTimeout(() => cargarLista().catch(() => {}), 400); });
         $('bs-texto').addEventListener('keydown', (e) => {
@@ -440,7 +517,7 @@
     });
 
     window.BS = {
-        abrir, enviar, reintentar, cargarRespuestas, asignar, estado,
+        abrir, enviar, enviarImagen, reintentar, cargarRespuestas, asignar, estado, bot,
         nuevaOportunidad, crearOportunidad, abrirEnlazar, enlazar,
         volverALista: () => $('bandeja').classList.remove('ver-chat', 'ver-panel'),
         verPanel: () => $('bandeja').classList.add('ver-panel'),

@@ -36,6 +36,27 @@ class CrmContactoRules
         }
     }
 
+    /**
+     * Unir dos contactos: deben ser distintos y no estar enlazados a clientes
+     * distintos (serían dos personas o empresas diferentes, no un duplicado).
+     */
+    public function validarUnir(?array $queda, ?array $seUne): void
+    {
+        if (!$queda || !$seUne) {
+            throw new \InvalidArgumentException('Contacto no encontrado.');
+        }
+        if ((int) $queda['id'] === (int) $seUne['id']) {
+            throw new \InvalidArgumentException('Elija un contacto distinto para unir.');
+        }
+        $a = (int) ($queda['id_cliente'] ?? 0);
+        $b = (int) ($seUne['id_cliente'] ?? 0);
+        if ($a > 0 && $b > 0 && $a !== $b) {
+            throw new \InvalidArgumentException(
+                'Los dos contactos están enlazados a clientes distintos; no parecen la misma persona y no se pueden unir.'
+            );
+        }
+    }
+
     public function validarEliminar(int $oportunidades): void
     {
         if ($oportunidades > 0) {

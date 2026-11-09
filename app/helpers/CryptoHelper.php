@@ -39,6 +39,16 @@ class CryptoHelper
     }
 
     /**
+     * Firma HMAC-SHA256 (base64url, 43 caracteres) para enlaces firmados. $contexto
+     * separa los usos: una firma de un módulo no sirve para otro.
+     */
+    public static function firma(string $contexto, string $datos): string
+    {
+        $mac = hash_hmac('sha256', $contexto . '|' . $datos, self::derivarLlave(), true);
+        return rtrim(strtr(base64_encode($mac), '+/', '-_'), '=');
+    }
+
+    /**
      * Llave AES independiente de la contraseña de BD.
      * Lee IA_ENCRYPTION_KEY del entorno; si no existe usa APP_KEY de config/app.php.
      */

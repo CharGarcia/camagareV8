@@ -48,7 +48,22 @@ class CrmReporteService
             'por_origen'     => $this->repo->agrupado('origen', $idEmpresa, $f, $desde, $hasta, $idUsuarioFiltro),
             'por_responsable' => $this->repo->agrupado('responsable', $idEmpresa, $f, $desde, $hasta, $idUsuarioFiltro),
             'motivos'        => $this->repo->motivosPerdida($idEmpresa, $f, $desde, $hasta, $idUsuarioFiltro),
+            'redes'          => $this->redes($idEmpresa, $desde, $hasta, $idUsuarioFiltro),
         ];
+    }
+
+    /**
+     * Fase 3: publicaciones del período, sus estadísticas y lo que trajeron al
+     * CRM. Sin el SQL de la fase 3 (o si falla) el resto del reporte sale igual.
+     */
+    private function redes(int $idEmpresa, string $desde, string $hasta, ?int $idUsuarioFiltro): array
+    {
+        try {
+            return CrmMetricaService::crear()->reporte($idEmpresa, $desde, $hasta, $idUsuarioFiltro);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'redes']);
+            return ['disponible' => false];
+        }
     }
 
     /** @return array{0:string,1:string} fechas Y-m-d válidas, ordenadas y dentro del tope */

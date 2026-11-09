@@ -362,6 +362,25 @@ class InstagramApiService
         return (string) $r['message_id'];
     }
 
+    /**
+     * Imagen por mensaje directo. Instagram la descarga desde $urlPublica (debe
+     * ser HTTPS y accesible sin sesión), así que se pasa un enlace firmado y temporal.
+     */
+    public function enviarImagen(string $token, string $igsid, string $urlPublica, ?string $tag = null): string
+    {
+        $cuerpo = ['recipient' => ['id' => $igsid],
+                   'message' => ['attachment' => ['type' => 'image', 'payload' => ['url' => $urlPublica]]]];
+        if ($tag !== null) {
+            $cuerpo['messaging_type'] = 'MESSAGE_TAG';
+            $cuerpo['tag'] = $tag;
+        }
+        $r = $this->http('POST', $this->graph('me/messages'), $cuerpo, $token, true);
+        if (empty($r['message_id'])) {
+            throw new \RuntimeException('Instagram no confirmó el envío de la imagen.');
+        }
+        return (string) $r['message_id'];
+    }
+
     /** Respuesta privada (DM) a quien comentó: una sola por comentario, dentro de 7 días. */
     public function respuestaPrivada(string $token, string $idComentario, string $texto): string
     {
@@ -383,12 +402,169 @@ class InstagramApiService
         return (string) $r['id'];
     }
 
+    // ── Publicaciones (fase 3, docs/diseno/crm-redes-fase3.md) ─────────────
+    // Flujo de Meta: contenedor (POST /{ig}/media) → esperar FINISHED
+    // (GET /{contenedor}?fields=status_code) → publicar (POST /{ig}/media_publish).
+    // Los archivos se pasan por URL PÚBLICA (enlace firmado del sistema); imágenes solo JPEG.
+
+    /** Formatos de contenedor que arma el sistema. */
+    public const CONTENEDOR_IMAGEN = 'imagen';
+    public const CONTENEDOR_REEL = 'reel';
+    public const CONTENEDOR_CARRUSEL = 'carrusel';
+    public const CONTENEDOR_VIDEO_ITEM = 'video_item';
+
+    /**
+     * Crea un contenedor y devuelve su id.
+     * $d: imagen → url, [texto], [alt], [carrusel_item], [ia]
+     *     reel   → url (video), [texto], [ia], [portada_ms]
+     *     carrusel → hijos (ids de contenedores), [texto], [ia]
+     */
+    public function crearContenedor(string $token, string $igId, string $tipo, array $d): string
+    {
+        $p = [];
+        switch ($tipo) {
+            case self::CONTENEDOR_IMAGEN:
+                $p['image_url'] = (string) $d['url'];
+                if (!empty($d['carrusel_item'])) {
+                    $p['is_carousel_item'] = 'true';
+                }
+                if (trim((string) ($d['alt'] ?? '')) !== '') {
+                    $p['alt_text'] = mb_substr(trim((string) $d['alt']), 0, 1000);
+                }
+                break;
+            case self::CONTENEDOR_VIDEO_ITEM:   // video dentro de un carrusel
+                $p['media_type'] = 'VIDEO';
+                $p['video_url'] = (string) $d['url'];
+                $p['is_carousel_item'] = 'true';
+                $d['carrusel_item'] = true;
+                break;
+            case self::CONTENEDOR_REEL:
+                $p['media_type'] = 'REELS';
+                $p['video_url'] = (string) $d['url'];
+                $p['share_to_feed'] = 'true';
+                if (isset($d['portada_ms'])) {
+                    $p['thumb_offset'] = (string) (int) $d['portada_ms'];
+                }
+                break;
+            case self::CONTENEDOR_CARRUSEL:
+                $hijos = array_values(array_filter(array_map('strval', (array) ($d['hijos'] ?? []))));
+                if (count($hijos) < 2 || count($hijos) > 20) {
+                    throw new \InvalidArgumentException('Un carrusel lleva de 2 a 20 imágenes o videos.');
+                }
+                $p['media_type'] = 'CAROUSEL';
+                $p['children'] = implode(',', $hijos);
+                break;
+            default:
+                throw new \InvalidArgumentException('Formato de Instagram no válido.');
+        }
+        // El texto y la marca de IA van en el contenedor principal, nunca en los hijos del carrusel.
+        if (empty($d['carrusel_item'])) {
+            if (trim((string) ($d['texto'] ?? '')) !== '') {
+                $p['caption'] = (string) $d['texto'];
+            }
+            if (!empty($d['ia'])) {
+                $p['is_ai_generated'] = 'true';
+            }
+        }
+        $r = $this->http('POST', $this->graph(rawurlencode($igId) . '/media'), $p, $token, true);
+        if (empty($r['id'])) {
+            throw new \RuntimeException('Instagram no creó el contenido para publicar.');
+        }
+        return (string) $r['id'];
+    }
+
+    /** EXPIRED | ERROR | FINISHED | IN_PROGRESS | PUBLISHED (y el detalle si hubo error). */
+    public function estadoContenedor(string $token, string $idContenedor): array
+    {
+        $r = $this->http('GET', $this->graph(rawurlencode($idContenedor)), ['fields' => 'status_code,status'], $token);
+        return ['estado' => strtoupper((string) ($r['status_code'] ?? '')), 'detalle' => (string) ($r['status'] ?? '')];
+    }
+
+    /** Publica un contenedor listo (FINISHED). Devuelve el id de la publicación. */
+    public function publicarContenedor(string $token, string $igId, string $idContenedor): string
+    {
+        $r = $this->http('POST', $this->graph(rawurlencode($igId) . '/media_publish'), ['creation_id' => $idContenedor], $token, true);
+        if (empty($r['id'])) {
+            throw new \RuntimeException('Instagram no confirmó la publicación.');
+        }
+        return (string) $r['id'];
+    }
+
+    /**
+     * Publicaciones por API usadas en las últimas 24 h y el tope vigente de la
+     * cuenta (la documentación dice 100 en un lugar y 50 en otro: se usa el real).
+     * @return array{usadas:int, tope:int}
+     */
+    public function limitePublicacion(string $token, string $igId): array
+    {
+        $r = $this->http('GET', $this->graph(rawurlencode($igId) . '/content_publishing_limit'), ['fields' => 'quota_usage,config'], $token);
+        $d = $r['data'][0] ?? $r;
+        return ['usadas' => (int) ($d['quota_usage'] ?? 0), 'tope' => (int) ($d['config']['quota_total'] ?? 50)];
+    }
+
+    /** Enlace y datos básicos de una publicación. */
+    public function datosPublicacion(string $token, string $idMedia): array
+    {
+        $r = $this->http('GET', $this->graph(rawurlencode($idMedia)), [
+            'fields' => 'id,permalink,media_type,media_product_type,timestamp,like_count,comments_count',
+        ], $token);
+        return [
+            'enlace' => (string) ($r['permalink'] ?? ''), 'tipo' => (string) ($r['media_product_type'] ?? $r['media_type'] ?? ''),
+            'me_gusta' => isset($r['like_count']) ? (int) $r['like_count'] : null,
+            'comentarios' => isset($r['comments_count']) ? (int) $r['comments_count'] : null,
+        ];
+    }
+
+    /** Métricas que pide el sistema por formato (nombres de Meta, noviembre de 2026). */
+    private const METRICAS = [
+        'imagen'   => ['reach', 'views', 'likes', 'comments', 'saved', 'shares', 'total_interactions'],
+        'carrusel' => ['reach', 'views', 'likes', 'comments', 'saved', 'shares', 'total_interactions'],
+        'reel'     => ['reach', 'views', 'likes', 'comments', 'saved', 'shares', 'total_interactions'],
+    ];
+
+    /**
+     * Métricas de una publicación: [nombre_meta => valor]. Meta devuelve vacío
+     * (no cero) si aún no hay datos; una métrica que ya no exista no rompe las demás.
+     */
+    public function metricasPublicacion(string $token, string $idMedia, string $formato): array
+    {
+        $nombres = self::METRICAS[$formato] ?? self::METRICAS['imagen'];
+        try {
+            $r = $this->http('GET', $this->graph(rawurlencode($idMedia) . '/insights'), ['metric' => implode(',', $nombres)], $token);
+        } catch (\RuntimeException $e) {
+            // Una métrica retirada por Meta hace fallar toda la consulta: se reintenta de a una.
+            $r = ['data' => []];
+            foreach ($nombres as $n) {
+                try {
+                    $r['data'] = array_merge($r['data'], $this->http('GET', $this->graph(rawurlencode($idMedia) . '/insights'), ['metric' => $n], $token)['data'] ?? []);
+                } catch (\RuntimeException $e2) {
+                    // sin esa métrica
+                }
+            }
+        }
+        $out = [];
+        foreach ((array) ($r['data'] ?? []) as $m) {
+            $v = $m['total_value']['value'] ?? ($m['values'][0]['value'] ?? null);
+            if (isset($m['name']) && is_numeric($v)) {
+                $out[(string) $m['name']] = (int) $v;
+            }
+        }
+        return $out;
+    }
+
+    /** Seguidores actuales de la cuenta. */
+    public function seguidores(string $token): ?int
+    {
+        $r = $this->http('GET', $this->graph('me'), ['fields' => 'followers_count'], $token);
+        return isset($r['followers_count']) ? (int) $r['followers_count'] : null;
+    }
+
     /**
      * $bearer: token en la cabecera Authorization (envíos); $json: cuerpo JSON en
      * vez de formulario. Las llamadas de login siguen con el token en la consulta,
-     * como las documenta Meta.
+     * como las documenta Meta. Protegido solo para que las pruebas lo sustituyan.
      */
-    private function http(string $metodo, string $url, array $datos, ?string $bearer = null, bool $json = false): array
+    protected function http(string $metodo, string $url, array $datos, ?string $bearer = null, bool $json = false): array
     {
         if (!$this->configurado()) {
             throw new \RuntimeException('La empresa no tiene registrada su app de Meta. Regístrela en Configuración del CRM → Canales.');

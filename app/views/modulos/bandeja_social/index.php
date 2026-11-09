@@ -73,6 +73,9 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     <select class="form-select form-select-sm" id="bs-f-estado">
                         <option value="abierta" selected>Abiertas</option><option value="cerrada">Cerradas</option><option value="">Todas</option>
                     </select>
+                    <select class="form-select form-select-sm" id="bs-f-bot" title="Asistente virtual">
+                        <option value="">Cualquiera</option><option value="traspasada">Pasadas por el asistente</option>
+                    </select>
                 </div>
                 <input type="search" class="form-control form-control-sm" id="bs-f-buscar" placeholder="Buscar nombre, @usuario o texto…">
             </div>
@@ -105,6 +108,8 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     </div>
                     <textarea class="form-control" id="bs-texto" rows="2" maxlength="1000" placeholder="Escriba su respuesta… (Enter envía, Shift+Enter salto de línea)"></textarea>
                     <?php if (!empty($perm['crear'])): ?>
+                        <input type="file" id="bs-imagen" accept="image/jpeg,image/png,image/gif" class="d-none" onchange="BS.enviarImagen(this)">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="bs-btn-imagen" onclick="document.getElementById('bs-imagen').click()" title="Enviar una imagen (JPG, PNG o GIF, hasta 8 MB)"><i class="bi bi-image"></i></button>
                         <button type="button" class="btn btn-primary btn-sm px-3" id="bs-btn-enviar" onclick="BS.enviar()" title="Enviar"><i class="bi bi-send"></i></button>
                     <?php endif; ?>
                 </div>

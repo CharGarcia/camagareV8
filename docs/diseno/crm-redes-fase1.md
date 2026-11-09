@@ -413,7 +413,7 @@ Los pasos 2–3 (CRM puro) y 4–6 (Instagram) son independientes y pueden avanz
 | 3 Pantalla CRM + Proformas | Hecho (proforma por sesión, URL limpia) | `views/modulos/crm/`, `public/js/modulos/crm.js` |
 | 4 Configuración + OAuth Instagram | Hecho (+ cron de renovación) | `views/modulos/crm_configuracion/`, `CrmCanalService`, `InstagramApiService` |
 | 5 Webhook + cola | Hecho (`/instagram-webhook`, cron cada minuto) | `InstagramWebhookController`, `CrmWebhookService` |
-| 6 Bandeja social | Hecho (envío solo texto) | `views/modulos/bandeja_social/`, `CrmBandejaService` |
+| 6 Bandeja social | Hecho (texto e imágenes por DM) | `views/modulos/bandeja_social/`, `CrmBandejaService` |
 | 7 Reportes y avisos | Hecho (pestaña Reportes; avisos «Instagram» y «CRM» en el navbar) | `CrmReporteService`, `ContadoresNavbarService` |
 | 8 Manuales | Hechos (`crm`, `crm-configuracion`, `bandeja-social`, `config/instagram-app-meta`) | `docs/manual/` |
 
@@ -421,5 +421,5 @@ Los pasos 2–3 (CRM puro) y 4–6 (Instagram) son independientes y pueden avanz
 - Registrar en el menú y permisos `modulos/crm`, `modulos/crm_configuracion` y `modulos/bandeja_social` (lo hace el administrador).
 - Cada empresa crea su app de Meta y la registra en Configuración del CRM → Canales (decisión 3 cambiada: app por empresa, tabla `crm_meta_apps`; `config/app.php` → `meta_instagram` solo guarda lo técnico).
 - ~~Endpoint de eliminación de datos (§12)~~ — hecho: `/instagram-datos/eliminar`, `/desautorizar` y `/estado` (`InstagramDatosController`, `CrmPrivacidadService`, tabla `crm_eliminaciones_datos`).
-- Enviar **imágenes** desde la Bandeja (Instagram exige una URL pública del archivo).
-- Unir contactos duplicados (la misma persona por mensaje directo y por comentario llega con ids distintos).
+- ~~Enviar **imágenes** desde la Bandeja~~ — hecho: `enviarImagenAjax` guarda en `storage/crm_media` y Meta la descarga de `/instagram-datos/imagen?t=` (token `{id}.{vence}.{HMAC}` con `CryptoHelper::firma`, 30 min, solo salientes `tipo='image'` de empresas activas). El eco del webhook se adopta por `tipo='image' AND texto IS NULL`.
+- ~~Unir contactos duplicados~~ — hecho: `CrmContactoService::unir()` (mueve oportunidades, conversaciones y actividades; completa vacíos; el IGSID del unido queda en `crm_contactos_alias`, que `getPorInstagramId()` también consulta). La eliminación de datos de Meta borra el alias (`quitarAlias`).

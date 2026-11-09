@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/crm
 tipo: modulo
 visibilidad: todos
-etiquetas: crm, reportes crm, tasa de cierre, conversion, ticket promedio, ventas por origen, ventas por vendedor, motivos de perdida, tiempo por etapa, embudo, embudo de ventas, pipeline, funnel, kanban, tablero, oportunidad, oportunidades, negocio, negocios, prospecto, prospectos, lead, leads, contacto, contactos, seguimiento, seguimiento de clientes, actividades, tareas, llamadas, reuniones, recordatorio, etapas, ganar, ganada, perder, perdida, motivo de perdida, conversion, convertir en cliente, crear proforma, valor ponderado, probabilidad, ventas, vendedor, responsable, instagram, linkedin, redes sociales
-version: 1.4
+etiquetas: crm, reportes crm, tasa de cierre, conversion, ticket promedio, ventas por origen, ventas por vendedor, motivos de perdida, tiempo por etapa, embudo, embudo de ventas, pipeline, funnel, kanban, tablero, oportunidad, oportunidades, negocio, negocios, prospecto, prospectos, lead, leads, contacto, contactos, seguimiento, seguimiento de clientes, actividades, tareas, llamadas, reuniones, recordatorio, etapas, ganar, ganada, perder, perdida, motivo de perdida, conversion, convertir en cliente, crear proforma, valor ponderado, probabilidad, ventas, vendedor, responsable, instagram, linkedin, redes sociales, unir contactos, contactos duplicados, duplicado, fusionar, combinar contactos, asistente virtual, bot de instagram, publicaciones, reporte de redes, alcance, seguidores, atribucion
+version: 1.7
 orden: 14
 estado: activo
 ---
@@ -35,6 +35,12 @@ escribe un mensaje directo o comenta una publicación queda registrada sola como
 la cuenta. Las conversaciones se leen y responden en la **Bandeja social**, desde
 donde también se crea la oportunidad con un clic. Los contactos de LinkedIn o de cualquier otro medio se
 registran a mano.
+
+Si la empresa activó el **asistente virtual** de Instagram, este puede crear la
+oportunidad solo cuando el cliente quiere comprar: queda en la primera etapa del
+embudo predeterminado, a cargo del responsable de la conversación, con la
+descripción «Registrada por el asistente virtual desde Instagram». Ver la guía
+**Asistente virtual de Instagram**.
 
 ## Requisitos previos
 
@@ -82,6 +88,30 @@ registran a mano.
 - **Mis actividades**: lo pendiente asignado a usted, por fecha.
 - **Reportes**: ver la sección siguiente.
 
+## Unir contactos duplicados
+
+La misma persona puede quedar registrada dos veces: Instagram le da un
+identificador distinto cuando escribe por **mensaje directo** y cuando **comenta**
+una publicación, o alguien la registró a mano antes de que escribiera.
+
+1. Abra el contacto que quiere **conservar** (vista Contactos).
+2. Pulse **Unir duplicado** (pie del modal) y busque el otro contacto.
+3. Pulse **Unir** y confirme.
+
+El contacto elegido le pasa a este sus **oportunidades**, **conversaciones** y
+**actividades**; los datos que aquí estén vacíos (correo, teléfono, empresa,
+cliente…) se completan con los del otro, y las notas de los dos se juntan. Lo que
+este ya tenía no se cambia. Luego el otro contacto se elimina (eliminación lógica).
+
+Si los dos tenían Instagram, el del otro queda **unido** a este: los mensajes y
+comentarios que lleguen por cualquiera de las dos cuentas entran a este contacto
+y no se vuelve a crear el duplicado. La ficha lo indica con «Unido con N cuenta(s)
+de Instagram más».
+
+No se pueden unir dos contactos enlazados a **clientes distintos** (no parecen
+la misma persona). La unión no se deshace desde la pantalla; queda en el
+registro de auditoría.
+
 ## Reportes del embudo
 
 En la vista **Reportes** se elige el período (**Desde / Hasta**; si no se indica,
@@ -99,6 +129,12 @@ las **ganadas** y **perdidas**, si se cerraron en el período.
 - **Por origen** y **por responsable**: qué canal y qué persona traen y cierran
   más, con su tasa de cierre y lo que tienen abierto.
 - **Motivos de pérdida**: por qué se pierde, con su porcentaje.
+- **Redes sociales** (si se usa **Publicaciones**): por red, cuántas
+  publicaciones salieron en el período, su alcance e interacciones (última
+  estadística tomada) y lo que trajeron al CRM por los comentarios de Instagram:
+  conversaciones, contactos nuevos, oportunidades y valor ganado. Además, las 10
+  publicaciones que más trajeron y los seguidores de Instagram al inicio y al
+  final del período.
 
 El período máximo es de 2 años. Sin acceso total, los reportes incluyen solo las
 oportunidades creadas por usted o asignadas a usted.
@@ -145,6 +181,7 @@ cierre estimada. El buscador acepta texto libre (título, contacto, teléfono,
 - **Modificar**: editar, mover de etapa, ganar, perder, reabrir, completar
   actividades y crear la proforma.
 - **Eliminar**: contactos, oportunidades y actividades (eliminación lógica).
+- **Unir duplicados**: requiere **Modificar** y **Eliminar**, y ver los dos contactos.
 - **Acceso total**: ve todo lo de la empresa. **Sin acceso total**, el usuario ve
   lo que **creó** y lo que tiene **asignado como responsable** (así un vendedor
   ve los prospectos que le asignan aunque no los haya registrado).
@@ -170,6 +207,8 @@ cierre estimada. El buscador acepta texto libre (título, contacto, teléfono,
 - **Proformas**: «Crear proforma» abre una proforma nueva con el cliente puesto;
   al guardarla, queda enlazada a la oportunidad.
 - **Vendedores**: la oportunidad puede llevar el vendedor del sistema.
+- **Publicaciones**: las oportunidades que salen de los comentarios de una
+  publicación de Instagram se le atribuyen (se ven en sus Resultados y en Reportes).
 - Toda acción queda en el registro de auditoría del sistema.
 
 ## Errores frecuentes
@@ -187,6 +226,13 @@ cierre estimada. El buscador acepta texto libre (título, contacto, teléfono,
 
 ## Historial de cambios
 
+- **1.7** — Reportes: bloque **Redes sociales** (publicaciones del período, alcance,
+  interacciones y contactos, oportunidades y ventas que trajeron).
+- **1.6** — El **asistente virtual** de Instagram puede crear oportunidades (una por
+  conversación) y guardar en el contacto los datos que el cliente da en el chat.
+- **1.5** — **Unir contactos duplicados**: pasa oportunidades, conversaciones y
+  actividades al contacto que queda y conserva el Instagram del otro, para que
+  no se vuelva a duplicar.
 - **1.4** — Vista **Reportes** (conversión, embudo por etapa, días por etapa, por mes,
   por origen, por responsable y motivos de pérdida) y avisos en la barra superior
   (actividades vencidas y conversaciones de Instagram sin leer).

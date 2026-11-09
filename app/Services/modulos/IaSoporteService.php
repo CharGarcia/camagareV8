@@ -37,7 +37,9 @@ class IaSoporteService
     public function guardarConfig(int $idEmpresa, array $data, int $idUsuario): void
     {
         $actual = $this->configRepo->getByEmpresa($idEmpresa);
-        $this->rules->validarConfig($data, $actual === null);
+        $data['modelo_chat'] = trim((string) ($data['modelo_chat'] ?? ''));
+        $data['esfuerzo'] = ($data['proveedor'] ?? '') === 'anthropic' ? trim((string) ($data['esfuerzo'] ?? '')) : '';
+        $this->rules->validarConfig($data, $actual === null, $actual['proveedor'] ?? null);
 
         $apiKeyCifrada = null;
         $apiKeyNueva = trim((string) ($data['api_key'] ?? ''));
@@ -50,11 +52,15 @@ class IaSoporteService
             'api_key_cifrada' => $apiKeyCifrada,
             'modelo_chat'     => $data['modelo_chat'],
             'activo'          => true,
+            'esfuerzo'        => $data['esfuerzo'] !== '' ? $data['esfuerzo'] : null,
         ], $idUsuario);
 
-        $this->logService->registrar($idUsuario, $idEmpresa, $actual === null ? 'crear' : 'actualizar', 'ia_config', null, null, [
+        $this->logService->registrar($idUsuario, $idEmpresa, $actual === null ? 'crear' : 'actualizar', 'ia_config', null,
+            $actual ? ['proveedor' => $actual['proveedor'], 'modelo_chat' => $actual['modelo_chat'], 'esfuerzo' => $actual['esfuerzo'] ?? null] : null, [
             'proveedor'   => $data['proveedor'],
             'modelo_chat' => $data['modelo_chat'],
+            'esfuerzo'    => $data['esfuerzo'] ?: null,
+            'clave_nueva' => $apiKeyCifrada !== null,
         ]);
     }
 
@@ -71,6 +77,7 @@ class IaSoporteService
             'configurado' => trim((string) $config['api_key_cifrada']) !== '',
             'proveedor'   => $config['proveedor'],
             'modelo_chat' => $config['modelo_chat'],
+            'esfuerzo'    => (string) ($config['esfuerzo'] ?? ''),
         ];
     }
 

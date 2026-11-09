@@ -48,6 +48,7 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
 
     <ul class="nav nav-tabs mb-3" role="tablist">
         <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#crmc-canales" type="button"><i class="bi bi-instagram me-1"></i>Canales</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-asistente" type="button" id="crmc-tab-asistente"><i class="bi bi-robot me-1"></i>Asistente virtual</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-embudos" type="button"><i class="bi bi-funnel me-1"></i>Embudos y etapas</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-origenes" type="button"><i class="bi bi-signpost-split me-1"></i>Orígenes</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-motivos" type="button"><i class="bi bi-x-octagon me-1"></i>Motivos de pérdida</button></li>
@@ -134,6 +135,11 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                 <?php endif; ?>
             </div>
             <div id="crmc-lista-canales" class="d-flex flex-column gap-2"></div>
+
+            <!-- LinkedIn (fase 3): app de la empresa y conexión de perfil/páginas; lo pinta crm_configuracion.js -->
+            <div class="card border-0 shadow-sm mt-3"><div class="card-body" id="crmc-li-app">
+                <div class="small text-muted">Cargando LinkedIn…</div>
+            </div></div>
         </div>
 
         <!-- Embudos y etapas -->
@@ -154,6 +160,120 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                     <div class="card border-0 shadow-sm" id="crmc-editor-embudo">
                         <div class="card-body text-muted small">Elija un embudo.</div>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Asistente virtual (fase 2): responde solo los mensajes directos de Instagram -->
+        <div class="tab-pane fade" id="crmc-asistente">
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white py-2 d-flex align-items-center gap-2 flex-wrap">
+                            <span class="fw-bold small"><i class="bi bi-robot me-1 text-primary"></i>Asistente virtual de Instagram</span>
+                            <select class="form-select form-select-sm ms-auto" id="bot-canal" style="width:220px;" title="Cuenta de Instagram"></select>
+                        </div>
+                        <div class="card-body">
+                            <div id="bot-aviso"></div>
+                            <form id="bot-form" autocomplete="off" onsubmit="event.preventDefault(); CRMBOT.guardar();">
+                                <div class="form-check form-switch mb-3">
+                                    <input class="form-check-input" type="checkbox" role="switch" id="bot-activo" name="activo" value="1">
+                                    <label class="form-check-label fw-bold" for="bot-activo">Responder automáticamente los mensajes directos</label>
+                                    <div class="small text-muted">Solo dentro de las 24 h de Instagram. Se identifica como asistente virtual y pasa a una persona cuando hace falta.</div>
+                                </div>
+                                <div class="row g-2">
+                                    <div class="col-sm-6">
+                                        <label class="form-label small fw-bold mb-1">Nombre del asistente</label>
+                                        <input type="text" class="form-control form-control-sm" name="nombre_asistente" id="bot-nombre" maxlength="60">
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small fw-bold mb-1">Tono</label>
+                                        <select class="form-select form-select-sm" name="tono" id="bot-tono">
+                                            <option value="cercano">Cercano (tutea)</option>
+                                            <option value="formal">Formal (de usted)</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold mb-1">Presentación (primer mensaje)</label>
+                                        <input type="text" class="form-control form-control-sm" name="presentacion" id="bot-presentacion" maxlength="500"
+                                               placeholder="Hola, soy … el asistente virtual de … ¿En qué te puedo ayudar?">
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold mb-1">Lo que debe saber (instrucciones de la empresa)</label>
+                                        <textarea class="form-control form-control-sm" rows="5" name="instrucciones" id="bot-instrucciones" maxlength="4000"
+                                                  placeholder="Ej.: Atendemos de lunes a viernes de 9:00 a 18:00. Envíos a todo el país en 48 h. No hacemos cambios en ropa interior."></textarea>
+                                        <div class="small text-muted">Además consulta los documentos cargados en <b>IA Soporte</b> y el catálogo de productos.</div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold mb-1">Temas de los que no habla</label>
+                                        <textarea class="form-control form-control-sm" rows="2" name="temas_prohibidos" id="bot-prohibidos" maxlength="1000"
+                                                  placeholder="Ej.: política, competencia, reclamos de garantía"></textarea>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small fw-bold mb-1">Cuándo responde</label>
+                                        <select class="form-select form-select-sm" name="horario" id="bot-horario" onchange="CRMBOT.verHorario()">
+                                            <option value="siempre">Siempre</option>
+                                            <option value="fuera_horario">Solo fuera del horario de atención</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-12 d-none" id="bot-horario-dias">
+                                        <label class="form-label small fw-bold mb-1">Horario de atención (en ese horario responde el equipo)</label>
+                                        <div class="d-flex flex-column gap-1" id="bot-dias"></div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <div class="form-check mt-sm-4">
+                                            <input class="form-check-input" type="checkbox" name="mostrar_stock" id="bot-stock" value="1">
+                                            <label class="form-check-label small" for="bot-stock">Decir si hay disponibilidad (nunca la cantidad)</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="crear_oportunidades" id="bot-oportunidades" value="1">
+                                            <label class="form-check-label small" for="bot-oportunidades">Crear la oportunidad en el CRM cuando el cliente quiere comprar (y pasarla a una persona)</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small fw-bold mb-1">Máx. respuestas por conversación</label>
+                                        <input type="number" class="form-control form-control-sm" name="max_respuestas_conv" id="bot-max-conv" min="1" max="50">
+                                        <div class="small text-muted">Al llegar, pasa a una persona.</div>
+                                    </div>
+                                    <div class="col-sm-6">
+                                        <label class="form-label small fw-bold mb-1">Máx. respuestas por día (empresa)</label>
+                                        <input type="number" class="form-control form-control-sm" name="max_respuestas_dia" id="bot-max-dia" min="1" max="100000">
+                                        <div class="small text-muted">Controla el gasto de su clave de IA.</div>
+                                    </div>
+                                </div>
+                                <?php if (!empty($perm['actualizar'])): ?>
+                                <div class="d-flex justify-content-end mt-3">
+                                    <button type="submit" class="btn btn-primary btn-sm px-3" id="bot-btn-guardar"><i class="bi bi-check2-circle me-1"></i>Guardar</button>
+                                </div>
+                                <?php endif; ?>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-5">
+                    <div class="card border-0 shadow-sm mb-3">
+                        <div class="card-header bg-white py-2"><span class="fw-bold small"><i class="bi bi-cpu me-1 text-primary"></i>IA de la empresa y consumo del mes</span></div>
+                        <div class="card-body small" id="bot-consumo"></div>
+                    </div>
+                    <?php if (!empty($perm['actualizar'])): ?>
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white py-2 d-flex align-items-center">
+                            <span class="fw-bold small"><i class="bi bi-chat-dots me-1 text-primary"></i>Probar</span>
+                            <button type="button" class="btn btn-link btn-sm ms-auto p-0" onclick="CRMBOT.reiniciarPrueba()">Empezar de nuevo</button>
+                        </div>
+                        <div class="card-body">
+                            <div class="small text-muted mb-2">Escriba como si fuera un cliente. Usa la configuración <b>guardada</b>; no envía nada a Instagram ni guarda nada en el CRM (sí consume su clave de IA).</div>
+                            <div id="bot-chat" class="border rounded p-2 mb-2 bg-light" style="height:280px; overflow-y:auto;"></div>
+                            <div class="d-flex gap-1">
+                                <input type="text" class="form-control form-control-sm" id="bot-prueba-texto" maxlength="1000" placeholder="Hola, ¿qué horario tienen?"
+                                       onkeydown="if (event.key === 'Enter') { event.preventDefault(); CRMBOT.probar(); }">
+                                <button type="button" class="btn btn-primary btn-sm" id="bot-btn-probar" onclick="CRMBOT.probar()" title="Enviar"><i class="bi bi-send"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -194,4 +314,5 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
 </script>
 <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
 <script src="<?= $base ?>/js/modulos/crm_configuracion.js?v=<?= asset_ver('/js/modulos/crm_configuracion.js') ?>"></script>
+<script src="<?= $base ?>/js/modulos/crm_asistente.js?v=<?= asset_ver('/js/modulos/crm_asistente.js') ?>"></script>
 <?php endif; ?>

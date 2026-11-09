@@ -50,7 +50,9 @@ class IaConfigRepository extends BaseRepository
                 ':activo'     => ($data['activo'] ?? true) ? 'true' : 'false',
                 ':id_usuario' => $idUsuario,
             ]);
-            return (int) $this->db->lastInsertId('ia_config_id_seq');
+            $id = (int) $this->db->lastInsertId('ia_config_id_seq');
+            $this->guardarEsfuerzo($idEmpresa, $data);
+            return $id;
         }
 
         // Si no vino una nueva key (reemplazo opcional), conservar la actual.
@@ -73,6 +75,17 @@ class IaConfigRepository extends BaseRepository
             ':id_usuario' => $idUsuario,
             ':id_empresa' => $idEmpresa,
         ]);
+        $this->guardarEsfuerzo($idEmpresa, $data);
         return (int) $existente['id'];
+    }
+
+    /** ia_config.esfuerzo (SQL del CRM fase 2). Sin la columna, no hace nada. */
+    private function guardarEsfuerzo(int $idEmpresa, array $data): void
+    {
+        if (!array_key_exists('esfuerzo', $data) || !$this->columnaExiste('ia_config', 'esfuerzo')) {
+            return;
+        }
+        $st = $this->db->prepare("UPDATE {$this->table} SET esfuerzo = :s WHERE id_empresa = :e AND eliminado = false");
+        $st->execute([':s' => $data['esfuerzo'], ':e' => $idEmpresa]);
     }
 }

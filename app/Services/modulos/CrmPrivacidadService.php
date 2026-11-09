@@ -144,6 +144,7 @@ class CrmPrivacidadService
             $d = [
                 'mensajes'       => $this->repo->vaciarMensajesDeConversaciones($idsConv) + $this->repo->vaciarComentariosDePersona($idExterno, $empresas),
                 'contactos'      => $this->repo->anonimizarContactos($idsConv, $idExterno, $empresas),
+                'alias'          => $this->repo->quitarAlias($idExterno, $empresas),
                 'conversaciones' => $this->repo->vaciarConversaciones($idsConv),
                 'cuentas'        => $this->repo->desconectarCanales(array_column($canales, 'id'), true),
                 'eventos'        => $this->repo->vaciarEventos($idExterno, $appId),

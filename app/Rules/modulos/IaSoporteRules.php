@@ -5,7 +5,9 @@ namespace App\Rules\modulos;
 
 class IaSoporteRules
 {
-    public const PROVEEDORES_SOPORTADOS = ['openai'];
+    public const PROVEEDORES_SOPORTADOS = ['openai', 'anthropic'];
+    /** Nivel de razonamiento (solo Anthropic). Vacío = el del modelo. */
+    public const ESFUERZOS = ['', 'low', 'medium', 'high'];
     private const MAX_BYTES_PDF = 20971520; // 20 MB
     private const MAX_LARGO_PREGUNTA = 4000;
     public const LIMITE_MENSAJES_POR_MINUTO = 12;
@@ -14,17 +16,32 @@ class IaSoporteRules
      * Valida los datos de configuración BYOK (proveedor, modelo, api key).
      * @throws \InvalidArgumentException
      */
-    public function validarConfig(array $data, bool $esNueva): void
+    public function validarConfig(array $data, bool $esNueva, ?string $proveedorActual = null): void
     {
         $proveedor = trim((string) ($data['proveedor'] ?? ''));
         if (!in_array($proveedor, self::PROVEEDORES_SOPORTADOS, true)) {
             throw new \InvalidArgumentException('Proveedor de IA no soportado.');
         }
-        if (trim((string) ($data['modelo_chat'] ?? '')) === '') {
+        $modelo = trim((string) ($data['modelo_chat'] ?? ''));
+        if ($modelo === '') {
             throw new \InvalidArgumentException('Debe indicar el modelo a usar.');
         }
-        if ($esNueva && trim((string) ($data['api_key'] ?? '')) === '') {
+        if (!preg_match('/^[A-Za-z0-9._:\-]{2,60}$/', $modelo)) {
+            throw new \InvalidArgumentException('El nombre del modelo no es válido.');
+        }
+        if ($proveedor === 'anthropic' && !str_starts_with($modelo, 'claude-')) {
+            throw new \InvalidArgumentException('Con Anthropic el modelo empieza con «claude-» (por ejemplo claude-opus-5-5).');
+        }
+        if (!in_array((string) ($data['esfuerzo'] ?? ''), self::ESFUERZOS, true)) {
+            throw new \InvalidArgumentException('Nivel de razonamiento no válido.');
+        }
+        $sinClave = trim((string) ($data['api_key'] ?? '')) === '';
+        if ($esNueva && $sinClave) {
             throw new \InvalidArgumentException('Debe ingresar la API key del proveedor.');
+        }
+        // La clave guardada es del proveedor anterior: no sirve para el nuevo.
+        if (!$esNueva && $sinClave && $proveedorActual !== null && $proveedorActual !== $proveedor) {
+            throw new \InvalidArgumentException('Cambió de proveedor: ingrese la API key del nuevo proveedor.');
         }
     }
 

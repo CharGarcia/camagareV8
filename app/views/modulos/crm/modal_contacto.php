@@ -62,15 +62,43 @@
                         <div class="col-12 d-none" id="crm-ct-extra">
                             <div class="small text-muted" id="crm-ct-cliente"></div>
                             <div class="small mt-1" id="crm-ct-oportunidades"></div>
+                            <div class="small text-muted mt-1 d-none" id="crm-ct-alias"></div>
                         </div>
                     </div>
                 </form>
+                <?php if (!empty($perm['actualizar']) && !empty($perm['eliminar'])): ?>
+                <!-- Unir duplicados: la misma persona llegó por mensaje directo y por comentario
+                     (Instagram le da ids distintos) o se registró dos veces. -->
+                <div class="border rounded-3 p-2 mt-3 bg-light d-none" id="crm-ct-unir">
+                    <div class="small fw-bold mb-1"><i class="bi bi-intersect me-1 text-primary"></i>Unir con otro contacto</div>
+                    <div class="small text-muted mb-2">
+                        El contacto elegido se une a este: le pasa sus oportunidades, conversaciones y actividades, completa los datos que aquí estén vacíos y luego se elimina.
+                    </div>
+                    <div class="position-relative">
+                        <input type="hidden" id="crm-ct-unir-id">
+                        <input type="text" class="form-control form-control-sm" id="crm-ct-unir-buscar" placeholder="Buscar el contacto duplicado…" autocomplete="off">
+                        <div class="list-group position-absolute w-100 shadow-sm d-none" id="crm-ct-unir-dd" style="z-index:10;max-height:220px;overflow:auto;"></div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-2">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CRM.ctUnirCancelar()">Cancelar</button>
+                        <button type="button" class="btn btn-primary btn-sm" id="crm-ct-unir-btn" onclick="CRM.ctUnirConfirmar()">
+                            <i class="bi bi-intersect me-1"></i>Unir
+                        </button>
+                    </div>
+                </div>
+                <?php endif; ?>
+
             </div>
             <div class="modal-footer bg-light py-2 d-flex justify-content-between">
                 <div>
                     <?php if (!empty($perm['eliminar'])): ?>
                     <button type="button" class="btn btn-outline-danger btn-sm d-none" id="crm-ct-btn-eliminar" onclick="CRM.ctEliminar()">
                         <i class="bi bi-trash"></i> Eliminar
+                    </button>
+                    <?php endif; ?>
+                    <?php if (!empty($perm['actualizar']) && !empty($perm['eliminar'])): ?>
+                    <button type="button" class="btn btn-outline-primary btn-sm d-none" id="crm-ct-btn-unir" onclick="CRM.ctUnirMostrar()" title="Unir con un contacto duplicado">
+                        <i class="bi bi-intersect"></i> Unir duplicado
                     </button>
                     <?php endif; ?>
                 </div>

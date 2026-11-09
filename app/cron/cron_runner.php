@@ -149,6 +149,75 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error procesando la cola del webhook de Instagram (CRM): " . $e->getMessage() . "\n";
 }
 
+// ── CRM: publicar lo programado en Instagram y LinkedIn (FIJO, en CADA tick) ─
+//    Cada destino (red/cuenta) se toma con SKIP LOCKED y se «alquila» 10 min.
+//    Sin el SQL de la fase 3 no hace nada. Diseño: docs/diseno/crm-redes-fase3.md.
+try {
+    $svcPub = \App\Services\modulos\CrmPublicadorService::crear();
+    if ($svcPub->disponible()) {
+        $rPub = $svcPub->procesarPendientes(10);
+        if ($rPub['publicadas'] || $rPub['errores']) {
+            echo "[" . date('Y-m-d H:i:s') . "] CRM publicaciones: {$rPub['publicadas']} publicada(s), {$rPub['esperando']} en espera, {$rPub['errores']} con error.\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error publicando en redes (CRM): " . $e->getMessage() . "\n";
+}
+
+// ── CRM: métricas de lo publicado (FIJO, en CADA tick) y seguidores (1 vez al día) ─
+//    Cortes a las 24 h, 7 días y 30 días de publicada; de a 30 por tick. Los
+//    seguidores de las cuentas de Instagram, una vez al día desde las 06:00.
+try {
+    $svcMet = \App\Services\modulos\CrmMetricaService::crear();
+    if ($svcMet->disponible()) {
+        $rMet = $svcMet->tomarCortes(30);
+        if ($rMet['tomadas'] || $rMet['errores']) {
+            echo "[" . date('Y-m-d H:i:s') . "] CRM métricas: {$rMet['tomadas']} corte(s) tomado(s), {$rMet['errores']} con error.\n";
+        }
+        $marcaSeg = sys_get_temp_dir() . '/sistema_crm_seguidores.txt';
+        if ((int) date('H') >= 6 && @file_get_contents($marcaSeg) !== date('Y-m-d')) {
+            file_put_contents($marcaSeg, date('Y-m-d'));
+            $svcMet->tomarSeguidores();
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error tomando métricas de redes (CRM): " . $e->getMessage() . "\n";
+}
+
+// ── CRM: purga de medios sin uso de las publicaciones (FIJO, 1 vez al día) ──
+//    Imágenes y videos que nadie usa hace 90 días y que ninguna publicación
+//    pendiente necesita: se borra el archivo y la fila queda como eliminada.
+//    Sin el SQL de la fase 3 no hace nada. Diseño: docs/diseno/crm-redes-fase3.md.
+try {
+    $marcaMedios = sys_get_temp_dir() . '/sistema_crm_purga_medios.txt';
+    if ((int) date('H') >= 3 && @file_get_contents($marcaMedios) !== date('Y-m-d')) {
+        file_put_contents($marcaMedios, date('Y-m-d'));
+        $nMedios = \App\Services\modulos\CrmMedioService::crear()->purgar();
+        if ($nMedios > 0) {
+            echo "[" . date('Y-m-d H:i:s') . "] CRM publicaciones: {$nMedios} archivo(s) sin uso purgado(s).\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error purgando medios de publicaciones (CRM): " . $e->getMessage() . "\n";
+}
+
+// ── CRM: asistente virtual de Instagram (FIJO, en CADA tick) ────────────────
+//    Responde los mensajes directos en cola (bot_pendiente_at vencido). Va
+//    después de la cola del webhook para atender lo que esta acaba de guardar.
+//    Sin el SQL de la fase 2 (crm_bot_config) no hace nada.
+//    Diseño: docs/diseno/crm-redes-fase2.md.
+try {
+    $svcBot = \App\Services\modulos\CrmBotService::crear();
+    if ($svcBot->disponible()) {
+        $rBot = $svcBot->procesarPendientes(20);
+        if ($rBot['respondidas'] || $rBot['traspasos'] || $rBot['errores']) {
+            echo "[" . date('Y-m-d H:i:s') . "] CRM asistente: {$rBot['respondidas']} respuesta(s), {$rBot['traspasos']} pasada(s) a una persona, {$rBot['omitidas']} omitida(s), {$rBot['errores']} con error.\n";
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error en el asistente virtual de Instagram (CRM): " . $e->getMessage() . "\n";
+}
+
 // ── Videollamadas: recordatorio de las reuniones que están por empezar ───────
 //    Corre en CADA tick a propósito: el aviso debe llegar minutos antes, no una
 //    vez al día. No necesita marca de "ya corrí": la consulta descarta las

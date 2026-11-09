@@ -206,7 +206,7 @@ class CrmCanalRepository extends BaseRepository
     public function porRenovar(int $dias): array
     {
         $st = $this->db->prepare(
-            "SELECT c.id, c.id_empresa, c.token_cifrado, c.token_expira_at, c.updated_at
+            "SELECT c.id, c.id_empresa, c.tipo, c.token_cifrado, c.token_expira_at, c.updated_at
                FROM crm_canales c
                JOIN empresas e ON e.id = c.id_empresa AND e.estado = '1' AND e.eliminado = false
               WHERE c.eliminado = false AND c.estado = 'activo' AND c.token_cifrado IS NOT NULL

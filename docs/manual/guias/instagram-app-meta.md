@@ -1,11 +1,11 @@
 ---
 titulo: App de Meta para Instagram (CRM)
-resumen: Cómo crea la empresa su app de Meta y la registra en Configuración del CRM para conectar su cuenta de Instagram, recibir mensajes y cumplir la eliminación de datos.
+resumen: Cómo crea la empresa su app de Meta y la registra en Configuración del CRM para conectar su cuenta de Instagram, recibir mensajes, publicar y cumplir la eliminación de datos.
 categoria: Ventas
 tipo: guia
 visibilidad: todos
-etiquetas: meta, facebook developers, app de meta, instagram api, instagram login, app id, app secret, redirect uri, oauth, webhook, token de verificacion, verify token, app review, revision de la app, permisos instagram, human agent, eliminacion de datos, data deletion, desautorizar, deauthorize, privacidad, crm instagram, conectar instagram
-version: 2.0
+etiquetas: meta, facebook developers, app de meta, instagram api, instagram login, app id, app secret, redirect uri, oauth, webhook, token de verificacion, verify token, app review, revision de la app, permisos instagram, human agent, eliminacion de datos, data deletion, desautorizar, deauthorize, privacidad, crm instagram, conectar instagram, publicar en instagram, content publish, insights, estadisticas, app_url
+version: 2.1
 orden: 50
 estado: activo
 ---
@@ -56,8 +56,20 @@ Con la app registrada aparece el botón **Conectar Instagram** (ver el manual
 
 ## Permisos de Meta y revisión de la app
 
-El sistema pide `instagram_business_basic`, `instagram_business_manage_messages`
-e `instagram_business_manage_comments`.
+El sistema pide:
+
+| Permiso | Para qué |
+|---------|----------|
+| `instagram_business_basic` | Datos de la cuenta |
+| `instagram_business_manage_messages` | Bandeja social: mensajes directos |
+| `instagram_business_manage_comments` | Bandeja social: comentarios |
+| `instagram_business_content_publish` | **Publicaciones**: publicar imágenes, carruseles y reels |
+| `instagram_business_manage_insights` | **Publicaciones**: estadísticas y seguidores |
+
+Agregue los cinco en la app (*Instagram → Permisos*). Las cuentas conectadas antes
+de que existieran los dos últimos deben pulsar **Reconectar** en Configuración del
+CRM y aceptarlos; mientras tanto los mensajes siguen funcionando, pero no se puede
+publicar.
 
 - Mientras la app está en **modo desarrollo**, solo funcionan las cuentas de
   Instagram agregadas como **evaluadoras** en la app. Alcanza para probar con la
@@ -98,8 +110,18 @@ app, sus cuentas dejan de renovarse y hay que volver a registrarla y reconectar.
 - **«Hay cuentas de Instagram conectadas con esta app. Desconéctelas primero.»**: al
   intentar quitar la app.
 
+## Publicaciones: dirección pública del servidor
+
+Para publicar, Instagram **descarga** cada imagen o video desde el servidor del
+sistema mediante un enlace privado que vence a las 2 horas. Por eso el servidor
+debe tener configurada su dirección pública con **https** (`app_url` en
+`config/local.php`); sin ella, las publicaciones de Instagram quedan con error.
+
 ## Historial de cambios
 
+- **2.1** — Permisos de publicar (`instagram_business_content_publish`) y de
+  estadísticas (`instagram_business_manage_insights`) para el módulo Publicaciones;
+  las cuentas ya conectadas deben reconectarse. Requisito de `app_url` con https.
 - **2.0** — La app de Meta la registra cada empresa en Configuración del CRM (antes
   era una sola app del sistema en `config/local.php`). Webhook, cancelación de
   autorización y eliminación de datos se validan con la app de la empresa dueña.

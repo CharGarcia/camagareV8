@@ -92,6 +92,7 @@ class BandejaSocialController extends BaseModuloController
                 'tipo'    => (string) ($_GET['tipo'] ?? ''),
                 'estado'  => (string) ($_GET['estado'] ?? 'abierta'),
                 'b'       => trim((string) ($_GET['b'] ?? '')),
+                'bot'     => (string) ($_GET['bot'] ?? ''),
                 'antes'   => preg_match('/^\d{4}-\d{2}-\d{2}[ T][\d:.]+$/', (string) ($_GET['antes'] ?? '')) ? $_GET['antes'] : null,
             ];
             $this->json([
@@ -141,6 +142,36 @@ class BandejaSocialController extends BaseModuloController
         }
     }
 
+    /** Imagen por mensaje directo (campo de archivo `imagen`). */
+    public function enviarImagenAjax(): void
+    {
+        $this->requireCrear();
+        $this->requireCrmDisponible();
+        $det = $this->conversacionAccesible($this->postInt('id'));
+        $f = $_FILES['imagen'] ?? null;
+        if (!$f || ($f['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            $err = (int) ($f['error'] ?? UPLOAD_ERR_NO_FILE);
+            $this->json(['ok' => false, 'error' => in_array($err, [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)
+                ? 'La imagen es demasiado grande.' : 'No se recibió la imagen.'], 400);
+        }
+        $idEmpresa = $this->idEmpresa();
+        $idUsuario = $this->idUsuario();
+        session_write_close();   // Instagram puede tardar: no retener la sesión
+        try {
+            $m = $this->bandeja->enviarImagen((int) $det['id'], (string) $f['tmp_name'], (int) $f['size'], $idEmpresa, $idUsuario,
+                self::urlImagenPublica(...));
+            $this->json(['ok' => true, 'mensaje' => $m, 'enviado' => $m['error'] === null, 'error_envio' => $m['error']]);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /** Enlace público y temporal que descarga Instagram (absoluto: lo abre un servidor externo). */
+    private static function urlImagenPublica(string $token): string
+    {
+        return url_absoluta('instagram-datos/imagen?t=' . rawurlencode($token));
+    }
+
     public function reintentarAjax(): void
     {
         $this->requireCrear();
@@ -154,7 +185,7 @@ class BandejaSocialController extends BaseModuloController
         $idUsuario = $this->idUsuario();
         session_write_close();
         try {
-            $r = $this->bandeja->reintentar((int) $m['id'], $idEmpresa, $idUsuario);
+            $r = $this->bandeja->reintentar((int) $m['id'], $idEmpresa, $idUsuario, self::urlImagenPublica(...));
             $this->json(['ok' => true, 'mensaje' => $r, 'enviado' => $r['error'] === null, 'error_envio' => $r['error']]);
         } catch (\Throwable $e) {
             $this->fallo($e, __FUNCTION__);
@@ -186,6 +217,26 @@ class BandejaSocialController extends BaseModuloController
             $estado = (string) ($_POST['estado'] ?? '');
             $this->bandeja->cambiarEstado((int) $det['id'], $estado, $this->idEmpresa(), $this->idUsuario());
             $this->json(['ok' => true, 'mensaje' => $estado === 'cerrada' ? 'Conversación cerrada.' : 'Conversación reabierta.']);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /** Pausar (`pausado`) o reactivar (`activo`) el asistente virtual en la conversación. */
+    public function botEstadoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->requireCrmDisponible();
+        $det = $this->conversacionAccesible($this->postInt('id'));
+        $bot = \App\Services\modulos\CrmBotService::crear();
+        if (!$bot->disponible()) {
+            $this->json(['ok' => false, 'error' => 'El asistente virtual no está instalado.'], 503);
+        }
+        try {
+            $estado = (string) ($_POST['estado'] ?? '');
+            $bot->cambiarEstadoConversacion((int) $det['id'], $estado, $this->idEmpresa(), $this->idUsuario());
+            $this->json(['ok' => true, 'mensaje' => $estado === 'activo'
+                ? 'El asistente vuelve a responder en esta conversación.' : 'El asistente ya no responderá en esta conversación.']);
         } catch (\Throwable $e) {
             $this->fallo($e, __FUNCTION__);
         }

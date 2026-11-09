@@ -79,8 +79,13 @@ class CrmPrivacidadRepository extends BaseRepository
             "SELECT id_empresa FROM crm_canales WHERE tipo = 'instagram' AND id_externo = :x1
              UNION SELECT id_empresa FROM crm_conversaciones WHERE id_hilo_externo = :x2
              UNION SELECT id_empresa FROM crm_contactos WHERE instagram_id = :x3"
+            . ($this->tablaExiste('crm_contactos_alias') ? ' UNION SELECT id_empresa FROM crm_contactos_alias WHERE instagram_id = :x4' : '')
         );
-        $st->execute([':x1' => $idExterno, ':x2' => $idExterno, ':x3' => $idExterno]);
+        $p = [':x1' => $idExterno, ':x2' => $idExterno, ':x3' => $idExterno];
+        if ($this->tablaExiste('crm_contactos_alias')) {
+            $p[':x4'] = $idExterno;
+        }
+        $st->execute($p);
         return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
     }
 
@@ -199,7 +204,25 @@ class CrmPrivacidadRepository extends BaseRepository
         return $st->rowCount();
     }
 
-    /** Vacía los eventos crudos del webhook que mencionan ese id. */
+    /**
+     * Quita ese id de Instagram de los alias (contactos unidos). La fila queda
+     * eliminada y sin el id, para no conservarlo.
+     */
+    public function quitarAlias(string $igsid, ?array $empresas = null): int
+    {
+        if (!$this->tablaExiste('crm_contactos_alias')) {
+            return 0;
+        }
+        $p = [':x' => $igsid];
+        $st = $this->db->prepare(
+            "UPDATE crm_contactos_alias SET instagram_id = '(eliminado)', eliminado = true,
+                    deleted_at = COALESCE(deleted_at, NOW()), updated_at = NOW()
+              WHERE instagram_id = :x" . self::enEmpresas($empresas, 'id_empresa', $p)
+        );
+        $st->execute($p);
+        return $st->rowCount();
+    }
+
     /** Vacía los eventos crudos del webhook que mencionan ese id y que firmó esa app. */
     public function vaciarEventos(string $idExterno, ?string $appId = null): int
     {

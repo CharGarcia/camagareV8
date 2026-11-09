@@ -301,6 +301,13 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
             <div class="col-lg-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-white py-2 fw-bold small">Por origen</div><div class="card-body p-0" id="crm-r-origen"></div></div></div>
             <div class="col-lg-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-white py-2 fw-bold small">Por responsable</div><div class="card-body p-0" id="crm-r-responsable"></div></div></div>
             <div class="col-lg-6"><div class="card border-0 shadow-sm h-100"><div class="card-header bg-white py-2 fw-bold small">Motivos de pérdida</div><div class="card-body p-0" id="crm-r-motivos"></div></div></div>
+            <!-- Redes sociales (fase 3): publicaciones del período y lo que trajeron al CRM -->
+            <div class="col-12 d-none" id="crm-r-redes-box">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-white py-2 fw-bold small"><i class="bi bi-megaphone me-1 text-primary"></i>Redes sociales: publicaciones y lo que trajeron</div>
+                    <div class="card-body p-0" id="crm-r-redes"></div>
+                </div>
+            </div>
         </div>
     </section>
 

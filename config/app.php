@@ -127,9 +127,25 @@ $defaults = [
             'instagram_business_basic',
             'instagram_business_manage_messages',
             'instagram_business_manage_comments',
+            // Fase 3 (publicaciones y métricas): la app de Meta de la empresa debe tenerlos.
+            'instagram_business_content_publish',
+            'instagram_business_manage_insights',
         ],
         // Campos de webhook a los que se suscribe cada cuenta conectada.
         'webhook_fields' => ['messages', 'messaging_seen', 'comments'],
+    ],
+
+    // CRM ↔ LinkedIn (publicaciones, fase 3). Solo lo técnico: cada empresa
+    // registra SU app de LinkedIn (Client ID/Secret) → tabla crm_linkedin_apps.
+    // 'api_version' (cabecera LinkedIn-Version, AAAAMM) debe estar dentro del año
+    // de soporte de LinkedIn: revisarla al menos una vez al año.
+    // Diseño: docs/diseno/crm-redes-fase3.md.
+    'linkedin' => [
+        'api_version'   => '202610',
+        // Perfil personal: productos «Sign In with LinkedIn using OpenID Connect» + «Share on LinkedIn» (autoservicio).
+        'scopes_perfil' => ['openid', 'profile', 'w_member_social'],
+        // Página de empresa: «Community Management API» (requiere aprobación de LinkedIn).
+        'scopes_pagina' => ['w_organization_social', 'r_organization_social', 'rw_organization_admin'],
     ],
 
     // Descargas Masivas (modulos/descargas-masivas): límite de documentos por

@@ -5,7 +5,8 @@
 --    Módulo  CRM                                         fas fa-handshake
 --      1  CRM                    modulos/crm             fas fa-filter-circle-dollar
 --      2  Bandeja social         modulos/bandeja_social  fab fa-instagram
---      3  Configuración del CRM  modulos/crm_configuracion  fa-sliders-h
+--      3  Publicaciones          modulos/crm_publicaciones  fas fa-bullhorn   (fase 3)
+--      4  Configuración del CRM  modulos/crm_configuracion  fa-sliders-h
 --
 --  - Si el módulo «CRM» o un submódulo (buscado por su RUTA) ya existe, lo
 --    actualiza (nombre, módulo, ícono, orden y lo deja activo); si no, lo crea.
@@ -16,7 +17,7 @@
 --
 --  Toca datos: sí (catálogo de íconos, modulos_menu, submodulos_menu).
 --  Reversible: anote antes el estado con la consulta «Antes» de abajo. Para quitar
---  lo creado: DELETE FROM submodulos_menu WHERE ruta IN (las 3 rutas) y luego el
+--  lo creado: DELETE FROM submodulos_menu WHERE ruta IN (las 4 rutas) y luego el
 --  módulo, solo si no tienen permisos asignados.
 --  Idempotente: se puede ejecutar varias veces.
 --  Listo para pegar en el Query Tool de pgAdmin y ejecutar de una vez (F5).
@@ -26,11 +27,11 @@
 -- SELECT 'modulo' AS tipo, id, nombre_modulo AS nombre, NULL AS ruta, id_icono, orden FROM modulos_menu WHERE lower(nombre_modulo) = 'crm'
 -- UNION ALL
 -- SELECT 'submodulo', id, nombre_submodulo, ruta, id_icono, orden FROM submodulos_menu
---  WHERE ruta IN ('modulos/crm', 'modulos/bandeja_social', 'modulos/crm_configuracion');
+--  WHERE ruta IN ('modulos/crm', 'modulos/bandeja_social', 'modulos/crm_publicaciones', 'modulos/crm_configuracion');
 
 -- 1. Íconos que falten en el catálogo
 INSERT INTO iconos_fontawesome (nombre_icono)
-SELECT v FROM (VALUES ('fas fa-handshake'), ('fas fa-filter-circle-dollar'), ('fab fa-instagram'), ('fa-sliders-h')) AS n(v)
+SELECT v FROM (VALUES ('fas fa-handshake'), ('fas fa-filter-circle-dollar'), ('fab fa-instagram'), ('fas fa-bullhorn'), ('fa-sliders-h')) AS n(v)
 WHERE NOT EXISTS (SELECT 1 FROM iconos_fontawesome i WHERE i.nombre_icono = n.v);
 
 -- 2. Módulo CRM: crear si no existe…
@@ -54,7 +55,8 @@ UPDATE submodulos_menu s
   FROM (VALUES
         ('modulos/crm',               'CRM',                   'fas fa-filter-circle-dollar', 1),
         ('modulos/bandeja_social',    'Bandeja social',        'fab fa-instagram',            2),
-        ('modulos/crm_configuracion', 'Configuración del CRM', 'fa-sliders-h',                3)
+        ('modulos/crm_publicaciones', 'Publicaciones',         'fas fa-bullhorn',             3),
+        ('modulos/crm_configuracion', 'Configuración del CRM', 'fa-sliders-h',                4)
        ) AS d(ruta, nombre, icono, orden)
  WHERE s.ruta = d.ruta;
 
@@ -68,16 +70,17 @@ SELECT d.nombre, d.ruta,
   FROM (VALUES
         ('modulos/crm',               'CRM',                   'fas fa-filter-circle-dollar', 1),
         ('modulos/bandeja_social',    'Bandeja social',        'fab fa-instagram',            2),
-        ('modulos/crm_configuracion', 'Configuración del CRM', 'fa-sliders-h',                3)
+        ('modulos/crm_publicaciones', 'Publicaciones',         'fas fa-bullhorn',             3),
+        ('modulos/crm_configuracion', 'Configuración del CRM', 'fa-sliders-h',                4)
        ) AS d(ruta, nombre, icono, orden)
  WHERE NOT EXISTS (SELECT 1 FROM submodulos_menu s WHERE s.ruta = d.ruta);
 
--- Comprobación: 1 módulo + 3 submódulos con sus íconos. Los id_submodulo son los
+-- Comprobación: 1 módulo + 4 submódulos con sus íconos. Los id_submodulo son los
 -- que van en config/modulos_mvc.php para cada ruta.
 -- SELECT 'modulo' AS tipo, m.id, m.nombre_modulo AS nombre, NULL AS ruta, i.nombre_icono
 --   FROM modulos_menu m JOIN iconos_fontawesome i ON i.id = m.id_icono WHERE lower(m.nombre_modulo) = 'crm'
 -- UNION ALL
 -- SELECT 'submodulo', s.id, s.nombre_submodulo, s.ruta, i.nombre_icono
 --   FROM submodulos_menu s JOIN iconos_fontawesome i ON i.id = s.id_icono
---  WHERE s.ruta IN ('modulos/crm', 'modulos/bandeja_social', 'modulos/crm_configuracion')
+--  WHERE s.ruta IN ('modulos/crm', 'modulos/bandeja_social', 'modulos/crm_publicaciones', 'modulos/crm_configuracion')
 --  ORDER BY tipo, nombre;

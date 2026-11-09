@@ -166,11 +166,23 @@ $urlBase = $base . '/' . ltrim($rutaModulo, '/');
                             <label class="form-label">Proveedor</label>
                             <select class="form-select" id="iaConfigProveedor" name="proveedor">
                                 <option value="openai">OpenAI (ChatGPT)</option>
+                                <option value="anthropic">Anthropic (Claude)</option>
                             </select>
+                            <small class="text-muted d-block mt-1">El asistente virtual de Instagram (CRM) necesita Anthropic.</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Modelo</label>
-                            <input type="text" class="form-control" id="iaConfigModelo" name="modelo_chat" value="gpt-4o-mini" placeholder="ej. gpt-4o-mini">
+                            <input type="text" class="form-control" id="iaConfigModelo" name="modelo_chat" value="gpt-4o-mini" placeholder="ej. gpt-4o-mini" maxlength="60">
+                        </div>
+                        <div class="mb-3 d-none" id="iaConfigEsfuerzoGrupo">
+                            <label class="form-label">Nivel de razonamiento</label>
+                            <select class="form-select" id="iaConfigEsfuerzo" name="esfuerzo">
+                                <option value="">El del modelo</option>
+                                <option value="low">Bajo (más rápido y económico)</option>
+                                <option value="medium">Medio</option>
+                                <option value="high">Alto (más preciso, más lento)</option>
+                            </select>
+                            <small class="text-muted d-block mt-1">El asistente de Instagram usa «Bajo» si aquí queda «El del modelo».</small>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">API key</label>

@@ -55,6 +55,29 @@ class CrmMensajeRules
         return $texto;
     }
 
+    /** Imágenes que Instagram acepta por mensaje directo (hasta 8 MB). */
+    public const IMAGEN_MIME = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/gif' => 'gif'];
+    public const IMAGEN_MAX_BYTES = 8 * 1024 * 1024;
+
+    /**
+     * Valida el archivo subido por su CONTENIDO (no por el nombre ni por lo que
+     * diga el navegador). Devuelve la extensión con que se guardará.
+     */
+    public function validarImagen(string $rutaTmp, int $bytes): string
+    {
+        if ($rutaTmp === '' || !is_file($rutaTmp) || $bytes <= 0) {
+            throw new \InvalidArgumentException('No se recibió la imagen.');
+        }
+        if ($bytes > self::IMAGEN_MAX_BYTES) {
+            throw new \InvalidArgumentException('La imagen supera 8 MB, el máximo que acepta Instagram.');
+        }
+        $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($rutaTmp);
+        if (!isset(self::IMAGEN_MIME[$mime]) || @getimagesize($rutaTmp) === false) {
+            throw new \InvalidArgumentException('Solo se pueden enviar imágenes JPG, PNG o GIF.');
+        }
+        return self::IMAGEN_MIME[$mime];
+    }
+
     public function validarRespuestaPrivada(?array $comentario, bool $yaRespondido, ?int $ahora = null): void
     {
         $ahora ??= time();

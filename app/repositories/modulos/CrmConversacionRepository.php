@@ -135,6 +135,21 @@ class CrmConversacionRepository extends BaseRepository
             ca.usuario AS canal_usuario, ca.estado AS canal_estado, ca.ventana_humana,
             ur.nombre AS responsable";
 
+    /** Columnas del asistente virtual (SQL de la fase 2). Sin él, la Bandeja funciona igual. */
+    private function hayBot(): bool
+    {
+        return $this->columnaExiste('crm_conversaciones', 'bot_estado');
+    }
+
+    private function columnasBot(): string
+    {
+        return $this->hayBot()
+            ? ", cv.bot_estado, cv.bot_motivo_traspaso, cv.bot_respuestas,
+               EXISTS (SELECT 1 FROM crm_bot_config bc WHERE bc.id_canal = cv.id_canal AND bc.id_empresa = cv.id_empresa
+                        AND bc.activo = true AND bc.eliminado = false) AS bot_cuenta_activa"
+            : '';
+    }
+
     private const FROM_BANDEJA = "
           FROM crm_conversaciones cv
           JOIN crm_canales ca ON ca.id = cv.id_canal
@@ -163,6 +178,10 @@ class CrmConversacionRepository extends BaseRepository
             $where .= ' AND cv.estado = :est';
             $p[':est'] = $f['estado'];
         }
+        // Conversaciones que el asistente virtual pasó a una persona.
+        if (($f['bot'] ?? '') === 'traspasada' && $this->hayBot()) {
+            $where .= " AND cv.bot_estado = 'traspasada'";
+        }
         $b = trim((string) ($f['b'] ?? ''));
         if ($b !== '') {
             $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(['ct.nombre', 'ct.instagram_usuario', 'cv.ultimo_mensaje'], $b, $p, 'bq');
@@ -174,7 +193,7 @@ class CrmConversacionRepository extends BaseRepository
             $where .= ' AND cv.ultimo_mensaje_at < :antes';
             $p[':antes'] = $f['antes'];
         }
-        $st = $this->db->prepare(self::SELECT_BANDEJA . self::FROM_BANDEJA . " {$where}
+        $st = $this->db->prepare(self::SELECT_BANDEJA . $this->columnasBot() . self::FROM_BANDEJA . " {$where}
             ORDER BY cv.ultimo_mensaje_at DESC NULLS LAST, cv.id DESC LIMIT " . max(1, min(200, $limite)));
         $st->execute($p);
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -195,7 +214,7 @@ class CrmConversacionRepository extends BaseRepository
     /** Una conversación con sus datos para la bandeja (incluye la cuenta externa). */
     public function getDetalle(int $id, int $idEmpresa): ?array
     {
-        $st = $this->db->prepare(self::SELECT_BANDEJA . ', ca.id_externo AS canal_id_externo' . self::FROM_BANDEJA . '
+        $st = $this->db->prepare(self::SELECT_BANDEJA . $this->columnasBot() . ', ca.id_externo AS canal_id_externo' . self::FROM_BANDEJA . '
             WHERE cv.id = :id AND cv.id_empresa = :e AND cv.eliminado = false');
         $st->execute([':id' => $id, ':e' => $idEmpresa]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
@@ -291,16 +310,36 @@ class CrmConversacionRepository extends BaseRepository
     }
 
     /** Mensaje saliente escrito en el sistema, antes de enviarlo (estado «enviando»). */
-    public function insertarSaliente(int $idEmpresa, int $idConversacion, string $tipo, string $texto, int $idUsuario, array $contenido): int
+    /** $texto null + $adjunto: imagen enviada desde la Bandeja (ruta relativa a storage/). */
+    /** $idUsuario null + $autor 'bot': lo escribió el asistente virtual. */
+    public function insertarSaliente(int $idEmpresa, int $idConversacion, string $tipo, ?string $texto, ?int $idUsuario, array $contenido, ?string $adjunto = null, string $autor = 'usuario'): int
     {
         $st = $this->db->prepare(
-            "INSERT INTO crm_mensajes (id_empresa, id_conversacion, direccion, autor, id_usuario, tipo, texto,
+            "INSERT INTO crm_mensajes (id_empresa, id_conversacion, direccion, autor, id_usuario, tipo, texto, adjunto_ruta,
                                        estado_envio, contenido, fecha, created_by)
-             VALUES (:e, :c, 'OUT', 'usuario', :u, :t, :tx, 'enviando', CAST(:j AS jsonb), NOW(), :u2) RETURNING id"
+             VALUES (:e, :c, 'OUT', :a, :u, :t, :tx, :adj, 'enviando', CAST(:j AS jsonb), NOW(), :u2) RETURNING id"
         );
-        $st->execute([':e' => $idEmpresa, ':c' => $idConversacion, ':u' => $idUsuario, ':t' => $tipo, ':tx' => $texto,
-                      ':j' => json_encode($contenido, JSON_UNESCAPED_UNICODE), ':u2' => $idUsuario]);
+        $st->execute([':e' => $idEmpresa, ':c' => $idConversacion, ':a' => $autor === 'bot' ? 'bot' : 'usuario', ':u' => $idUsuario,
+                      ':t' => $tipo, ':tx' => $texto, ':adj' => $adjunto, ':j' => json_encode($contenido, JSON_UNESCAPED_UNICODE), ':u2' => $idUsuario]);
         return (int) $st->fetchColumn();
+    }
+
+    /**
+     * Imagen saliente para el enlace público que descarga Instagram. Solo
+     * imágenes enviadas desde el sistema, vigentes y de una empresa activa
+     * (endpoint sin sesión, CLAUDE.md §6).
+     */
+    public function getImagenSalientePublica(int $idMensaje): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT m.id, m.id_empresa, m.adjunto_ruta
+               FROM crm_mensajes m
+               JOIN empresas e ON e.id = m.id_empresa AND e.estado = '1' AND e.eliminado = false
+              WHERE m.id = :id AND m.direccion = 'OUT' AND m.tipo = 'image'
+                AND m.eliminado = false AND m.adjunto_ruta IS NOT NULL"
+        );
+        $st->execute([':id' => $idMensaje]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
     /**
@@ -331,20 +370,28 @@ class CrmConversacionRepository extends BaseRepository
      * sin id con el mismo texto, se le asigna el id del eco en vez de duplicarlo.
      * Devuelve true si lo adoptó.
      */
-    public function adoptarEco(int $idConversacion, string $idExterno, ?string $texto): bool
+    /** También los del asistente virtual: su eco no debe contarse como respuesta de una persona. */
+    public function adoptarEco(int $idConversacion, string $idExterno, ?string $texto, string $tipo = 'text'): bool
     {
-        if ($texto === null || $texto === '') {
+        $p = [':x' => $idExterno, ':c' => $idConversacion];
+        if ($texto !== null && $texto !== '') {
+            $cond = 'texto = :t';
+            $p[':t'] = $texto;
+        } elseif ($tipo === 'image') {
+            // Imagen enviada desde la Bandeja: sin texto; se empareja con la imagen pendiente más antigua.
+            $cond = "tipo = 'image' AND texto IS NULL";
+        } else {
             return false;
         }
         $st = $this->db->prepare(
             "UPDATE crm_mensajes SET id_externo = :x, estado_envio = CASE WHEN estado_envio = 'enviando' THEN 'enviado' ELSE estado_envio END,
                     updated_at = NOW()
               WHERE id = (SELECT id FROM crm_mensajes
-                           WHERE id_conversacion = :c AND direccion = 'OUT' AND autor = 'usuario' AND id_externo IS NULL
-                             AND texto = :t AND fecha > NOW() - INTERVAL '10 minutes'
+                           WHERE id_conversacion = :c AND direccion = 'OUT' AND autor IN ('usuario', 'bot') AND id_externo IS NULL
+                             AND {$cond} AND fecha > NOW() - INTERVAL '10 minutes'
                            ORDER BY fecha, id LIMIT 1)"
         );
-        $st->execute([':x' => $idExterno, ':c' => $idConversacion, ':t' => $texto]);
+        $st->execute($p);
         return $st->rowCount() > 0;
     }
 

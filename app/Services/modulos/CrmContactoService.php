@@ -42,6 +42,18 @@ class CrmContactoService
         return $this->repo->getPorId($id, $idEmpresa);
     }
 
+    /** Ids de Instagram adicionales (quedaron al unir contactos). */
+    public function alias(int $id, int $idEmpresa): array
+    {
+        return $this->repo->aliasDe($id, $idEmpresa);
+    }
+
+    /** Se pueden unir contactos (la tabla de alias ya existe). */
+    public function unirDisponible(): bool
+    {
+        return $this->repo->hayAlias();
+    }
+
     public function buscar(int $idEmpresa, string $q, ?int $idUsuarioFiltro, ?int $id = null): array
     {
         return $this->repo->buscarParaSelect($idEmpresa, $q, $idUsuarioFiltro, $id);
@@ -123,6 +135,69 @@ class CrmContactoService
             $this->repo->eliminar($id, $idEmpresa, $idUsuario);
             $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'crm_contactos', $id, $antes, null);
             if ($managed) $db->commit();
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Une dos contactos de la misma persona: el que se une ($idSeUne) pasa al
+     * que queda ($idQueda) sus oportunidades, conversaciones, actividades y su id
+     * de Instagram (como alias, para que el webhook lo siga reconociendo), y luego
+     * se elimina (lógico). En el que queda solo se completan los datos vacíos;
+     * las notas de los dos se juntan. Devuelve el resumen de lo movido.
+     */
+    public function unir(int $idQueda, int $idSeUne, int $idEmpresa, int $idUsuario): array
+    {
+        if (!$this->repo->hayAlias()) {
+            throw new \RuntimeException('Falta actualizar la base de datos del CRM (tabla crm_contactos_alias) para poder unir contactos.');
+        }
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) $db->beginTransaction();
+        try {
+            $this->repo->lockUnion($idQueda, $idSeUne, $idEmpresa);
+            $queda = $this->repo->getPorId($idQueda, $idEmpresa);
+            $seUne = $this->repo->getPorId($idSeUne, $idEmpresa);
+            $this->rules->validarUnir($queda, $seUne);
+
+            // Mismo candado que usa el webhook al buscar o crear el contacto de un id de Instagram.
+            foreach ([$queda['instagram_id'], $seUne['instagram_id']] as $ig) {
+                if ($ig) $this->repo->lockInstagram($idEmpresa, (string) $ig);
+            }
+
+            $d = [];
+            foreach (['empresa_contacto', 'cargo', 'telefono', 'correo', 'instagram_usuario', 'linkedin_url',
+                      'id_cliente', 'id_whatsapp_chat', 'id_origen', 'id_responsable'] as $c) {
+                $d[$c] = ($queda[$c] ?? null) !== null && $queda[$c] !== '' ? $queda[$c] : ($seUne[$c] ?? null);
+            }
+            $d['nombre'] = $queda['nombre'];
+            $notas = array_filter([trim((string) $queda['notas']), trim((string) $seUne['notas'])], fn($n) => $n !== '');
+            $d['notas'] = $notas ? implode("\n\n", array_unique($notas)) : null;
+
+            // Id de Instagram: si el que queda no tiene, toma el del otro; si los dos
+            // tienen (DM y comentario con ids distintos), el del otro queda como alias.
+            $igQueda = (string) ($queda['instagram_id'] ?? '');
+            $igSeUne = (string) ($seUne['instagram_id'] ?? '');
+            $d['instagram_id'] = $igQueda !== '' ? $igQueda : ($igSeUne !== '' ? $igSeUne : null);
+
+            $movidas = $this->repo->moverReferencias($idSeUne, $idQueda, $idEmpresa, $idUsuario);
+            // Primero se elimina el que se une: libera su id de Instagram (índice único).
+            $this->repo->eliminar($idSeUne, $idEmpresa, $idUsuario);
+            $this->repo->actualizar($idQueda, $d, $idEmpresa, $idUsuario);
+            $this->repo->moverAlias($idSeUne, $idQueda, $d['instagram_id'], $idEmpresa, $idUsuario);
+            if ($igQueda !== '' && $igSeUne !== '' && $igSeUne !== $igQueda) {
+                $this->repo->agregarAlias($idQueda, $igSeUne, $idEmpresa, $idUsuario);
+            }
+
+            $this->log->registrar($idUsuario, $idEmpresa, 'UNIR', 'crm_contactos', $idQueda,
+                ['contacto' => $this->paraLog($queda), 'unido' => $this->paraLog($seUne) + ['id' => $idSeUne, 'instagram_id' => $igSeUne ?: null]],
+                $this->paraLog($d) + ['instagram_id' => $d['instagram_id'], 'movidas' => $movidas]);
+            $this->log->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'crm_contactos', $idSeUne,
+                $seUne, ['unido_a' => $idQueda]);
+            if ($managed) $db->commit();
+            return ['id' => $idQueda, 'movidas' => $movidas];
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;

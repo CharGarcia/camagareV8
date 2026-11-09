@@ -5,8 +5,8 @@ categoria: Herramientas
 ruta_modulo: modulos/ia-soporte
 tipo: modulo
 visibilidad: todos
-etiquetas: ia, inteligencia artificial, asistente, chat, preguntar, documentos, consultas legales, tributarias, contables
-version: 1.0
+etiquetas: ia, inteligencia artificial, asistente, chat, preguntar, documentos, consultas legales, tributarias, contables, proveedor de ia, openai, chatgpt, anthropic, claude, api key, clave de ia, modelo, nivel de razonamiento, asistente virtual instagram
+version: 1.1
 orden: 10
 estado: activo
 ---
@@ -30,6 +30,25 @@ fragmento exacto; las del manual abren el artículo correspondiente.
 La empresa necesita tener configurado su proveedor de IA con su propia clave, en
 la pestaña de configuración. Sin eso, el asistente avisa de que no está
 configurado.
+
+## Configurar el proveedor de IA
+
+En la pestaña **Configuración**:
+
+| Campo | Qué significa |
+|-------|---------------|
+| Proveedor | **OpenAI (ChatGPT)** o **Anthropic (Claude)**. |
+| Modelo | El sugerido aparece al elegir el proveedor (`gpt-4o-mini` u `claude-opus-5-5`). Con Anthropic debe empezar con `claude-`. |
+| Nivel de razonamiento | Solo Anthropic: Bajo (más rápido y económico), Medio o Alto. «El del modelo» deja el valor por defecto. |
+| API key | La clave de la cuenta de la empresa en ese proveedor. Se guarda cifrada y no se vuelve a mostrar; vacío al editar = se conserva. |
+
+- Si cambia de proveedor, debe escribir la **clave del nuevo**: la anterior no
+  sirve.
+- Esta misma configuración la usa el **asistente virtual de Instagram** del CRM,
+  que necesita **Anthropic**. Si eligió «El del modelo» en el nivel de
+  razonamiento, el asistente usa «Bajo». Los documentos que suba aquí también
+  los consulta el asistente para responder a los clientes.
+- El consumo lo cobra el proveedor directamente a la empresa.
 
 ## Cómo se usa
 
@@ -58,7 +77,16 @@ respuestas distintas a la misma pregunta, y es correcto.
   tema, o el manual aún no cubre ese módulo.
 - **Cita un documento desactualizado**: los documentos los carga la empresa;
   revise cuáles están subidos.
+- **«Cambió de proveedor: ingrese la API key del nuevo proveedor»**: escriba la
+  clave del proveedor elegido.
+- **«Con Anthropic el modelo empieza con claude-»**: use, por ejemplo,
+  `claude-opus-5-5`.
+- **«La clave de Anthropic configurada no es válida…»** o **«…no tiene saldo»**:
+  revísela en console.anthropic.com.
 
 ## Historial de cambios
 
+- **1.1** — Proveedor **Anthropic (Claude)** con nivel de razonamiento; al cambiar
+  de proveedor se exige la clave nueva. La configuración la usa también el
+  asistente virtual de Instagram del CRM.
 - **1.0** — Versión inicial.

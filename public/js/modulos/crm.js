@@ -400,6 +400,41 @@
             d.motivos.map((m) => `<tr><td>${esc(m.nombre)}</td><td class="text-end">${m.cantidad}</td>
                 <td class="text-end">${totalMot ? Math.round(m.cantidad * 100 / totalMot) : 0}%</td><td class="text-end">$${dinero(m.valor)}</td>
                 <td>${barra(+m.cantidad, totalMot, `${m.nombre}: ${m.cantidad}`)}</td></tr>`), 'No se perdieron oportunidades en el período.');
+
+        pintarRedes(d.redes);
+    }
+
+    /** Fase 3: publicaciones del período y lo que trajeron al CRM (solo si está instalado). */
+    function pintarRedes(rd) {
+        const box = $('crm-r-redes-box');
+        if (!box) return;
+        box.classList.toggle('d-none', !rd || !rd.disponible);
+        if (!rd || !rd.disponible) return;
+        const n = (v) => (v === null || v === undefined) ? '—' : Number(v).toLocaleString('es-EC');
+        const maxCont = Math.max(0, ...rd.por_red.map((g) => +g.contactos_nuevos));
+        const resumen = tabla([['Red'], ['Publicaciones', 'text-end'], ['Alcance', 'text-end'], ['Interacciones', 'text-end'], ['Conversaciones', 'text-end'],
+                ['Contactos nuevos', 'text-end'], ['Oportunidades', 'text-end'], ['Ganadas', 'text-end'], ['Valor ganado', 'text-end'], ['', 'w-25']],
+            rd.por_red.map((g) => `<tr><td><i class="bi ${g.red === 'Instagram' ? 'bi-instagram text-danger' : 'bi-linkedin text-primary'} me-1"></i>${esc(g.red)}</td>
+                <td class="text-end">${g.publicaciones}</td><td class="text-end">${n(g.alcance)}</td><td class="text-end">${n(g.interacciones)}</td>
+                <td class="text-end">${g.conversaciones}</td><td class="text-end">${g.contactos_nuevos}</td><td class="text-end">${g.oportunidades}</td>
+                <td class="text-end">${g.ganadas}</td><td class="text-end">$${dinero(g.valor_ganado)}</td>
+                <td>${barra(+g.contactos_nuevos, maxCont, `${g.red}: ${g.contactos_nuevos} contacto(s) nuevo(s)`)}</td></tr>`),
+            'No hubo publicaciones desde el sistema en el período.');
+        const mejores = rd.mejores.length ? `<div class="px-3 pt-3 pb-1 small fw-bold">Las que más trajeron</div>` + tabla(
+            [['Publicación'], ['Red'], ['Publicada'], ['Alcance', 'text-end'], ['Interacciones', 'text-end'], ['Contactos', 'text-end'], ['Oportunidades', 'text-end'], ['Valor ganado', 'text-end']],
+            rd.mejores.map((f) => `<tr><td class="text-truncate" style="max-width:260px" title="${esc(f.titulo)}">${f.enlace ? `<a href="${esc(f.enlace)}" target="_blank" rel="noopener">${esc(f.titulo)}</a>` : esc(f.titulo)}</td>
+                <td>${esc(f.red)} <span class="text-muted">${esc(f.canal || '')}</span></td><td>${fecha(f.publicada_at, true)}</td>
+                <td class="text-end">${n(f.alcance)}</td><td class="text-end">${n(f.interacciones)}</td><td class="text-end">${f.contactos_nuevos ?? 0}</td>
+                <td class="text-end">${f.oportunidades ?? 0}</td><td class="text-end">$${dinero(f.valor_ganado || 0)}</td></tr>`), '') : '';
+        const seg = rd.seguidores.length ? `<div class="px-3 pt-3 pb-1 small fw-bold">Seguidores en Instagram</div>` + tabla(
+            [['Cuenta'], ['Al inicio', 'text-end'], ['Al final', 'text-end'], ['Cambio', 'text-end']],
+            rd.seguidores.map((s) => {
+                const dif = s.inicio === null ? null : s.fin - s.inicio;
+                return `<tr><td>@${esc(s.canal)}</td><td class="text-end">${n(s.inicio)}</td><td class="text-end">${n(s.fin)}</td>
+                    <td class="text-end ${dif > 0 ? 'text-success' : (dif < 0 ? 'text-danger' : '')}">${dif === null ? '—' : (dif > 0 ? '+' : '') + n(dif)}</td></tr>`;
+            }), '') : '';
+        $('crm-r-redes').innerHTML = resumen + mejores + seg
+            + '<div class="small text-muted px-3 py-2">Alcance e interacciones: última estadística tomada (24 h, 7 o 30 días). Contactos y oportunidades: los que llegaron por comentarios de la publicación en Instagram.</div>';
     }
 
     // ── Selector tipo chip (contacto / cliente) ──────────────────────────────
@@ -825,6 +860,8 @@
         $('crm-ct-titulo-modal').textContent = 'Nuevo contacto';
         $('crm-ct-extra').classList.add('d-none');
         $('crm-ct-btn-eliminar')?.classList.add('d-none');
+        $('crm-ct-btn-unir')?.classList.add('d-none');
+        ctUnirCancelar();
         $('crm-ct-btn-guardar').classList.remove('d-none');
         ctLlenarSelects(null);
         modal('crmModalContacto').show();
@@ -855,9 +892,50 @@
             const [est, cls] = ESTADOS[o.estado] || [o.estado, ''];
             return `<a href="#" class="d-block text-decoration-none" onclick="event.preventDefault(); CRM.opAbrir(${o.id})">#${o.numero} ${esc(o.titulo)} · $${dinero(o.valor_estimado)} <span class="badge ${cls}">${est}</span></a>`;
         }).join('') || '<span class="text-muted">Sin oportunidades.</span>';
+        const alias = c.instagram_alias || [];
+        $('crm-ct-alias').classList.toggle('d-none', !alias.length);
+        $('crm-ct-alias').innerHTML = alias.length
+            ? `<i class="bi bi-intersect me-1"></i>Unido con ${alias.length} cuenta(s) de Instagram más: sus mensajes llegan a este contacto.` : '';
         $('crm-ct-btn-eliminar')?.classList.remove('d-none');
+        $('crm-ct-btn-unir')?.classList.remove('d-none');
+        ctUnirCancelar();
         $('crm-ct-btn-guardar').classList.toggle('d-none', !cfg.perm.actualizar);
         modal('crmModalContacto').show();
+    }
+
+    // Unir duplicados: el contacto abierto queda; el elegido se une a él y se elimina.
+    let taUnir = null;
+    function ctUnirMostrar() {
+        const box = $('crm-ct-unir');
+        if (!box) return;
+        box.classList.remove('d-none');
+        setTimeout(() => $('crm-ct-unir-buscar').focus(), 50);
+    }
+
+    function ctUnirCancelar() {
+        if (!$('crm-ct-unir')) return;
+        $('crm-ct-unir').classList.add('d-none');
+        taUnir?.limpiar();
+    }
+
+    async function ctUnirConfirmar() {
+        if (st.uniendoCt) return;
+        const id = $('crm-ct-id').value;
+        const idUnir = $('crm-ct-unir-id').value;
+        if (!id) return;
+        if (!idUnir) { aviso('info', 'Elija el contacto', 'Busque y elija el contacto duplicado que se unirá a este.'); return; }
+        const otro = $('crm-ct-unir-buscar').value;
+        st.uniendoCt = true;
+        const btn = $('crm-ct-unir-btn');
+        btn.disabled = true;
+        try {
+            if (!(await confirmar(`«${otro}» se unirá a «${$('crm-ct-nombre').value}» y luego se eliminará. Esto no se puede deshacer desde la pantalla. ¿Continuar?`, 'Sí, unir'))) return;
+            const r = await api('unirContactoAjax', { post: { id, id_unir: idUnir } });
+            toast(r.mensaje || 'Contactos unidos.');
+            await ctAbrir(id);
+            recargar();
+        } catch (e) { aviso('error', 'No se pudo unir', e.message); }
+        finally { st.uniendoCt = false; btn.disabled = false; }
     }
 
     async function ctGuardar() {
@@ -984,6 +1062,16 @@
             buscar: async (q) => (await api('buscarClientesAjax', { params: { q } })).data,
             etiqueta: etiquetaCliente,
         });
+        if ($('crm-ct-unir-buscar')) {
+            taUnir = typeahead({
+                input: $('crm-ct-unir-buscar'), oculto: $('crm-ct-unir-id'), dd: $('crm-ct-unir-dd'),
+                buscar: async (q) => {
+                    const actual = String($('crm-ct-id').value);
+                    return ((await api('buscarContactosAjax', { params: { q } })).data || []).filter((c) => String(c.id) !== actual);
+                },
+                etiqueta: etiquetaContacto,
+            });
+        }
 
         document.querySelectorAll('[data-crm-vista]').forEach((b) => b.addEventListener('click', () => mostrarVista(b.dataset.crmVista)));
         let tBuscar = null;
@@ -1025,6 +1113,6 @@
         opLlenarEtapas: () => opLlenarEtapas(),
         cliConfirmar, cliNuevo, perderConfirmar,
         actNueva, actAbrir, actGuardar, actCompletar, actEliminar, actTipoCambiado,
-        ctAbrir, ctGuardar, ctEliminar,
+        ctAbrir, ctGuardar, ctEliminar, ctUnirMostrar, ctUnirCancelar, ctUnirConfirmar,
     };
 })();

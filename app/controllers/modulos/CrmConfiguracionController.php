@@ -97,6 +97,69 @@ class CrmConfiguracionController extends BaseModuloController
         ]);
     }
 
+    // ── Asistente virtual (fase 2) ───────────────────────────────────────────
+
+    /** El SQL de la fase 2 está aplicado; si no, 503 con un mensaje claro. */
+    private function botDisponible(): \App\Services\modulos\CrmBotService
+    {
+        $bot = \App\Services\modulos\CrmBotService::crear();
+        if (!$bot->disponible()) {
+            $this->json(['ok' => false, 'error' => 'El asistente virtual todavía no está instalado en la base de datos (SQL de la fase 2).'], 503);
+        }
+        return $bot;
+    }
+
+    /** Configuración de una cuenta, estado de la IA de la empresa y consumo del mes. */
+    public function botAjax(): void
+    {
+        $this->requireLeer();
+        $this->requireCrmDisponible();
+        $bot = $this->botDisponible();
+        try {
+            $this->json([
+                'ok' => true,
+                'config' => $bot->obtenerConfig((int) ($_GET['id_canal'] ?? 0), $this->idEmpresa()),
+                'ia' => $bot->estadoIa($this->idEmpresa()),
+                'consumo' => $bot->consumoMes($this->idEmpresa()),
+            ]);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    public function guardarBotAjax(): void
+    {
+        $this->requireActualizar();
+        $this->requireCrmDisponible();
+        $bot = $this->botDisponible();
+        try {
+            $d = $_POST;
+            $d['horario_atencion'] = json_decode((string) ($_POST['horario_atencion'] ?? '{}'), true) ?: [];
+            $r = $bot->guardarConfig($this->postInt('id_canal'), $d, $this->idEmpresa(), $this->idUsuario());
+            $this->json(['ok' => true, 'mensaje' => $r['activo'] ? 'Asistente guardado y activo.' : 'Asistente guardado (inactivo).']);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /** Conversación simulada: no envía nada a Instagram ni escribe en el CRM. */
+    public function probarBotAjax(): void
+    {
+        $this->requireActualizar();
+        $this->requireCrmDisponible();
+        $bot = $this->botDisponible();
+        $idEmpresa = $this->idEmpresa();
+        $idUsuario = $this->idUsuario();
+        session_write_close();   // la IA puede tardar: no retener la sesión
+        try {
+            $mensajes = json_decode((string) ($_POST['mensajes'] ?? '[]'), true);
+            $r = $bot->probar($this->postInt('id_canal'), is_array($mensajes) ? $mensajes : [], $idEmpresa, $idUsuario);
+            $this->json(['ok' => true] + $r);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
     // ── App de Meta de la empresa ────────────────────────────────────────────
 
     /** Datos de la app (sin el App Secret) para repintar la tarjeta. */
@@ -218,6 +281,125 @@ class CrmConfiguracionController extends BaseModuloController
                 \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             }
             $flash = ['tipo' => 'error', 'texto' => $negocio ? $e->getMessage() : 'No se pudo conectar la cuenta. Intente de nuevo.'];
+        }
+        session_start();
+        $_SESSION['crm_config_flash'] = $flash;
+        header('Location: ' . $volver);
+        exit;
+    }
+
+    // ── LinkedIn (fase 3) ────────────────────────────────────────────────────
+
+    private const OAUTH_LI_SESION = 'crm_li_oauth';
+
+    /** Dirección de retorno registrada en la app de LinkedIn (debe coincidir exacto). */
+    private function redirectUriLinkedin(): string
+    {
+        return url_absoluta('modulos/crm_configuracion/linkedinCallback');
+    }
+
+    private function linkedin(): \App\Services\modulos\CrmLinkedinService
+    {
+        $svc = \App\Services\modulos\CrmLinkedinService::crear();
+        if (!$svc->disponible()) {
+            $this->json(['ok' => false, 'error' => 'LinkedIn todavía no está instalado en la base de datos (SQL de la fase 3).'], 503);
+        }
+        return $svc;
+    }
+
+    /** App de LinkedIn (sin el secreto) y la dirección de retorno que se registra en ella. */
+    public function linkedinAppAjax(): void
+    {
+        $this->requireLeer();
+        $this->requireCrmDisponible();
+        $this->json(['ok' => true, 'app' => $this->linkedin()->obtenerApp($this->idEmpresa()), 'redirect' => $this->redirectUriLinkedin()]);
+    }
+
+    public function guardarLinkedinAppAjax(): void
+    {
+        $svc = $this->linkedin();
+        $svc->obtenerApp($this->idEmpresa())['configurada'] ? $this->requireActualizar() : $this->requireCrear();
+        $this->requireCrmDisponible();
+        try {
+            $svc->guardarApp($this->idEmpresa(), (string) ($_POST['client_id'] ?? ''), (string) ($_POST['client_secret'] ?? ''),
+                !empty($_POST['paginas_aprobadas']), $this->idUsuario());
+            $this->json(['ok' => true, 'mensaje' => 'App de LinkedIn guardada.', 'app' => $svc->obtenerApp($this->idEmpresa())]);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    public function quitarLinkedinAppAjax(): void
+    {
+        $this->requireEliminar();
+        $this->requireCrmDisponible();
+        try {
+            $this->linkedin()->quitarApp($this->idEmpresa(), $this->idUsuario());
+            $this->json(['ok' => true, 'mensaje' => 'App de LinkedIn quitada.']);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /** `paginas=1`: además pide permiso para las páginas de empresa. */
+    public function conectarLinkedinAjax(): void
+    {
+        $this->requireCrear();
+        $this->requireCrmDisponible();
+        try {
+            $paginas = !empty($_POST['paginas']);
+            $state = bin2hex(random_bytes(24));
+            $url = $this->linkedin()->urlConexion($state, $this->redirectUriLinkedin(), $this->idEmpresa(), $paginas);
+            $_SESSION[self::OAUTH_LI_SESION] = [
+                'state' => $state, 'id_empresa' => $this->idEmpresa(), 'id_usuario' => $this->idUsuario(),
+                'paginas' => $paginas, 'expira' => time() + self::OAUTH_MINUTOS * 60,
+            ];
+            $this->json(['ok' => true, 'url' => $url]);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /** Retorno de LinkedIn: mismo cuidado que instagramCallback (state de un solo uso, sesión suelta, URL limpia). */
+    public function linkedinCallback(): void
+    {
+        $this->requireCrear();
+        $volver = rtrim(BASE_URL, '/') . '/modulos/crm_configuracion';
+        $pend = $_SESSION[self::OAUTH_LI_SESION] ?? null;
+        unset($_SESSION[self::OAUTH_LI_SESION]);
+        $state = (string) ($_GET['state'] ?? '');
+        $valido = is_array($pend) && $state !== '' && hash_equals((string) $pend['state'], $state)
+            && (int) $pend['expira'] >= time() && (int) $pend['id_empresa'] === $this->idEmpresa()
+            && (int) $pend['id_usuario'] === $this->idUsuario();
+        if (!$valido) {
+            $_SESSION['crm_config_flash'] = ['tipo' => 'error', 'texto' => 'La conexión con LinkedIn venció o no se inició desde esta pantalla. Vuelva a pulsar «Conectar LinkedIn».'];
+            header('Location: ' . $volver);
+            exit;
+        }
+        if (!empty($_GET['error'])) {
+            $_SESSION['crm_config_flash'] = ['tipo' => 'warning', 'texto' => 'Se canceló la autorización en LinkedIn; no se conectó ninguna cuenta.'];
+            header('Location: ' . $volver);
+            exit;
+        }
+        $code = (string) ($_GET['code'] ?? '');
+        $idEmpresa = $this->idEmpresa();
+        $idUsuario = $this->idUsuario();
+        session_write_close();
+        try {
+            $svc = \App\Services\modulos\CrmLinkedinService::crear();
+            if ($code === '' || !$svc->disponible()) {
+                throw new \RuntimeException('LinkedIn no devolvió el código de autorización.');
+            }
+            $r = $svc->completarConexion($code, $this->redirectUriLinkedin(), $idEmpresa, $idUsuario, (bool) $pend['paginas']);
+            $flash = $r['cuentas']
+                ? ['tipo' => 'success', 'texto' => 'LinkedIn conectado: ' . implode(', ', $r['cuentas']) . '.', 'avisos' => $r['avisos']]
+                : ['tipo' => 'warning', 'texto' => 'No se conectó ninguna cuenta de LinkedIn.', 'avisos' => $r['avisos']];
+        } catch (\Throwable $e) {
+            $negocio = ($e instanceof \InvalidArgumentException || $e instanceof \RuntimeException) && !($e instanceof \PDOException);
+            if (!$negocio) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+            $flash = ['tipo' => 'error', 'texto' => $negocio ? $e->getMessage() : 'No se pudo conectar LinkedIn. Intente de nuevo.'];
         }
         session_start();
         $_SESSION['crm_config_flash'] = $flash;

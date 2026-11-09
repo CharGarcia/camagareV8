@@ -60,9 +60,17 @@ class CrmCanalService
     public function getCanales(int $idEmpresa): array
     {
         $canales = $this->repo->getPorEmpresa($idEmpresa);
-        $requeridos = $this->api($idEmpresa)->scopes();
+        $requeridosPorTipo = [
+            self::TIPO_INSTAGRAM => $this->api($idEmpresa)->scopes(),
+            'linkedin_perfil'    => ['w_member_social'],
+            'linkedin_pagina'    => ['w_organization_social'],
+        ];
         foreach ($canales as &$c) {
+            $requeridos = $requeridosPorTipo[$c['tipo']] ?? [];
             $c['permisos_faltantes'] = array_values(array_diff($requeridos, (array) $c['permisos']));
+            // Fase 3: la cuenta de Instagram se conectó antes de los permisos de publicar.
+            $c['falta_publicar'] = in_array($c['tipo'] === self::TIPO_INSTAGRAM ? 'instagram_business_content_publish' : ($requeridos[0] ?? '-'),
+                $c['permisos_faltantes'], true);
             $c['dias_para_vencer'] = $c['token_expira_at']
                 ? (int) floor((strtotime($c['token_expira_at']) - time()) / 86400) : null;
         }
@@ -214,6 +222,11 @@ class CrmCanalService
                 $this->repo->marcarEstado($id, 'token_vencido');
                 $this->log->registrar(0, $idEmpresa, 'TOKEN_VENCIDO', 'crm_canales', $id, null, ['estado' => 'token_vencido']);
                 $res['vencidos']++;
+                continue;
+            }
+            // LinkedIn (fase 3) no entrega cómo renovar a apps sin convenio: se
+            // reconecta al vencer (la pantalla avisa con los días que quedan).
+            if (($c['tipo'] ?? self::TIPO_INSTAGRAM) !== self::TIPO_INSTAGRAM) {
                 continue;
             }
             try {

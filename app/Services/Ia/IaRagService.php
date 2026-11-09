@@ -216,9 +216,6 @@ class IaRagService
 
     private function resolverProveedor(string $proveedor): IaProviderInterface
     {
-        return match ($proveedor) {
-            'openai' => new OpenAiProvider(),
-            default  => throw new \RuntimeException('Proveedor de IA no soportado: ' . $proveedor),
-        };
+        return IaProveedores::crear($proveedor);
     }
 }

@@ -6,7 +6,9 @@ namespace App\Services\modulos;
 
 use App\core\Database;
 use App\Helpers\CryptoHelper;
+use App\repositories\modulos\CrmBotRepository;
 use App\repositories\modulos\CrmCanalRepository;
+use App\Rules\modulos\CrmBotRules;
 use App\repositories\modulos\CrmCatalogoRepository;
 use App\repositories\modulos\CrmContactoRepository;
 use App\repositories\modulos\CrmConversacionRepository;
@@ -44,15 +46,18 @@ class CrmWebhookService
         private CrmCatalogoRepository $catalogos,
         private ?InstagramApiService $apiFija,   // solo pruebas; si no, la app de cada empresa
         private LogSistemaService $log,
-        private CrmMetaAppRepository $apps
+        private CrmMetaAppRepository $apps,
+        private ?CrmBotRepository $bot = null
     ) {
+        $this->bot ??= new CrmBotRepository();
     }
 
     public static function crear(?InstagramApiService $api = null): self
     {
         return new self(
             new CrmWebhookEventoRepository(), new CrmCanalRepository(), new CrmConversacionRepository(),
-            new CrmContactoRepository(), new CrmCatalogoRepository(), $api, new LogSistemaService(), new CrmMetaAppRepository()
+            new CrmContactoRepository(), new CrmCatalogoRepository(), $api, new LogSistemaService(), new CrmMetaAppRepository(),
+            new CrmBotRepository()
         );
     }
 
@@ -283,7 +288,8 @@ class CrmWebhookService
         return $this->enTransaccion(function () use ($canal, $igsid, $perfil, $info, $mid, $eco, $fecha, $ruta, $m) {
             $conv = $this->obtenerConversacion($canal, 'dm', $igsid, null, $perfil, 'instagram_dm');
             // Eco de un mensaje enviado desde la Bandeja: ya existe (sin id todavía); no duplicar.
-            if ($eco && $this->conversaciones->adoptarEco((int) $conv['id'], $mid, $info['texto'])) {
+            if ($eco && $this->conversaciones->adoptarEco((int) $conv['id'], $mid, $info['texto'], $info['tipo'])) {
+                if ($ruta) @unlink(MVC_ROOT . '/storage/' . $ruta);   // el original ya está guardado con el saliente
                 return true;
             }
             $contenido = $m;
@@ -302,6 +308,14 @@ class CrmWebhookService
             ]);
             if ($nuevo !== null) {
                 $this->conversaciones->registrarMensaje((int) $conv['id'], ($eco ? 'Tú: ' : '') . $info['extracto'], $fecha, !$eco);
+                if ($this->bot->disponible()) {
+                    if ($eco) {
+                        // Alguien respondió desde la app de Instagram: el asistente se calla en esta conversación.
+                        $this->bot->pausarPorPersona((int) $conv['id'], (int) $canal['id_empresa']);
+                    } else {
+                        $this->bot->encolar((int) $conv['id'], (int) $canal['id_empresa'], CrmBotRules::SEGUNDOS_AGRUPAR);
+                    }
+                }
             }
             return true;
         });
@@ -402,17 +416,7 @@ class CrmWebhookService
     /** Decisión 5: sin asignar, fija o por turnos (el de menos conversaciones abiertas). */
     private function elegirResponsable(array $canal): ?int
     {
-        $asig = (array) ($canal['config']['asignacion'] ?? []);
-        $usuarios = array_values(array_filter(array_map('intval', (array) ($asig['usuarios'] ?? []))));
-        switch ($asig['regla'] ?? 'sin_asignar') {
-            case 'fija':
-                return $usuarios[0] ?? null;
-            case 'rotacion':
-                $this->conversaciones->lockReparto((int) $canal['id']);
-                return $this->conversaciones->usuarioConMenosCarga((int) $canal['id'], $usuarios);
-            default:
-                return null;
-        }
+        return (new CrmRepartoService($this->conversaciones))->elegir($canal);
     }
 
     private function obtenerContacto(int $idEmpresa, string $igsid, ?array $perfil, string $tipoOrigen, ?int $responsable): int

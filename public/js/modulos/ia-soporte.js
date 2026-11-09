@@ -33,6 +33,8 @@
 
         const formConfig = document.getElementById('iaFormConfig');
         if (formConfig) formConfig.addEventListener('submit', guardarConfig);
+        const selProv = document.getElementById('iaConfigProveedor');
+        if (selProv) selProv.addEventListener('change', cambioProveedor);
 
         const btnNuevoPrompt = document.getElementById('iaBtnNuevoPrompt');
         if (btnNuevoPrompt) btnNuevoPrompt.addEventListener('click', () => abrirModalPrompt(null));
@@ -556,10 +558,35 @@
                 const d = res.data;
                 document.getElementById('iaConfigProveedor').value = d.proveedor;
                 document.getElementById('iaConfigModelo').value = d.modelo_chat;
+                document.getElementById('iaConfigProveedor').dataset.guardado = d.proveedor;
+                const esf = document.getElementById('iaConfigEsfuerzo');
+                if (esf) esf.value = d.esfuerzo || '';
+                mostrarEsfuerzo();
                 document.getElementById('iaConfigEstadoTexto').innerHTML = d.configurado
                     ? '<span class="text-success"><i class="bi bi-check-circle"></i> API key configurada. Déjelo en blanco para conservarla, o escriba una nueva para reemplazarla.</span>'
                     : '<span class="text-muted">Aún no hay una API key configurada.</span>';
             });
+    }
+
+    /** Modelo sugerido por proveedor (se puede cambiar a mano). */
+    const MODELO_PROVEEDOR = { openai: 'gpt-4o-mini', anthropic: 'claude-opus-5-5' };
+
+    function mostrarEsfuerzo() {
+        const g = document.getElementById('iaConfigEsfuerzoGrupo');
+        if (g) g.classList.toggle('d-none', document.getElementById('iaConfigProveedor').value !== 'anthropic');
+    }
+
+    function cambioProveedor() {
+        const sel = document.getElementById('iaConfigProveedor');
+        const modelo = document.getElementById('iaConfigModelo');
+        // Al cambiar de proveedor, el modelo del otro no sirve: se propone el sugerido.
+        if (Object.values(MODELO_PROVEEDOR).includes(modelo.value) || modelo.value.trim() === '' ||
+            (sel.value === 'anthropic') !== modelo.value.startsWith('claude-')) {
+            modelo.value = MODELO_PROVEEDOR[sel.value] || '';
+        }
+        modelo.placeholder = 'ej. ' + (MODELO_PROVEEDOR[sel.value] || '');
+        document.getElementById('iaConfigApiKey').placeholder = sel.value === 'anthropic' ? 'sk-ant-...' : 'sk-...';
+        mostrarEsfuerzo();
     }
 
     function guardarConfig(ev) {

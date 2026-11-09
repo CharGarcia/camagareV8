@@ -468,6 +468,7 @@ class CrmController extends BaseModuloController
         }
         $this->requireAccesoCrm($c);
         $c['oportunidades'] = $this->oportunidades->getPorContacto($id, $this->idEmpresa(), $this->idUsuarioFiltro());
+        $c['instagram_alias'] = $this->contactos->alias($id, $this->idEmpresa());
         $this->json(['ok' => true, 'contacto' => $c]);
     }
 
@@ -516,6 +517,32 @@ class CrmController extends BaseModuloController
             $this->requireAccesoCrm($this->contactos->getPorId($id, $this->idEmpresa()));
             $this->contactos->eliminar($id, $this->idEmpresa(), $this->idUsuario());
             $this->json(['ok' => true, 'mensaje' => 'Contacto eliminado.']);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /**
+     * Une dos contactos duplicados: `id` queda, `id_unir` se une a él y se elimina.
+     * Pide modificar (el que queda) y eliminar (el que se une), y acceso a los dos.
+     */
+    public function unirContactoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->requireEliminar();
+        $this->requireCrmDisponible();
+        $id = $this->postInt('id');
+        $idUnir = $this->postInt('id_unir');
+        try {
+            $this->requireAccesoCrm($this->contactos->getPorId($id, $this->idEmpresa()));
+            $this->requireAccesoCrm($this->contactos->getPorId($idUnir, $this->idEmpresa()));
+            $r = $this->contactos->unir($id, $idUnir, $this->idEmpresa(), $this->idUsuario());
+            $m = $r['movidas'];
+            $this->json([
+                'ok' => true, 'id' => $id,
+                'mensaje' => sprintf('Contactos unidos. Se pasaron %d oportunidad(es), %d conversación(es) y %d actividad(es).',
+                    $m['crm_oportunidades'], $m['crm_conversaciones'], $m['crm_actividades']),
+            ]);
         } catch (\Throwable $e) {
             $this->fallo($e, __FUNCTION__);
         }

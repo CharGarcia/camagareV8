@@ -92,6 +92,7 @@ class IaSoporteController extends BaseModuloController
                 'proveedor'   => trim((string) ($_POST['proveedor'] ?? 'openai')),
                 'modelo_chat' => trim((string) ($_POST['modelo_chat'] ?? '')),
                 'api_key'     => (string) ($_POST['api_key'] ?? ''),
+                'esfuerzo'    => trim((string) ($_POST['esfuerzo'] ?? '')),
             ], $idUsuario);
             echo json_encode(['ok' => true, 'msg' => 'Configuración guardada correctamente.']);
         } catch (\Throwable $e) {

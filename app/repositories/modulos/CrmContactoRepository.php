@@ -144,14 +144,105 @@ class CrmContactoRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
-    /** Contacto de una persona de Instagram (IGSID) en la empresa. */
+    /**
+     * Contacto de una persona de Instagram (IGSID) en la empresa: por su id
+     * principal o por un alias que le quedó al unir contactos duplicados.
+     */
     public function getPorInstagramId(int $idEmpresa, string $igsid): ?array
     {
         $st = $this->db->prepare(
-            'SELECT * FROM crm_contactos WHERE id_empresa = :e AND instagram_id = :i AND eliminado = false LIMIT 1'
+            'SELECT * FROM crm_contactos WHERE id_empresa = :e AND instagram_id = :i AND eliminado = false ORDER BY id LIMIT 1'
+        );
+        $st->execute([':e' => $idEmpresa, ':i' => $igsid]);
+        $c = $st->fetch(PDO::FETCH_ASSOC);
+        if ($c || !$this->hayAlias()) {
+            return $c ?: null;
+        }
+        $st = $this->db->prepare(
+            'SELECT c.* FROM crm_contactos_alias a
+               JOIN crm_contactos c ON c.id = a.id_contacto AND c.id_empresa = a.id_empresa AND c.eliminado = false
+              WHERE a.id_empresa = :e AND a.instagram_id = :i AND a.eliminado = false
+              ORDER BY c.id LIMIT 1'
         );
         $st->execute([':e' => $idEmpresa, ':i' => $igsid]);
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** La tabla de alias existe (sin ella, unir contactos no está disponible). */
+    public function hayAlias(): bool
+    {
+        static $hay = null;
+        return $hay ??= $this->tablaExiste('crm_contactos_alias');
+    }
+
+    /** Ids de Instagram adicionales del contacto. */
+    public function aliasDe(int $idContacto, int $idEmpresa): array
+    {
+        if (!$this->hayAlias()) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            'SELECT instagram_id FROM crm_contactos_alias
+              WHERE id_contacto = :c AND id_empresa = :e AND eliminado = false ORDER BY id'
+        );
+        $st->execute([':c' => $idContacto, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_COLUMN);
+    }
+
+    /** Candado de los dos contactos que se unen (en orden fijo, para no cruzarse). */
+    public function lockUnion(int $idA, int $idB, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('crm_contacto:' || CAST(:e AS text) || ':' || CAST(:c AS text)))");
+        foreach ([min($idA, $idB), max($idA, $idB)] as $id) {
+            $st->execute([':e' => $idEmpresa, ':c' => $id]);
+        }
+    }
+
+    public function agregarAlias(int $idContacto, string $igsid, int $idEmpresa, int $idUsuario): void
+    {
+        $st = $this->db->prepare(
+            'INSERT INTO crm_contactos_alias (id_empresa, id_contacto, instagram_id, created_by, updated_by)
+             SELECT :e, :c, :i, :u, :u2
+              WHERE NOT EXISTS (SELECT 1 FROM crm_contactos_alias
+                                 WHERE id_empresa = :e2 AND instagram_id = :i2 AND eliminado = false)'
+        );
+        $st->execute([':e' => $idEmpresa, ':c' => $idContacto, ':i' => $igsid, ':u' => $idUsuario, ':u2' => $idUsuario,
+                      ':e2' => $idEmpresa, ':i2' => $igsid]);
+    }
+
+    /** Pasa los alias de un contacto a otro. Quita el que coincida con el id principal del destino. */
+    public function moverAlias(int $deId, int $aId, ?string $igsidDestino, int $idEmpresa, int $idUsuario): void
+    {
+        $st = $this->db->prepare(
+            'UPDATE crm_contactos_alias SET id_contacto = :a, updated_at = NOW(), updated_by = :u
+              WHERE id_contacto = :de AND id_empresa = :e AND eliminado = false'
+        );
+        $st->execute([':a' => $aId, ':u' => $idUsuario, ':de' => $deId, ':e' => $idEmpresa]);
+        if ($igsidDestino !== null && $igsidDestino !== '') {
+            $st = $this->db->prepare(
+                'UPDATE crm_contactos_alias SET eliminado = true, deleted_at = NOW(), deleted_by = :u, updated_at = NOW(), updated_by = :u2
+                  WHERE id_contacto = :a AND id_empresa = :e AND instagram_id = :i AND eliminado = false'
+            );
+            $st->execute([':u' => $idUsuario, ':u2' => $idUsuario, ':a' => $aId, ':e' => $idEmpresa, ':i' => $igsidDestino]);
+        }
+    }
+
+    /**
+     * Pasa al contacto que queda todo lo que apuntaba al que se une:
+     * oportunidades, conversaciones y actividades. Devuelve cuántas filas movió por tabla.
+     */
+    public function moverReferencias(int $deId, int $aId, int $idEmpresa, int $idUsuario): array
+    {
+        $movidas = [];
+        foreach (['crm_oportunidades', 'crm_conversaciones', 'crm_actividades'] as $tabla) {
+            $st = $this->db->prepare(
+                "UPDATE {$tabla} SET id_contacto = :a, updated_at = NOW(), updated_by = :u
+                  WHERE id_contacto = :de AND id_empresa = :e AND eliminado = false"
+            );
+            $st->execute([':a' => $aId, ':u' => $idUsuario, ':de' => $deId, ':e' => $idEmpresa]);
+            $movidas[$tabla] = $st->rowCount();
+        }
+        return $movidas;
     }
 
     /** Candado para «buscar o crear» el contacto de un IGSID (dos eventos simultáneos de la misma persona). */

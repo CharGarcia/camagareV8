@@ -6,6 +6,7 @@ namespace App\Services\modulos;
 
 use App\core\Database;
 use App\Helpers\CryptoHelper;
+use App\repositories\modulos\CrmBotRepository;
 use App\repositories\modulos\CrmCanalRepository;
 use App\repositories\modulos\CrmCatalogoRepository;
 use App\repositories\modulos\CrmContactoRepository;
@@ -35,15 +36,17 @@ class CrmBandejaService
         private CrmCatalogoRepository $catalogos,
         private ?InstagramApiService $apiFija,   // solo pruebas; si no, la app de la empresa
         private CrmMensajeRules $rules,
-        private LogSistemaService $log
+        private LogSistemaService $log,
+        private ?CrmBotRepository $bot = null
     ) {
+        $this->bot ??= new CrmBotRepository();
     }
 
     public static function crear(?InstagramApiService $api = null): self
     {
         return new self(
             new CrmConversacionRepository(), new CrmCanalRepository(), new CrmContactoRepository(),
-            new CrmCatalogoRepository(), $api, new CrmMensajeRules(), new LogSistemaService()
+            new CrmCatalogoRepository(), $api, new CrmMensajeRules(), new LogSistemaService(), new CrmBotRepository()
         );
     }
 
@@ -141,6 +144,7 @@ class CrmBandejaService
             $idMsg = $this->conversaciones->insertarSaliente($idEmpresa, $idConv, $tipo, $texto, $idUsuario, $destino);
             $this->log->registrar($idUsuario, $idEmpresa, 'ENVIAR_MENSAJE', 'crm_mensajes', $idMsg, null,
                 ['id_conversacion' => $idConv, 'modo' => $modo, 'tag' => $destino['tag'] ?? null]);
+            $this->bot->pausarPorPersona($idConv, $idEmpresa);   // responde una persona: el asistente se calla
             return ['id' => $idMsg, 'det' => $det, 'destino' => $destino];
         });
 
@@ -148,8 +152,83 @@ class CrmBandejaService
         return $this->despachar($prep['id'], $prep['det'], $modo, $texto, $prep['destino'], $idEmpresa);
     }
 
+    /** Vigencia del enlace público de una imagen saliente (Instagram la descarga al enviar). */
+    public const MINUTOS_ENLACE_IMAGEN = 30;
+    private const CONTEXTO_FIRMA = 'crm_imagen_saliente';
+
+    /**
+     * Envía una imagen por mensaje directo. Se guarda en storage/crm_media (no
+     * público) y a Instagram se le pasa un enlace firmado que vence en
+     * MINUTOS_ENLACE_IMAGEN. $urlPublica: fn(string $token): string con la URL
+     * absoluta del endpoint público (la arma el controlador con url_absoluta()).
+     */
+    public function enviarImagen(int $idConv, string $rutaTmp, int $bytes, int $idEmpresa, int $idUsuario, callable $urlPublica): array
+    {
+        $ext = $this->rules->validarImagen($rutaTmp, $bytes);
+        $sub = $idEmpresa . '/' . date('Y-m');
+        $dir = MVC_ROOT . CrmWebhookService::DIR_ADJUNTOS . '/' . $sub;
+        if (!is_dir($dir) && !@mkdir($dir, 0750, true) && !is_dir($dir)) {
+            throw new \RuntimeException('No se pudo guardar la imagen en el servidor.');
+        }
+        $archivo = 'out_' . bin2hex(random_bytes(12)) . '.' . $ext;
+        $rel = 'crm_media/' . $sub . '/' . $archivo;
+        $abs = $dir . '/' . $archivo;
+
+        try {
+            $prep = $this->enTransaccion(function () use ($idConv, $idEmpresa, $idUsuario, $rutaTmp, $abs, $rel) {
+                if (!$this->conversaciones->bloquear($idConv, $idEmpresa)) {
+                    throw new \RuntimeException('Conversación no encontrada.');
+                }
+                $det = $this->conversaciones->getDetalle($idConv, $idEmpresa);
+                $destino = $this->validarDestino($det, 'dm');
+                $copiado = is_uploaded_file($rutaTmp) ? move_uploaded_file($rutaTmp, $abs) : copy($rutaTmp, $abs);
+                if (!$copiado) {
+                    throw new \RuntimeException('No se pudo guardar la imagen en el servidor.');
+                }
+                $idMsg = $this->conversaciones->insertarSaliente($idEmpresa, $idConv, 'image', null, $idUsuario, $destino, $rel);
+                $this->log->registrar($idUsuario, $idEmpresa, 'ENVIAR_MENSAJE', 'crm_mensajes', $idMsg, null,
+                    ['id_conversacion' => $idConv, 'modo' => 'imagen', 'tag' => $destino['tag'] ?? null]);
+                $this->bot->pausarPorPersona($idConv, $idEmpresa);
+                return ['id' => $idMsg, 'det' => $det, 'destino' => $destino];
+            });
+        } catch (\Throwable $e) {
+            if (is_file($abs)) @unlink($abs);
+            throw $e;
+        }
+        return $this->despachar($prep['id'], $prep['det'], 'imagen', '', $prep['destino'] + ['url' => $urlPublica], $idEmpresa);
+    }
+
+    /** Token del enlace público: {id}.{vence}.{firma}. */
+    public static function tokenImagen(int $idMensaje, ?int $vence = null): string
+    {
+        $vence ??= time() + self::MINUTOS_ENLACE_IMAGEN * 60;
+        return $idMensaje . '.' . $vence . '.' . CryptoHelper::firma(self::CONTEXTO_FIRMA, $idMensaje . '.' . $vence);
+    }
+
+    /**
+     * Ruta absoluta de la imagen de un token válido y vigente; null si el token
+     * es inválido, venció, o el mensaje/empresa ya no está (mismo resultado en
+     * todos los casos: no se revela el motivo).
+     */
+    public function imagenPorToken(string $token): ?array
+    {
+        if (!preg_match('/^(\d{1,12})\.(\d{10})\.([A-Za-z0-9_-]{43})$/', $token, $m)) {
+            return null;
+        }
+        if ((int) $m[2] < time() || !hash_equals(CryptoHelper::firma(self::CONTEXTO_FIRMA, $m[1] . '.' . $m[2]), $m[3])) {
+            return null;
+        }
+        $msg = $this->conversaciones->getImagenSalientePublica((int) $m[1]);
+        $abs = $msg ? $this->rutaAdjunto($msg) : null;
+        if (!$abs) {
+            return null;
+        }
+        $mime = (string) (new \finfo(FILEINFO_MIME_TYPE))->file($abs);
+        return isset(CrmMensajeRules::IMAGEN_MIME[$mime]) ? ['ruta' => $abs, 'mime' => $mime] : null;
+    }
+
     /** Vuelve a enviar un mensaje que quedó «fallido». */
-    public function reintentar(int $idMensaje, int $idEmpresa, int $idUsuario): array
+    public function reintentar(int $idMensaje, int $idEmpresa, int $idUsuario, ?callable $urlPublica = null): array
     {
         $prep = $this->enTransaccion(function () use ($idMensaje, $idEmpresa, $idUsuario) {
             $m = $this->conversaciones->getMensaje($idMensaje, $idEmpresa);
@@ -159,12 +238,21 @@ class CrmBandejaService
             $idConv = (int) $m['id_conversacion'];
             $this->conversaciones->bloquear($idConv, $idEmpresa);
             $det = $this->conversaciones->getDetalle($idConv, $idEmpresa);
-            $modo = ['text' => 'dm', 'comment_reply' => 'publica', 'private_reply' => 'privada'][$m['tipo']] ?? 'dm';
-            $destino = $this->validarDestino($det, $modo);
+            $modo = ['text' => 'dm', 'comment_reply' => 'publica', 'private_reply' => 'privada', 'image' => 'imagen'][$m['tipo']] ?? 'dm';
+            $destino = $this->validarDestino($det, $modo === 'imagen' ? 'dm' : $modo);
+            if ($modo === 'imagen' && !$this->rutaAdjunto($m)) {
+                throw new \InvalidArgumentException('La imagen ya no está en el servidor; envíela de nuevo.');
+            }
             $this->conversaciones->reintentar($idMensaje);
             $this->log->registrar($idUsuario, $idEmpresa, 'REINTENTAR_MENSAJE', 'crm_mensajes', $idMensaje, null, ['modo' => $modo]);
             return ['det' => $det, 'modo' => $modo, 'texto' => (string) $m['texto'], 'destino' => $destino];
         });
+        if ($prep['modo'] === 'imagen') {
+            if (!$urlPublica) {
+                throw new \LogicException('Falta la URL pública para reenviar la imagen.');
+            }
+            $prep['destino']['url'] = $urlPublica;
+        }
         return $this->despachar($idMensaje, $prep['det'], $prep['modo'], $prep['texto'], $prep['destino'], $idEmpresa);
     }
 
@@ -200,7 +288,34 @@ class CrmBandejaService
         return ['comment_id' => (string) $com['id_externo']];
     }
 
-    private function despachar(int $idMsg, array $det, string $modo, string $texto, array $destino, int $idEmpresa): array
+    /**
+     * Respuesta del asistente virtual por mensaje directo. Mismas reglas y mismo
+     * envío en dos tiempos que una persona, salvo que el bot NUNCA usa la
+     * ventana extendida (HUMAN_AGENT): pasadas las 24 h no envía.
+     * $alGuardar corre dentro de la transacción corta, tras guardar el mensaje.
+     */
+    public function enviarComoBot(int $idConv, string $texto, int $idEmpresa, ?callable $alGuardar = null): array
+    {
+        $texto = $this->rules->validarTexto($texto);
+        $prep = $this->enTransaccion(function () use ($idConv, $texto, $idEmpresa, $alGuardar) {
+            if (!$this->conversaciones->bloquear($idConv, $idEmpresa)) {
+                throw new \RuntimeException('Conversación no encontrada.');
+            }
+            $det = $this->conversaciones->getDetalle($idConv, $idEmpresa);
+            $destino = $this->validarDestino($det, 'dm');
+            if (($destino['tag'] ?? null) !== null) {
+                throw new \InvalidArgumentException('Fuera de las 24 h el asistente no puede responder; solo una persona.');
+            }
+            $idMsg = $this->conversaciones->insertarSaliente($idEmpresa, $idConv, 'text', $texto, null, $destino + ['bot' => true], null, 'bot');
+            $this->log->registrar(0, $idEmpresa, 'ENVIAR_MENSAJE', 'crm_mensajes', $idMsg, null,
+                ['id_conversacion' => $idConv, 'modo' => 'dm', 'autor' => 'bot']);
+            if ($alGuardar) $alGuardar($idMsg);
+            return ['id' => $idMsg, 'det' => $det, 'destino' => $destino];
+        });
+        return $this->despachar($prep['id'], $prep['det'], 'dm', $texto, $prep['destino'], $idEmpresa, 'Asistente: ');
+    }
+
+    private function despachar(int $idMsg, array $det, string $modo, string $texto, array $destino, int $idEmpresa, string $prefijo = 'Tú: '): array
     {
         $error = null;
         $idExterno = null;
@@ -212,6 +327,7 @@ class CrmBandejaService
             $api = $this->apiFija ?? InstagramApiService::paraEmpresa($idEmpresa);
             $idExterno = match ($modo) {
                 'dm'      => $api->enviarMensaje($token, (string) $destino['igsid'], $texto, $destino['tag'] ?? null),
+                'imagen'  => $api->enviarImagen($token, (string) $destino['igsid'], ($destino['url'])(self::tokenImagen($idMsg)), $destino['tag'] ?? null),
                 'privada' => $api->respuestaPrivada($token, (string) $destino['comment_id'], $texto),
                 default   => $api->responderComentario($token, (string) $destino['comment_id'], $texto),
             };
@@ -220,7 +336,7 @@ class CrmBandejaService
         }
         $this->conversaciones->resultadoEnvio($idMsg, $idExterno, $error ? 'fallido' : 'enviado', $error);
         if (!$error) {
-            $this->conversaciones->registrarMensaje((int) $det['id'], 'Tú: ' . mb_substr($texto, 0, 120), date('Y-m-d H:i:s'), false);
+            $this->conversaciones->registrarMensaje((int) $det['id'], $prefijo . ($modo === 'imagen' ? '[Imagen]' : mb_substr($texto, 0, 120)), date('Y-m-d H:i:s'), false);
         }
         $m = $this->conversaciones->getMensaje($idMsg, $idEmpresa) ?? ['id' => $idMsg];
         $m['error'] = $error;
