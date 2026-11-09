@@ -244,6 +244,11 @@ class IngresosController extends BaseModuloController
                 require_once $autoload;
             }
 
+            // A4 vertical. Html2Pdf solo respeta el ancho si va en cada celda (th y td).
+            $w = $conProyecto
+                ? ['num' => 13, 'fecha' => 9, 'tipo' => 12, 'recibo' => 19, 'obs' => 16, 'proy' => 12, 'monto' => 9, 'estado' => 10]
+                : ['num' => 13, 'fecha' => 9, 'tipo' => 14, 'recibo' => 22, 'obs' => 23, 'proy' => 0,  'monto' => 9, 'estado' => 10];
+
             ob_start();
 ?>
             <style>
@@ -263,14 +268,14 @@ class IngresosController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 12%">Nº Ingreso</th>
-                            <th style="width: 8%">Fecha</th>
-                            <th style="width: 14%">Tipo</th>
-                            <th style="width: 20%">Recibo de</th>
-                            <th style="width: <?= $conProyecto ? 14 : 26 ?>%">Observaciones</th>
-                            <?php if ($conProyecto): ?><th style="width: 12%">Proyecto</th><?php endif; ?>
-                            <th style="width: 10%" class="text-end">Monto</th>
-                            <th style="width: 10%">Estado</th>
+                            <th style="width: <?= $w['num'] ?>%">Nº Ingreso</th>
+                            <th style="width: <?= $w['fecha'] ?>%">Fecha</th>
+                            <th style="width: <?= $w['tipo'] ?>%">Tipo</th>
+                            <th style="width: <?= $w['recibo'] ?>%">Recibo de</th>
+                            <th style="width: <?= $w['obs'] ?>%">Observaciones</th>
+                            <?php if ($conProyecto): ?><th style="width: <?= $w['proy'] ?>%">Proyecto</th><?php endif; ?>
+                            <th style="width: <?= $w['monto'] ?>%" class="text-end">Monto</th>
+                            <th style="width: <?= $w['estado'] ?>%">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -283,14 +288,14 @@ class IngresosController extends BaseModuloController
                             );
                             ?>
                             <tr>
-                                <td><?= htmlspecialchars((string)($r['numero_ingreso'] ?? '')) ?></td>
-                                <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
-                                <td><?= htmlspecialchars($tipoLabel) ?></td>
-                                <td><?= htmlspecialchars((string)($r['recibo_de'] ?? $r['cliente_nombre'] ?? $r['concepto_nombre'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['observaciones'] ?? '')) ?></td>
-                                <?php if ($conProyecto): ?><td><?= htmlspecialchars((string)($r['proyecto_nombre'] ?? '')) ?></td><?php endif; ?>
-                                <td class="text-end"><?= number_format((float)($r['monto_total'] ?? 0), 2) ?></td>
-                                <td><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
+                                <td style="width: <?= $w['num'] ?>%"><?= htmlspecialchars((string)($r['numero_ingreso'] ?? '')) ?></td>
+                                <td style="width: <?= $w['fecha'] ?>%"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                                <td style="width: <?= $w['tipo'] ?>%"><?= htmlspecialchars($tipoLabel) ?></td>
+                                <td style="width: <?= $w['recibo'] ?>%"><?= htmlspecialchars((string)($r['recibo_de'] ?? $r['cliente_nombre'] ?? $r['concepto_nombre'] ?? '')) ?></td>
+                                <td style="width: <?= $w['obs'] ?>%"><?= htmlspecialchars((string)($r['observaciones'] ?? '')) ?></td>
+                                <?php if ($conProyecto): ?><td style="width: <?= $w['proy'] ?>%"><?= htmlspecialchars((string)($r['proyecto_nombre'] ?? '')) ?></td><?php endif; ?>
+                                <td style="width: <?= $w['monto'] ?>%" class="text-end"><?= number_format((float)($r['monto_total'] ?? 0), 2) ?></td>
+                                <td style="width: <?= $w['estado'] ?>%"><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -299,7 +304,7 @@ class IngresosController extends BaseModuloController
 <?php
             $content = ob_get_clean();
 
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($content);
             $html2pdf->output('Ingresos_' . date('Ymd_His') . '.pdf', 'D');
             exit;
