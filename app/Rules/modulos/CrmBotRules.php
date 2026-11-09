@@ -16,7 +16,7 @@ namespace App\Rules\modulos;
  */
 class CrmBotRules
 {
-    public const SEGUNDOS_AGRUPAR = 20;     // espera para juntar mensajes seguidos del cliente
+    public const SEGUNDOS_AGRUPAR = 8;      // espera para juntar mensajes seguidos del cliente (luego responde el proceso en vivo)
     public const SEGUNDOS_REINTENTO = 120;  // tras un fallo del proveedor
     public const MAX_INTENTOS = 2;          // fallos seguidos antes de pasar a una persona
 

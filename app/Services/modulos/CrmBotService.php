@@ -239,6 +239,47 @@ class CrmBotService
         return $r;
     }
 
+    /** ¿Hay una conversación en cola que vence pronto? (para lanzar el proceso en vivo). */
+    public function hayEnCola(float $dentroDeSegundos = 60.0): bool
+    {
+        if (!$this->disponible()) {
+            return false;
+        }
+        $s = $this->repo->segundosParaProximo();
+        return $s !== null && $s <= $dentroDeSegundos;
+    }
+
+    /**
+     * Proceso en vivo (scripts/crm_asistente_tiempo_real.php): responde cada turno
+     * apenas vence, sin esperar al cron (que corre cada minuto y queda de respaldo).
+     * Sale cuando la cola no tiene nada en los próximos $holgura segundos o al
+     * pasar $maxSegundos. Seguro junto al cron: la cola se toma con SKIP LOCKED.
+     * $dormir: solo pruebas.
+     * @return array{respondidas:int, traspasos:int, omitidas:int, errores:int, vueltas:int}
+     */
+    public function atenderEnVivo(int $maxSegundos = 90, float $holgura = 20.0, ?callable $dormir = null): array
+    {
+        $total = ['respondidas' => 0, 'traspasos' => 0, 'omitidas' => 0, 'errores' => 0, 'vueltas' => 0];
+        if (!$this->disponible()) {
+            return $total;
+        }
+        $dormir ??= static function (float $s): void { usleep((int) round($s * 1_000_000)); };
+        $inicio = microtime(true);
+        while (microtime(true) - $inicio < $maxSegundos) {
+            $total['vueltas']++;
+            foreach ($this->procesarPendientes(20) as $k => $v) {
+                $total[$k] += $v;
+            }
+            $s = $this->repo->segundosParaProximo();
+            if ($s === null || $s > $holgura) {
+                break;
+            }
+            // Espera justo hasta el próximo turno (entre 0,5 y 3 s por vuelta).
+            $dormir(max(0.5, min(3.0, $s)));
+        }
+        return $total;
+    }
+
     /** @return string enviado | traspaso | omitido | error | reintento */
     public function atender(int $idConv, int $idEmpresa): string
     {

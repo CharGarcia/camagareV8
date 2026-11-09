@@ -5,7 +5,7 @@ categoria: Ventas
 tipo: guia
 visibilidad: todos
 etiquetas: asistente virtual, bot, chatbot, bot de instagram, respuesta automatica, responder automaticamente, ia, inteligencia artificial, claude, anthropic, mensajes directos, dm, atencion automatica, fuera de horario, pasar a una persona, traspaso, pausar bot, reactivar bot, probar asistente, consumo ia, costo ia, crm instagram
-version: 1.0
+version: 1.1
 orden: 51
 estado: activo
 ---
@@ -79,8 +79,10 @@ configuración **guardada**:
 
 ## Qué hace en cada mensaje
 
-1. Espera unos **20 segundos** por si el cliente manda varios mensajes seguidos, y
-   los responde juntos. La respuesta llega en alrededor de un minuto.
+1. Espera unos **8 segundos** por si el cliente manda varios mensajes seguidos, y
+   los responde juntos. La respuesta suele llegar en **10 a 20 segundos** (lo que
+   tarda la IA en redactar). Si el servidor no pudo atenderla en ese momento, la
+   responde en la siguiente revisión automática, que corre cada minuto.
 2. Se presenta en su primer mensaje y responde en mensajes cortos.
 3. Para afirmar algo usa solo los documentos de la empresa, el catálogo de
    productos (precio **con IVA**) y lo que usted escribió en «Lo que debe saber».
@@ -148,4 +150,5 @@ le tocan al equipo.
 
 ## Historial de cambios
 
+- **1.1** — Responde más rápido: espera 8 segundos (antes 20) y contesta apenas vence esa espera, sin esperar la revisión de cada minuto.
 - **1.0** — Versión inicial.

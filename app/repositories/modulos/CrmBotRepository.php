@@ -141,7 +141,7 @@ class CrmBotRepository extends BaseRepository
             "UPDATE crm_conversaciones SET bot_pendiente_at = NULL
               WHERE id IN (SELECT cv.id FROM crm_conversaciones cv
                              JOIN empresas em ON em.id = cv.id_empresa AND em.estado = '1' AND em.eliminado = false
-                            WHERE cv.bot_pendiente_at IS NOT NULL AND cv.bot_pendiente_at <= NOW() AND cv.eliminado = false
+                            WHERE cv.bot_pendiente_at IS NOT NULL AND cv.bot_pendiente_at <= clock_timestamp() AND cv.eliminado = false
                             ORDER BY cv.bot_pendiente_at
                             LIMIT " . max(1, min(200, $limite)) . "
                             FOR UPDATE OF cv SKIP LOCKED)
@@ -149,6 +149,25 @@ class CrmBotRepository extends BaseRepository
         );
         $st->execute();
         return array_map(fn($r) => array_map('intval', $r), $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Segundos que faltan para el próximo turno en la cola (0 si ya hay uno vencido),
+     * o null si la cola está vacía. Lo usa el proceso en vivo para saber si espera.
+     */
+    public function segundosParaProximo(): ?float
+    {
+        // clock_timestamp(): reloj real (NOW() se congela dentro de una transacción).
+        // Sin GREATEST en SQL: GREATEST(0, NULL) da 0 en PostgreSQL y una cola vacía
+        // parecería tener un turno vencido.
+        $st = $this->db->query(
+            "SELECT EXTRACT(EPOCH FROM (MIN(cv.bot_pendiente_at) - clock_timestamp()))
+               FROM crm_conversaciones cv
+               JOIN empresas em ON em.id = cv.id_empresa AND em.estado = '1' AND em.eliminado = false
+              WHERE cv.bot_pendiente_at IS NOT NULL AND cv.eliminado = false"
+        );
+        $v = $st->fetchColumn();
+        return $v === null || $v === false ? null : max(0.0, (float) $v);
     }
 
     /** Fallo del proveedor: vuelve a la cola más tarde y cuenta el intento. */

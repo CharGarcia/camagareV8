@@ -84,6 +84,16 @@ class InstagramWebhookController extends Controller
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'procesar', 'id_evento' => $idEvento]);
         }
+        // Asistente virtual en vivo: si el mensaje dejó una conversación en su cola, un
+        // proceso aparte responde apenas vence la espera para agrupar (el cron de cada
+        // minuto queda de respaldo). Uno solo a la vez (candado en el script).
+        try {
+            if (\App\Services\modulos\CrmBotService::crear()->hayEnCola(60.0)) {
+                \App\Helpers\ProcesoSegundoPlano::lanzar('crm_asistente_tiempo_real.php');
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'asistente_en_vivo', 'id_evento' => $idEvento]);
+        }
         exit;
     }
 
