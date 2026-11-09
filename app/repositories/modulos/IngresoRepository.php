@@ -498,8 +498,20 @@ class IngresoRepository extends BaseRepository
      * LATERAL + LIMIT 1: asientos_programados no tiene índice único por referencia, y una regla
      * duplicada no debe duplicar el botón del concepto.
      */
-    public function getConceptosIngreso(int $idEmpresa): array
+    /**
+     * Conceptos ACTIVOS del módulo. Con $soloId devuelve únicamente ese concepto, esté activo o
+     * no: es el concepto de un documento ya guardado (p. ej. migrado y luego desactivado), que
+     * el modal debe seguir mostrando con su cuenta.
+     */
+    public function getConceptosIngreso(int $idEmpresa, ?int $soloId = null): array
     {
+        $filtro = $soloId === null
+            ? "AND o.aplica_ingresos = TRUE AND UPPER(o.estado) = 'ACTIVO'"
+            : 'AND o.id = :solo_id';
+        $params = [':id_empresa' => $idEmpresa];
+        if ($soloId !== null) {
+            $params[':solo_id'] = $soloId;
+        }
         $sql = "SELECT o.*,
                        COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS cuenta_id,
                        pc.codigo AS cuenta_codigo,
@@ -517,11 +529,10 @@ class IngresoRepository extends BaseRepository
                 ) ap ON true
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap.id_cuenta, o.id_cuenta_contable)
                 WHERE o.id_empresa = :id_empresa
-                  AND o.aplica_ingresos = TRUE
-                  AND UPPER(o.estado) = 'ACTIVO'
+                  {$filtro}
                   AND o.eliminado = FALSE
                 ORDER BY o.nombre ASC";
-        return $this->query($sql, [':id_empresa' => $idEmpresa])->fetchAll(PDO::FETCH_ASSOC);
+        return $this->query($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function getFacturasPendientes(int $idCliente, int $idEmpresa, ?int $excluirIngresoId = null): array

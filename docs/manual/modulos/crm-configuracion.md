@@ -50,7 +50,8 @@ Para conectar Instagram:
 La pestaña **Canales** tiene dos secciones plegables: **Instagram (Meta)** y
 **LinkedIn**. Cada una reúne la app de la empresa y sus cuentas conectadas, y su
 encabezado resume cuántas hay conectadas (y si alguna tiene el acceso vencido)
-aunque esté cerrada. El sistema recuerda en ese navegador qué sección dejó cerrada.
+aunque esté cerrada. Las secciones empiezan **cerradas**; pulse su encabezado para
+abrirla. El sistema recuerda en ese navegador cuáles dejó abiertas.
 
 ### Registrar la app de Meta de la empresa
 

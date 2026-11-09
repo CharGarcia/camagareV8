@@ -930,6 +930,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
     })();
 
+    /**
+     * Concepto de un ingreso ya guardado que NO está en el combo (el combo solo trae los activos;
+     * típico: el concepto de la migración, desactivado después). Se agrega como opción temporal
+     * —con su cuenta contable— para que el modal lo muestre y preste la cuenta a las líneas de
+     * «otros conceptos». Con null (documento nuevo u otro documento) solo limpia la anterior.
+     */
+    function ingMostrarConceptoDocumento(c) {
+        const sel    = document.getElementById('m-select-concepto');
+        const selGen = document.getElementById('m-select-concepto-general');
+        [sel, selGen].forEach(s => s && s.querySelectorAll('option[data-temporal]').forEach(o => o.remove()));
+        if (!c || !sel || [...sel.options].some(o => o.value == c.id)) return;
+        const inactivo = String(c.estado || '').toUpperCase() !== 'ACTIVO';
+        const opt = new Option(c.nombre || '', c.id);
+        opt.dataset.temporal      = '1';
+        opt.dataset.comportamiento = c.comportamiento || 'GENERAL';
+        opt.dataset.cuentaId      = c.cuenta_id || 0;
+        opt.dataset.cuentaCodigo  = c.cuenta_codigo || '';
+        opt.dataset.cuentaNombre  = c.cuenta_nombre || '';
+        sel.add(opt);
+        if (selGen) {
+            const optGen = new Option((c.nombre || '') + (inactivo ? ' (inactivo)' : ''), c.id);
+            optGen.dataset.temporal = '1';
+            selGen.add(optGen);
+        }
+    }
+
     function sincronizarBotonesConcepto(id) {
         document.querySelectorAll('.concepto-ingreso-btn').forEach(btn => {
             const activo = btn.dataset.id == id;
@@ -2132,6 +2158,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // Ingreso nuevo: volver a preguntar qué conceptos tienen documentos pendientes (al ver uno
         // guardado no, para no esconder el botón de su propio concepto mientras se carga).
         if (!desdeVer) ingRefrescarConceptosConPendientes();
+        if (!desdeVer) ingMostrarConceptoDocumento(null); // quita el concepto inactivo del documento anterior
         // Reset form UI
         document.getElementById('modalIngresoTitulo').textContent = 'Registrar Nuevo Ingreso';
         const iconEl = document.getElementById('modalIngresoIcono');
@@ -2606,6 +2633,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
                 const comp = ing.tipo_ingreso || 'GENERAL';
                 document.getElementById('m-input-tipo-ingreso').value = comp;
+                ingMostrarConceptoDocumento(ing.concepto_documento); // concepto inactivo: igual se muestra
                 document.getElementById('m-select-concepto').value = ing.id_ingreso_concepto;
                 sincronizarBotonesConcepto(ing.id_ingreso_concepto);
                 document.getElementById('m-input-observaciones').value = ing.observaciones || '';
@@ -2682,6 +2710,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         cuenta_codigo: d.cuenta_codigo || '',
                         cuenta_nombre: d.cuenta_nombre || ''
                     }));
+                // Línea guardada sin cuenta (migrada): se muestra la del concepto, que es la que
+                // usa el asiento para ella.
+                ingAplicarCuentaConceptoALineas();
 
                 // Reconstruir docPendientes agrupando por documento (varias filas = cobro por ítems)
                 docPendientes = [];

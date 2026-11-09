@@ -89,25 +89,28 @@
         resumen(li, 'crmc-badge-linkedin');
     }
 
-    /** Recuerda en este navegador qué secciones del acordeón de Canales dejó cerradas el usuario. */
+    /**
+     * Acordeón de Canales: las secciones empiezan cerradas; se recuerda en este
+     * navegador cuáles dejó abiertas el usuario.
+     */
     function iniciarAcordeon() {
-        const CLAVE = 'crmc_canales_cerradas';
-        let cerradas = [];
-        try { cerradas = JSON.parse(localStorage.getItem(CLAVE) || '[]') || []; } catch (e) { cerradas = []; }
+        const CLAVE = 'crmc_canales_abiertas';
+        let abiertas = [];
+        try { abiertas = JSON.parse(localStorage.getItem(CLAVE) || '[]') || []; } catch (e) { abiertas = []; }
         document.querySelectorAll('#crmc-acordeon-canales .accordion-item').forEach((item) => {
             const sec = item.dataset.seccion;
             const panel = item.querySelector('.accordion-collapse');
             const boton = item.querySelector('.accordion-button');
             if (!panel || !boton) return;
-            if (cerradas.includes(sec)) {
-                panel.classList.remove('show');
-                boton.classList.add('collapsed');
-                boton.setAttribute('aria-expanded', 'false');
+            if (abiertas.includes(sec)) {
+                panel.classList.add('show');
+                boton.classList.remove('collapsed');
+                boton.setAttribute('aria-expanded', 'true');
             }
             const guardar = (abierta) => {
-                cerradas = cerradas.filter((s) => s !== sec);
-                if (!abierta) cerradas.push(sec);
-                try { localStorage.setItem(CLAVE, JSON.stringify(cerradas)); } catch (e) { /* sin almacenamiento */ }
+                abiertas = abiertas.filter((s) => s !== sec);
+                if (abierta) abiertas.push(sec);
+                try { localStorage.setItem(CLAVE, JSON.stringify(abiertas)); } catch (e) { /* sin almacenamiento */ }
             };
             panel.addEventListener('shown.bs.collapse', () => guardar(true));
             panel.addEventListener('hidden.bs.collapse', () => guardar(false));

@@ -70,6 +70,10 @@ class IngresoService
         // Enriquecer las líneas manuales con la cuenta contable usada en el asiento (si existe),
         // para que la grilla del modal muestre la cuenta elegida al reabrir.
         $this->enriquecerCuentasDetalle($ingreso, $id, $idEmpresa);
+        // Concepto del documento aunque esté INACTIVO (no viene en el combo del modal, que solo
+        // lista los activos): el modal lo agrega para mostrarlo y prestar su cuenta a las líneas.
+        $idConcepto = (int) ($ingreso['id_ingreso_concepto'] ?? 0);
+        $ingreso['concepto_documento'] = $idConcepto > 0 ? ($this->getConceptosIngreso($idEmpresa, $idConcepto)[0] ?? null) : null;
 
         return $ingreso;
     }
@@ -553,7 +557,7 @@ class IngresoService
         return $this->repository->usaProyecto() ? (new \App\repositories\modulos\ProyectoRepository())->getParaFiltro($idEmpresa) : [];
     }
 
-    public function getConceptosIngreso(int $idEmpresa): array
+    public function getConceptosIngreso(int $idEmpresa, ?int $soloId = null): array
     {
         $programadoRepo = new AsientoProgramadoRepository();
         return array_map(static function (array $c) use ($programadoRepo): array {
@@ -563,7 +567,7 @@ class IngresoService
                 $c['cuenta_nombre'] = null;
             }
             return $c;
-        }, $this->repository->getConceptosIngreso($idEmpresa));
+        }, $this->repository->getConceptosIngreso($idEmpresa, $soloId));
     }
 
     public function getFacturasPendientes(int $idCliente, int $idEmpresa, ?int $excluirIngresoId = null): array

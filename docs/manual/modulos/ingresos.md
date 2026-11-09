@@ -627,6 +627,13 @@ misma revisión al guardar:
   el aviso «El concepto de este ingreso no tiene cuenta contable asignada». Ese
   cobro va a la **Cuenta por Cobrar** de Configuración Contable → Ventas con
   Factura (o Recibos de Venta), igual que el de una factura sin asiento propio.
+  Si ese ingreso trae además líneas de otros conceptos, toman la cuenta del
+  concepto **Otros ingresos (migración)**, esté activo o no. Al abrir un ingreso
+  cuyo concepto está **inactivo**, el concepto se muestra igual (marcado
+  «inactivo») y sus líneas sin cuenta muestran la del concepto. En la pestaña
+  **Asiento contable** de un ingreso sin asiento, lo que el sistema no pudo
+  resolver aparece como una última línea con su monto y sin cuenta: solo hay que
+  elegirla.
 - **3.25** — El PDF del listado de ingresos sale en hoja A4 vertical (antes
   horizontal).
 - **3.24** — Con una sola forma de cobro ya no hace falta pulsar **+**: al

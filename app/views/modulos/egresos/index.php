@@ -1013,6 +1013,32 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
     })();
 
+    /**
+     * Concepto de un egreso ya guardado que NO está en el combo (el combo solo trae los activos;
+     * típico: el concepto de la migración, desactivado después). Se agrega como opción temporal
+     * —con su cuenta contable— para que el modal lo muestre y preste la cuenta a las líneas de
+     * «otros conceptos». Con null (documento nuevo u otro documento) solo limpia la anterior.
+     */
+    function egMostrarConceptoDocumento(c) {
+        const sel    = document.getElementById('eg-select-concepto');
+        const selGen = document.getElementById('eg-select-concepto-general');
+        [sel, selGen].forEach(s => s && s.querySelectorAll('option[data-temporal]').forEach(o => o.remove()));
+        if (!c || !sel || [...sel.options].some(o => o.value == c.id)) return;
+        const inactivo = String(c.estado || '').toUpperCase() !== 'ACTIVO';
+        const opt = new Option(c.nombre || '', c.id);
+        opt.dataset.temporal      = '1';
+        opt.dataset.comportamiento = c.comportamiento || 'GENERAL';
+        opt.dataset.cuentaId      = c.cuenta_id || 0;
+        opt.dataset.cuentaCodigo  = c.cuenta_codigo || '';
+        opt.dataset.cuentaNombre  = c.cuenta_nombre || '';
+        sel.add(opt);
+        if (selGen) {
+            const optGen = new Option((c.nombre || '') + (inactivo ? ' (inactivo)' : ''), c.id);
+            optGen.dataset.temporal = '1';
+            selGen.add(optGen);
+        }
+    }
+
     function sincronizarBotonesConceptoEgreso(id) {
         document.querySelectorAll('.concepto-egreso-btn').forEach(btn => {
             const activo = btn.dataset.id == id;
@@ -2215,6 +2241,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     });
 
     function abrirModalEgreso(esNuevo = true) {
+        if (esNuevo) egMostrarConceptoDocumento(null); // quita el concepto inactivo del documento anterior
         egNavId = null;
         egNavFoto = null;
         egNavActualizar();
@@ -2613,6 +2640,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             egSeleccionarProyecto(e);
             const comp = e.tipo_egreso || 'GENERAL';
             document.getElementById('eg-input-tipo-egreso').value = comp;
+            egMostrarConceptoDocumento(e.concepto_documento); // concepto inactivo: igual se muestra
             document.getElementById('eg-select-concepto').value = e.id_egreso_concepto;
             sincronizarBotonesConceptoEgreso(e.id_egreso_concepto);
             setConceptoEgresoBotonesDisabled(true); // En modo ver/editar el concepto es de solo lectura
@@ -2636,6 +2664,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     cuenta_codigo: d.cuenta_codigo || '',
                     cuenta_nombre: d.cuenta_nombre || ''
                 }));
+            // Línea guardada sin cuenta (migrada): se muestra la del concepto, que es la que usa
+            // el asiento para ella.
+            egAplicarCuentaConceptoALineas();
 
             // Hidratar docsEgreso agrupando por documento (varias filas = pago por ítems)
             docsEgreso = [];

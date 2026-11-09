@@ -340,6 +340,37 @@ class AsientoBuilderService
      */
     private array $motivosFaltantes = [];
 
+    /** contrapartidaPorCuenta: alguna línea manual («otros conceptos») quedó sin cuenta. */
+    private bool $lineaManualSinCuenta = false;
+
+    /**
+     * Concepto «Otros ingresos/egresos (migración)» de la empresa, esté activo o no. El migrador
+     * se lo pone a los documentos que SOLO traen otros conceptos; los que además cobran/pagan
+     * facturas quedan sin concepto de cabecera y sus líneas de otros conceptos, sin cuenta. Para
+     * esas líneas se usa la cuenta de este concepto: es la que el usuario ya configuró para lo
+     * migrado. Misma lectura que la cabecera: manda el asiento programado, respalda la columna.
+     *
+     * @return array{nombre:string,estado:string,id_cuenta:int}|null
+     */
+    private function conceptoMigracionRespaldo(\PDO $db, int $idEmpresa, string $flujo): ?array
+    {
+        $st = $db->prepare("SELECT o.nombre, o.estado, COALESCE(ap.id_cuenta, o.id_cuenta_contable) AS id_cuenta
+                              FROM empresa_opciones_ingreso_egreso o
+                              LEFT JOIN asientos_programados ap ON ap.id_referencia = o.id
+                                                               AND ap.tipo_referencia = :tipo_ref
+                                                               AND ap.id_empresa = o.id_empresa
+                                                               AND ap.eliminado = false
+                             WHERE o.id_empresa = :emp AND o.nombre = :nombre AND o.eliminado = false
+                             ORDER BY o.id LIMIT 1");
+        $st->execute([
+            ':tipo_ref' => $flujo === 'egreso' ? 'opcion_egreso' : 'opcion_ingreso',
+            ':emp'      => $idEmpresa,
+            ':nombre'   => $flujo === 'egreso' ? 'Otros egresos (migración)' : 'Otros ingresos (migración)',
+        ]);
+        $r = $st->fetch(\PDO::FETCH_ASSOC);
+        return $r ? ['nombre' => (string) $r['nombre'], 'estado' => (string) $r['estado'], 'id_cuenta' => (int) $r['id_cuenta']] : null;
+    }
+
     /** Motivos registrados al armar el último asiento (sin repetidos). */
     public function getMotivosFaltantes(): array
     {
@@ -4677,6 +4708,11 @@ class AsientoBuilderService
             $conceptoIdCuenta = $oficialIngreso['id_cuenta'];
         }
 
+        // Sin concepto de cabecera (migrado que cobra facturas): sus líneas de «otros conceptos»
+        // toman la cuenta del concepto de migración (ver conceptoMigracionRespaldo).
+        $sinConceptoCabecera = ($ingreso['concepto_nombre'] ?? null) === null;
+        $respaldoLineas = $sinConceptoCabecera ? $this->conceptoMigracionRespaldo($db, $idEmpresa, 'ingreso') : null;
+
         // ── DEBE: formas de cobro (banco/caja) → config Cobros/Pagos ──
         [$detalles, $totalMovido] = $this->lineasFormas($idEmpresa, $idIngreso, 'ingreso');
         if ($totalMovido <= 0) {
@@ -4722,12 +4758,25 @@ class AsientoBuilderService
                 $db, $idEmpresa, $idIngreso, 'ingreso',
                 $conceptoIdCuenta,
                 $refCarteraNoResuelta !== '' ? $refCarteraNoResuelta : (string) ($ingreso['concepto_nombre'] ?? 'Ingreso'),
-                $restante, $detallesConCuenta
+                $restante, $detallesConCuenta,
+                (int) ($respaldoLineas['id_cuenta'] ?? 0)
             );
             // Igual que en el egreso: el trozo no cubierto es el hueco del Haber (ver comentario
             // en generarAsientoEgreso).
             $cubierto = round(array_sum(array_column($contrapartida, 'monto')), 2);
-            if ($cubierto < round($restante, 2) - 0.005) {
+            if ($cubierto < round($restante, 2) - 0.005 && $sinConceptoCabecera && $this->lineaManualSinCuenta) {
+                // Documento sin concepto de cabecera con líneas de «otros conceptos» sin cuenta:
+                // lo que falta es la cuenta de esas líneas, no la cartera.
+                if ($respaldoLineas !== null) {
+                    $this->registrarFaltanteContrapartida(
+                        'ingreso', 'GENERAL', (string) $respaldoLineas['nombre'],
+                        strtoupper(trim((string) $respaldoLineas['estado'])) === 'INACTIVO'
+                    );
+                } else {
+                    $this->registrarFaltante('Las líneas de «otros conceptos» de este ingreso no tienen cuenta contable: '
+                        . 'abra el documento y elija la cuenta en cada línea.');
+                }
+            } elseif ($cubierto < round($restante, 2) - 0.005) {
                 $this->registrarFaltanteContrapartida(
                     'ingreso',
                     // Sin concepto de cabecera (migrados): el tipo del documento dice de qué sección sale la cuenta.
@@ -4888,6 +4937,8 @@ class AsientoBuilderService
         //    Cuenta por Pagar que el documento acreditó en su propio asiento al registrarse
         //    (puede estar repartida en varias cuentas por línea/Producto/Categoría/Marca — ver
         //    contrapartidaCarteraCompras), no la cuenta del concepto elegido en el egreso.
+        $sinConceptoCabecera = ($egreso['concepto_nombre'] ?? null) === null;
+        $respaldoLineas = $sinConceptoCabecera ? $this->conceptoMigracionRespaldo($db, $idEmpresa, 'egreso') : null;
         [$lineasCartera, $totalCartera, $refCarteraNoResuelta, $montoNoResuelto, $docsNoResueltos] = $this->contrapartidaCarteraCompras($db, $idEmpresa, $idEgreso);
         if ($totalCartera > 0) {
             foreach ($lineasCartera as $l) {
@@ -4921,13 +4972,26 @@ class AsientoBuilderService
                 $db, $idEmpresa, $idEgreso, 'egreso',
                 $conceptoIdCuenta,
                 $refCarteraNoResuelta !== '' ? $refCarteraNoResuelta : (string) ($egreso['concepto_nombre'] ?? 'Egreso'),
-                $restante, $detallesConCuenta
+                $restante, $detallesConCuenta,
+                (int) ($respaldoLineas['id_cuenta'] ?? 0)
             );
             // Lo que la contrapartida no llegó a cubrir es exactamente el hueco del Debe. Se anota
             // qué cuenta faltó para poder explicarlo (el motivo depende del comportamiento del
             // concepto: cartera de compras, nómina o la cuenta libre del propio concepto).
             $cubierto = round(array_sum(array_column($contrapartida, 'monto')), 2);
-            if ($cubierto < round($restante, 2) - 0.005) {
+            if ($cubierto < round($restante, 2) - 0.005 && $sinConceptoCabecera && $this->lineaManualSinCuenta) {
+                // Documento sin concepto de cabecera con líneas de «otros conceptos» sin cuenta:
+                // lo que falta es la cuenta de esas líneas, no la cartera.
+                if ($respaldoLineas !== null) {
+                    $this->registrarFaltanteContrapartida(
+                        'egreso', 'GENERAL', (string) $respaldoLineas['nombre'],
+                        strtoupper(trim((string) $respaldoLineas['estado'])) === 'INACTIVO'
+                    );
+                } else {
+                    $this->registrarFaltante('Las líneas de «otros conceptos» de este egreso no tienen cuenta contable: '
+                        . 'abra el documento y elija la cuenta en cada línea.');
+                }
+            } elseif ($cubierto < round($restante, 2) - 0.005) {
                 $this->registrarFaltanteContrapartida(
                     'egreso',
                     // Sin concepto de cabecera (migrados): el tipo del documento dice de qué sección sale la cuenta.
@@ -6058,8 +6122,14 @@ class AsientoBuilderService
      */
     private function contrapartidaPorCuenta(
         \PDO $db, int $idEmpresa, int $idDocumento, string $flujo,
-        int $conceptoCuenta, string $conceptoNombre, float $totalMovido, array $detallesModal
+        int $conceptoCuenta, string $conceptoNombre, float $totalMovido, array $detallesModal,
+        int $cuentaRespaldoLineas = 0
     ): array {
+        $this->lineaManualSinCuenta = false;
+        // Cuenta de una línea manual que no trae la suya: la del concepto de cabecera y, si el
+        // documento no tiene concepto (migrado), la del concepto de migración. Ese respaldo es
+        // SOLO para las líneas manuales: el saldo de cartera sin resolver no lo usa.
+        $cuentaLineaDefecto = $conceptoCuenta > 0 ? $conceptoCuenta : $cuentaRespaldoLineas;
         $esEgreso   = ($flujo === 'egreso');
         $tablaDet   = $esEgreso ? 'egresos_detalle' : 'ingresos_detalle';
         $colDoc     = $esEgreso ? 'id_egreso' : 'id_ingreso';
@@ -6126,8 +6196,8 @@ class AsientoBuilderService
             // (registrarFaltanteContrapartida), que sabe de qué sección de Configuración Contable
             // debía salir esa cuenta; anotarlo también aquí solo repetiría el mismo aviso.
             $ctaLinea = (int) ($row['id_cuenta_contable'] ?? 0);
-            $cta = $ctaLinea > 0 ? $ctaLinea : ($mapaCuenta[$desc] ?? $conceptoCuenta);
-            if ($cta <= 0) { $faltaCuenta = true; continue; } // sin cuenta → descuadre intencional
+            $cta = $ctaLinea > 0 ? $ctaLinea : ($mapaCuenta[$desc] ?? $cuentaLineaDefecto);
+            if ($cta <= 0) { $faltaCuenta = true; $this->lineaManualSinCuenta = true; continue; } // sin cuenta → descuadre intencional
             if (!isset($grupos[$cta])) {
                 $grupos[$cta] = ['id_cuenta' => $cta, 'monto' => 0.0, 'referencia' => $desc !== '' ? $desc : $conceptoNombre];
             }

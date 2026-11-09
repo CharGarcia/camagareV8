@@ -196,6 +196,10 @@ class EgresoService
         // Enriquecer las líneas manuales con la cuenta contable usada en el asiento (si existe),
         // para que la grilla del modal muestre la cuenta elegida al reabrir.
         $this->enriquecerCuentasDetalle($egreso, $id, $idEmpresa);
+        // Concepto del documento aunque esté INACTIVO (no viene en el combo del modal, que solo
+        // lista los activos): el modal lo agrega para mostrarlo y prestar su cuenta a las líneas.
+        $idConcepto = (int) ($egreso['id_egreso_concepto'] ?? 0);
+        $egreso['concepto_documento'] = $idConcepto > 0 ? ($this->getConceptosEgreso($idEmpresa, $idConcepto)[0] ?? null) : null;
         return $egreso;
     }
 
@@ -846,7 +850,7 @@ class EgresoService
         return $this->repository->usaProyecto() ? (new \App\repositories\modulos\ProyectoRepository())->getParaFiltro($idEmpresa) : [];
     }
 
-    public function getConceptosEgreso(int $idEmpresa): array
+    public function getConceptosEgreso(int $idEmpresa, ?int $soloId = null): array
     {
         $programadoRepo = new AsientoProgramadoRepository();
         return array_map(static function (array $c) use ($programadoRepo): array {
@@ -856,7 +860,7 @@ class EgresoService
                 $c['cuenta_nombre'] = null;
             }
             return $c;
-        }, $this->repository->getConceptosEgreso($idEmpresa));
+        }, $this->repository->getConceptosEgreso($idEmpresa, $soloId));
     }
 
     public function getDocumentosPendientesProveedor(int $idProveedor, int $idEmpresa): array

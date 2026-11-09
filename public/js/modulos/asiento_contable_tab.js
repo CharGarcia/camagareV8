@@ -636,12 +636,19 @@
                         d.documento_referencia || d.referencia_detalle || d.referencia || '',
                         { id_centro_costo: d.id_centro_costo, id_proyecto: d.id_proyecto }
                     ));
+                    // Lo que el sistema no pudo resolver se propone como UNA línea ya con su monto
+                    // y sin cuenta: se ven las cuentas que sí están configuradas y solo queda
+                    // elegir la que falta (antes había que agregar esa línea a mano).
+                    const dif = parseFloat(json.diferencia || 0);
+                    const hayFaltante = Math.abs(dif) >= 0.005;
+                    if (hayFaltante) {
+                        agregarLinea('', '', '', dif < 0 ? Math.abs(dif) : 0, dif > 0 ? dif : 0, '');
+                    }
                     if (!filas().length) placeholder('<i class="bi bi-info-circle me-1"></i> Agregue las l&iacute;neas del asiento.');
                     manual = false;
                     recalcular();
-                    const dif = parseFloat(json.diferencia || 0);
-                    const falta = Math.abs(dif) >= 0.005
-                        ? ' Falta ' + Math.abs(dif).toFixed(2) + ' al ' + (dif < 0 ? 'Debe' : 'Haber') + ': agregue esa l&iacute;nea con la cuenta que corresponda.'
+                    const falta = hayFaltante
+                        ? ' La &uacute;ltima l&iacute;nea (' + Math.abs(dif).toFixed(2) + ' al ' + (dif < 0 ? 'Debe' : 'Haber') + ') es la que falta: elija su cuenta contable.'
                         : '';
                     const esc = (s) => String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
                     if (json.mensaje_manual) {

@@ -765,7 +765,12 @@ proveedores), pasa por la misma revisión al guardar:
 - **1.54** — Egresos migrados que pagan compras o liquidaciones que no se
   migraron (la línea no tiene documento enlazado): ese pago va a la **Cuenta por
   Pagar** de Configuración Contable → Adquisiciones de Compras/Servicios, en vez
-  de dejar el asiento incompleto por «concepto sin cuenta contable».
+  de dejar el asiento incompleto por «concepto sin cuenta contable». Las líneas
+  de otros conceptos de esos egresos toman la cuenta del concepto **Otros egresos
+  (migración)**, esté activo o no. Un egreso cuyo concepto está **inactivo** lo
+  muestra igual al abrirlo (marcado «inactivo»). En la pestaña **Asiento
+  contable** de un egreso sin asiento, lo que falta aparece como una última línea
+  con su monto y sin cuenta: solo hay que elegirla.
 - **1.53** — Con una sola forma de pago ya no hace falta pulsar **+**: al
   guardar (o actualizar), la forma y el monto que quedaron en la fila de captura
   se agregan solos. Si las formas de pago no cubren el total, se abre la pestaña
