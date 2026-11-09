@@ -200,6 +200,7 @@
         unaVez(async () => {
             const r = await api('regenerarTokenMetaAjax', { post: {} });
             $('crmc-verify-token').value = r.app.verify_token;
+            if ($('crmc-verify-token-guia')) $('crmc-verify-token-guia').value = r.app.verify_token;
             toast(r.mensaje);
         });
     }

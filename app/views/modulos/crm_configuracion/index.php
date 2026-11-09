@@ -80,10 +80,65 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                     <span class="badge <?= $app['configurada'] ? 'bg-success' : 'bg-secondary' ?>" id="crmc-app-estado"><?= $app['configurada'] ? 'Registrada' : 'Sin registrar' ?></span>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">Cree la app en <strong>developers.facebook.com</strong> (caso de uso «Administrar mensajes y contenido en Instagram»)
-                        y copie aquí su <strong>App ID</strong> y <strong>App Secret</strong> (Configuración de la app → Básica) y el
-                        <strong>ID de configuración</strong> de inicio de sesión. Luego registre en la app las direcciones de abajo.
-                        Guía completa: manual <em>App de Meta para Instagram</em>.</p>
+                    <?php
+                    // Campo de solo lectura con botón Copiar (usa CRMC.copiar).
+                    $copiable = static function (string $valor, string $id = '') use ($h): string {
+                        return '<div class="input-group input-group-sm my-1" style="max-width:640px;"><input type="text" class="form-control font-monospace" readonly'
+                            . ($id !== '' ? ' id="' . $h($id) . '"' : '') . ' value="' . $h($valor) . '">'
+                            . '<button class="btn btn-outline-secondary" type="button" onclick="CRMC.copiar(this)" title="Copiar"><i class="bi bi-clipboard"></i></button></div>';
+                    };
+                    $urlManual = url_absoluta('documentacion?slug=' . rawurlencode('guias/instagram-app-meta'));
+                    ?>
+                    <p class="small text-muted mb-2">Cada empresa usa su propia app de Meta. Siga el <strong>paso a paso</strong> (abajo) para crearla
+                        en <strong>developers.facebook.com</strong> y copie aquí su <strong>App ID</strong>, <strong>App Secret</strong> e
+                        <strong>ID de configuración</strong>. Guía completa:
+                        <a href="<?= $h($urlManual) ?>" target="_blank" rel="noopener">App de Meta para Instagram</a>.</p>
+
+                    <!-- Paso a paso en pantalla (Unified login, apps de Meta desde nov. 2026). Las direcciones se muestran
+                         desde el inicio: la de redirección hace falta en Meta ANTES de tener el ID de configuración. -->
+                    <div class="mb-3">
+                        <button class="btn btn-outline-primary btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#crmc-guia-meta"
+                                aria-expanded="<?= $app['configurada'] ? 'false' : 'true' ?>" aria-controls="crmc-guia-meta">
+                            <i class="bi bi-list-ol me-1"></i>Paso a paso para configurar la app en Meta
+                        </button>
+                        <div class="collapse <?= $app['configurada'] ? '' : 'show' ?>" id="crmc-guia-meta">
+                            <div class="border rounded-3 bg-light p-3 mt-2 small" style="max-width:980px;">
+                                <ol class="mb-0 ps-3 d-flex flex-column gap-2">
+                                    <li><strong>Crear la app.</strong> En <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener">developers.facebook.com → Mis apps</a>
+                                        pulse <em>Crear app</em>. Nombre sin «Instagram», «Facebook», «Meta» ni «WhatsApp» (Meta lo rechaza), p. ej. «MiEmpresa CRM».
+                                        Caso de uso: <strong>Administrar mensajes y contenido en Instagram</strong>. Portafolio comercial: el de la empresa.
+                                        Si la empresa ya tiene una app para WhatsApp, cree <strong>otra</strong> para el CRM.</li>
+                                    <li><strong>Crear la configuración de inicio de sesión.</strong> En la app: <em>Casos de uso → Administrar mensajes y contenido en
+                                        Instagram → Personalizar → API setup with Unified login → Crear nueva configuración</em>. Identificador: <strong>usuario del sistema</strong>,
+                                        caducidad <strong>Nunca</strong>, activo <strong>Cuentas de Instagram</strong>. Permisos: <code>instagram_basic</code>,
+                                        <code>instagram_manage_messages</code>, <code>instagram_manage_comments</code>, <code>instagram_content_publish</code> e
+                                        <code>instagram_manage_insights</code> (este último da las métricas; quite <code>ads_management</code> y <code>ads_read</code>
+                                        si puede). En <strong>URL de redirección</strong> registre y <strong>seleccione</strong> esta dirección:
+                                        <?= $copiable((string) $urlsMeta['oauth']) ?>
+                                        Meta genera una <em>URL de inicio de sesión</em>: el número después de <code>config_id=</code> es el <strong>ID de configuración</strong>.</li>
+                                    <li><strong>Registrar la app aquí.</strong> <em>App ID</em> y <em>App Secret</em> están en <em>Configuración de la app → Básica</em>
+                                        (pulse «Mostrar» en la clave secreta). Escríbalos abajo con el <em>ID de configuración</em> y pulse <strong>Guardar</strong>.</li>
+                                    <li><strong>Webhook.</strong> En <em>API setup with Unified login → Configurar webhooks</em>, pegue en
+                                        <em>URL de devolución de llamada</em>: <?= $copiable((string) $urlsMeta['webhook']) ?>
+                                        y en <em>Identificador de verificación</em> el token
+                                        <?= $app['configurada'] ? $copiable((string) $app['verify_token'], 'crmc-verify-token-guia') :'<span class="text-body-tertiary">(aparece al guardar la app en el paso 3)</span>' ?>
+                                        Pulse <em>Verificar y guardar</em> y suscriba los campos <strong>messages</strong>, <strong>messaging_seen</strong> y <strong>comments</strong>.</li>
+                                    <li><strong>Eliminación de datos.</strong> En <em>Configuración de la app → Básica</em>, como URL de eliminación de datos:
+                                        <?= $copiable((string) $urlsMeta['eliminar']) ?></li>
+                                    <li><strong>Cuenta para probar.</strong> Mientras la app no esté publicada, solo funcionan las cuentas con rol: en
+                                        <em>API setup with Unified login → Generar identificadores de acceso → Añadir cuenta</em>, agregue la cuenta de Instagram
+                                        de la empresa como <strong>Evaluador de Instagram</strong> y acepte la invitación en
+                                        <a href="https://www.instagram.com/accounts/manage_access/" target="_blank" rel="noopener">instagram.com → Apps y sitios web → Invitaciones de evaluador</a>.
+                                        No hace falta generar ni copiar ningún token en Meta.</li>
+                                    <li><strong>Conectar.</strong> Pulse <strong>Conectar Instagram</strong> (abajo), elija el portafolio comercial y la cuenta, y acepte.
+                                        Solo se pueden responder los mensajes que lleguen <strong>después</strong> de conectar.</li>
+                                    <li><strong>Para clientes sin rol en la app</strong> hay que pasar la <em>revisión de la app</em> de Meta (App Review) y publicarla (modo Live).</li>
+                                </ol>
+                                <div class="text-muted mt-2">Si su app es anterior a noviembre de 2026 y tiene «API setup with Instagram login», use el
+                                    <em>Instagram</em> App ID y Secret y deje vacío el ID de configuración (ver el manual).</div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="row g-2 align-items-end mb-1" style="max-width:980px;">
                         <div class="col-md-3">
                             <label class="form-label small fw-bold mb-1">App ID</label>

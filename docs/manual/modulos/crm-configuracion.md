@@ -49,6 +49,11 @@ Para conectar Instagram:
 
 ### Registrar la app de Meta de la empresa
 
+La tarjeta trae el botón **Paso a paso para configurar la app en Meta** (abierto
+mientras la app no está registrada): los pasos en Meta, en orden, con cada
+dirección que hay que pegar allá y su botón para copiar, incluida la **URL de
+redirección**, que se necesita antes de tener el ID de configuración.
+
 Cada empresa usa su propia app de Meta. En **Canales → App de Meta de la
 empresa**:
 
@@ -236,7 +241,7 @@ catálogos.
 
 ## Historial de cambios
 
-- **1.4** — **Unified login** (apps de Meta nuevas): campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
+- **1.4** — **Unified login** (apps de Meta nuevas): **paso a paso en pantalla** para configurar la app en Meta, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
 - **1.3** — **LinkedIn**: app de la empresa y conexión de perfil y páginas (solo
   para publicar). Aviso para reconectar Instagram y dar los permisos de publicar y
   de estadísticas.
