@@ -678,32 +678,16 @@ class IngresoService
         if (empty($ingreso['detalles'])) {
             return;
         }
-        $asiento = $this->asientoContableService()->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa);
+        // El asiento del documento: el generado por el módulo o, si viene de la migración, el
+        // enlazado en id_asiento_contable (modulo_origen 'migracion', que el primero no encuentra).
+        $svc = $this->asientoContableService();
+        $asiento = $svc->getAsientoPorOrigen('ingreso', $idIngreso, $idEmpresa)
+            ?: $svc->getAsientoMigradoParaMostrar('ingreso', $idIngreso, $idEmpresa);
         if (!$asiento || empty($asiento['detalles'])) {
             return;
         }
-        $mapa = [];
-        foreach ($asiento['detalles'] as $ad) {
-            if ((float) ($ad['haber'] ?? 0) <= 0) continue; // contrapartida del ingreso = lado Haber
-            $ref = trim((string) ($ad['referencia_detalle'] ?? ''));
-            if ($ref === '' || isset($mapa[$ref])) continue;
-            $mapa[$ref] = [
-                'id'     => (int) ($ad['id_cuenta_contable'] ?? 0),
-                'codigo' => $ad['codigo_cuenta'] ?? '',
-                'nombre' => $ad['nombre_cuenta'] ?? '',
-            ];
-        }
-        foreach ($ingreso['detalles'] as &$d) {
-            if (($d['tipo_documento'] ?? '') !== 'OTRO') continue;
-            if (!empty($d['id_cuenta_contable'])) continue; // ya viene persistido, no inferir
-            $ref = trim((string) ($d['descripcion'] ?? ''));
-            if (isset($mapa[$ref])) {
-                $d['id_cuenta_contable'] = $mapa[$ref]['id'];
-                $d['cuenta_codigo']      = $mapa[$ref]['codigo'];
-                $d['cuenta_nombre']      = $mapa[$ref]['nombre'];
-            }
-        }
-        unset($d);
+        // Contrapartida del ingreso = lado Haber. Las líneas con cuenta guardada no se tocan.
+        \App\Helpers\CuentasDetalleDesdeAsiento::aplicar($ingreso['detalles'], $asiento['detalles'], 'haber', 'OTRO', 'monto_cobrado');
     }
 
     /**

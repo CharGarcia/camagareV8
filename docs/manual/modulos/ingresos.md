@@ -6,7 +6,7 @@ ruta_modulo: modulos/ingresos
 tipo: modulo
 visibilidad: todos
 etiquetas: ingresos, cobrar factura de reembolso, cobro de reembolso, no aparece factura de reembolso, concepto facturas de reembolso, proyecto, filtrar por proyecto, columna proyecto, ingresos de un proyecto, ingreso de un proyecto, obra, asignar proyecto, ingreso por proyecto, proyecto en el pdf, documentos pendientes, no coincide con cuentas por cobrar, solo mis documentos, vendedor, acceso total, cobro, cobrar, buscar ingreso, buscador, filtros, filtrar ingresos, filtrar por forma de cobro, buscar por factura cobrada, buscar por cheque, buscar por transferencia, filtro de fechas, chips, editar ingreso, modificar ingreso, corregir ingreso, cambiar monto cobrado, quitar factura del ingreso, periodo cerrado, solo lectura, no deja editar, no puedo modificar, ordenar por dos columnas, ordenar por recibi de y fecha, recibo, dinero que entra, anticipo, deposito, efectivo, transferencia, caja, excel, exportar, combinar conceptos, mezclar conceptos, otros conceptos, varios documentos, cobro sin factura, tipo real, tipo de ingreso, numero de ingreso, serie, secuencial, numero repetido, numero duplicado, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, orden de formas de cobro, saldo de la forma de cobro, saldo disponible, ocultar saldo, aparecen documentos que no busque, resultados que no corresponden, buscar por numero de documento cobrado, cuenta del anticipo, anticipo sin cuenta, cuenta contable del concepto, cuenta por defecto, falta cuenta contable, cobrar factura y dejar anticipo, excedente como anticipo, listado no se actualiza, no aparece el ingreso guardado, no se ve el cambio, vuelve a la primera pagina, se pierde la pagina, refrescar listado, recargar tabla, fila resaltada, observaciones automaticas, observaciones se llenan solas, observaciones se completan solas, glosa del ingreso, concepto del comprobante, descripcion del cobro, cobro factura de venta, falta un centavo, centavo pendiente, no puedo cobrar el centavo, diferencia de un centavo, saldo de 0.01, queda un centavo, referencia muy larga, glosa larga, no guarda el ingreso, no se guarda el cobro, error al guardar ingreso, value too long, texto demasiado largo, se corta la referencia, limite de caracteres, imprimir, impresora, doble clic, ingreso duplicado, cobro duplicado, cobrar dos veces, doble cobro, ya no tiene saldo suficiente, crear cliente desde el ingreso, nuevo cliente, registrar cliente, crear forma de cobro, crear concepto, no aparece el boton de crear cliente, falta el boton nuevo cliente, ingreso anulado con asiento vivo, asiento sigue contabilizado, no se anulo el asiento, asiento de documento anulado, no se pudo anular el asiento contable del ingreso, eliminar ingreso, registrar otro ingreso, guardar y nuevo, guardar y crear otro, seguir en este, varios ingresos seguidos, no cerrar el modal, continuar registrando, no pasa nada al guardar, se queda pensando, tarda en guardar, guardando, demora al guardar, no muestra mensaje al guardar, boton mas, boton agregar forma de cobro, olvide agregar la forma de cobro, la suma de cobros no coincide, descuadre, faltan por asignar, forma de cobro no se agrego
-version: 3.26
+version: 3.27
 orden: 10
 estado: activo
 ---
@@ -622,6 +622,10 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.27** — La columna **Cuenta contable** de las líneas de otros conceptos ya
+  se llena con la cuenta del asiento del ingreso cuando la línea no la tenía
+  guardada (ingresos migrados o antiguos): también si el asiento es el de la
+  migración o agrupó varias líneas en una sola cuenta.
 - **3.26** — Ingresos migrados que cobran facturas que no se migraron (la línea
   del documento no tiene factura enlazada): su asiento ya no queda incompleto con
   el aviso «El concepto de este ingreso no tiene cuenta contable asignada». Ese

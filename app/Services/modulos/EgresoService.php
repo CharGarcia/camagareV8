@@ -798,32 +798,16 @@ class EgresoService
         if (empty($egreso['detalles'])) {
             return;
         }
-        $asiento = $this->asientoContableService()->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa);
+        // El asiento del documento: el generado por el módulo o, si viene de la migración, el
+        // enlazado en id_asiento_contable (modulo_origen 'migracion', que el primero no encuentra).
+        $svc = $this->asientoContableService();
+        $asiento = $svc->getAsientoPorOrigen('egreso', $idEgreso, $idEmpresa)
+            ?: $svc->getAsientoMigradoParaMostrar('egreso', $idEgreso, $idEmpresa);
         if (!$asiento || empty($asiento['detalles'])) {
             return;
         }
-        $mapa = [];
-        foreach ($asiento['detalles'] as $ad) {
-            if ((float) ($ad['debe'] ?? 0) <= 0) continue; // contrapartida del egreso = lado Debe
-            $ref = trim((string) ($ad['referencia_detalle'] ?? ''));
-            if ($ref === '' || isset($mapa[$ref])) continue;
-            $mapa[$ref] = [
-                'id'     => (int) ($ad['id_cuenta_contable'] ?? 0),
-                'codigo' => $ad['codigo_cuenta'] ?? '',
-                'nombre' => $ad['nombre_cuenta'] ?? '',
-            ];
-        }
-        foreach ($egreso['detalles'] as &$d) {
-            if (($d['tipo_documento'] ?? '') !== 'MANUAL') continue;
-            if (!empty($d['id_cuenta_contable'])) continue; // ya viene persistido, no inferir
-            $ref = trim((string) ($d['descripcion'] ?? ''));
-            if (isset($mapa[$ref])) {
-                $d['id_cuenta_contable'] = $mapa[$ref]['id'];
-                $d['cuenta_codigo']      = $mapa[$ref]['codigo'];
-                $d['cuenta_nombre']      = $mapa[$ref]['nombre'];
-            }
-        }
-        unset($d);
+        // Contrapartida del egreso = lado Debe. Las líneas con cuenta guardada no se tocan.
+        \App\Helpers\CuentasDetalleDesdeAsiento::aplicar($egreso['detalles'], $asiento['detalles'], 'debe', 'MANUAL', 'monto_pagado');
     }
 
     /**
