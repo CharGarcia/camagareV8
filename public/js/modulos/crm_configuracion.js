@@ -217,11 +217,210 @@
         }
     }
 
-    function conectarInstagram() {
+    // ── Paso a paso de Meta (modal con una tarjeta por paso) ─────────────────
+    const guia = { paso: 0 };
+    function guiaModal() { return window.bootstrap ? bootstrap.Modal.getOrCreateInstance($('crmc-modal-guia')) : null; }
+    function guiaAbrir(paso) {
+        const m = guiaModal();
+        if (!m) return;
+        // Sin app registrada se empieza por el principio; con app, por los webhooks (lo que suele faltar).
+        guiaIr(typeof paso === 'number' ? paso : (cfg.appRegistrada ? 3 : 0));
+        m.show();
+    }
+    function guiaIr(n) {
+        const pasos = document.querySelectorAll('#crmc-modal-guia .crmc-guia-paso');
+        const total = pasos.length;
+        guia.paso = Math.max(0, Math.min(total - 1, n));
+        pasos.forEach((p, i) => p.classList.toggle('d-none', i !== guia.paso));
+        document.querySelectorAll('#crmc-modal-guia .crmc-punto').forEach((b, i) => {
+            b.classList.toggle('activo', i === guia.paso);
+            b.classList.toggle('hecho', i < guia.paso);
+        });
+        $('crmc-guia-anterior').disabled = guia.paso === 0;
+        const ultimo = guia.paso === total - 1;
+        $('crmc-guia-siguiente').classList.toggle('d-none', ultimo);
+        if ($('crmc-guia-conectar')) $('crmc-guia-conectar').classList.toggle('d-none', !ultimo);
+        const cuerpo = document.querySelector('#crmc-modal-guia .modal-body');
+        if (cuerpo) cuerpo.scrollTop = 0;
+    }
+    function guiaMover(d) { guiaIr(guia.paso + d); }
+    function guiaConectar() {
+        const m = guiaModal();
+        if (m) m.hide();
+        conectarInstagram();
+    }
+
+    // ── Conectar Instagram / LinkedIn en una ventana aparte ──────────────────
+    // La autorización (Meta o LinkedIn) se abre en otra ventana: el sistema queda
+    // abierto aquí. Al volver (instagramCallback / linkedinCallback → esta misma
+    // página dentro de esa ventana, con el resultado en cfg.flash: ese aviso SOLO lo
+    // dejan los callbacks), la página se lo pasa a esta ventana y se cierra.
+    // Canal: BroadcastChannel (mismo sitio; no depende de window.opener ni de
+    // window.name, que algunos navegadores cortan al pasar por facebook.com), con
+    // postMessage al opener como respaldo. Sin respuesta de ninguna ventana del
+    // sistema (p. ej. se abrió en la misma pestaña), la página sigue normal.
+    const VENTANA = 'crmc_autorizacion';
+    const CANAL = 'crmc-autorizacion';
+    const canal = 'BroadcastChannel' in window ? new BroadcastChannel(CANAL) : null;
+    const REDES = {
+        instagram: {
+            titulo: 'Conectar Instagram', nombre: 'Meta (Facebook / Instagram)',
+            pasos: ['Inicie sesión con <strong>Instagram</strong> o con <strong>Facebook</strong>.',
+                'Elija el <strong>portafolio comercial</strong> de la empresa y la <strong>cuenta de Instagram</strong>.',
+                'Acepte los permisos.'],
+            pedirUrl: () => api('conectarInstagramAjax', { post: {} }),
+        },
+        linkedin: {
+            titulo: 'Conectar LinkedIn', nombre: 'LinkedIn',
+            pasos: ['Inicie sesión con la cuenta de LinkedIn que publicará.', 'Acepte los permisos que pide la app de la empresa.'],
+            pedirUrl: (paginas) => api('conectarLinkedinAjax', { post: { paginas: paginas ? '1' : '' } }),
+        },
+    };
+    const con = { red: null, paginas: false, ventana: null, vigilante: null, recibido: false, esperando: false, abierta: 0, vistos: new Set() };
+
+    function modalConectar() { return window.bootstrap ? bootstrap.Modal.getOrCreateInstance($('crmc-modal-conectar')) : null; }
+    function estadoConectar(estado) {
+        const caja = $('crmc-modal-conectar');
+        caja.querySelector('[data-estado="antes"]').classList.toggle('d-none', estado !== 'antes');
+        caja.querySelector('[data-estado="esperando"]').classList.toggle('d-none', estado !== 'esperando');
+        caja.querySelector('[data-accion="abrir"]').classList.toggle('d-none', estado !== 'antes');
+    }
+    function prepararConectar(red, paginas) {
+        const r = REDES[red];
+        const m = modalConectar();
+        if (!m) {   // sin Bootstrap: como antes, en la misma pestaña
+            unaVez(async () => { window.location.href = (await r.pedirUrl(paginas)).url; });
+            return;
+        }
+        con.red = red; con.paginas = !!paginas;
+        const caja = $('crmc-modal-conectar');
+        caja.querySelector('[data-red-titulo]').textContent = r.titulo;
+        caja.querySelectorAll('[data-red-nombre]').forEach((e) => { e.textContent = r.nombre; });
+        caja.querySelector('[data-red-pasos]').innerHTML = r.pasos.map((p) => `<li>${p}</li>`).join('');
+        estadoConectar('antes');
+        m.show();
+    }
+    function conectarInstagram() { prepararConectar('instagram'); }
+    function conectarLinkedin(paginas) { prepararConectar('linkedin', paginas); }
+
+    function conectarAbrir() {
+        const r = REDES[con.red];
+        if (!r) return;
+        // La ventana se abre YA (en el clic) para que el navegador no la bloquee; la URL llega después.
+        const ancho = 620, alto = 760;
+        const izq = Math.max(0, (window.screenX || 0) + (window.outerWidth - ancho) / 2);
+        const arr = Math.max(0, (window.screenY || 0) + (window.outerHeight - alto) / 2);
+        let v = null;
+        try { v = window.open('about:blank', VENTANA, `popup=yes,width=${ancho},height=${alto},left=${izq},top=${arr}`); } catch (e) { v = null; }
         unaVez(async () => {
-            const r = await api('conectarInstagramAjax', { post: {} });
-            // Instagram pide iniciar sesión y autorizar; vuelve a instagramCallback.
-            window.location.href = r.url;
+            let url;
+            try {
+                url = (await r.pedirUrl(con.paginas)).url;
+            } catch (e) {
+                if (v && !v.closed) v.close();
+                throw e;
+            }
+            if (!v || v.closed) {
+                // Ventanas emergentes bloqueadas: se sigue en esta pestaña (al terminar vuelve al sistema).
+                await aviso('info', 'Se abrirá en esta misma pestaña', 'El navegador bloqueó la ventana aparte. Al terminar, volverá automáticamente al sistema.');
+                window.location.href = url;
+                return;
+            }
+            v.location.href = url;
+            try { v.focus(); } catch (e) { /* otro origen */ }
+            con.ventana = v; con.recibido = false; con.esperando = true; con.abierta = Date.now();
+            estadoConectar('esperando');
+            clearInterval(con.vigilante);
+            // Si la cierran sin terminar, no llega resultado: se recupera la pantalla.
+            con.vigilante = setInterval(() => {
+                if (con.recibido) { clearInterval(con.vigilante); return; }
+                if (!con.ventana || con.ventana.closed) {
+                    clearInterval(con.vigilante);
+                    // «Cerrada» en los primeros segundos = el sitio cortó el vínculo entre ventanas
+                    // (sigue abierta para la persona): se sigue esperando el resultado por el canal.
+                    if (Date.now() - con.abierta < 4000) return;
+                    setTimeout(() => {
+                        if (con.recibido) return;
+                        con.esperando = false;
+                        const m = modalConectar();
+                        if (m) m.hide();
+                        toast('No se completó la conexión.', 'info');
+                        cargarCanales().catch(() => {});
+                    }, 2000);
+                }
+            }, 800);
+        });
+    }
+
+    /** Resultado recibido desde la ventana de autorización (una sola vez por id). */
+    function recibirResultado(d) {
+        if (!d || d.tipo !== 'resultado' || !d.id || con.vistos.has(d.id)) return false;
+        if (!con.esperando) return false;   // otra pestaña del sistema que no inició esta conexión
+        con.vistos.add(d.id);
+        con.recibido = true; con.esperando = false;
+        clearInterval(con.vigilante);
+        const m = modalConectar();
+        if (m) m.hide();
+        mostrarResultado(d.flash);
+        cargarCanales().catch(() => {});
+        cargarLinkedin();
+        return true;
+    }
+    if (canal) {
+        canal.onmessage = (e) => {
+            if (recibirResultado(e.data)) canal.postMessage({ tipo: 'recibido', id: e.data.id });
+        };
+    }
+
+    /** Muestra el resultado que trae la ventana de autorización (mismo formato que el aviso de la página). */
+    function mostrarResultado(flash) {
+        if (!flash) return;
+        const icono = { success: 'success', warning: 'warning', error: 'error' }[flash.tipo] || 'info';
+        const avisos = (flash.avisos || []).map((a) => `<div class="small text-start mt-1">⚠ ${esc(a)}</div>`).join('');
+        if (window.Swal) Swal.fire({ icon: icono, title: esc(flash.texto), html: avisos || undefined });
+        else alert(flash.texto + (flash.avisos ? '\n' + flash.avisos.join('\n') : ''));
+    }
+
+    // Respaldo sin BroadcastChannel: la ventana de autorización usa window.opener.
+    window.addEventListener('message', (e) => {
+        if (e.origin !== window.location.origin || !e.data) return;
+        if (recibirResultado(e.data) && e.source) {
+            try { e.source.postMessage({ tipo: 'recibido', id: e.data.id }, window.location.origin); } catch (x) { /* ya cerrada */ }
+        }
+    });
+
+    /**
+     * ¿Esta página es la ventana de autorización que volvió del callback? Le pasa el
+     * resultado a la ventana del sistema que la abrió; si esa lo confirma, se cierra.
+     * Si nadie responde (se abrió en la misma pestaña), devuelve false y la página
+     * carga normal con su aviso.
+     */
+    function soyVentanaDeAutorizacion() {
+        if (!cfg.flash) return Promise.resolve(false);
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2);
+        const msg = { tipo: 'resultado', id, flash: cfg.flash };
+        return new Promise((resolver) => {
+            let listo = false;
+            const terminar = (ok) => {
+                if (listo) return;
+                listo = true;
+                if (ok) {
+                    document.body.innerHTML = '<div style="font-family:sans-serif;padding:24px;text-align:center">'
+                        + 'Listo. Vuelva a la ventana del sistema CaMaGaRe (esta se cierra sola).</div>';
+                    setTimeout(() => window.close(), 400);
+                }
+                resolver(ok);
+            };
+            const alConfirmar = (d) => { if (d && d.tipo === 'recibido' && d.id === id) terminar(true); };
+            if (canal) {
+                canal.addEventListener('message', (e) => alConfirmar(e.data));
+                canal.postMessage(msg);
+            }
+            if (window.opener && !window.opener.closed) {
+                window.addEventListener('message', (e) => { if (e.origin === window.location.origin) alConfirmar(e.data); });
+                try { window.opener.postMessage(msg, window.location.origin); } catch (e) { /* sin acceso */ }
+            }
+            setTimeout(() => terminar(false), 1500);
         });
     }
 
@@ -290,12 +489,6 @@
         unaVez(async () => { const r = await api('quitarLinkedinAppAjax', { post: {} }); toast(r.mensaje, 'info'); await cargarLinkedin(); });
     }
 
-    function conectarLinkedin(paginas) {
-        unaVez(async () => {
-            const r = await api('conectarLinkedinAjax', { post: { paginas: paginas ? '1' : '' } });
-            window.location.href = r.url;   // LinkedIn pide autorizar y vuelve a linkedinCallback
-        });
-    }
 
     function probar(id) {
         unaVez(async () => { const r = await api('probarCanalAjax', { post: { id } }); toast(r.mensaje); });
@@ -512,6 +705,7 @@
     // ── Arranque ─────────────────────────────────────────────────────────────
     document.addEventListener('DOMContentLoaded', async () => {
         if (!$('crmc-lista-canales')) return;
+        if (await soyVentanaDeAutorizacion()) return;   // ventana de Meta/LinkedIn que volvió: avisa y se cierra
         try {
             await cargarDatos();
             await cargarCanales();
@@ -522,7 +716,8 @@
     });
 
     window.CRMC = {
-        conectarInstagram, probar, desconectar, guardarCanal, reglaCambiada,
+        conectarInstagram, conectarAbrir, guiaAbrir, guiaIr, guiaMover, guiaConectar,
+        probar, desconectar, guardarCanal, reglaCambiada,
         guardarApp, quitarApp, regenerarToken, copiar, guardarLinkedin, quitarLinkedin, conectarLinkedin,
         elegirEmbudo, nuevoEmbudo, guardarEmbudo, eliminarEmbudo, agregarEtapa, guardarEtapa, eliminarEtapa,
         agregarItem, guardarItem, eliminarItem,

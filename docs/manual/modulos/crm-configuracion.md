@@ -49,10 +49,13 @@ Para conectar Instagram:
 
 ### Registrar la app de Meta de la empresa
 
-La tarjeta trae el botón **Paso a paso para configurar la app en Meta** (abierto
-mientras la app no está registrada): los pasos en Meta, en orden, con cada
-dirección que hay que pegar allá y su botón para copiar, incluida la **URL de
-redirección**, que se necesita antes de tener el ID de configuración.
+La tarjeta trae el botón **Paso a paso para configurar la app en Meta**. Abre una
+ventana con **una tarjeta por paso** (crear la app, configuración de inicio de
+sesión, URL de redirección e ID de configuración, webhooks, eliminación de datos,
+cuenta para probar y conectar). Cada tarjeta muestra la **ruta de menús de Meta**
+y los campos **con el mismo nombre que tienen allá**, con el valor del sistema y
+su botón para copiar. Se avanza con **Siguiente** / **Anterior** o con los números
+de arriba; el último paso tiene el botón **Conectar Instagram**.
 
 Cada empresa usa su propia app de Meta. En **Canales → App de Meta de la
 empresa**:
@@ -78,11 +81,15 @@ app, solo si no hay cuentas conectadas con ella.
 ### Conectar la cuenta de Instagram
 
 1. Pestaña **Canales** → **Conectar Instagram** (aparece cuando la app está registrada).
-2. Se abre la ventana de Meta: inicie sesión (con Instagram o con Facebook), elija el
-   **portafolio comercial** y la **cuenta de Instagram**, y acepte.
-3. Al volver, el sistema muestra *«Cuenta @… conectada»* y la cuenta aparece con
-   estado **Conectada**. Si se compartieron varias cuentas, aparece una tarjeta por
-   cada una.
+   Un aviso explica lo que va a pasar; pulse **Abrir y conectar**.
+2. Meta se abre en una **ventana aparte** (el sistema queda abierto detrás): inicie
+   sesión (con Instagram o con Facebook), elija el **portafolio comercial** y la
+   **cuenta de Instagram**, y acepte.
+3. Al terminar, **esa ventana se cierra sola** y el sistema muestra *«Cuenta @…
+   conectada»*; la cuenta aparece con estado **Conectada**. Si se compartieron varias
+   cuentas, aparece una tarjeta por cada una. Si el navegador bloquea las ventanas
+   emergentes, Meta se abre en la misma pestaña y, al terminar, vuelve sola al sistema.
+   Si cierra la ventana de Meta antes de terminar, no se conecta nada.
 
 Con **Unified login** el acceso es del portafolio y **no vence** («acceso del
 portafolio (no vence)»). Deja de servir solo si alguien quita la app del portafolio
@@ -112,6 +119,8 @@ En **Canales → App de LinkedIn de la empresa**:
 3. **Conectar mi perfil** publica en su perfil personal. Si LinkedIn aprobó la
    *Community Management API* en la app, marque la casilla y use **Conectar perfil
    y páginas** para publicar también en las páginas de empresa que administra.
+   Igual que con Instagram, LinkedIn se abre en una **ventana aparte** que se cierra
+   sola al terminar.
 
 Las cuentas de LinkedIn sirven solo para **publicar** (no reciben mensajes ni se
 reparten). Su acceso dura unos 60 días y LinkedIn no permite renovarlo solo: la
@@ -241,7 +250,7 @@ catálogos.
 
 ## Historial de cambios
 
-- **1.4** — **Unified login** (apps de Meta nuevas): **paso a paso en pantalla** para configurar la app en Meta, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
+- **1.4** — **Unified login** (apps de Meta nuevas): **paso a paso en un modal** (una tarjeta por paso, con la ruta de menús y los campos como en Meta), **Conectar** Instagram y LinkedIn en una **ventana aparte** que se cierra sola y devuelve el resultado al sistema, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
 - **1.3** — **LinkedIn**: app de la empresa y conexión de perfil y páginas (solo
   para publicar). Aviso para reconectar Instagram y dar los permisos de publicar y
   de estadísticas.

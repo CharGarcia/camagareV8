@@ -15,6 +15,10 @@ Para usar Instagram en el CRM, **cada empresa** registra su propia app de Meta e
 cualquier usuario con permiso en ese módulo. Los datos quedan guardados solo
 para esa empresa, y el App Secret se guarda cifrado y no se vuelve a mostrar.
 
+En esa tarjeta, el botón **Paso a paso para configurar la app en Meta** muestra
+estos mismos pasos como tarjetas, con la ruta de menús de Meta y cada dato listo
+para copiar.
+
 > Desde noviembre de 2026 Meta crea las apps nuevas con **«API setup with Unified
 > login»** (inicio de sesión unificado): ya no ofrece «Instagram login» a apps
 > nuevas. Esta guía describe esa forma. Si su app es anterior y usa «API setup with
@@ -97,8 +101,10 @@ en la app:
    Instagram**.
 2. Acepte la invitación en **instagram.com/accounts/manage_access → Invitaciones de
    evaluador**.
-3. En el sistema pulse **Conectar Instagram**. En la ventana de Meta elija el
-   **portafolio comercial** y la **cuenta de Instagram**, y acepte.
+3. En el sistema pulse **Conectar Instagram** y luego **Abrir y conectar**. Meta se
+   abre en una ventana aparte: elija el **portafolio comercial** y la **cuenta de
+   Instagram**, y acepte. Al terminar, esa ventana se cierra sola y el sistema
+   muestra el resultado.
 
 No hace falta generar ni copiar ningún token en Meta: el sistema obtiene y guarda
 el acceso solo, cifrado.
@@ -197,7 +203,7 @@ debe tener configurada su dirección pública con **https** (`app_url` en
 
 ## Historial de cambios
 
-- **3.0** — **Unified login** para las apps nuevas de Meta: campo **ID de
+- **3.0** — **Unified login** para las apps nuevas de Meta (con paso a paso en pantalla y conexión en ventana aparte): campo **ID de
   configuración**, App ID/Secret de la app de Meta, configuración con usuario del
   sistema que no vence, una cuenta por canal, cuenta evaluadora para probar, ventana
   de 24 h desde la conexión, aviso de acceso revocado. La forma anterior queda como
