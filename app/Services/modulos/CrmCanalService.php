@@ -60,17 +60,25 @@ class CrmCanalService
     public function getCanales(int $idEmpresa): array
     {
         $canales = $this->repo->getPorEmpresa($idEmpresa);
+        $tec = InstagramApiService::configTecnica();
+        $api = $this->api($idEmpresa);
         $requeridosPorTipo = [
-            self::TIPO_INSTAGRAM => $this->api($idEmpresa)->scopes(),
             'linkedin_perfil'    => ['w_member_social'],
             'linkedin_pagina'    => ['w_organization_social'],
         ];
         foreach ($canales as &$c) {
-            $requeridos = $requeridosPorTipo[$c['tipo']] ?? [];
+            // Cada cuenta de Instagram se mide con los permisos del modo con que se conectó.
+            $unificada = $c['tipo'] === self::TIPO_INSTAGRAM && (($c['config']['modo'] ?? '') === 'unificado');
+            $requeridos = $c['tipo'] === self::TIPO_INSTAGRAM
+                ? ($unificada === $api->unificado() ? $api->scopes() : (array) $tec[$unificada ? 'scopes_unificado' : 'scopes'])
+                : ($requeridosPorTipo[$c['tipo']] ?? []);
             $c['permisos_faltantes'] = array_values(array_diff($requeridos, (array) $c['permisos']));
             // Fase 3: la cuenta de Instagram se conectó antes de los permisos de publicar.
-            $c['falta_publicar'] = in_array($c['tipo'] === self::TIPO_INSTAGRAM ? 'instagram_business_content_publish' : ($requeridos[0] ?? '-'),
-                $c['permisos_faltantes'], true);
+            $publicar = $c['tipo'] === self::TIPO_INSTAGRAM
+                ? ($unificada ? 'instagram_content_publish' : 'instagram_business_content_publish') : ($requeridos[0] ?? '-');
+            $c['falta_publicar'] = in_array($publicar, $c['permisos_faltantes'], true);
+            $c['unificada'] = $unificada;
+            // null = no vence (Unified login: token del portafolio).
             $c['dias_para_vencer'] = $c['token_expira_at']
                 ? (int) floor((strtotime($c['token_expira_at']) - time()) / 86400) : null;
         }
@@ -93,6 +101,9 @@ class CrmCanalService
      */
     public function completarConexion(string $code, string $redirectUri, int $idEmpresa, int $idUsuario): array
     {
+        if ($this->api($idEmpresa)->unificado()) {
+            return $this->completarConexionUnificada($code, $redirectUri, $idEmpresa, $idUsuario);
+        }
         // 1. Meta (sin transacción abierta), con la app de la empresa.
         $api    = $this->api($idEmpresa);
         $corto  = $api->canjearCodigo($code, $redirectUri);
@@ -121,8 +132,105 @@ class CrmCanalService
             'token_expira_at' => date('Y-m-d H:i:s', time() + $largo['expira_en']),
             'permisos'        => $corto['permisos'],
         ];
+        $id = $this->guardarCuenta($datos, [
+            'webhooks_ok' => $webhooksOk, 'cuenta_tipo' => $perfil['account_type'], 'conectado_at' => date('Y-m-d H:i:s'),
+            'modo' => 'instagram',
+        ], $idEmpresa, $idUsuario);
+        return ['id' => $id, 'usuario' => $perfil['username'], 'avisos' => $avisos];
+    }
 
-        // 2. Base de datos, bajo candado por cuenta.
+    /**
+     * Unified login (decisiones 3 y 4 de crm-redes-unified-login.md): código → token
+     * del portafolio (no vence) → cuentas que el cliente compartió → por cada una:
+     * datos, suscripción a webhooks y alta/reconexión. Un canal por cuenta, todos con
+     * el mismo token. Una cuenta conectada a otra empresa se omite con aviso.
+     * @return array{id:int, usuario:string, avisos:string[]}
+     */
+    private function completarConexionUnificada(string $code, string $redirectUri, int $idEmpresa, int $idUsuario): array
+    {
+        $api = $this->api($idEmpresa);
+        $tok = $api->canjearCodigo($code, $redirectUri);
+        $token = $tok['token'];
+        $avisos = [];
+
+        $permisos = [];
+        try {
+            $permisos = $api->permisosConcedidos($token);
+        } catch (\RuntimeException $e) {
+            $avisos[] = 'No se pudo leer qué permisos se concedieron: ' . $e->getMessage();
+        }
+        $faltan = $permisos ? array_values(array_diff($api->scopes(), $permisos)) : [];
+        if ($faltan) {
+            $avisos[] = 'La configuración de Meta no concede: ' . implode(', ', $faltan)
+                . '. Agréguelos a la configuración de inicio de sesión de la app y vuelva a conectar.';
+        }
+        $portafolio = '';
+        try {
+            $portafolio = $api->clienteBusinessId($token);
+        } catch (\RuntimeException $e) {
+            // solo informativo
+        }
+        $cuentas = $api->cuentasAsignadas($token);
+        if (!$cuentas) {
+            throw new \InvalidArgumentException('Meta no compartió ninguna cuenta de Instagram. Vuelva a conectar y, en la ventana de Meta, '
+                . 'elija el portafolio comercial y la cuenta de Instagram (debe ser profesional).');
+        }
+
+        $conectadas = [];
+        $primerId = 0;
+        foreach ($cuentas as $cta) {
+            try {
+                $perfil = $api->perfil($token, $cta['id']);
+            } catch (\RuntimeException $e) {
+                if ($e instanceof \App\Services\InstagramTokenInvalidoException) {
+                    throw $e;
+                }
+                $perfil = ['user_id' => $cta['id'], 'username' => $cta['username'], 'name' => '', 'account_type' => 'BUSINESS'];
+            }
+            $usuario = $perfil['username'] !== '' ? $perfil['username'] : $cta['username'];
+            $webhooksOk = false;
+            try {
+                $webhooksOk = $api->suscribirWebhooks($token, $cta['id']);
+            } catch (\Throwable $e) {
+                $avisos[] = "@{$usuario} quedó conectada, pero Instagram no aceptó la suscripción a mensajes: " . $e->getMessage();
+            }
+            $datos = [
+                'tipo'            => self::TIPO_INSTAGRAM,
+                'id_externo'      => $cta['id'],
+                'usuario'         => $usuario,
+                'nombre'          => $perfil['name'] ?: $usuario,
+                'token_cifrado'   => CryptoHelper::encriptar($token),
+                'token_expira_at' => $tok['expira_en'] > 0 ? date('Y-m-d H:i:s', time() + $tok['expira_en']) : null,
+                'permisos'        => $permisos,
+            ];
+            try {
+                $id = $this->guardarCuenta($datos, [
+                    'webhooks_ok' => $webhooksOk, 'cuenta_tipo' => 'BUSINESS', 'conectado_at' => date('Y-m-d H:i:s'),
+                    'modo' => 'unificado', 'client_business_id' => $portafolio,
+                ], $idEmpresa, $idUsuario);
+            } catch (\InvalidArgumentException $e) {
+                if (count($cuentas) === 1) {
+                    throw $e;
+                }
+                $avisos[] = $e->getMessage();
+                continue;
+            }
+            $primerId = $primerId ?: $id;
+            $conectadas[] = '@' . $usuario;
+        }
+        if (!$conectadas) {
+            throw new \InvalidArgumentException('Ninguna de las cuentas compartidas se pudo conectar. ' . implode(' ', $avisos));
+        }
+        return ['id' => $primerId, 'usuario' => implode(', ', array_map(fn($u) => ltrim($u, '@'), $conectadas)), 'avisos' => $avisos];
+    }
+
+    /**
+     * Alta o reconexión de una cuenta, bajo candado por cuenta (transacción corta).
+     * Una cuenta activa en otra empresa no se toca (InvalidArgumentException).
+     */
+    private function guardarCuenta(array $datos, array $ajustes, int $idEmpresa, int $idUsuario): int
+    {
+        $perfil = ['user_id' => $datos['id_externo'], 'username' => $datos['usuario']];
         $db = Database::getConnection();
         $managed = !$db->inTransaction();
         if ($managed) $db->beginTransaction();
@@ -147,19 +255,33 @@ class CrmCanalService
                 $id = $this->repo->insertar($idEmpresa, $datos, $idUsuario);
                 $accion = 'CONECTAR';
             }
-            $this->repo->guardarAjustes($id, $idEmpresa, [
-                'webhooks_ok' => $webhooksOk, 'cuenta_tipo' => $perfil['account_type'], 'conectado_at' => date('Y-m-d H:i:s'),
-            ], null, $idUsuario);
+            $this->repo->guardarAjustes($id, $idEmpresa, $ajustes, null, $idUsuario);
             $this->log->registrar($idUsuario, $idEmpresa, $accion, 'crm_canales', $id, null, [
                 'tipo' => self::TIPO_INSTAGRAM, 'usuario' => $perfil['username'], 'id_externo' => $perfil['user_id'],
-                'permisos' => $corto['permisos'], 'webhooks_ok' => $webhooksOk,
+                'permisos' => $datos['permisos'], 'webhooks_ok' => $ajustes['webhooks_ok'] ?? null, 'modo' => $ajustes['modo'] ?? 'instagram',
             ]);
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
             throw $e;
         }
-        return ['id' => $id, 'usuario' => $perfil['username'], 'avisos' => $avisos];
+        return $id;
+    }
+
+    /**
+     * Meta dijo que el acceso de un canal ya no sirve (error 190): el canal pasa a
+     * «token_vencido» y la pantalla pide Reconectar (decisión 5). Nunca falla.
+     */
+    public static function accesoRevocado(int $idCanal, int $idEmpresa): void
+    {
+        try {
+            if ((new CrmCanalRepository())->marcarRevocado($idCanal, $idEmpresa)) {
+                (new LogSistemaService())->registrar(0, $idEmpresa, 'TOKEN_REVOCADO', 'crm_canales', $idCanal,
+                    ['estado' => 'activo'], ['estado' => 'token_vencido']);
+            }
+        } catch (\Throwable $e) {
+            ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'accesoRevocado', 'id_canal' => $idCanal]);
+        }
     }
 
     public function desconectar(int $id, int $idEmpresa, int $idUsuario): void
@@ -186,7 +308,12 @@ class CrmCanalService
         if ($token === '') {
             throw new \InvalidArgumentException('El canal no tiene un acceso vigente. Vuelva a conectar la cuenta.');
         }
-        return $this->api($idEmpresa)->perfil($token);
+        try {
+            return $this->api($idEmpresa)->perfil($token, (string) $canal['id_externo']);
+        } catch (\App\Services\InstagramTokenInvalidoException $e) {
+            self::accesoRevocado($id, $idEmpresa);
+            throw $e;
+        }
     }
 
     /** Asignación de conversaciones nuevas (decisión 5) y si la app tiene HUMAN_AGENT aprobado. */

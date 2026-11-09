@@ -77,7 +77,7 @@ class CrmMetricaRepository extends BaseRepository
     public function canalesSinSeguidoresHoy(): array
     {
         $st = $this->db->prepare(
-            "SELECT c.id, c.id_empresa, c.token_cifrado FROM crm_canales c
+            "SELECT c.id, c.id_empresa, c.id_externo, c.token_cifrado FROM crm_canales c
                JOIN empresas em ON em.id = c.id_empresa AND em.estado = '1' AND em.eliminado = false
               WHERE c.tipo = 'instagram' AND c.estado = 'activo' AND c.eliminado = false AND c.token_cifrado IS NOT NULL
                 AND NOT EXISTS (SELECT 1 FROM crm_seguidores_diarios s WHERE s.id_canal = c.id AND s.fecha = CURRENT_DATE AND s.eliminado = false)

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/crm_configuracion
 tipo: modulo
 visibilidad: todos
-etiquetas: app de meta, app id, app secret, token de verificacion, configuracion crm, ajustes crm, conectar instagram, vincular instagram, cuenta de instagram, redes sociales, instagram empresa, desconectar instagram, reconectar, acceso vencido, token, embudo, embudos, etapas, etapas del embudo, pipeline, probabilidad, orden de etapas, origenes, origen del contacto, motivos de perdida, asignar conversaciones, repartir mensajes, turnos, human agent, siete dias, asistente virtual, bot, chatbot, respuesta automatica, probar asistente, consumo ia, linkedin, conectar linkedin, app de linkedin, client id, pagina de empresa, publicar
-version: 1.3
+etiquetas: app de meta, app id, app secret, id de configuracion, config_id, unified login, inicio de sesion unificado, portafolio comercial, token de verificacion, configuracion crm, ajustes crm, conectar instagram, vincular instagram, cuenta de instagram, redes sociales, instagram empresa, desconectar instagram, reconectar, acceso vencido, token, embudo, embudos, etapas, etapas del embudo, pipeline, probabilidad, orden de etapas, origenes, origen del contacto, motivos de perdida, asignar conversaciones, repartir mensajes, turnos, human agent, siete dias, asistente virtual, bot, chatbot, respuesta automatica, probar asistente, consumo ia, linkedin, conectar linkedin, app de linkedin, client id, pagina de empresa, publicar
+version: 1.4
 orden: 15
 estado: activo
 ---
@@ -52,11 +52,18 @@ Para conectar Instagram:
 Cada empresa usa su propia app de Meta. En **Canales → App de Meta de la
 empresa**:
 
-1. Pegue el **Instagram App ID** y el **Instagram App Secret** de la app (se crean
-   en developers.facebook.com) y pulse **Guardar**.
-2. Copie las cuatro direcciones y el **token de verificación** que aparecen y
-   péguelos en la app de Meta. El paso a paso está en la guía
-   **App de Meta para Instagram (CRM)**.
+1. Escriba el **App ID** y el **App Secret** de la app (*Configuración de la app →
+   Básica*, en developers.facebook.com) y el **ID de configuración** de inicio de
+   sesión (está en la URL de inicio de sesión que da Meta, después de `config_id=`).
+   Pulse **Guardar**.
+2. Copie las direcciones y el **token de verificación** que aparecen y péguelos en
+   la app de Meta. El paso a paso está en la guía **App de Meta para Instagram (CRM)**.
+
+Las apps de Meta creadas desde noviembre de 2026 usan **Unified login** y necesitan
+el ID de configuración. Una app anterior con «Instagram login» usa el *Instagram*
+App ID y Secret y deja vacío ese campo; una etiqueta junto a los campos indica cuál
+de las dos formas usa la empresa. Poner o quitar el ID de configuración solo se
+permite sin cuentas conectadas.
 
 El App Secret se guarda cifrado y no vuelve a mostrarse: para cambiarlo, escriba
 uno nuevo; si deja el campo vacío, se conserva el guardado. El botón de flechas
@@ -66,15 +73,24 @@ app, solo si no hay cuentas conectadas con ella.
 ### Conectar la cuenta de Instagram
 
 1. Pestaña **Canales** → **Conectar Instagram** (aparece cuando la app está registrada).
-2. Instagram pide iniciar sesión con la cuenta de la empresa y **autorizar** al
-   sistema. Acepte **todos** los permisos: sin el de mensajes o el de
-   comentarios, esos no llegarán.
+2. Se abre la ventana de Meta: inicie sesión (con Instagram o con Facebook), elija el
+   **portafolio comercial** y la **cuenta de Instagram**, y acepte.
 3. Al volver, el sistema muestra *«Cuenta @… conectada»* y la cuenta aparece con
-   estado **Conectada** y la fecha hasta la que vale el acceso.
+   estado **Conectada**. Si se compartieron varias cuentas, aparece una tarjeta por
+   cada una.
 
-El acceso dura unos 60 días y **el sistema lo renueva solo** cada día cuando
-faltan 10 o menos. Si por algún motivo vence, la cuenta pasa a **Acceso vencido**:
-pulse **Reconectar** y autorice de nuevo.
+Con **Unified login** el acceso es del portafolio y **no vence** («acceso del
+portafolio (no vence)»). Deja de servir solo si alguien quita la app del portafolio
+o la cuenta pasa a otro portafolio: entonces la cuenta queda **Acceso vencido** y
+pide **Reconectar**. Con una app anterior («Instagram login») el acceso dura unos 60
+días y **el sistema lo renueva solo**.
+
+Los mensajes que llegaron **antes de conectar** la cuenta no se pueden responder
+desde el sistema (la ventana de 24 h de Instagram cuenta desde la conexión).
+
+Si a la configuración de la app en Meta le falta un permiso (por ejemplo
+`instagram_manage_insights`, el de las métricas), la tarjeta lo avisa: agréguelo en
+Meta y pulse **Reconectar**.
 
 **Permisos para publicar**: si la cuenta se conectó antes de existir
 **Publicaciones**, la tarjeta pide **Reconectar** para aceptar los permisos de
@@ -201,6 +217,12 @@ catálogos.
   registrada su app de Meta»**: falta registrar la app en esta pestaña.
 - **«Hay cuentas de Instagram conectadas con esta app. Desconéctelas primero.»**:
   al quitar la app.
+- **Meta muestra «Invalid platform app» al conectar**: la app es nueva (Unified
+  login) y falta el **ID de configuración**.
+- **«Meta no compartió ninguna cuenta de Instagram»**: en la ventana de Meta no se
+  eligió la cuenta (o es personal). Vuelva a conectar y elíjala.
+- **«Hay cuentas de Instagram conectadas con la forma anterior…»**: al poner o quitar
+  el ID de configuración. Desconecte las cuentas, guarde y vuelva a conectarlas.
 - **«Para activar el asistente, configure Anthropic (Claude)…»**: la IA de la
   empresa no es Anthropic o no tiene clave (IA Soporte → Configuración).
 - **«El asistente virtual todavía no está instalado en la base de datos»**: falta
@@ -214,6 +236,7 @@ catálogos.
 
 ## Historial de cambios
 
+- **1.4** — **Unified login** (apps de Meta nuevas): campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
 - **1.3** — **LinkedIn**: app de la empresa y conexión de perfil y páginas (solo
   para publicar). Aviso para reconectar Instagram y dar los permisos de publicar y
   de estadísticas.

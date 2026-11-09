@@ -57,6 +57,19 @@ class CrmMetaAppRepository extends BaseRepository
         return (int) $st->fetchColumn();
     }
 
+    /** ¿Está aplicado el SQL de Unified login (crm_meta_apps.config_id)? */
+    public function admiteConfigId(): bool
+    {
+        return $this->disponible() && $this->columnaExiste('crm_meta_apps', 'config_id');
+    }
+
+    /** ID de configuración de Meta (Unified login); '' = Instagram Login. */
+    public function guardarConfigId(int $id, int $idEmpresa, string $configId): void
+    {
+        $st = $this->db->prepare('UPDATE crm_meta_apps SET config_id = :c WHERE id = :id AND id_empresa = :e AND eliminado = false');
+        $st->execute([':c' => $configId !== '' ? $configId : null, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
     /** $secretCif / $tokenCif null = se conserva el que había. */
     public function actualizar(int $id, int $idEmpresa, string $appId, ?string $secretCif, ?string $tokenCif, ?string $tokenHash, int $idUsuario): void
     {

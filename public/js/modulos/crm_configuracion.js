@@ -107,13 +107,24 @@
         const activo = c.estado === 'activo';
         const avisos = [];
         if (activo && c.dias_para_vencer !== null && c.dias_para_vencer < 10) avisos.push(`El acceso vence en ${c.dias_para_vencer} día(s); el sistema lo renueva solo cada día.`);
-        if (c.falta_publicar && activo) {
+        if (c.unificada && c.permisos_faltantes && c.permisos_faltantes.length) {
+            // Unified login: los permisos los define la configuración de la app en Meta, no la persona al conectar.
+            avisos.push('La configuración de inicio de sesión de la app de Meta no incluye: ' + c.permisos_faltantes.join(', ')
+                + (c.permisos_faltantes.includes('instagram_manage_insights') ? ' (sin él no hay métricas de las publicaciones)' : '')
+                + '. Agréguelo(s) en Meta y pulse «Reconectar».');
+        } else if (c.falta_publicar && activo) {
             avisos.push('Para publicar desde el sistema (Publicaciones), pulse «Reconectar» y acepte los permisos nuevos de publicar y de estadísticas. Los mensajes siguen funcionando mientras tanto.');
         } else if (c.permisos_faltantes && c.permisos_faltantes.length) {
             avisos.push('Faltan permisos: ' + c.permisos_faltantes.join(', ') + '. Vuelva a conectar y acéptelos todos.');
         }
         if (activo && c.config && c.config.webhooks_ok === false) avisos.push('Instagram no aceptó la suscripción a mensajes. Vuelva a conectar la cuenta.');
-        if (c.estado === 'token_vencido') avisos.push('El acceso venció. Pulse «Reconectar» para seguir recibiendo mensajes.');
+        if (c.estado === 'token_vencido') {
+            avisos.push(c.unificada
+                ? 'Meta ya no acepta el acceso de esta cuenta (se quitó la app del portafolio o la cuenta cambió de portafolio). Pulse «Reconectar».'
+                : 'El acceso venció. Pulse «Reconectar» para seguir recibiendo mensajes.');
+        }
+        const acceso = c.unificada && activo ? 'acceso del portafolio (no vence)'
+            : (c.token_expira_at ? 'acceso hasta ' + fecha(c.token_expira_at) : 'sin acceso');
         const editable = cfg.perm.actualizar && c.estado !== 'desconectado';
         return `<div class="card border-0 shadow-sm"><div class="card-body py-2">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
@@ -121,7 +132,7 @@
                     <i class="bi bi-instagram text-danger me-1"></i><span class="fw-bold">@${esc(c.usuario)}</span>
                     <span class="text-muted small ms-1">${esc(c.nombre || '')}</span>
                     <span class="badge ${cls} ms-2">${est}</span>
-                    <div class="small text-muted">Conectada por ${esc(c.conectado_por || '-')} · ${c.token_expira_at ? 'acceso hasta ' + fecha(c.token_expira_at) : 'sin acceso'}</div>
+                    <div class="small text-muted">Conectada por ${esc(c.conectado_por || '-')} · ${acceso}</div>
                 </div>
                 <div class="d-flex gap-1">
                     ${activo ? `<button type="button" class="btn btn-outline-secondary btn-sm" onclick="CRMC.probar(${c.id})"><i class="bi bi-plug me-1"></i>Probar</button>` : ''}
@@ -165,8 +176,9 @@
     function guardarApp() {
         const appId = $('crmc-app-id').value.trim();
         const secreto = $('crmc-app-secret').value.trim();
+        const configId = $('crmc-config-id') ? $('crmc-config-id').value.trim() : '';
         unaVez(async () => {
-            const r = await api('guardarAppMetaAjax', { post: { app_id: appId, app_secret: secreto } });
+            const r = await api('guardarAppMetaAjax', { post: { app_id: appId, app_secret: secreto, config_id: configId } });
             $('crmc-app-secret').value = '';
             toast(r.mensaje);
             // La tarjeta (URLs, token, botón Conectar) la pinta el servidor: se recarga.

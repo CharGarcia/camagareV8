@@ -325,12 +325,17 @@ class CrmBandejaService
                 throw new \RuntimeException('La cuenta de Instagram no tiene un acceso vigente. Reconéctela en Configuración del CRM.');
             }
             $api = $this->apiFija ?? InstagramApiService::paraEmpresa($idEmpresa);
+            // Id de la cuenta: en Unified login los envíos van por /{id-cuenta}, no /me.
+            $igId = (string) ($det['canal_id_externo'] ?? '');
             $idExterno = match ($modo) {
-                'dm'      => $api->enviarMensaje($token, (string) $destino['igsid'], $texto, $destino['tag'] ?? null),
-                'imagen'  => $api->enviarImagen($token, (string) $destino['igsid'], ($destino['url'])(self::tokenImagen($idMsg)), $destino['tag'] ?? null),
-                'privada' => $api->respuestaPrivada($token, (string) $destino['comment_id'], $texto),
+                'dm'      => $api->enviarMensaje($token, (string) $destino['igsid'], $texto, $destino['tag'] ?? null, $igId),
+                'imagen'  => $api->enviarImagen($token, (string) $destino['igsid'], ($destino['url'])(self::tokenImagen($idMsg)), $destino['tag'] ?? null, $igId),
+                'privada' => $api->respuestaPrivada($token, (string) $destino['comment_id'], $texto, $igId),
                 default   => $api->responderComentario($token, (string) $destino['comment_id'], $texto),
             };
+        } catch (\App\Services\InstagramTokenInvalidoException $e) {
+            CrmCanalService::accesoRevocado((int) $det['id_canal'], $idEmpresa);
+            $error = $e->getMessage();
         } catch (\Throwable $e) {
             $error = $e instanceof \RuntimeException ? $e->getMessage() : 'No se pudo enviar. Intente de nuevo.';
         }

@@ -177,7 +177,8 @@ class CrmConfiguracionController extends BaseModuloController
         $svc->obtener($this->idEmpresa())['configurada'] ? $this->requireActualizar() : $this->requireCrear();
         $this->requireCrmDisponible();
         try {
-            $svc->guardar($this->idEmpresa(), (string) ($_POST['app_id'] ?? ''), (string) ($_POST['app_secret'] ?? ''), $this->idUsuario());
+            $svc->guardar($this->idEmpresa(), (string) ($_POST['app_id'] ?? ''), (string) ($_POST['app_secret'] ?? ''), $this->idUsuario(),
+                isset($_POST['config_id']) ? (string) $_POST['config_id'] : null);
             $this->json(['ok' => true, 'mensaje' => 'App de Meta guardada.', 'app' => $svc->obtener($this->idEmpresa())]);
         } catch (\Throwable $e) {
             $this->fallo($e, __FUNCTION__);

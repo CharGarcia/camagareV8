@@ -131,6 +131,16 @@ $defaults = [
             'instagram_business_content_publish',
             'instagram_business_manage_insights',
         ],
+        // Unified login (apps de Meta creadas desde nov. 2026, con ID de configuración):
+        // los permisos los define la configuración en Meta; esta lista solo sirve para
+        // avisar cuáles faltan. Diseño: docs/diseno/crm-redes-unified-login.md.
+        'scopes_unificado' => [
+            'instagram_basic',
+            'instagram_manage_messages',
+            'instagram_manage_comments',
+            'instagram_content_publish',
+            'instagram_manage_insights',
+        ],
         // Campos de webhook a los que se suscribe cada cuenta conectada.
         'webhook_fields' => ['messages', 'messaging_seen', 'comments'],
     ],

@@ -119,6 +119,12 @@ class CrmPublicadorService
         } catch (\InvalidArgumentException $e) {
             // Datos o configuración: reintentar no lo arregla.
             return $this->error($d, $e->getMessage(), true);
+        } catch (\App\Services\InstagramTokenInvalidoException $e) {
+            // Meta revocó el acceso: reintentar no lo arregla; el canal pide reconectar.
+            if ($this->igFijo === null) {
+                CrmCanalService::accesoRevocado((int) $d['id_canal'], (int) $d['id_empresa']);
+            }
+            return $this->error($d, $e->getMessage() . ' Luego use «Reintentar».', true);
         } catch (\RuntimeException $e) {
             return $this->fallo($d, $e->getMessage());
         }

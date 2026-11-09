@@ -149,6 +149,20 @@ class CrmCanalRepository extends BaseRepository
         $st->execute([':tok' => $tokenCifrado, ':exp' => $expiraAt, ':id' => $id]);
     }
 
+    /**
+     * Meta revocó el acceso (error 190): activo → token_vencido. Devuelve si cambió
+     * (dos procesos que lo detectan a la vez registran el cambio una sola vez).
+     */
+    public function marcarRevocado(int $id, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "UPDATE crm_canales SET estado = 'token_vencido', updated_at = NOW()
+              WHERE id = :id AND id_empresa = :e AND estado = 'activo' AND eliminado = false"
+        );
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return $st->rowCount() > 0;
+    }
+
     public function marcarEstado(int $id, string $estado): void
     {
         $st = $this->db->prepare('UPDATE crm_canales SET estado = :s, updated_at = NOW() WHERE id = :id AND eliminado = false');

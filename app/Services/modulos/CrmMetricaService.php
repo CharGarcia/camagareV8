@@ -109,10 +109,14 @@ class CrmMetricaService
         foreach ($this->repo->canalesSinSeguidoresHoy() as $c) {
             try {
                 $api = $this->igFijo ?? InstagramApiService::paraEmpresa((int) $c['id_empresa']);
-                $s = $api->seguidores(CryptoHelper::desencriptar((string) $c['token_cifrado']));
+                $s = $api->seguidores(CryptoHelper::desencriptar((string) $c['token_cifrado']), (string) ($c['id_externo'] ?? ''));
                 if ($s !== null) {
                     $this->repo->guardarSeguidores((int) $c['id_empresa'], (int) $c['id'], $s);
                     $n++;
+                }
+            } catch (\App\Services\InstagramTokenInvalidoException $e) {
+                if (!$this->igFijo) {
+                    CrmCanalService::accesoRevocado((int) $c['id'], (int) $c['id_empresa']);
                 }
             } catch (\RuntimeException $e) {
                 // se intenta mañana

@@ -131,8 +131,40 @@ host), webhook público y su firma, LinkedIn.
 
 | Paso | Estado |
 |---|---|
-| 1 Verificación en Meta | en curso |
-| 2 Servicio de API | pendiente |
-| 3 Conexión y llamadores | pendiente |
-| 4 Pantalla y manuales | pendiente |
+| 1 Verificación en Meta | **Hecho** (09-11-2026) |
+| 2 Servicio de API | **Hecho** (09-11-2026): SQL `2026-11-09_crm_unified_login.sql` (`crm_meta_apps.config_id`); `InstagramApiService` en dos modos (`unificado()` = hay config_id): diálogo de Facebook con config_id, canje en graph.facebook.com, `cuentasAsignadas()`, `permisosConcedidos()`, `clienteBusinessId()`, todo por `/{id-cuenta}` (`nodo()`), token como access_token; error 190 → `InstagramTokenInvalidoException`; 2534022 con mensaje claro; `taparTokens()` (EAA…/IGAA…); red aislada en `transporte()`. `config/app.php` → `scopes_unificado`. Pruebas: `test_unified_paso2.php` 46/46 + suites anteriores en verde; token falso contra Meta real → 190 en los dos hosts |
+| 3 Conexión y llamadores | **Hecho** (09-11-2026): `CrmCanalService::completarConexionUnificada()` (canje → permisos → portafolio → cuentas; un canal por cuenta con el mismo token, `token_expira_at` NULL, `config.modo=unificado` + `client_business_id`; cuentas de otra empresa se omiten con aviso; si todas, error); alta/reconexión común en `guardarCuenta()`; `getCanales()` mide permisos según el modo de cada canal (`unificada`); `accesoRevocado()` + `CrmCanalRepository::marcarRevocado()` (activo → token_vencido, una vez, log `TOKEN_REVOCADO`) desde Bandeja, publicador, seguidores y «Probar»; Bandeja/métricas pasan el id de la cuenta. Pruebas: `test_unified_paso3.php` 28/28 + 13 suites anteriores en verde |
+| 4 Pantalla y manuales | **Hecho** (09-11-2026): campo **ID de configuración** en Canales → App de Meta (etiqueta del modo, direcciones con su lugar en Meta según el modo); `CrmMetaAppService::guardar(…, $configId)` + `CrmCanalRules::validarConfigId/validarCambioModo` (poner/quitar el ID solo sin cuentas conectadas) + `CrmMetaAppRepository::admiteConfigId/guardarConfigId`; tarjeta de la cuenta: «acceso del portafolio (no vence)», permisos que faltan en la configuración, acceso revocado. Manuales: `guias/instagram-app-meta` 3.0, `crm-configuracion` 1.4, `bandeja-social` 1.5. Pruebas: `test_unified_paso4.php` 12/12 + vista en los dos modos |
 | 5 Prueba real | pendiente |
+
+### 6.1 Resultado de la verificación (09-11-2026, app `2284857582363461`, config `1455752466529399`)
+
+Token de prueba del panel (evaluadora @camagare.ec), llamadas desde el servidor de producción:
+
+| Llamada (graph.facebook.com/v27.0) | Resultado |
+|---|---|
+| `GET /me?fields=id,name,client_business_id` | `{"client_business_id": …}` — solo eso (sin `id`/`name`): es el usuario del sistema |
+| `GET /me/assigned_instagram_accounts?fields=id,username` | la cuenta, con su id `1784…` y usuario. **Sin `business_management`** (§2.1-2 resuelto: no hace falta) |
+| `GET /debug_token?input_token=T&access_token=T` | `(#100)` pide token de app → en el sistema usar `APPID|APPSECRET` o, mejor, `/me/permissions` |
+| `GET /me/permissions` | lista `permission/status` (los de la configuración + `public_profile`). **Se usa este** para saber qué concedió la empresa |
+| `GET /{ig}?fields=id,username,name,followers_count,profile_picture_url` | OK. (No se pidió `account_type`: en modo unificado no se valida, solo hay cuentas profesionales) |
+| `GET /{ig}/subscribed_apps` / `POST …?subscribed_fields=messages,messaging_seen,comments` | `{"data":[]}` / `{"success":true}` |
+| `GET /{ig}/conversations?platform=instagram&fields=participants` | OK, IGSID iguales a los de Instagram Login. Sin `(#200)` |
+| `POST /{ig}/messages` `{recipient:{id:IGSID}, message:{text}}` | **antes de suscribir la cuenta**: `(#10) … fuera del período permitido` (subcódigo 2534022) aunque el cliente escribió minutos antes. **Después de suscribir y de un mensaje nuevo del cliente**: `{"recipient_id","message_id"}` ✔ |
+| `GET /{igsid}?fields=name,username` | OK |
+| `GET /{ig}/content_publishing_limit?fields=quota_usage,config` | `quota_total` 100, `quota_duration` 86400 |
+
+Conclusiones para programar:
+- Mensajes, respuesta privada y suscripción: `/{id-cuenta}/…` en `graph.facebook.com` (no `me`).
+- **La ventana de 24 h solo cuenta mensajes recibidos con la cuenta ya suscrita a la app**: lo
+  escrito antes de conectar no se puede responder por el sistema (avisarlo en la guía y en el
+  error 2534022 de la Bandeja).
+- Meta **repite el token completo** en el error de un token mal formado: nunca registrar
+  mensajes de error de Meta sin pasarlos por el enmascarado (`mensajeError` ya lo hace para
+  `access_token=`; agregar `EAA…`).
+- Pendiente de la configuración en Meta: quitar `ads_management`/`ads_read` y agregar
+  `instagram_manage_insights` (sin él no hay métricas).
+- El token de prueba quedó expuesto en el chat (Meta lo repitió en un error): se **revocó** el
+  09-11-2026 quitando la integración «CaMaGaRe CRM» del portafolio de camagare (Configuración del
+  negocio → Integraciones). La app y su configuración siguen; al conectar desde el sistema se
+  vuelve a agregar con un token nuevo.

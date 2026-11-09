@@ -58,9 +58,15 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
         <!-- Canales -->
         <div class="tab-pane fade show active" id="crmc-canales">
             <?php
-            $app = $appMeta ?? ['configurada' => false, 'app_id' => '', 'secret_guardado' => false, 'verify_token' => ''];
+            $app = ($appMeta ?? []) + ['configurada' => false, 'app_id' => '', 'secret_guardado' => false, 'verify_token' => '', 'config_id' => '', 'unificado' => false];
             $editable = $app['configurada'] ? !empty($perm['actualizar']) : !empty($perm['crear']);
-            $etiquetasUrl = [
+            // Dónde va cada dirección en Meta, según la forma de inicio de sesión de la app.
+            $etiquetasUrl = $app['unificado'] ? [
+                'oauth'        => ['URL de redirección', 'API setup with Unified login → la configuración → URL de redirección'],
+                'webhook'      => ['URL de devolución de llamada (webhook)', 'API setup with Unified login → Configurar webhooks. Token de verificación: el de abajo'],
+                'desautorizar' => ['URL para cancelar la autorización', 'Si Meta la pide (Configuración de la app o Inicio de sesión con Facebook para empresas)'],
+                'eliminar'     => ['URL de solicitud de eliminación de datos', 'Configuración de la app → Básica → Eliminación de datos'],
+            ] : [
                 'oauth'        => ['URI de redirección de OAuth válida', 'Inicio de sesión empresarial → URI de redirección de OAuth válidas'],
                 'webhook'      => ['URL de devolución de llamada (webhook)', 'Webhooks → URL de devolución de llamada. Token de verificación: el de abajo'],
                 'desautorizar' => ['URL para cancelar la autorización', 'Inicio de sesión empresarial → Cancelar autorización'],
@@ -74,19 +80,25 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                     <span class="badge <?= $app['configurada'] ? 'bg-success' : 'bg-secondary' ?>" id="crmc-app-estado"><?= $app['configurada'] ? 'Registrada' : 'Sin registrar' ?></span>
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-2">Cree la app en <strong>developers.facebook.com</strong> (tipo Empresa, producto Instagram) y copie aquí su
-                        <strong>Instagram App ID</strong> y <strong>App Secret</strong>. Luego registre en la app las direcciones de abajo.
+                    <p class="small text-muted mb-2">Cree la app en <strong>developers.facebook.com</strong> (caso de uso «Administrar mensajes y contenido en Instagram»)
+                        y copie aquí su <strong>App ID</strong> y <strong>App Secret</strong> (Configuración de la app → Básica) y el
+                        <strong>ID de configuración</strong> de inicio de sesión. Luego registre en la app las direcciones de abajo.
                         Guía completa: manual <em>App de Meta para Instagram</em>.</p>
-                    <div class="row g-2 align-items-end mb-2" style="max-width:820px;">
-                        <div class="col-md-4">
-                            <label class="form-label small fw-bold mb-1">Instagram App ID</label>
+                    <div class="row g-2 align-items-end mb-1" style="max-width:980px;">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold mb-1">App ID</label>
                             <input type="text" class="form-control form-control-sm font-monospace" id="crmc-app-id" inputmode="numeric" maxlength="30"
                                    value="<?= $h($app['app_id']) ?>" <?= $editable ? '' : 'disabled' ?>>
                         </div>
-                        <div class="col-md-5">
-                            <label class="form-label small fw-bold mb-1">Instagram App Secret</label>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold mb-1">App Secret</label>
                             <input type="password" class="form-control form-control-sm font-monospace" id="crmc-app-secret" maxlength="64" autocomplete="new-password"
                                    placeholder="<?= $app['secret_guardado'] ? 'Guardado — escriba solo para cambiarlo' : 'Pegue el App Secret' ?>" <?= $editable ? '' : 'disabled' ?>>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold mb-1">ID de configuración</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="crmc-config-id" inputmode="numeric" maxlength="30"
+                                   value="<?= $h($app['config_id']) ?>" placeholder="Apps nuevas (Unified login)" <?= $editable ? '' : 'disabled' ?>>
                         </div>
                         <div class="col-md-3 d-flex gap-1">
                             <?php if ($editable): ?>
@@ -96,6 +108,13 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
                                 <button type="button" class="btn btn-outline-danger btn-sm" onclick="CRMC.quitarApp()" title="Quitar la app de Meta"><i class="bi bi-trash"></i></button>
                             <?php endif; ?>
                         </div>
+                    </div>
+                    <div class="small text-muted mb-2" style="max-width:980px;">
+                        <?php if ($app['configurada']): ?>
+                            <span class="badge bg-light text-dark border me-1"><?= $app['unificado'] ? 'Unified login' : 'Inicio de sesión de Instagram' ?></span>
+                        <?php endif; ?>
+                        El <strong>ID de configuración</strong> está en la URL de inicio de sesión que da Meta (después de <code>config_id=</code>).
+                        Déjelo vacío solo si su app es anterior a noviembre de 2026 y usa «API setup with Instagram login» (ahí van el Instagram App ID y Secret).
                     </div>
 
                     <div class="<?= $app['configurada'] ? '' : 'd-none' ?>" id="crmc-app-datos">

@@ -5,10 +5,22 @@ declare(strict_types=1);
 namespace App\Services;
 
 /**
- * Único punto del sistema que habla con la API de Instagram (Instagram Login,
- * graph.instagram.com). Diseño: docs/diseno/crm-redes-fase1.md §7.
+ * Único punto del sistema que habla con la API de Instagram. Dos modos, según la
+ * app de Meta de la empresa (crm_meta_apps):
+ *  - **Instagram Login** (apps viejas, sin config_id): graph.instagram.com, `/me`
+ *    es la cuenta, token de 60 días que se renueva. Diseño: crm-redes-fase1.md §7.
+ *  - **Unified login** (apps nuevas, con config_id): graph.facebook.com, token de
+ *    usuario del sistema del portafolio (BISU, no vence), `/me` es el usuario del
+ *    sistema → todo va por el id de la cuenta. Diseño: crm-redes-unified-login.md
+ *    (verificado contra Meta el 09-11-2026, §6.1).
  *
- * Endpoints (documentación de Meta, verificados el 08-11-2026):
+ * Unified login:
+ *  - Autorizar:      https://www.facebook.com/{v}/dialog/oauth?client_id&config_id&redirect_uri&response_type=code
+ *  - Código→token:   GET https://graph.facebook.com/{v}/oauth/access_token
+ *  - Cuentas:        GET /me/assigned_instagram_accounts · permisos: GET /me/permissions
+ *  - Resto:          /{id-cuenta}/messages, /{id-cuenta}/subscribed_apps, /{id-cuenta}?fields=…
+ *
+ * Instagram Login (documentación de Meta, verificados el 08-11-2026):
  *  - Autorizar:      https://www.instagram.com/oauth/authorize
  *  - Código→token:   POST https://api.instagram.com/oauth/access_token (token de ~1 h)
  *  - Token largo:    GET  https://graph.instagram.com/access_token?grant_type=ig_exchange_token (~60 días)
@@ -26,6 +38,8 @@ class InstagramApiService
     private const URL_AUTORIZAR = 'https://www.instagram.com/oauth/authorize';
     private const URL_CODIGO    = 'https://api.instagram.com/oauth/access_token';
     private const URL_GRAPH     = 'https://graph.instagram.com';
+    private const URL_GRAPH_FB  = 'https://graph.facebook.com';
+    private const URL_DIALOGO_FB = 'https://www.facebook.com';
 
     private const TIMEOUT_CONEXION = 8;
     private const TIMEOUT_TOTAL    = 20;
@@ -43,7 +57,7 @@ class InstagramApiService
      */
     public function __construct(array $cfg = [])
     {
-        $this->cfg = $cfg + self::configTecnica() + ['app_id' => '', 'app_secret' => '', 'webhook_verify_token' => ''];
+        $this->cfg = $cfg + self::configTecnica() + ['app_id' => '', 'app_secret' => '', 'webhook_verify_token' => '', 'config_id' => ''];
     }
 
     /** Versión de la API, permisos y campos del webhook (globales, sin secretos). */
@@ -56,6 +70,7 @@ class InstagramApiService
             $tec = [
                 'graph_version'  => (string) ($m['graph_version'] ?? 'v27.0'),
                 'scopes'         => (array) ($m['scopes'] ?? ['instagram_business_basic']),
+                'scopes_unificado' => (array) ($m['scopes_unificado'] ?? ['instagram_basic', 'instagram_manage_messages']),
                 'webhook_fields' => (array) ($m['webhook_fields'] ?? []),
             ];
         }
@@ -74,6 +89,7 @@ class InstagramApiService
                 'app_id'               => (string) $a['app_id'],
                 'app_secret'           => \App\Helpers\CryptoHelper::desencriptar((string) $a['app_secret_cifrado']),
                 'webhook_verify_token' => \App\Helpers\CryptoHelper::desencriptar((string) $a['verify_token_cifrado']),
+                'config_id'            => trim((string) ($a['config_id'] ?? '')),   // sin la columna (SQL pendiente) = Instagram Login
             ] : []);
         }
         return self::$porEmpresa[$idEmpresa];
@@ -96,14 +112,43 @@ class InstagramApiService
         return trim((string) $this->cfg['app_id']) !== '' && trim((string) $this->cfg['app_secret']) !== '';
     }
 
+    /** ¿La app usa Unified login? (tiene ID de configuración de Meta). */
+    public function unificado(): bool
+    {
+        return trim((string) $this->cfg['config_id']) !== '';
+    }
+
+    public function configId(): string
+    {
+        return trim((string) $this->cfg['config_id']);
+    }
+
+    /**
+     * Permisos que el sistema necesita. En Unified login los define la configuración
+     * de Meta (no se piden en la URL); esta lista solo sirve para avisar cuáles faltan.
+     */
     public function scopes(): array
     {
-        return array_values((array) $this->cfg['scopes']);
+        return array_values((array) $this->cfg[$this->unificado() ? 'scopes_unificado' : 'scopes']);
     }
 
     /** URL a la que se envía al usuario para autorizar la cuenta de Instagram. */
     public function urlAutorizacion(string $state, string $redirectUri): string
     {
+        if ($this->unificado()) {
+            // config_id reemplaza a scope (Meta rechaza scope en apps nuevas). prompt=login:
+            // sin él, quien ya tiene sesión de Facebook en el navegador entra con esa cuenta
+            // y no ve la opción de Instagram.
+            return self::URL_DIALOGO_FB . '/' . trim((string) $this->cfg['graph_version'], '/') . '/dialog/oauth?' . http_build_query([
+                'client_id'     => $this->cfg['app_id'],
+                'config_id'     => $this->configId(),
+                'redirect_uri'  => $redirectUri,
+                'response_type' => 'code',
+                'override_default_response_type' => 'true',
+                'state'         => $state,
+                'prompt'        => 'login',
+            ]);
+        }
         return self::URL_AUTORIZAR . '?' . http_build_query([
             'client_id'     => $this->cfg['app_id'],
             'redirect_uri'  => $redirectUri,
@@ -121,6 +166,21 @@ class InstagramApiService
      */
     public function canjearCodigo(string $code, string $redirectUri): array
     {
+        if ($this->unificado()) {
+            // Token del usuario del sistema del portafolio del cliente (BISU). No trae
+            // la lista de permisos: se piden aparte con permisosConcedidos().
+            $r = $this->http('GET', $this->graph('oauth/access_token'), [
+                'client_id'     => $this->cfg['app_id'],
+                'client_secret' => $this->cfg['app_secret'],
+                'redirect_uri'  => $redirectUri,
+                'code'          => $code,
+            ]);
+            if (empty($r['access_token'])) {
+                throw new \RuntimeException('Meta no entregó el acceso. Vuelva a intentar la conexión.');
+            }
+            return ['token' => (string) $r['access_token'], 'user_id' => '', 'permisos' => [],
+                    'expira_en' => (int) ($r['expires_in'] ?? 0)];   // 0 = no vence (configuración «Nunca»)
+        }
         $r = $this->http('POST', self::URL_CODIGO, [
             'client_id'     => $this->cfg['app_id'],
             'client_secret' => $this->cfg['app_secret'],
@@ -143,6 +203,7 @@ class InstagramApiService
     /** Token corto → token de larga duración. @return array{token:string, expira_en:int} */
     public function tokenLargo(string $tokenCorto): array
     {
+        $this->soloInstagramLogin('tokenLargo');
         $r = $this->http('GET', self::URL_GRAPH . '/access_token', [
             'grant_type'    => 'ig_exchange_token',
             'client_secret' => $this->cfg['app_secret'],
@@ -154,6 +215,7 @@ class InstagramApiService
     /** Renueva un token largo vigente (con 24 h o más). @return array{token:string, expira_en:int} */
     public function renovarToken(string $token): array
     {
+        $this->soloInstagramLogin('renovarToken');
         $r = $this->http('GET', self::URL_GRAPH . '/refresh_access_token', [
             'grant_type'   => 'ig_refresh_token',
             'access_token' => $token,
@@ -161,9 +223,21 @@ class InstagramApiService
         return $this->leerToken($r);
     }
 
-    /** @return array{user_id:string, username:string, name:string, account_type:string} */
-    public function perfil(string $token): array
+    /**
+     * $igId: id de la cuenta (obligatorio en Unified login, donde /me es el usuario del
+     * sistema; Meta no da account_type ahí y solo asigna cuentas profesionales).
+     * @return array{user_id:string, username:string, name:string, account_type:string}
+     */
+    public function perfil(string $token, string $igId = ''): array
     {
+        if ($this->unificado()) {
+            $r = $this->http('GET', $this->graph($this->nodo($igId)), ['fields' => 'id,username,name'], $token);
+            if (empty($r['id'])) {
+                throw new \RuntimeException('Instagram no devolvió los datos de la cuenta.');
+            }
+            return ['user_id' => (string) $r['id'], 'username' => (string) ($r['username'] ?? ''),
+                    'name' => (string) ($r['name'] ?? ''), 'account_type' => 'BUSINESS'];
+        }
         $r = $this->http('GET', $this->graph('me'), [
             'fields'       => 'user_id,username,name,account_type',
             'access_token' => $token,
@@ -180,17 +254,71 @@ class InstagramApiService
     }
 
     /** Suscribe la cuenta a los webhooks configurados (mensajes, comentarios…). */
-    public function suscribirWebhooks(string $token): bool
+    public function suscribirWebhooks(string $token, string $igId = ''): bool
     {
         $campos = array_values((array) $this->cfg['webhook_fields']);
         if (!$campos) {
             return false;
+        }
+        if ($this->unificado()) {
+            // Importante (verificado 09-11-2026): la ventana de 24 h para responder solo
+            // cuenta los mensajes que llegan con la cuenta YA suscrita a la app.
+            $r = $this->http('POST', $this->graph($this->nodo($igId) . '/subscribed_apps') . '?' . http_build_query([
+                'subscribed_fields' => implode(',', $campos),
+            ]), [], $token);
+            return !empty($r['success']);
         }
         $r = $this->http('POST', $this->graph('me/subscribed_apps') . '?' . http_build_query([
             'subscribed_fields' => implode(',', $campos),
             'access_token'      => $token,
         ]), []);
         return !empty($r['success']);
+    }
+
+    /**
+     * Unified login: cuentas de Instagram que el cliente compartió con la app (un
+     * token puede traer varias). @return list<array{id:string, username:string}>
+     */
+    public function cuentasAsignadas(string $token): array
+    {
+        $out = [];
+        $url = $this->graph('me/assigned_instagram_accounts');
+        $datos = ['fields' => 'id,username', 'limit' => 50];
+        for ($pagina = 0; $pagina < 5 && $url !== ''; $pagina++) {
+            $r = $this->http('GET', $url, $datos, $token);
+            foreach ((array) ($r['data'] ?? []) as $c) {
+                if (!empty($c['id'])) {
+                    $out[] = ['id' => (string) $c['id'], 'username' => (string) ($c['username'] ?? '')];
+                }
+            }
+            $despues = (string) ($r['paging']['cursors']['after'] ?? '');
+            $url = !empty($r['paging']['next']) && $despues !== '' ? $this->graph('me/assigned_instagram_accounts') : '';
+            $datos = ['fields' => 'id,username', 'limit' => 50, 'after' => $despues];
+        }
+        return $out;
+    }
+
+    /**
+     * Unified login: permisos concedidos al token (GET /me/permissions; debug_token
+     * exige el token de la app). @return string[]
+     */
+    public function permisosConcedidos(string $token): array
+    {
+        $r = $this->http('GET', $this->graph('me/permissions'), [], $token);
+        $out = [];
+        foreach ((array) ($r['data'] ?? []) as $p) {
+            if (($p['status'] ?? '') === 'granted' && !empty($p['permission'])) {
+                $out[] = (string) $p['permission'];
+            }
+        }
+        return $out;
+    }
+
+    /** Unified login: id del portafolio comercial del cliente (dueño del token). */
+    public function clienteBusinessId(string $token): string
+    {
+        $r = $this->http('GET', $this->graph('me'), ['fields' => 'client_business_id'], $token);
+        return (string) ($r['client_business_id'] ?? '');
     }
 
     // ── Webhook ──────────────────────────────────────────────────────────────
@@ -326,7 +454,31 @@ class InstagramApiService
 
     private function graph(string $ruta): string
     {
-        return self::URL_GRAPH . '/' . trim((string) $this->cfg['graph_version'], '/') . '/' . ltrim($ruta, '/');
+        return ($this->unificado() ? self::URL_GRAPH_FB : self::URL_GRAPH) . '/'
+            . trim((string) $this->cfg['graph_version'], '/') . '/' . ltrim($ruta, '/');
+    }
+
+    /**
+     * Nodo de la cuenta: «me» en Instagram Login; el id de la cuenta en Unified login
+     * (ahí /me es el usuario del sistema y no sirve para mensajes ni perfil).
+     */
+    private function nodo(string $igId): string
+    {
+        if (!$this->unificado()) {
+            return 'me';
+        }
+        $igId = trim($igId);
+        if ($igId === '' || !preg_match('/^[0-9]{1,30}$/', $igId)) {
+            throw new \InvalidArgumentException('Falta la cuenta de Instagram del canal. Vuelva a conectar la cuenta.');
+        }
+        return $igId;
+    }
+
+    private function soloInstagramLogin(string $que): void
+    {
+        if ($this->unificado()) {
+            throw new \LogicException($que . ' no aplica a Unified login (el token no vence).');
+        }
     }
 
     private function leerToken(array $r): array
@@ -351,14 +503,14 @@ class InstagramApiService
      * entre 24 h y 7 días (solo si la app tiene aprobada esa función).
      * @return string id del mensaje en Instagram (mid)
      */
-    public function enviarMensaje(string $token, string $igsid, string $texto, ?string $tag = null): string
+    public function enviarMensaje(string $token, string $igsid, string $texto, ?string $tag = null, string $igId = ''): string
     {
         $cuerpo = ['recipient' => ['id' => $igsid], 'message' => ['text' => $texto]];
         if ($tag !== null) {
             $cuerpo['messaging_type'] = 'MESSAGE_TAG';
             $cuerpo['tag'] = $tag;
         }
-        $r = $this->http('POST', $this->graph('me/messages'), $cuerpo, $token, true);
+        $r = $this->http('POST', $this->graph($this->nodo($igId) . '/messages'), $cuerpo, $token, true);
         if (empty($r['message_id'])) {
             throw new \RuntimeException('Instagram no confirmó el envío del mensaje.');
         }
@@ -369,7 +521,7 @@ class InstagramApiService
      * Imagen por mensaje directo. Instagram la descarga desde $urlPublica (debe
      * ser HTTPS y accesible sin sesión), así que se pasa un enlace firmado y temporal.
      */
-    public function enviarImagen(string $token, string $igsid, string $urlPublica, ?string $tag = null): string
+    public function enviarImagen(string $token, string $igsid, string $urlPublica, ?string $tag = null, string $igId = ''): string
     {
         $cuerpo = ['recipient' => ['id' => $igsid],
                    'message' => ['attachment' => ['type' => 'image', 'payload' => ['url' => $urlPublica]]]];
@@ -377,7 +529,7 @@ class InstagramApiService
             $cuerpo['messaging_type'] = 'MESSAGE_TAG';
             $cuerpo['tag'] = $tag;
         }
-        $r = $this->http('POST', $this->graph('me/messages'), $cuerpo, $token, true);
+        $r = $this->http('POST', $this->graph($this->nodo($igId) . '/messages'), $cuerpo, $token, true);
         if (empty($r['message_id'])) {
             throw new \RuntimeException('Instagram no confirmó el envío de la imagen.');
         }
@@ -385,9 +537,9 @@ class InstagramApiService
     }
 
     /** Respuesta privada (DM) a quien comentó: una sola por comentario, dentro de 7 días. */
-    public function respuestaPrivada(string $token, string $idComentario, string $texto): string
+    public function respuestaPrivada(string $token, string $idComentario, string $texto, string $igId = ''): string
     {
-        $r = $this->http('POST', $this->graph('me/messages'),
+        $r = $this->http('POST', $this->graph($this->nodo($igId) . '/messages'),
             ['recipient' => ['comment_id' => $idComentario], 'message' => ['text' => $texto]], $token, true);
         if (empty($r['message_id'])) {
             throw new \RuntimeException('Instagram no confirmó la respuesta privada.');
@@ -556,9 +708,9 @@ class InstagramApiService
     }
 
     /** Seguidores actuales de la cuenta. */
-    public function seguidores(string $token): ?int
+    public function seguidores(string $token, string $igId = ''): ?int
     {
-        $r = $this->http('GET', $this->graph('me'), ['fields' => 'followers_count'], $token);
+        $r = $this->http('GET', $this->graph($this->nodo($igId)), ['fields' => 'followers_count'], $token);
         return isset($r['followers_count']) ? (int) $r['followers_count'] : null;
     }
 
@@ -572,7 +724,12 @@ class InstagramApiService
         if (!$this->configurado()) {
             throw new \RuntimeException('La empresa no tiene registrada su app de Meta. Regístrela en Configuración del CRM → Canales.');
         }
-        $ch = curl_init();
+        if ($bearer !== null && $this->unificado()) {
+            // graph.facebook.com: el token va como access_token, igual que en las
+            // llamadas verificadas contra Meta (§6.1 del diseño). Nunca sale en los errores.
+            $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query(['access_token' => $bearer]);
+            $bearer = null;
+        }
         if ($metodo === 'GET' && $datos) {
             $url .= (str_contains($url, '?') ? '&' : '?') . http_build_query($datos);
         }
@@ -583,24 +740,8 @@ class InstagramApiService
         if ($json) {
             $cabeceras[] = 'Content-Type: application/json';
         }
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $url,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => self::TIMEOUT_CONEXION,
-            CURLOPT_TIMEOUT        => self::TIMEOUT_TOTAL,
-            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,   // droplets sin ruta IPv6 se cuelgan hasta el timeout
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-            CURLOPT_HTTPHEADER     => $cabeceras,
-        ]);
-        if ($metodo === 'POST') {
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $json ? json_encode($datos, JSON_UNESCAPED_UNICODE) : http_build_query($datos));
-        }
-        $cuerpo = curl_exec($ch);
-        $errno  = curl_errno($ch);
-        $codigo = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
+        $post = $metodo === 'POST' ? ($json ? json_encode($datos, JSON_UNESCAPED_UNICODE) : http_build_query($datos)) : null;
+        [$errno, $codigo, $cuerpo] = $this->transporte($url, $cabeceras, $post);
 
         if ($errno) {
             throw new \RuntimeException($errno === CURLE_OPERATION_TIMEDOUT
@@ -612,9 +753,48 @@ class InstagramApiService
             throw new \RuntimeException('Respuesta inesperada de Instagram (HTTP ' . $codigo . ').');
         }
         if ($codigo >= 400 || isset($json['error']) || isset($json['error_type'])) {
+            $err = is_array($json['error'] ?? null) ? $json['error'] : [];
+            if ((int) ($err['code'] ?? 0) === 190) {
+                // Token vencido, revocado o de una app/portafolio que ya no da acceso.
+                throw new InstagramTokenInvalidoException(
+                    'Instagram ya no acepta el acceso de esta cuenta (vencido o revocado). Vuelva a conectarla en Configuración del CRM.');
+            }
+            if ((int) ($err['error_subcode'] ?? 0) === 2534022) {
+                throw new \RuntimeException('Instagram no permite responder: han pasado más de 24 h desde el último mensaje del cliente, '
+                    . 'o lo escribió antes de conectar la cuenta al sistema. Espere a que vuelva a escribir.');
+            }
             throw new \RuntimeException('Instagram rechazó la operación: ' . $this->mensajeError($json, $codigo));
         }
         return $json;
+    }
+
+    /**
+     * La llamada de red, sola (TLS verificado, tiempos cortos, solo IPv4).
+     * $post null = GET. Protegido solo para que las pruebas lo sustituyan.
+     * @return array{0:int, 1:int, 2:string} [errno de curl, código HTTP, cuerpo]
+     */
+    protected function transporte(string $url, array $cabeceras, ?string $post): array
+    {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_CONNECTTIMEOUT => self::TIMEOUT_CONEXION,
+            CURLOPT_TIMEOUT        => self::TIMEOUT_TOTAL,
+            CURLOPT_IPRESOLVE      => CURL_IPRESOLVE_V4,   // droplets sin ruta IPv6 se cuelgan hasta el timeout
+            CURLOPT_SSL_VERIFYPEER => true,
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_HTTPHEADER     => $cabeceras,
+        ]);
+        if ($post !== null) {
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $post);
+        }
+        $cuerpo = curl_exec($ch);
+        $errno  = curl_errno($ch);
+        $codigo = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        return [$errno, $codigo, (string) $cuerpo];
     }
 
     /** Mensaje de error de Meta en sus dos formatos ({error:{message}} o {error_message}). */
@@ -625,7 +805,16 @@ class InstagramApiService
             $msg = $j['error_description'] ?? $j['error'];
         }
         $msg = trim((string) ($msg ?: 'HTTP ' . $codigo));
-        // Por si Meta repite el token en el texto: nunca mostrarlo.
-        return (string) preg_replace('/(access_token=)[^&\s]+/i', '$1***', mb_substr($msg, 0, 300));
+        return self::taparTokens(mb_substr($msg, 0, 300));
+    }
+
+    /**
+     * Meta repite el token completo en algunos errores («Malformed access token EAA…»,
+     * visto el 09-11-2026): nunca mostrarlo ni registrarlo.
+     */
+    public static function taparTokens(string $texto): string
+    {
+        $texto = (string) preg_replace('/(access_token=)[^&\s"]+/i', '$1***', $texto);
+        return (string) preg_replace('/\b(EAA|IGAA|IGQ)[A-Za-z0-9_\-]{16,}/', '$1***', $texto);
     }
 }

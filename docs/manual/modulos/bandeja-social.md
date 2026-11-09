@@ -6,7 +6,7 @@ ruta_modulo: modulos/bandeja_social
 tipo: modulo
 visibilidad: todos
 etiquetas: bandeja, bandeja social, instagram, mensajes de instagram, dm, mensaje directo, inbox, chat de instagram, comentarios, responder comentarios, respuesta privada, respuesta publica, redes sociales, atender clientes, ventana de 24 horas, no puedo responder, human agent, asignar conversacion, cerrar conversacion, respuestas rapidas, crm, enviar imagen, enviar foto, adjuntar imagen, foto por instagram, asistente virtual, bot, chatbot, pausar bot, reactivar bot, pasada a persona, traspaso
-version: 1.4
+version: 1.5
 orden: 16
 estado: activo
 ---
@@ -141,8 +141,13 @@ por una persona.
 
 ## Errores frecuentes
 
-- **«Han pasado más de 24 h desde el último mensaje del cliente…»**: regla de
-  Instagram; espere a que el cliente escriba.
+- **«Han pasado más de 24 h desde el último mensaje del cliente…»** o **«Instagram
+  no permite responder…»**: regla de Instagram; espere a que el cliente escriba. Los
+  mensajes que llegaron **antes de conectar** la cuenta al sistema tampoco se pueden
+  responder desde aquí.
+- **«Instagram ya no acepta el acceso de esta cuenta…»**: Meta revocó el acceso (por
+  ejemplo, se quitó la app del portafolio). Reconecte la cuenta en Configuración del
+  CRM y pulse *Reintentar*.
 - **«El cliente todavía no ha escrito por mensaje directo…»**: Instagram no deja
   escribir primero.
 - **«Ese comentario ya recibió su respuesta privada»**: solo se permite una.
@@ -158,6 +163,7 @@ por una persona.
 
 ## Historial de cambios
 
+- **1.5** — Mensajes de error más claros: lo escrito antes de conectar la cuenta no se puede responder, y aviso cuando Meta revoca el acceso.
 - **1.4** — Los comentarios de las publicaciones hechas desde **Publicaciones** se
   atribuyen a esa publicación (conversaciones, contactos y oportunidades).
 - **1.3** — **Asistente virtual**: sus mensajes se marcan como «Asistente», el panel
