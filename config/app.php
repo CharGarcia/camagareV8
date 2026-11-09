@@ -116,6 +116,22 @@ $defaults = [
     // Si el worker no arranca solo, indique aquí la ruta absoluta al ejecutable.
     'sri_lote_php_bin' => '',
 
+    // CRM ↔ Instagram (API de Instagram con Instagram Login). Solo lo TÉCNICO,
+    // común a todos: cada empresa registra SU app de Meta (App ID, App Secret,
+    // token del webhook) en modulos/crm_configuracion → tabla crm_meta_apps.
+    // Diseño: docs/diseno/crm-redes-fase1.md.
+    'meta_instagram' => [
+        'graph_version'        => 'v27.0',
+        // Permisos que se piden al conectar una cuenta.
+        'scopes' => [
+            'instagram_business_basic',
+            'instagram_business_manage_messages',
+            'instagram_business_manage_comments',
+        ],
+        // Campos de webhook a los que se suscribe cada cuenta conectada.
+        'webhook_fields' => ['messages', 'messaging_seen', 'comments'],
+    ],
+
     // Descargas Masivas (modulos/descargas-masivas): límite de documentos por
     // descarga. No hay límite de rango de fechas; se acota por CANTIDAD de
     // documentos encontrados (un año con pocos documentos es tan válido como un
@@ -159,5 +175,4 @@ $defaults['env']               = $envStr('CMG_ENV', (string) $defaults['env']);
 $defaults['debug']             = (bool) $envBool('CMG_DEBUG', (bool) $defaults['debug']);
 $defaults['show_login_errors'] = (bool) $envBool('CMG_SHOW_LOGIN_ERRORS', (bool) $defaults['show_login_errors']);
 $defaults['2captcha_api_key']  = $envStr('CMG_2CAPTCHA_KEY', (string) $defaults['2captcha_api_key']);
-
 return $defaults;

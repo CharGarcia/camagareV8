@@ -562,6 +562,14 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-headset" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white soporte-bandeja-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
+                <a href="<?= $base ?>/modulos/bandeja_social" class="text-white text-decoration-none position-relative d-none cmg-icon-update crm-bandeja-icon" title="Instagram: conversaciones sin leer (suyas o sin asignar)">
+                    <i class="bi bi-instagram" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white crm-bandeja-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
+                <a href="<?= $base ?>/modulos/crm" class="text-white text-decoration-none position-relative d-none cmg-icon-update crm-actividades-icon" title="CRM: actividades vencidas a su cargo">
+                    <i class="bi bi-kanban" style="font-size: 1.1rem;"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger text-white crm-actividades-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
+                </a>
 
                 <!-- Novedades del sistema (solo escritorio): desplegable con las novedades vigentes;
                      badge = sin leer. Lo llena el JS de partials/novedades_modal.php (oculto hasta
@@ -787,6 +795,16 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <span class="position-absolute badge rounded-pill bg-danger text-white soporte-bandeja-badge">0</span>
                     <small>Soporte</small>
                 </a>
+                <a class="cmg-icon-update crm-bandeja-icon d-none" href="<?= $base ?>/modulos/bandeja_social">
+                    <i class="bi bi-instagram"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger text-white crm-bandeja-badge">0</span>
+                    <small>Instagram</small>
+                </a>
+                <a class="cmg-icon-update crm-actividades-icon d-none" href="<?= $base ?>/modulos/crm">
+                    <i class="bi bi-kanban"></i>
+                    <span class="position-absolute badge rounded-pill bg-danger text-white crm-actividades-badge">0</span>
+                    <small>CRM</small>
+                </a>
                 <a href="#" data-bs-toggle="modal" data-bs-target="#modalSubmodulosNuevos" class="cmg-submod-nuevos-icon d-none">
                     <i class="bi bi-stars"></i>
                     <span class="position-absolute badge rounded-pill bg-success cmg-submod-nuevos-badge">0</span>
@@ -978,6 +996,9 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
             ordenes_compra_borrador:      { icon: '.ordenes-compra-borrador-icon',      badge: '.ordenes-compra-borrador-badge' },
             carwash_borrador:             { icon: '.carwash-borrador-icon',             badge: '.carwash-borrador-badge' },
             whatsapp_unread:              { icon: '.whatsapp-unread-icon',              badge: '.whatsapp-unread-badge' },
+            // CRM: conversaciones de Instagram sin leer (suyas o sin asignar) y actividades vencidas a su cargo.
+            crm_bandeja_sin_leer:         { icon: '.crm-bandeja-icon',                  badge: '.crm-bandeja-badge' },
+            crm_actividades_vencidas:     { icon: '.crm-actividades-icon',              badge: '.crm-actividades-badge' },
             // Bandeja del equipo de soporte (solo la reciben los agentes).
             soporte_bandeja:              { icon: '.soporte-bandeja-icon',              badge: '.soporte-bandeja-badge' },
             // Respuestas sin leer del usuario: no tiene ícono en el navbar, pinta

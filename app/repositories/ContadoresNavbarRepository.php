@@ -114,6 +114,28 @@ class ContadoresNavbarRepository
     }
 
     /**
+     * CRM (por usuario): conversaciones de la Bandeja social abiertas con mensajes
+     * sin leer que le tocan (asignadas a él o sin asignar) y sus actividades del
+     * CRM vencidas. Lanza si las tablas del CRM aún no existen (el llamador lo atrapa).
+     * @return array{bandeja:int, actividades:int}
+     */
+    public function getCrmPendientes(int $idEmpresa, int $idUsuario): array
+    {
+        $st = $this->db->prepare(
+            "SELECT
+                (SELECT COUNT(*) FROM crm_conversaciones cv
+                  WHERE cv.id_empresa = :e1 AND cv.eliminado = false AND cv.estado = 'abierta' AND cv.sin_leer > 0
+                    AND (cv.id_responsable = :u1 OR cv.id_responsable IS NULL)) AS bandeja,
+                (SELECT COUNT(*) FROM crm_actividades a
+                  WHERE a.id_empresa = :e2 AND a.id_responsable = :u2 AND a.eliminado = false
+                    AND a.completada = false AND a.vence_at < NOW()) AS actividades"
+        );
+        $st->execute([':e1' => $idEmpresa, ':u1' => $idUsuario, ':e2' => $idEmpresa, ':u2' => $idUsuario]);
+        $r = $st->fetch(\PDO::FETCH_ASSOC) ?: [];
+        return ['bandeja' => (int) ($r['bandeja'] ?? 0), 'actividades' => (int) ($r['actividades'] ?? 0)];
+    }
+
+    /**
      * Documentos con NOVEDAD del SRI (devueltos / no autorizados / con error) por tipo.
      *
      * Fuente de verdad: la tabla `sri_envio_log` (la misma que alimenta el seguimiento

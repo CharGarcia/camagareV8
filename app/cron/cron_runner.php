@@ -102,6 +102,53 @@ try {
     echo "[" . date('Y-m-d H:i:s') . "] Error archivando conversaciones de soporte: " . $e->getMessage() . "\n";
 }
 
+// ── CRM: renovar el acceso de las cuentas de Instagram (FIJO, 1 vez al día) ──
+//    El token dura ~60 días; se renueva cuando faltan 10 o menos. Uno vencido
+//    queda «Acceso vencido» y solo se recupera reconectando la cuenta. Sin el SQL
+//    del CRM (o sin la app de Meta configurada) no hace nada.
+try {
+    $marcaCrm = sys_get_temp_dir() . '/sistema_crm_tokens.txt';
+    $hoy = date('Y-m-d');
+    if ((int) date('H') >= 4 && @file_get_contents($marcaCrm) !== $hoy) {
+        file_put_contents($marcaCrm, $hoy);
+        $svcCanales = \App\Services\modulos\CrmCanalService::crear();
+        // Cada canal se renueva con la app de Meta de su empresa; si la empresa
+        // quitó su app, ese canal cuenta como error y vencerá (hay que reconectar).
+        if (\App\Services\modulos\CrmConfiguracionService::crear()->disponible()) {
+            $rTok = $svcCanales->renovarTokens();
+            if ($rTok['renovados'] || $rTok['vencidos'] || $rTok['errores']) {
+                echo "[" . date('Y-m-d H:i:s') . "] CRM Instagram: {$rTok['renovados']} acceso(s) renovado(s), {$rTok['vencidos']} vencido(s), {$rTok['errores']} error(es).\n";
+            }
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error renovando accesos de Instagram (CRM): " . $e->getMessage() . "\n";
+}
+
+// ── CRM: cola del webhook de Instagram (FIJO, en CADA tick) ──────────────────
+//    El webhook procesa cada evento al recibirlo; aquí se retoman los que
+//    quedaron pendientes o con error (hasta 5 intentos). Una vez al día se
+//    purgan los ya resueltos con más de 30 días (es una cola técnica).
+try {
+    $svcWebhook = \App\Services\modulos\CrmWebhookService::crear();
+    if ($svcWebhook->disponible()) {
+        $rCola = $svcWebhook->procesarPendientes(200);
+        if ($rCola['procesados'] || $rCola['errores']) {
+            echo "[" . date('Y-m-d H:i:s') . "] CRM webhook: {$rCola['procesados']} evento(s) procesado(s), {$rCola['ignorados']} ignorado(s), {$rCola['errores']} con error.\n";
+        }
+        $marcaPurga = sys_get_temp_dir() . '/sistema_crm_purga_eventos.txt';
+        if ((int) date('H') >= 3 && @file_get_contents($marcaPurga) !== date('Y-m-d')) {
+            file_put_contents($marcaPurga, date('Y-m-d'));
+            $nPurga = $svcWebhook->purgar(30);
+            if ($nPurga > 0) {
+                echo "[" . date('Y-m-d H:i:s') . "] CRM webhook: {$nPurga} evento(s) antiguos purgados.\n";
+            }
+        }
+    }
+} catch (\Throwable $e) {
+    echo "[" . date('Y-m-d H:i:s') . "] Error procesando la cola del webhook de Instagram (CRM): " . $e->getMessage() . "\n";
+}
+
 // ── Videollamadas: recordatorio de las reuniones que están por empezar ───────
 //    Corre en CADA tick a propósito: el aviso debe llegar minutos antes, no una
 //    vez al día. No necesita marca de "ya corrí": la consulta descarta las

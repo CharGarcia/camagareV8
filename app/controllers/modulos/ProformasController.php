@@ -76,7 +76,17 @@ class ProformasController extends BaseModuloController
 
         $tarifasIva = (new \App\models\TarifaIva())->getActivos();
 
+        // «Crear proforma» desde una oportunidad del CRM: CrmController::prepararProformaAjax
+        // deja la oportunidad y su cliente en sesión (URL limpia). De un solo uso: al
+        // recargar la página ya no vuelve a abrir otra proforma.
+        $desdeOportunidad = $_SESSION['proformas_desde_oportunidad'] ?? null;
+        unset($_SESSION['proformas_desde_oportunidad']);
+        if (!is_array($desdeOportunidad) || (int) ($desdeOportunidad['id_empresa'] ?? 0) !== $idEmpresa) {
+            $desdeOportunidad = null;
+        }
+
         $this->viewWithLayout('layouts.main', 'modulos/proformas/index', [
+            'desdeOportunidad' => $desdeOportunidad,
             'titulo'          => 'Proformas',
             'perm'            => $perm,
             'rows'            => $result['rows'],

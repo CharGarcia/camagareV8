@@ -94,6 +94,15 @@ class ProformaService
             $idProforma = $this->repository->insertCabecera($data);
             $this->guardarDetalles($idProforma, $data['detalles']);
             $this->guardarInfoAdicional($idProforma, $data['info_adicional'] ?? []);
+            // Creada desde una oportunidad del CRM: se enlazan en la misma transacción
+            // (si la oportunidad ya no admite proforma, la proforma tampoco se crea).
+            $idOportunidad = (int) ($data['id_oportunidad'] ?? 0);
+            if ($idOportunidad > 0) {
+                CrmOportunidadService::crear()->vincularProforma(
+                    $idOportunidad, $idProforma, (float) ($data['importe_total'] ?? 0), $idEmpresa, $idUsuario
+                );
+                $this->repository->setOportunidad($idProforma, $idOportunidad, $idEmpresa);
+            }
             $guardado->registrar($data['token_guardado'] ?? '', $idEmpresa, 'proformas', $idProforma, $secuencial, $idUsuario);
             if ($managed) $db->commit();
 
@@ -179,6 +188,12 @@ class ProformaService
             $this->guardarDetalles($id, $data['detalles']);
             $this->repository->deleteInfoAdicional($id);
             $this->guardarInfoAdicional($id, $data['info_adicional'] ?? []);
+            // CRM: la oportunidad abierta enlazada sigue el total de su proforma.
+            if (!empty($proforma['id_oportunidad'])) {
+                CrmOportunidadService::crear()->actualizarValorPorProforma(
+                    $id, (float) ($data['importe_total'] ?? 0), $idEmpresa, $idUsuario
+                );
+            }
             $db->commit();
 
             try {

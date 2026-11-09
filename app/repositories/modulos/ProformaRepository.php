@@ -439,6 +439,19 @@ class ProformaRepository extends BaseRepository
         return (int) $this->query($sql, $params)->fetchColumn();
     }
 
+    /**
+     * CRM: anota de qué oportunidad salió la proforma. Si la columna aún no existe
+     * (database/2026-11-08_crm_fase1.sql sin aplicar) no hace nada.
+     */
+    public function setOportunidad(int $id, int $idOportunidad, int $idEmpresa): void
+    {
+        if (!in_array('id_oportunidad', $this->columnasExistentes('proformas_cabecera'), true)) {
+            return;
+        }
+        $st = $this->db->prepare('UPDATE proformas_cabecera SET id_oportunidad = ? WHERE id = ? AND id_empresa = ?');
+        $st->execute([$idOportunidad, $id, $idEmpresa]);
+    }
+
     public function updateCabecera(int $id, array $data): void
     {
         $conCondiciones = in_array('condiciones_html', $this->columnasExistentes('proformas_cabecera'), true);

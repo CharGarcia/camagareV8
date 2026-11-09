@@ -1,0 +1,197 @@
+<?php
+/**
+ * Configuración del CRM (modulos/crm_configuracion): canales (Instagram),
+ * embudos y etapas, orígenes y motivos de pérdida. Todo por AJAX
+ * (CrmConfiguracionController); lógica en public/js/modulos/crm_configuracion.js.
+ * Diseño: docs/diseno/crm-redes-fase1.md §9.3.
+ *
+ * @var array       $perm
+ * @var string      $rutaModulo
+ * @var bool        $disponible
+ * @var array|null  $appMeta   app de Meta de la empresa (sin App Secret)
+ * @var array       $urlsMeta  URLs que se registran en esa app
+ * @var array|null  $flash
+ */
+$base    = rtrim(BASE_URL, '/');
+$urlBase = $base . '/' . ltrim($rutaModulo, '/');
+$h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+$claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'error' => 'alert-danger'];
+?>
+<style>
+    #modulo-crm-config .crmc-etapa { display:flex; gap:6px; align-items:center; padding:6px 8px; border:1px solid #e3e6ea; border-radius:.5rem; background:#fff; }
+    #modulo-crm-config .crmc-etapa .crmc-asa { cursor:grab; color:#adb5bd; }
+    #modulo-crm-config .crmc-etapa input[type=color] { width:32px; height:28px; padding:2px; }
+    #modulo-crm-config .crmc-embudo.active { background:#e7f1ff; border-color:#b6d4fe; }
+    #modulo-crm-config .form-control-sm, #modulo-crm-config .form-select-sm { font-size:.8rem; }
+</style>
+
+<div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-crm-config">
+    <div class="d-flex align-items-center justify-content-between mb-2">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-gear me-2 text-primary"></i>Configuración del CRM</h5>
+        <a href="<?= $base ?>/modulos/crm" class="btn btn-outline-secondary btn-sm"><i class="bi bi-kanban me-1"></i>Ir al CRM</a>
+    </div>
+
+<?php if (!$disponible): ?>
+    <div class="alert alert-warning"><i class="bi bi-database-exclamation me-1"></i>
+        El CRM todavía no está instalado en la base de datos. Falta aplicar <code>database/2026-11-08_crm_fase1.sql</code>.</div>
+<?php else: ?>
+
+    <?php if ($flash): ?>
+        <div class="alert <?= $claseFlash[$flash['tipo']] ?? 'alert-info' ?> alert-dismissible fade show">
+            <?= $h($flash['texto']) ?>
+            <?php foreach (($flash['avisos'] ?? []) as $av): ?>
+                <div class="small mt-1"><i class="bi bi-exclamation-triangle me-1"></i><?= $h($av) ?></div>
+            <?php endforeach; ?>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+        </div>
+    <?php endif; ?>
+
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#crmc-canales" type="button"><i class="bi bi-instagram me-1"></i>Canales</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-embudos" type="button"><i class="bi bi-funnel me-1"></i>Embudos y etapas</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-origenes" type="button"><i class="bi bi-signpost-split me-1"></i>Orígenes</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#crmc-motivos" type="button"><i class="bi bi-x-octagon me-1"></i>Motivos de pérdida</button></li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- Canales -->
+        <div class="tab-pane fade show active" id="crmc-canales">
+            <?php
+            $app = $appMeta ?? ['configurada' => false, 'app_id' => '', 'secret_guardado' => false, 'verify_token' => ''];
+            $editable = $app['configurada'] ? !empty($perm['actualizar']) : !empty($perm['crear']);
+            $etiquetasUrl = [
+                'oauth'        => ['URI de redirección de OAuth válida', 'Inicio de sesión empresarial → URI de redirección de OAuth válidas'],
+                'webhook'      => ['URL de devolución de llamada (webhook)', 'Webhooks → URL de devolución de llamada. Token de verificación: el de abajo'],
+                'desautorizar' => ['URL para cancelar la autorización', 'Inicio de sesión empresarial → Cancelar autorización'],
+                'eliminar'     => ['URL de solicitud de eliminación de datos', 'Inicio de sesión empresarial → Solicitud de eliminación de datos'],
+            ];
+            ?>
+            <!-- App de Meta de ESTA empresa (crm_meta_apps). El App Secret nunca vuelve al navegador. -->
+            <div class="card border-0 shadow-sm mb-3" id="crmc-app-meta">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-bold small"><i class="bi bi-meta me-1 text-primary"></i>App de Meta de la empresa</span>
+                    <span class="badge <?= $app['configurada'] ? 'bg-success' : 'bg-secondary' ?>" id="crmc-app-estado"><?= $app['configurada'] ? 'Registrada' : 'Sin registrar' ?></span>
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">Cree la app en <strong>developers.facebook.com</strong> (tipo Empresa, producto Instagram) y copie aquí su
+                        <strong>Instagram App ID</strong> y <strong>App Secret</strong>. Luego registre en la app las direcciones de abajo.
+                        Guía completa: manual <em>App de Meta para Instagram</em>.</p>
+                    <div class="row g-2 align-items-end mb-2" style="max-width:820px;">
+                        <div class="col-md-4">
+                            <label class="form-label small fw-bold mb-1">Instagram App ID</label>
+                            <input type="text" class="form-control form-control-sm font-monospace" id="crmc-app-id" inputmode="numeric" maxlength="30"
+                                   value="<?= $h($app['app_id']) ?>" <?= $editable ? '' : 'disabled' ?>>
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label small fw-bold mb-1">Instagram App Secret</label>
+                            <input type="password" class="form-control form-control-sm font-monospace" id="crmc-app-secret" maxlength="64" autocomplete="new-password"
+                                   placeholder="<?= $app['secret_guardado'] ? 'Guardado — escriba solo para cambiarlo' : 'Pegue el App Secret' ?>" <?= $editable ? '' : 'disabled' ?>>
+                        </div>
+                        <div class="col-md-3 d-flex gap-1">
+                            <?php if ($editable): ?>
+                                <button type="button" class="btn btn-primary btn-sm" onclick="CRMC.guardarApp()"><i class="bi bi-check2 me-1"></i>Guardar</button>
+                            <?php endif; ?>
+                            <?php if (!empty($perm['eliminar']) && $app['configurada']): ?>
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="CRMC.quitarApp()" title="Quitar la app de Meta"><i class="bi bi-trash"></i></button>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+
+                    <div class="<?= $app['configurada'] ? '' : 'd-none' ?>" id="crmc-app-datos">
+                        <div class="fw-bold small mt-3 mb-1">Datos para registrar en la app de Meta</div>
+                        <div class="d-flex flex-column gap-1" style="max-width:820px;">
+                            <?php foreach ($urlsMeta as $clave => $url): ?>
+                                <div>
+                                    <div class="small text-muted"><?= $h($etiquetasUrl[$clave][0]) ?> <span class="text-body-tertiary">· <?= $h($etiquetasUrl[$clave][1]) ?></span></div>
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control font-monospace" readonly value="<?= $h($url) ?>">
+                                        <button class="btn btn-outline-secondary" type="button" onclick="CRMC.copiar(this)" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                                    </div>
+                                </div>
+                            <?php endforeach; ?>
+                            <div>
+                                <div class="small text-muted">Token de verificación del webhook</div>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control font-monospace" readonly id="crmc-verify-token" value="<?= $h($app['verify_token']) ?>">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="CRMC.copiar(this)" title="Copiar"><i class="bi bi-clipboard"></i></button>
+                                    <?php if (!empty($perm['actualizar'])): ?>
+                                        <button class="btn btn-outline-secondary" type="button" onclick="CRMC.regenerarToken()" title="Generar otro token"><i class="bi bi-arrow-repeat"></i></button>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        </div>
+                        <?php if (!empty($app['actualizado'])): ?>
+                            <div class="small text-muted mt-2">Última modificación: <?= $h(date('d-m-Y H:i:s', strtotime((string) $app['actualizado']))) ?><?= $app['actualizado_por'] ? ' · ' . $h($app['actualizado_por']) : '' ?></div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="small text-muted">Cuentas de Instagram de esta empresa. Sus mensajes y comentarios llegan a la Bandeja social.</div>
+                <?php if (!empty($perm['crear'])): ?>
+                    <button type="button" class="btn btn-primary btn-sm <?= $app['configurada'] ? '' : 'd-none' ?>" id="crmc-btn-conectar" onclick="CRMC.conectarInstagram()"><i class="bi bi-instagram me-1"></i>Conectar Instagram</button>
+                <?php endif; ?>
+            </div>
+            <div id="crmc-lista-canales" class="d-flex flex-column gap-2"></div>
+        </div>
+
+        <!-- Embudos y etapas -->
+        <div class="tab-pane fade" id="crmc-embudos">
+            <div class="row g-3">
+                <div class="col-md-4 col-lg-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                            <span class="fw-bold small">Embudos</span>
+                            <?php if (!empty($perm['crear'])): ?>
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0" onclick="CRMC.nuevoEmbudo()"><i class="bi bi-plus-lg"></i></button>
+                            <?php endif; ?>
+                        </div>
+                        <div class="list-group list-group-flush" id="crmc-lista-embudos"></div>
+                    </div>
+                </div>
+                <div class="col-md-8 col-lg-9">
+                    <div class="card border-0 shadow-sm" id="crmc-editor-embudo">
+                        <div class="card-body text-muted small">Elija un embudo.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orígenes -->
+        <div class="tab-pane fade" id="crmc-origenes">
+            <div class="card border-0 shadow-sm" style="max-width:760px;">
+                <div class="card-body">
+                    <p class="small text-muted mb-2">Por dónde llegan los contactos (Instagram, LinkedIn, referidos…). Se usan para filtrar y medir.</p>
+                    <div id="crmc-lista-origenes" class="d-flex flex-column gap-1"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Motivos de pérdida -->
+        <div class="tab-pane fade" id="crmc-motivos">
+            <div class="card border-0 shadow-sm" style="max-width:760px;">
+                <div class="card-body">
+                    <p class="small text-muted mb-2">Motivos que se eligen al marcar una oportunidad como perdida.</p>
+                    <div id="crmc-lista-motivos" class="d-flex flex-column gap-1"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+<?php endif; ?>
+</div>
+
+<?php if ($disponible): ?>
+<script>
+    window.CRMC_CONFIG = {
+        urlBase: <?= json_encode($urlBase) ?>,
+        perm: {
+            crear:      <?= json_encode(!empty($perm['crear'])) ?>,
+            actualizar: <?= json_encode(!empty($perm['actualizar'])) ?>,
+            eliminar:   <?= json_encode(!empty($perm['eliminar'])) ?>,
+        },
+    };
+</script>
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="<?= $base ?>/js/modulos/crm_configuracion.js?v=<?= asset_ver('/js/modulos/crm_configuracion.js') ?>"></script>
+<?php endif; ?>

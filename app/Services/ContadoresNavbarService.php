@@ -87,6 +87,10 @@ class ContadoresNavbarService
      */
     public const RUTA_CONTROL_BANCARIO = 'modulos/control-bancario';
 
+    /** CRM: la Bandeja social (mensajes de Instagram) y el embudo (actividades vencidas). */
+    public const RUTA_BANDEJA_SOCIAL = 'modulos/bandeja_social';
+    public const RUTA_CRM = 'modulos/crm';
+
     /** Ventana en días para "suscripciones por vencer" (cobros próximos de los clientes). */
     private const DIAS_SUSCRIPCIONES_POR_VENCER = 7;
 
@@ -279,6 +283,33 @@ class ContadoresNavbarService
     }
 
     /**
+     * Pendientes del CRM del usuario (caché por empresa+usuario, TTL corto: los
+     * mensajes llegan por el webhook, que no pasa por log_sistema para invalidar).
+     * @return array{bandeja:int, actividades:int}
+     */
+    /** El usuario leyó una conversación o completó una actividad: su aviso se recalcula ya. */
+    public static function invalidarCrm(int $idEmpresa, int $idUsuario): void
+    {
+        Cache::delete('cmg_conteos_crm_' . $idEmpresa . '_' . $idUsuario);
+    }
+
+    private function contadoresCrm(int $idEmpresa, int $idUsuario): array
+    {
+        $clave = 'cmg_conteos_crm_' . $idEmpresa . '_' . $idUsuario;
+        $cache = Cache::get($clave);
+        if (is_array($cache) && isset($cache['bandeja'])) {
+            return $cache;
+        }
+        try {
+            $r = $this->repo->getCrmPendientes($idEmpresa, $idUsuario);
+        } catch (\Throwable $e) {
+            $r = ['bandeja' => 0, 'actividades' => 0];   // CRM sin instalar
+        }
+        Cache::set($clave, $r, self::TTL_CONTADORES);
+        return $r;
+    }
+
+    /**
      * Lista de la campana de tareas (se pide al abrirla, no en cada sondeo): las
      * vencidas y las por vencer del usuario, cada grupo con su total real — la lista
      * se corta en LIMITE_LISTA_TAREAS por grupo.
@@ -354,7 +385,7 @@ class ContadoresNavbarService
         $rutas = array_unique(array_merge(
             array_values(self::RUTAS_MODULO),
             array_values(self::NOVEDAD_RUTAS),
-            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES, self::RUTA_CONTROL_BANCARIO]
+            [self::RUTA_EMPRESA, self::RUTA_SUSCRIPCIONES, self::RUTA_CONTROL_BANCARIO, self::RUTA_BANDEJA_SOCIAL, self::RUTA_CRM]
         ));
         $perms = [];
         foreach ($rutas as $ruta) {
@@ -536,6 +567,20 @@ class ContadoresNavbarService
                         'dias_por_vencer' => ControlBancarioService::DIAS_POSFECHADOS_POR_VENCER,
                     ];
                 }
+            }
+        }
+
+        // CRM: lo que le toca a ESTE usuario — conversaciones de la Bandeja social con
+        // mensajes sin leer (asignadas a él o sin asignar) y sus actividades vencidas.
+        // Cada uno solo con permiso 'ver' en su módulo. Sin el SQL del CRM se omiten.
+        if ($idEmpresa > 0 && $idUsuario > 0
+            && (!empty($permRuta[self::RUTA_BANDEJA_SOCIAL]) || !empty($permRuta[self::RUTA_CRM]))) {
+            $crm = $this->contadoresCrm($idEmpresa, $idUsuario);
+            if (!empty($permRuta[self::RUTA_BANDEJA_SOCIAL])) {
+                $out['crm_bandeja_sin_leer'] = $crm['bandeja'];
+            }
+            if (!empty($permRuta[self::RUTA_CRM])) {
+                $out['crm_actividades_vencidas'] = $crm['actividades'];
             }
         }
 

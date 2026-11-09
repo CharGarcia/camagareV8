@@ -344,6 +344,34 @@ window.PF_CONFIG  = {
     }, { sorts: window.currentSorts, multi: true, container: '.pf-scroll', reload: false });
 
     if (inputBusc) inputBusc.addEventListener('input', debounce(() => fetchSearch(1), 400));
+
+    // «Crear proforma» desde una oportunidad del CRM: el CRM dejó la oportunidad y su
+    // cliente en sesión (URL limpia) y ProformasController::index() los pasa una sola
+    // vez. Se abre una proforma nueva con el cliente puesto; al guardarla, el servidor
+    // la enlaza a la oportunidad (ProformaService::crear → CrmOportunidadService).
+    (async function desdeOportunidadCrm() {
+        const op = <?= json_encode($desdeOportunidad ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        if (!op || !op.id) return;
+        // El modal termina de engancharse en DOMContentLoaded (proformas_modal.js).
+        if (document.readyState === 'loading') {
+            await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
+        }
+        if (!window.PF_CONFIG.perm.crear) {
+            Swal.fire({ icon: 'warning', title: 'Sin permiso', text: 'No tiene permiso para crear proformas.' });
+            return;
+        }
+        const idCli = String(op.id_cliente || '');
+        let cliente = null;
+        try {
+            const r = await fetch(`${urlBase}/getClientesAjax?q=${encodeURIComponent(op.identificacion || '')}`);
+            const j = await r.json();
+            cliente = (j.data || []).find(c => String(c.id) === idCli) || null;
+        } catch (e) { console.error(e); }
+        window.PF.nuevaDesdeOportunidad({ id: op.id, numero: op.numero, titulo: op.titulo, cliente });
+        if (idCli && !cliente) {
+            Swal.fire({ icon: 'info', title: 'Seleccione el cliente', text: 'No se encontró el cliente de la oportunidad entre los clientes activos.' });
+        }
+    })();
 })();
 </script>
 

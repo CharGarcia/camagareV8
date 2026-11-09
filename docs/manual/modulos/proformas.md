@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva
-version: 1.30
+etiquetas: proforma, proformas, crm, oportunidad, proforma desde el crm, embudo de ventas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva
+version: 1.31
 orden: 15
 estado: activo
 ---
@@ -501,8 +501,26 @@ El detalle completo (qué tipos lo permiten, qué pasa al cambiar de modo y cuá
 documentos admite cada periodo) está en el manual de **Empresa**, sección
 *Secuenciales por punto de emisión*.
 
+## Proformas creadas desde el CRM
+
+En una oportunidad del **CRM**, el botón **Crear proforma** abre este módulo con
+una proforma nueva y el cliente de la oportunidad ya puesto (el título del modal
+dice de qué oportunidad sale). Se completa como cualquier otra proforma. Al
+guardarla:
+
+- queda **enlazada a la oportunidad**, y el valor de la oportunidad pasa a ser el
+  total de la proforma;
+- si después se edita la proforma (mientras esté en borrador), la oportunidad
+  sigue su nuevo total;
+- cada oportunidad admite **una** proforma. Si la oportunidad ya tiene una, o
+  está ganada o perdida, la proforma no se guarda y se avisa el motivo.
+
+Si la proforma se cierra sin guardar, no queda nada enlazado. Detalle en el
+manual del **CRM**.
+
 ## Historial de cambios
 
+- **1.31** — **Crear proforma desde una oportunidad del CRM**: abre una proforma nueva con el cliente puesto y, al guardarla, la deja enlazada a la oportunidad, que toma su total como valor.
 - **1.30** — Los **decimales de cantidad y precio** y el logo salen del **establecimiento de la serie** de la proforma, no del primer establecimiento de la empresa: en la ventana (al elegir la serie), al guardar y en el PDF, la ficha de productos, las condiciones y el correo. La conversión a factura, recibo o pedido no cambia: sigue emitiendo por el primer establecimiento con secuencial configurado.
 - **1.29** — En una proforma **aprobada, facturada, rechazada o anulada** las pestañas
   **Vigencia** y **Condiciones** del pie del modal vuelven a poder abrirse para consultar

@@ -179,7 +179,12 @@
     }
 
     /* ── Reset modal ─────────────────────────────────────────── */
+    // Oportunidad del CRM de la que sale la proforma nueva (PF.nuevaDesdeOportunidad).
+    // Viaja en el payload solo al CREAR; ProformaService enlaza ambas al guardar.
+    let _pfIdOportunidad = null;
+
     function _reset() {
+        _pfIdOportunidad = null;
         $id('pf_id').value = '';
         $id('pf_tituloModal').textContent = 'Nueva Proforma';
 
@@ -998,6 +1003,7 @@
             importe_total:       +importeTotal.toFixed(2),
             detalles,
             info_adicional:     adicional,
+            id_oportunidad:     !$id('pf_id').value ? _pfIdOportunidad : null,
         };
     }
 
@@ -1774,6 +1780,29 @@
             getModal().show();
             if (typeof window.aplicarFavoritosModal === 'function') {
                 window.aplicarFavoritosModal('#modalProforma');
+            }
+        },
+
+        /**
+         * Proforma nueva para una oportunidad del CRM (botón «Crear proforma» de la
+         * oportunidad → /modulos/proformas?crm_oportunidad=…). Abre siempre una proforma
+         * en blanco (no ofrece el borrador pendiente) con el cliente ya puesto.
+         * @param {{id:number, numero?:number, titulo?:string, cliente?:object}} op
+         */
+        nuevaDesdeOportunidad(op) {
+            _registrarAutoGuardado();
+            _bloquearSecuencial = false;
+            _reset();
+            _initClienteBuscar();
+            getModal().show();
+            if (typeof window.aplicarFavoritosModal === 'function') {
+                window.aplicarFavoritosModal('#modalProforma');
+            }
+            _pfIdOportunidad = parseInt(op && op.id, 10) || null;
+            if (op && op.cliente) _seleccionarCliente(op.cliente);
+            if (_pfIdOportunidad) {
+                const titulo = op.titulo ? ` «${op.titulo}»` : '';
+                $id('pf_tituloModal').textContent = `Nueva Proforma · Oportunidad${op.numero ? ' #' + op.numero : ''}${titulo}`;
             }
         },
 
