@@ -264,7 +264,10 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
             if (stripos($m, 'credit') !== false || stripos($m, 'billing') !== false) {
                 throw new \RuntimeException('La cuenta de Anthropic de la empresa no tiene saldo. Revise la facturación en console.anthropic.com.');
             }
-            throw new \RuntimeException('Anthropic rechazó la solicitud (datos no válidos).');
+            // El motivo de Anthropic (p. ej. «output_config.format.schema: …») es lo único que
+            // permite corregir: se muestra recortado y sin nada que parezca una clave.
+            $motivo = self::motivoAnthropic($m);
+            throw new \RuntimeException('Anthropic rechazó la solicitud (datos no válidos)' . ($motivo !== '' ? ': ' . $motivo : '.'));
         } catch (APIStatusException $e) {
             throw new \RuntimeException('Anthropic respondió con un error. Se reintentará.');
         } catch (APIConnectionException $e) {
@@ -301,6 +304,21 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
             array_pop($out);
         }
         return $out;
+    }
+
+    /**
+     * Texto del error 400 de Anthropic, legible y seguro de mostrar: saca el
+     * «message» del JSON si viene, tapa cualquier cosa con forma de clave y recorta.
+     */
+    public static function motivoAnthropic(string $crudo): string
+    {
+        $t = $crudo;
+        if (preg_match('/"message"\s*:\s*"((?:[^"\\\\]|\\\\.)*)"/', $crudo, $m)) {
+            $t = (string) json_decode('"' . $m[1] . '"');
+        }
+        $t = (string) preg_replace('/sk-ant-[A-Za-z0-9_\-]+/', 'sk-ant-***', $t);
+        $t = trim((string) preg_replace('/\s+/', ' ', $t));
+        return mb_substr($t, 0, 240);
     }
 
     private static function textoDe(array $bloques): string
