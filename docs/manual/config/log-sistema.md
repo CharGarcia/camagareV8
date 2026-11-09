@@ -31,7 +31,10 @@ pantalla registra **acciones de negocio**.
 2. Por defecto verá los eventos del año en curso. Ajuste **Desde** y **Hasta** para
    acotar el rango: mientras más corto el rango, más rápida la consulta.
 3. Use los filtros de la barra superior para acotar por **Usuario**, **Empresa**
-   (solo nivel 3), **Acción** o **Módulo**.
+   (solo nivel 3), **Acción** o **Módulo**. Los cuatro tienen **buscador**: haga
+   clic en el filtro y escriba parte del nombre (sin importar mayúsculas ni tildes)
+   para acortar la lista, y elija con el ratón o con Enter. Para quitar el filtro
+   borre lo elegido con **Retroceso** o use **Limpiar**.
 4. Para encontrar un evento por lo que dice adentro, escriba en **Contenido del
    mensaje** (ver más abajo).
 5. Haga clic en cualquier fila para abrir el **detalle del evento**: en el
@@ -264,7 +267,8 @@ espacios.
 - **1.4** — Los documentos que entran por XML o por la descarga automática del SRI
   (compras, liquidaciones, notas de crédito y débito, facturas de venta) ahora
   registran su evento **Crear**, con el origen y la clave de acceso; antes no
-  aparecían en la bitácora.
+  aparecían en la bitácora. Los filtros **Usuario**, **Empresa**, **Acción** y
+  **Módulo** ahora tienen buscador: se escribe para encontrar la opción.
 - **1.3** — Columna **Referencia** en el listado, el detalle, el PDF y el Excel: nombre
   e identificación del cliente, proveedor, empleado o producto afectado (o del tercero
   del documento), para reconocer el registro sin abrir cada evento. `tercero:` busca

@@ -217,7 +217,51 @@
         }
     }
 
+    // Filtros con buscador: los <select> de Usuario, Empresa, Acción y Módulo se
+    // convierten en TomSelect (ya cargado en el layout) para poder escribir y filtrar
+    // la lista. El <select> original sigue siendo la fuente del valor: getFiltros() y
+    // el evento 'change' no cambian. Si TomSelect no cargó, quedan como selects normales.
+    const filtrosBuscables = {};
+    const IDS_BUSCABLES = ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla'];
+
+    function initFiltrosBuscables() {
+        if (typeof window.TomSelect !== 'function') return;
+        IDS_BUSCABLES.forEach(function (id) {
+            const el = document.getElementById(id);
+            if (!el || el.tomselect) return;
+            try {
+                filtrosBuscables[id] = new window.TomSelect(el, {
+                    create: false,
+                    maxOptions: null,
+                    allowEmptyOption: false, // la opción vacía ("Todos") pasa a ser el placeholder
+                    placeholder: (el.options[0] ? el.options[0].text : 'Todos') + ' — buscar…',
+                    dropdownParent: 'body',
+                    copyClassesToDropdown: false, // .form-select deformaría el desplegable
+                    dropdownClass: 'ts-dropdown log-ts-dropdown',
+                    selectOnTab: true,
+                    render: {
+                        no_results: function () {
+                            return '<div class="no-results px-2 py-1 text-muted">Sin coincidencias</div>';
+                        },
+                    },
+                    onItemAdd: function () { this.blur(); },
+                });
+            } catch (e) {
+                // Se queda como <select> normal.
+            }
+        });
+    }
+
+    function limpiarFiltroSelect(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (filtrosBuscables[id]) filtrosBuscables[id].clear(true); // silencioso: no recarga por cada uno
+        else el.value = '';
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
+        initFiltrosBuscables();
+
         // Auditoría: búsqueda con debounce.
         const input = document.getElementById('logInputBuscar');
         if (input) {
@@ -271,10 +315,9 @@
         const btnLimpiar = document.getElementById('btnLimpiarFiltros');
         if (btnLimpiar) {
             btnLimpiar.addEventListener('click', function () {
-                ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla', 'fltContenido'].forEach(function (id) {
-                    const el = document.getElementById(id);
-                    if (el) el.value = '';
-                });
+                ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla'].forEach(limpiarFiltroSelect);
+                const inputCont = document.getElementById('fltContenido');
+                if (inputCont) inputCont.value = '';
                 ['fltDesde', 'fltHasta'].forEach(function (id) {
                     const el = document.getElementById(id);
                     if (el) el.value = el.defaultValue;

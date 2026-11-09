@@ -31,6 +31,45 @@ $verIntentos = $nivel >= 3;
         align-items: flex-end;
         gap: .5rem;
     }
+    /* Filtros con buscador (Usuario, Empresa, Acción, Módulo): TomSelect compacto, del
+       mismo alto que el resto de la barra. El ancho es fijo para que la barra no salte
+       al elegir un nombre largo. */
+    .log-toolbar .ts-wrapper.log-flt-buscable {
+        padding: 0;
+        border: 0;
+        background: none;
+        height: 30px;
+        min-height: 30px;
+        width: 190px;
+    }
+    .log-toolbar .ts-wrapper.log-flt-buscable .ts-control {
+        height: 30px;
+        min-height: 30px;
+        padding: 3px 24px 3px 8px;
+        font-size: .875rem;
+        flex-wrap: nowrap;
+        overflow: hidden;
+        white-space: nowrap;
+        border-radius: .25rem;
+        /* Flecha de Bootstrap: la variable la define .form-select, clase que TomSelect
+           copia al contenedor. */
+        background: #fff var(--bs-form-select-bg-img) no-repeat right .5rem center / 12px 10px;
+    }
+    .log-toolbar .ts-wrapper.log-flt-buscable .ts-control .item {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .log-toolbar .ts-wrapper.log-flt-buscable .ts-control > input {
+        font-size: .875rem;
+        min-width: 2rem;
+    }
+    .log-ts-dropdown {
+        font-size: .8125rem;
+        min-width: 260px;
+        z-index: 1080;
+    }
+    .log-ts-dropdown .ts-dropdown-content { max-height: 320px; }
     .log-tabs .nav-link {
         padding: .25rem .75rem;
         font-size: .8125rem;
@@ -86,7 +125,7 @@ $verIntentos = $nivel >= 3;
 
             <div>
                 <label class="form-label small mb-0 text-muted">Usuario</label>
-                <select id="fltUsuario" class="form-select form-select-sm" style="min-width:150px;height:30px;">
+                <select id="fltUsuario" class="form-select form-select-sm log-flt-buscable" style="min-width:150px;height:30px;" autocomplete="off">
                     <option value="">Todos</option>
                     <?php foreach ($opcionesFiltros['usuarios'] as $u): ?>
                         <option value="<?= (int) $u['id_usuario'] ?>"><?= htmlspecialchars((string) $u['nombre']) ?></option>
@@ -97,7 +136,7 @@ $verIntentos = $nivel >= 3;
             <?php if ($nivel >= 3 && !empty($opcionesFiltros['empresas'])): ?>
             <div>
                 <label class="form-label small mb-0 text-muted">Empresa</label>
-                <select id="fltEmpresa" class="form-select form-select-sm" style="min-width:150px;height:30px;">
+                <select id="fltEmpresa" class="form-select form-select-sm log-flt-buscable" style="min-width:150px;height:30px;" autocomplete="off">
                     <option value="">Todas</option>
                     <?php foreach ($opcionesFiltros['empresas'] as $e): ?>
                         <option value="<?= (int) $e['id_empresa'] ?>"><?= htmlspecialchars((string) $e['nombre']) ?></option>
@@ -108,7 +147,7 @@ $verIntentos = $nivel >= 3;
 
             <div>
                 <label class="form-label small mb-0 text-muted">Acción</label>
-                <select id="fltAccion" class="form-select form-select-sm" style="min-width:120px;height:30px;">
+                <select id="fltAccion" class="form-select form-select-sm log-flt-buscable" style="min-width:120px;height:30px;" autocomplete="off">
                     <option value="">Todas</option>
                     <?php foreach ($opcionesFiltros['acciones'] as $a): ?>
                         <option value="<?= htmlspecialchars((string) $a['valor']) ?>"><?= htmlspecialchars((string) $a['label']) ?></option>
@@ -118,7 +157,7 @@ $verIntentos = $nivel >= 3;
 
             <div>
                 <label class="form-label small mb-0 text-muted">Módulo</label>
-                <select id="fltTabla" class="form-select form-select-sm" style="min-width:140px;height:30px;">
+                <select id="fltTabla" class="form-select form-select-sm log-flt-buscable" style="min-width:140px;height:30px;" autocomplete="off">
                     <option value="">Todos</option>
                     <?php foreach ($opcionesFiltros['tablas'] as $t): ?>
                         <option value="<?= htmlspecialchars((string) $t['codigo']) ?>"><?= htmlspecialchars((string) $t['label']) ?></option>
