@@ -1633,7 +1633,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const tb = document.getElementById('eg-tbody-pagos');
         tb.innerHTML = '';
         if (pagosEgreso.length === 0) {
-            tb.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted small">No hay formas cargadas.</td></tr>';
+            tb.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted small">Con una sola forma de pago basta elegirla arriba: se agrega sola al guardar. Use <i class="bi bi-plus-lg"></i> solo si son varias.</td></tr>';
         } else {
             pagosEgreso.forEach((p, i) => {
                 let txtRef = p.ref || '';
@@ -1699,6 +1699,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         renderPagosAnuladosEgreso();
         egActualizarObservacionesAuto(); // las formas de pago también van en el texto
+        // Al quitar una forma de pago, la fila de captura vuelve a sugerir lo que falta
+        // (es lo que se toma sola al guardar si el usuario no pulsa "+").
+        document.getElementById('eg-add-pago-monto').value = egPendientePago().toFixed(2);
     }
 
     function renderPagosAnuladosEgreso() {
@@ -2004,14 +2007,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function addEgresoPago() {
         const c = document.getElementById('eg-add-pago-forma');
-        if (!c.value) { Swal.fire('Requerido', 'Seleccione forma de pago', 'warning'); return; }
+        if (!c.value) { Swal.fire('Requerido', 'Seleccione forma de pago', 'warning'); return false; }
         
         const selOpt = c.options[c.selectedIndex];
         const tipoPadre = (selOpt.dataset.tipo || '').toUpperCase();
         const m = parseFloat(document.getElementById('eg-add-pago-monto').value) || 0;
         const r = document.getElementById('eg-add-pago-ref').value;
 
-        if (m <= 0) { Swal.fire('Inválido', 'Monto debe ser mayor a 0', 'warning'); return; }
+        if (m <= 0) { Swal.fire('Inválido', 'Monto debe ser mayor a 0', 'warning'); return false; }
 
         let tipoOp = null;
         let numChq = null;
@@ -2024,12 +2027,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 numChq = document.getElementById('eg-add-pago-num-cheque').value.trim();
                 fecChq = document.getElementById('eg-add-pago-fecha-cheque').value;
                 benefChq = document.getElementById('eg-add-pago-benef-cheque').value.trim().toUpperCase() || null;
-                if (!numChq) { Swal.fire('Campo requerido', 'Ingrese número de cheque', 'warning'); return; }
-                if (!fecChq) { Swal.fire('Campo requerido', 'Ingrese fecha de cobro del cheque', 'warning'); return; }
+                if (!numChq) { Swal.fire('Campo requerido', 'Ingrese número de cheque', 'warning'); return false; }
+                if (!fecChq) { Swal.fire('Campo requerido', 'Ingrese fecha de cobro del cheque', 'warning'); return false; }
                 const maxFecChq = new Date(); maxFecChq.setFullYear(maxFecChq.getFullYear() + 1);
                 if (new Date(fecChq + 'T00:00:00') > maxFecChq) {
                     Swal.fire('Fecha Inválida', 'La fecha de cobro del cheque no puede ser mayor a 1 año desde hoy.', 'warning');
-                    return;
+                    return false;
                 }
             }
         }
@@ -2054,6 +2057,64 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         renderPagosEgreso();
         // Pre-cargar el monto con lo que aún falta por pagar.
         document.getElementById('eg-add-pago-monto').value = egPendientePago().toFixed(2);
+        return true;
+    }
+
+    // ── Fila de captura tomada al guardar ─────────────────────────────────────
+    // Con una sola forma de pago el usuario no necesita pulsar "+": la fila de captura ya
+    // trae el monto pendiente (egPendientePago) y, si hay favorito, la forma. Al guardar (alta
+    // o edición), si esa fila tiene forma y monto y aún falta cubrir el total, se agrega como
+    // si se hubiera pulsado "+" (misma función, mismas validaciones de cheque/banco).
+    // Devuelve false solo si la fila tenía datos inválidos (el aviso ya se mostró).
+    function egTomarFilaPagoPendiente(total) {
+        if (esEgresoSoloLectura) return true;
+        const c = document.getElementById('eg-add-pago-forma');
+        const m = parseFloat(document.getElementById('eg-add-pago-monto').value) || 0;
+        if (!c || c.disabled || !c.value || m <= 0) return true;
+        const sum = pagosEgreso.reduce((a, b) => a + b.monto, 0);
+        if (total - sum <= 0.009) return true; // ya cuadra: no hay nada que tomar
+        if (addEgresoPago()) return true;
+        egMostrarPestanaPagos();
+        return false;
+    }
+
+    /** Formas de pago en el formato que recibe el servidor (alta y edición). */
+    function egPagosPayload() {
+        return pagosEgreso.map(p => ({
+            id_forma_pago: p.id_forma,
+            monto: p.monto,
+            referencia: p.ref,
+            tipo_operacion_bancaria: p.tipo_operacion_bancaria,
+            numero_cheque: p.numero_cheque,
+            fecha_cobro: p.fecha_cobro,
+            beneficiario_cheque: p.beneficiario_cheque
+        }));
+    }
+
+    function egMostrarPestanaPagos() {
+        if (!window.bootstrap) return;
+        const gen = document.getElementById('tab-egreso-gen-btn');
+        if (gen) bootstrap.Tab.getOrCreateInstance(gen).show();
+        const sub = document.querySelector('a[href="#eg-subtab-pag"]');
+        if (sub) bootstrap.Tab.getOrCreateInstance(sub).show();
+    }
+
+    /** Valida que las formas de pago cubran el total; si no, muestra cuánto falta y abre la pestaña. */
+    function egValidarCuadrePagos(total) {
+        const sum = pagosEgreso.reduce((a, b) => a + b.monto, 0);
+        const falta = +(total - sum).toFixed(2);
+        if (Math.abs(falta) <= 0.01) return true;
+        egMostrarPestanaPagos();
+        let msg;
+        if (falta > 0 && pagosEgreso.length === 0) {
+            msg = `Elija la forma de pago del egreso ($${total.toFixed(2)}) en la pestaña "Formas de Pago".`;
+        } else if (falta > 0) {
+            msg = `Faltan $${falta.toFixed(2)} por asignar a una forma de pago (pagos $${sum.toFixed(2)} de $${total.toFixed(2)}).`;
+        } else {
+            msg = `Las formas de pago ($${sum.toFixed(2)}) superan el total del egreso ($${total.toFixed(2)}) en $${(-falta).toFixed(2)}.`;
+        }
+        Swal.fire('Formas de pago', msg, 'warning');
+        return false;
     }
 
     // ── Navegación Anterior / Siguiente entre egresos (encabezado del modal) ──────────
@@ -2349,15 +2410,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             observaciones: document.getElementById('eg-input-obs').value,
             ...egProyectoPayload(),
             detalles: [],
-            pagos: pagosEgreso.map(p=>({
-                id_forma_pago: p.id_forma,
-                monto: p.monto,
-                referencia: p.ref,
-                tipo_operacion_bancaria: p.tipo_operacion_bancaria,
-                numero_cheque: p.numero_cheque,
-                fecha_cobro: p.fecha_cobro,
-                beneficiario_cheque: p.beneficiario_cheque
-            }))
+            pagos: [] // se arma con egPagosPayload() después de tomar la fila de captura
         };
 
         const valSujeto = document.getElementById('eg-input-id-sujeto').value;
@@ -2374,8 +2427,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         data.detalles = construido.detalles;
 
         data.monto_total = data.detalles.reduce((a,b)=>a+b.monto_pagado,0);
-        const sumPag = pagosEgreso.reduce((a,b)=>a+b.monto,0);
-        if(Math.abs(sumPag - data.monto_total) > 0.01) { Swal.fire('Inconsistencia', 'La suma de pagos registrados no coincide con el total liquidado.', 'error'); return; }
+        // Formas de pago: la fila de captura (forma + monto) se toma sola si el usuario no
+        // pulsó "+"; solo con varias formas hace falta agregarlas a la lista.
+        if (!egTomarFilaPagoPendiente(data.monto_total)) return;
+        if (!egValidarCuadrePagos(data.monto_total)) return;
+        data.pagos = egPagosPayload();
+        // renderPagosEgreso() pudo actualizar el texto automático de observaciones con la forma tomada.
+        data.observaciones = document.getElementById('eg-input-obs').value;
 
         // Validación 1 (cliente): fecha de emisión no puede ser anterior a la fecha de los documentos
         for (const d of docsSel) {
@@ -2850,11 +2908,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
 
         const montoTotal = construido.detalles.reduce((a, b) => a + b.monto_pagado, 0);
-        const sumPag = pagosEgreso.reduce((a, b) => a + b.monto, 0);
-        if (Math.abs(sumPag - montoTotal) > 0.01) {
-            Swal.fire('Inconsistencia', 'La suma de las formas de pago ($' + sumPag.toFixed(2) + ') no coincide con el total del egreso ($' + montoTotal.toFixed(2) + ').', 'error');
-            return;
-        }
+        if (!egTomarFilaPagoPendiente(montoTotal)) return;
+        if (!egValidarCuadrePagos(montoTotal)) return;
 
         const btn = document.getElementById('btnGuardarEgreso');
         const oldHtml = btn.innerHTML;
@@ -2872,15 +2927,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             ...egProyectoPayload(),
             detalles: construido.detalles,
             monto_total: montoTotal,
-            pagos: pagosEgreso.map(p => ({
-                id_forma_pago: p.id_forma,
-                monto: p.monto,
-                referencia: p.ref,
-                tipo_operacion_bancaria: p.tipo_operacion_bancaria,
-                numero_cheque: p.numero_cheque,
-                fecha_cobro: p.fecha_cobro,
-                beneficiario_cheque: p.beneficiario_cheque
-            })),
+            pagos: egPagosPayload(),
             // Cheques marcados para anular en el modal: se anulan en este mismo guardado.
             cheques_anular: pagosAnuladosEgreso
                 .filter(p => p.pendiente)

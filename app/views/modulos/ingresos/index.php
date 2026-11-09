@@ -1911,7 +1911,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         tbody.innerHTML = '';
 
         if (formasPagoData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3 small">Agregue las formas en que se recibió el dinero.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3 small">Con una sola forma de cobro basta elegirla arriba: se agrega sola al guardar. Use <i class="bi bi-plus-lg"></i> solo si son varias.</td></tr>';
         } else {
             formasPagoData.forEach((p, idx) => {
                 // Formatear referencia textual
@@ -1958,11 +1958,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         if (!formaId) {
             Swal.fire('Forma de Cobro', 'Seleccione una forma de cobro.', 'warning');
-            return;
+            return false;
         }
         if (monto <= 0) {
             Swal.fire('Monto Inválido', 'El monto debe ser mayor a 0.00.', 'warning');
-            return;
+            return false;
         }
 
         let tipoOpBanco = null;
@@ -1976,16 +1976,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 fecChq = document.getElementById('m-add-cobro-fecha-cheque').value;
                 if (!numChq) {
                     Swal.fire('Cheque', 'Por favor ingrese el número de cheque.', 'warning');
-                    return;
+                    return false;
                 }
                 if (!fecChq) {
                     Swal.fire('Cheque', 'Por favor seleccione la fecha de cobro del cheque.', 'warning');
-                    return;
+                    return false;
                 }
                 const maxFecChq = new Date(); maxFecChq.setFullYear(maxFecChq.getFullYear() + 1);
                 if (new Date(fecChq + 'T00:00:00') > maxFecChq) {
                     Swal.fire('Fecha Inválida', 'La fecha de cobro del cheque no puede ser mayor a 1 año desde hoy.', 'warning');
-                    return;
+                    return false;
                 }
             }
         }
@@ -2008,6 +2008,33 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('m-add-cobro-fecha-cheque').value = '';
 
         renderPagos();
+        return true;
+    }
+
+    // ── Fila de captura tomada al guardar ─────────────────────────────────────
+    // Con una sola forma de cobro el usuario no necesita pulsar "+": la fila de captura ya
+    // trae el monto pendiente (recalcularSumariaCobros) y, si hay favorito, la forma. Al
+    // guardar, si esa fila tiene forma y monto y aún falta cubrir el total, se agrega como si
+    // se hubiera pulsado "+" (misma función, mismas validaciones de cheque/banco).
+    // Devuelve false solo si la fila tenía datos inválidos (el aviso ya se mostró).
+    function ingTomarFilaCobroPendiente(total) {
+        if (esIngresoModoLectura) return true;
+        const combo = document.getElementById('m-add-cobro-forma');
+        const monto = parseFloat(document.getElementById('m-add-cobro-monto').value) || 0;
+        if (!combo || combo.disabled || !combo.value || monto <= 0) return true;
+        const sum = formasPagoData.reduce((a, b) => a + b.monto, 0);
+        if (total - sum <= 0.009) return true; // ya cuadra: no hay nada que tomar
+        if (agregarLineaCobro()) return true;
+        ingMostrarPestanaCobros();
+        return false;
+    }
+
+    function ingMostrarPestanaCobros() {
+        if (!window.bootstrap) return;
+        const gen = document.getElementById('tab-ingreso-gen-btn');
+        if (gen) bootstrap.Tab.getOrCreateInstance(gen).show();
+        const sub = document.querySelector('a[href="#subtab-cobros"]');
+        if (sub) bootstrap.Tab.getOrCreateInstance(sub).show();
     }
 
     function eliminarFormaPago(idx) {
@@ -2344,10 +2371,26 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         // Sum total
         data.monto_total = data.detalles.reduce((a, b) => a + b.monto_cobrado, 0);
 
-        // Valida pagos
+        // Formas de cobro: la fila de captura (forma + monto) se toma sola si el usuario no
+        // pulsó "+"; solo con varias formas hace falta agregarlas a la lista.
+        if (!ingTomarFilaCobroPendiente(data.monto_total)) return;
+        data.pagos = formasPagoData;
+        // renderPagos() pudo actualizar el texto automático de observaciones con la forma tomada.
+        data.observaciones = document.getElementById('m-input-observaciones').value;
+
         const sumPagos = formasPagoData.reduce((a, b) => a + b.monto, 0);
-        if (Math.abs(sumPagos - data.monto_total) > 0.01) {
-            Swal.fire('Descuadre', `La suma de cobros ($${sumPagos.toFixed(2)}) no coincide con el total ($${data.monto_total.toFixed(2)}).`, 'error');
+        const faltaCobro = +(data.monto_total - sumPagos).toFixed(2);
+        if (Math.abs(faltaCobro) > 0.01) {
+            ingMostrarPestanaCobros();
+            let msg;
+            if (faltaCobro > 0 && formasPagoData.length === 0) {
+                msg = `Elija la forma de cobro del ingreso ($${data.monto_total.toFixed(2)}) en la pestaña "Formas de Cobro".`;
+            } else if (faltaCobro > 0) {
+                msg = `Faltan $${faltaCobro.toFixed(2)} por asignar a una forma de cobro (cobros $${sumPagos.toFixed(2)} de $${data.monto_total.toFixed(2)}).`;
+            } else {
+                msg = `Las formas de cobro ($${sumPagos.toFixed(2)}) superan el total del ingreso ($${data.monto_total.toFixed(2)}) en $${(-faltaCobro).toFixed(2)}.`;
+            }
+            Swal.fire('Formas de cobro', msg, 'warning');
             return;
         }
 
