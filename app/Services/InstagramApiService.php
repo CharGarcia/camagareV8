@@ -318,6 +318,9 @@ class InstagramApiService
             @unlink($tmp);
             return null;
         }
+        // El cron (root) baja los adjuntos: carpeta y archivo quedan del dueño de
+        // storage/, para que Apache pueda mostrarlos y guardar en la misma carpeta.
+        \App\Helpers\DuenoStorage::igualar($dirAbs . '/' . $final);
         return $final;
     }
 
