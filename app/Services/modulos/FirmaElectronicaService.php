@@ -491,6 +491,104 @@ class FirmaElectronicaService
     }
 
     // ═════════════════════════════════════════════════════════════════════
+    // ENLACES POR VENDEDOR (un enlace/QR por negocio vendedor, para su comisión)
+    // ═════════════════════════════════════════════════════════════════════
+
+    /** ¿Está aplicada la migración de vendedores? (database/20261110_firmas_enlaces_vendedor.sql) */
+    public function vendedoresDisponibles(): bool
+    {
+        return $this->repository->tieneVendedor();
+    }
+
+    /** @return array<int, array{id_vendedor:int, nombre:string, url:?string}> */
+    public function getEnlacesVendedor(int $idEmpresa): array
+    {
+        if (!$this->repository->tieneVendedor()) {
+            return [];
+        }
+        return array_map(static fn(array $r) => [
+            'id_vendedor' => (int) $r['id_vendedor'],
+            'nombre'      => (string) $r['nombre'],
+            'url'         => !empty($r['codigo']) ? self::urlEnlaceFijo(trim((string) $r['codigo'])) : null,
+        ], $this->repository->getEnlacesVendedor($idEmpresa));
+    }
+
+    /**
+     * Genera el enlace de un vendedor. Si ya tiene uno se devuelve ese, salvo $regenerar:
+     * entonces el anterior deja de funcionar (los QR impresos con él también).
+     */
+    public function generarEnlaceVendedor(int $idEmpresa, int $idUsuario, int $idVendedor, bool $regenerar = false): string
+    {
+        $this->exigirVendedores();
+        if (empty($this->getConfigModulo($idEmpresa)['existe'])) {
+            throw new Exception('Primero guarde la configuración del módulo (pestaña General).');
+        }
+        $vendedor = $this->repository->getVendedorActivo($idVendedor, $idEmpresa);
+        if (!$vendedor) {
+            throw new Exception('El vendedor no existe o está inactivo.');
+        }
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->lockEnlaceVendedor($idEmpresa, $idVendedor);
+            $actual = $this->repository->getEnlaceVendedor($idEmpresa, $idVendedor);
+            if ($actual && !$regenerar) {
+                $this->repository->commit();
+                return self::urlEnlaceFijo(trim((string) $actual['codigo']));
+            }
+            if ($actual) {
+                $this->repository->eliminarEnlaceVendedor($idEmpresa, $idVendedor, $idUsuario);
+            }
+            $codigo = bin2hex(random_bytes(16));
+            $this->repository->crearEnlaceVendedor($idEmpresa, $idVendedor, $codigo, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, $actual ? 'regenerar_enlace_vendedor' : 'crear_enlace_vendedor',
+                'firmas_enlaces_vendedor', $idVendedor, $actual ? ['codigo' => trim((string) $actual['codigo'])] : null,
+                ['id_vendedor' => $idVendedor, 'vendedor' => $vendedor['nombre'], 'codigo' => $codigo]);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+        return self::urlEnlaceFijo($codigo);
+    }
+
+    /** Quita el enlace de un vendedor: deja de funcionar (las firmas ya registradas conservan su vendedor). */
+    public function quitarEnlaceVendedor(int $idEmpresa, int $idUsuario, int $idVendedor): void
+    {
+        $this->exigirVendedores();
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->lockEnlaceVendedor($idEmpresa, $idVendedor);
+            $actual = $this->repository->getEnlaceVendedor($idEmpresa, $idVendedor);
+            if ($actual) {
+                $this->repository->eliminarEnlaceVendedor($idEmpresa, $idVendedor, $idUsuario);
+                $this->logService->registrar($idUsuario, $idEmpresa, 'quitar_enlace_vendedor', 'firmas_enlaces_vendedor', $idVendedor,
+                    ['codigo' => trim((string) $actual['codigo'])], null);
+            }
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    private function exigirVendedores(): void
+    {
+        if (!$this->repository->tieneVendedor()) {
+            throw new Exception('Falta aplicar en la base de datos el script 20261110_firmas_enlaces_vendedor.sql.');
+        }
+    }
+
+    /** Vendedor de la firma para su factura: solo si sigue activo en la empresa. */
+    private function vendedorDeFirma(array $firma): ?int
+    {
+        $id = (int) ($firma['id_vendedor'] ?? 0);
+        if ($id <= 0 || !$this->repository->tieneVendedor()) {
+            return null;
+        }
+        return $this->repository->getVendedorActivo($id, (int) $firma['id_empresa']) ? $id : null;
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
     // ENVÍO DEL ENLACE AL CLIENTE (correo / WhatsApp)
     // ═════════════════════════════════════════════════════════════════════
 
@@ -528,6 +626,14 @@ class FirmaElectronicaService
         if ($porWhatsapp && $telefono === '') {
             throw new Exception('Ingrese el celular para enviar por WhatsApp: 10 dígitos numéricos (ej. 0958924835).');
         }
+        // Vendedor del enlace (opcional): la firma que nazca de él queda a su nombre.
+        $idVendedor = (int) ($d['id_vendedor'] ?? 0);
+        if ($idVendedor > 0 && $idFirma <= 0) {
+            $this->exigirVendedores();
+            if (!$this->repository->getVendedorActivo($idVendedor, $idEmpresa)) {
+                throw new Exception('El vendedor elegido no existe o está inactivo.');
+            }
+        }
 
         $this->repository->beginTransaction();
         try {
@@ -550,10 +656,14 @@ class FirmaElectronicaService
                     'expira_at'        => date('Y-m-d H:i:s', strtotime('+' . self::DIAS_ENLACE . ' days')),
                     'created_by'       => $idUsuario,
                 ]);
+                if ($idVendedor > 0) {
+                    $this->repository->setVendedorSolicitud($idSol, $idEmpresa, $idVendedor);
+                }
                 $sol = $this->solRepo->getById($idSol, $idEmpresa);
             }
             $this->logService->registrar($idUsuario, $idEmpresa, 'enviar_enlace', 'firma_solicitudes', (int) $sol['id'], null,
-                ['correo' => $porCorreo ? $correo : null, 'whatsapp' => $porWhatsapp ? $telefono : null, 'id_firma' => $idFirma ?: null]);
+                ['correo' => $porCorreo ? $correo : null, 'whatsapp' => $porWhatsapp ? $telefono : null, 'id_firma' => $idFirma ?: null,
+                 'id_vendedor' => ($idVendedor > 0 && $idFirma <= 0) ? $idVendedor : null]);
             $this->repository->commit();
         } catch (\Throwable $e) {
             $this->repository->rollBack();
@@ -752,6 +862,12 @@ class FirmaElectronicaService
             return null;
         }
         $cfg = $this->repository->getConfigPorEnlace($codigo);
+        $idVendedor = null;
+        if (!$cfg && $this->repository->tieneVendedor()) {
+            // Enlace propio de un vendedor: la solicitud que nazca aquí queda a su nombre.
+            $cfg = $this->repository->getEnlaceVendedorPorCodigo($codigo);
+            $idVendedor = $cfg ? (int) $cfg['id_vendedor'] : null;
+        }
         if (!$cfg) {
             return null;
         }
@@ -759,6 +875,7 @@ class FirmaElectronicaService
             'id' => 0, 'token' => '', 'estado' => 'pendiente', 'origen' => 'enlace_fijo',
             'id_empresa' => (int) $cfg['id_empresa'], 'empresa_nombre' => $cfg['empresa_nombre'],
             'correo_destino' => '', 'nombre_destino' => '', 'enlace_codigo' => $codigo,
+            'id_vendedor' => $idVendedor,
         ];
         return $this->armarPortal((int) $cfg['id_empresa'], $sol, null);
     }
@@ -977,6 +1094,9 @@ class FirmaElectronicaService
                 'expira_at'        => date('Y-m-d H:i:s', strtotime('+' . self::DIAS_ENLACE . ' days')),
                 'created_by'       => $cfg['id_usuario_responsable'] ?: null,
             ]);
+            if (!empty($portal['solicitud']['id_vendedor'])) {
+                $this->repository->setVendedorSolicitud($idSol, $idEmpresa, (int) $portal['solicitud']['id_vendedor']);
+            }
             $sol = $this->solRepo->getById($idSol, $idEmpresa);
             $this->crearFirmaDesdePortal($sol, $data);
             $db->commit();
@@ -1007,6 +1127,11 @@ class FirmaElectronicaService
             'fecha_caducidad'          => $this->caducidadEstimada((int) ($data['id_producto'] ?? 0), $idEmpresa),
         ]);
         $idFirma = $this->repository->createDesdePortal($firmaData, (int) $sol['id']);
+        // Vendedor del enlace (fijo del vendedor o elegido al enviarlo): pasa a la firma y a su factura.
+        if (!empty($sol['id_vendedor'])) {
+            $this->repository->setVendedorFirma($idFirma, $idEmpresa, (int) $sol['id_vendedor']);
+            $firmaData['id_vendedor'] = (int) $sol['id_vendedor'];
+        }
         $this->solRepo->marcarCompletado((int) $sol['id'], $idFirma);
         $this->repository->crearEvento($idEmpresa, $idFirma, 'datos', 'Datos del titular registrados', 'Falta subir los documentos.', true, null);
         $this->logService->registrar(0, $idEmpresa, 'crear_portal', 'firmas_electronicas', $idFirma, null, $firmaData);
@@ -2126,6 +2251,11 @@ class FirmaElectronicaService
                 'fecha_caducidad' => $this->caducidadEstimada((int) ($copia['id_producto'] ?? 0), $idEmpresa),
             ]);
             $this->repository->marcarRenovacion($idNueva, $idFirma, $idSol);
+            // La renovación conserva el vendedor de la firma anterior (el negocio que trajo al cliente).
+            if (($idVen = $this->vendedorDeFirma($firma)) !== null) {
+                $this->repository->setVendedorSolicitud($idSol, $idEmpresa, $idVen);
+                $this->repository->setVendedorFirma($idNueva, $idEmpresa, $idVen);
+            }
             $this->solRepo->marcarCompletado($idSol, $idNueva);
             $n = $this->copiarAdjuntos($firma, $idNueva, $idUsuario);
             $this->repository->actualizarTramite($idFirma, $idEmpresa, ['id_firma_renovacion' => $idNueva], $idUsuario);
@@ -2716,6 +2846,8 @@ class FirmaElectronicaService
             'id_usuario'          => $idUsuario,
             'empresa_config'      => $empresaConfig,
             'id_cliente'          => $idCliente,
+            // Vendedor del enlace por el que llegó la solicitud: su comisión sale de los reportes por vendedor.
+            'id_vendedor'         => $this->vendedorDeFirma($firma),
             'id_establecimiento'  => (int) $serie['id_establecimiento'],
             'id_punto_emision'    => (int) $serie['id'],
             'id_bodega'           => null,

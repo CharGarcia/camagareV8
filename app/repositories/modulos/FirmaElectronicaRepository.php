@@ -15,6 +15,123 @@ class FirmaElectronicaRepository extends BaseRepository
         parent::__construct($this->table);
     }
 
+    // ── Vendedor de la firma y enlaces por vendedor ───────────
+
+    private static ?bool $conVendedor = null;
+
+    /**
+     * ¿Ya se aplicó database/20261110_firmas_enlaces_vendedor.sql? Sin la columna, todo lo
+     * de vendedores se omite y el módulo sigue como antes (el SQL va antes que el código).
+     */
+    public function tieneVendedor(): bool
+    {
+        if (self::$conVendedor === null) {
+            $st = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_schema = current_schema()
+                   AND ((table_name = 'firmas_electronicas' AND column_name = 'id_vendedor')
+                     OR (table_name = 'firma_solicitudes'   AND column_name = 'id_vendedor')
+                     OR (table_name = 'firmas_enlaces_vendedor' AND column_name = 'codigo'))"
+            );
+            self::$conVendedor = (int) $st->fetchColumn() === 3;
+        }
+        return self::$conVendedor;
+    }
+
+    /** Vendedor activo de la empresa (id, nombre) o null. */
+    public function getVendedorActivo(int $idVendedor, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, nombre FROM vendedores
+             WHERE id = :id AND id_empresa = :ie AND eliminado = false AND status = 1"
+        );
+        $st->execute([':id' => $idVendedor, ':ie' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function setVendedorFirma(int $idFirma, int $idEmpresa, ?int $idVendedor): void
+    {
+        $this->db->prepare("UPDATE {$this->table} SET id_vendedor = :v WHERE id = :id AND id_empresa = :ie AND eliminado = false")
+                 ->execute([':v' => $idVendedor ?: null, ':id' => $idFirma, ':ie' => $idEmpresa]);
+    }
+
+    public function setVendedorSolicitud(int $idSolicitud, int $idEmpresa, ?int $idVendedor): void
+    {
+        $this->db->prepare("UPDATE firma_solicitudes SET id_vendedor = :v WHERE id = :id AND id_empresa = :ie AND eliminado = false")
+                 ->execute([':v' => $idVendedor ?: null, ':id' => $idSolicitud, ':ie' => $idEmpresa]);
+    }
+
+    /** Vendedores activos de la empresa con el código de su enlace (null si aún no tiene). */
+    public function getEnlacesVendedor(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT v.id AS id_vendedor, v.nombre, e.codigo
+             FROM vendedores v
+             LEFT JOIN firmas_enlaces_vendedor e
+                    ON e.id_vendedor = v.id AND e.id_empresa = v.id_empresa AND e.eliminado = false
+             WHERE v.id_empresa = :ie AND v.eliminado = false AND v.status = 1
+             ORDER BY v.nombre"
+        );
+        $st->execute([':ie' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Enlace de un vendedor por su código: solo con la empresa activa (CLAUDE.md §6), el
+     * vendedor activo y el módulo configurado. Inactivo = como si no existiera.
+     */
+    public function getEnlaceVendedorPorCodigo(string $codigo): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT e.id_empresa, e.id_vendedor, v.nombre AS vendedor_nombre,
+                    em.nombre AS empresa_nombre, em.ruc AS empresa_ruc
+             FROM firmas_enlaces_vendedor e
+             JOIN empresas em ON em.id = e.id_empresa AND em.estado = '1' AND em.eliminado = false
+             JOIN vendedores v ON v.id = e.id_vendedor AND v.id_empresa = e.id_empresa AND v.eliminado = false AND v.status = 1
+             JOIN firmas_electronicas_config c ON c.id_empresa = e.id_empresa AND c.eliminado = false
+             WHERE e.codigo = :c AND e.eliminado = false
+             LIMIT 1"
+        );
+        $st->execute([':c' => $codigo]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function lockEnlaceVendedor(int $idEmpresa, int $idVendedor): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('firma_enlace_vendedor:' || :ie || ':' || :v))");
+        $st->execute([':ie' => $idEmpresa, ':v' => $idVendedor]);
+    }
+
+    public function getEnlaceVendedor(int $idEmpresa, int $idVendedor): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, codigo FROM firmas_enlaces_vendedor
+             WHERE id_empresa = :ie AND id_vendedor = :v AND eliminado = false LIMIT 1"
+        );
+        $st->execute([':ie' => $idEmpresa, ':v' => $idVendedor]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    public function crearEnlaceVendedor(int $idEmpresa, int $idVendedor, string $codigo, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "INSERT INTO firmas_enlaces_vendedor (id_empresa, id_vendedor, codigo, created_by)
+             VALUES (:ie, :v, :c, :u)"
+        )->execute([':ie' => $idEmpresa, ':v' => $idVendedor, ':c' => $codigo, ':u' => $idUsuario]);
+    }
+
+    public function eliminarEnlaceVendedor(int $idEmpresa, int $idVendedor, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE firmas_enlaces_vendedor
+             SET eliminado = true, deleted_at = CURRENT_TIMESTAMP, deleted_by = :u
+             WHERE id_empresa = :ie AND id_vendedor = :v AND eliminado = false"
+        )->execute([':u' => $idUsuario, ':ie' => $idEmpresa, ':v' => $idVendedor]);
+    }
+
     public function getListado(
         int $idEmpresa,
         string $buscar,
@@ -34,6 +151,9 @@ class FirmaElectronicaRepository extends BaseRepository
         // `clave:valor ... texto libre`. Antes se buscaba el string completo con un
         // solo ILIKE, así que los filtros del buscador (estado:, estado_pago:…) nunca
         // se aplicaban.
+        // Vendedor: el de la factura activa si tiene; si no, el de la firma (enlace de origen).
+        $conVendedor = $this->tieneVendedor();
+
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
             // Texto libre: columnas del listado y lo que identifica la firma. Decisión del
@@ -41,7 +161,7 @@ class FirmaElectronicaRepository extends BaseRepository
             // se filtran solo desde el modal. Datos sensibles fuera del texto libre a
             // propósito: código dactilar, fecha de nacimiento, dirección, adjuntos y rutas.
             $condicion = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                [
+                array_merge($conVendedor ? ["COALESCE(ven.nombre, '')"] : [], [
                     "CONCAT_WS(' ', f.nombres, f.apellidos)",              // Nombres
                     'f.numero_identificacion',                              // Identificación
                     'f.telefono',                                           // Teléfono
@@ -53,7 +173,7 @@ class FirmaElectronicaRepository extends BaseRepository
                     "CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial)", // Nº de la factura
                     'f.observaciones',
                     'u.nombre',                                             // Usuario que registró
-                ],
+                ]),
                 $parsed['texto_libre'],
                 $params,
                 'tl'
@@ -65,7 +185,7 @@ class FirmaElectronicaRepository extends BaseRepository
         // Claves del modal de filtros (las viejas se conservan: viajan en los enlaces
         // de PDF/Excel).
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
-            'texto'  => [
+            'texto'  => ($conVendedor ? ['vendedor' => "COALESCE(ven.nombre, '')"] : []) + [
                 'nombres'        => 'f.nombres',
                 'apellidos'      => 'f.apellidos',
                 'identificacion' => 'f.numero_identificacion',
@@ -74,7 +194,7 @@ class FirmaElectronicaRepository extends BaseRepository
                 'tipo_firma'     => 'f.nombre_producto',
                 'empresa'        => "CONCAT_WS(' ', f.ruc_empresa, f.nombre_empresa)",
             ],
-            'exacto' => [
+            'exacto' => ($conVendedor ? ['id_vendedor' => 'ven.id'] : []) + [
                 'estado'              => 'f.estado',
                 'estado_pago'         => 'f.estado_pago',
                 'tipo_identificacion' => 'f.tipo_identificacion',
@@ -99,8 +219,14 @@ class FirmaElectronicaRepository extends BaseRepository
         // Mismos JOIN en el conteo y el listado: el texto libre y los filtros usan v y u.
         $joinsFiltro = "LEFT JOIN ventas_cabecera v ON v.id = f.id_factura
                         LEFT JOIN usuarios        u ON u.id = f.created_by";
+        if ($conVendedor) {
+            $joinsFiltro .= "
+                        LEFT JOIN vendedores    ven ON ven.id = COALESCE(
+                            CASE WHEN v.id IS NOT NULL AND v.eliminado = false THEN v.id_vendedor END, f.id_vendedor)";
+        }
+        $colVendedor = $conVendedor ? 'ven.nombre AS vendedor_nombre,' : 'NULL AS vendedor_nombre,';
 
-        $cols = [
+        $cols = ($conVendedor ? ['vendedor' => 'ven.nombre'] : []) + [
             'nombres'              => 'f.nombres',
             'apellidos'            => 'f.apellidos',
             'numero_identificacion'=> 'f.numero_identificacion',
@@ -133,7 +259,7 @@ class FirmaElectronicaRepository extends BaseRepository
                            f.observaciones, f.created_at, f.updated_at,
                            f.facturacion_mismos_datos, f.facturacion_tipo_id, f.facturacion_num_id,
                            f.facturacion_nombres, f.facturacion_direccion, f.facturacion_correo,
-                           f.facturacion_telefono, f.id_factura,
+                           f.facturacion_telefono, f.id_factura, {$colVendedor}
                            p.nombre AS provincia_nombre, c.nombre AS ciudad_nombre,
                            v.estado AS factura_estado, v.eliminado AS factura_eliminada,
                            v.establecimiento AS factura_establecimiento,

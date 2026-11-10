@@ -78,6 +78,8 @@ class FirmasElectronicasController extends BaseModuloController
             'seriesFact'    => $this->service->getSeriesFacturacion($idEmpresa),
             'formasCobro'   => $this->service->getFormasCobro($idEmpresa),
             'usuariosEmp'   => $this->service->getUsuariosEmpresa($idEmpresa),
+            // Vendedores para el selector de «Enviar link» (vacío si falta aplicar el SQL de vendedores)
+            'vendedoresFirma' => $this->service->getEnlacesVendedor($idEmpresa),
             'titulo'      => 'Firmas Electrónicas',
             'perm'        => $perm,
             'rutaModulo'  => self::RUTA_MODULO,
@@ -126,7 +128,7 @@ class FirmasElectronicasController extends BaseModuloController
         $base = BASE_URL;
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.</td></tr>';
+            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $created = !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '—';
@@ -150,6 +152,7 @@ class FirmasElectronicasController extends BaseModuloController
                 echo '<td class="ps-3 fw-medium" data-col="nombres">' . htmlspecialchars(($r['nombres'] ?? '') . ' ' . ($r['apellidos'] ?? '')) . '</td>';
                 echo '<td data-col="numero_identificacion">' . htmlspecialchars($r['numero_identificacion'] ?? '') . '</td>';
                 echo '<td data-col="nombre_producto" class="text-muted small">' . htmlspecialchars($r['nombre_producto'] ?? '—') . '</td>';
+                echo '<td data-col="vendedor" class="small">' . htmlspecialchars((string) (($r['vendedor_nombre'] ?? '') ?: '-')) . '</td>';
                 echo '<td data-col="telefono">' . htmlspecialchars($r['telefono'] ?? '—') . '</td>';
                 echo '<td data-col="correo" class="d-none d-lg-table-cell small">' . htmlspecialchars($r['correo'] ?? '—') . '</td>';
                 echo '<td class="text-center" data-col="estado_pago">' . $badgeEstadoPago . '</td>';
@@ -518,7 +521,7 @@ class FirmasElectronicasController extends BaseModuloController
 
             require_once MVC_ROOT . '/vendor/autoload.php';
 
-            $headers    = ['Nombres', 'Apellidos', 'Tipo ID', 'Nro. Identificación', 'Tipo Firma', 'Teléfono', 'Correo', 'Estado Pago', 'Estado', 'Fecha'];
+            $headers    = ['Nombres', 'Apellidos', 'Tipo ID', 'Nro. Identificación', 'Tipo Firma', 'Vendedor', 'Teléfono', 'Correo', 'Estado Pago', 'Estado', 'Fecha'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
@@ -527,6 +530,7 @@ class FirmasElectronicasController extends BaseModuloController
                     ucfirst($r['tipo_identificacion'] ?? ''),
                     $r['numero_identificacion'] ?? '',
                     $r['nombre_producto'] ?? '—',
+                    ($r['vendedor_nombre'] ?? '') ?: '—',
                     $r['telefono'] ?? '—',
                     $r['correo'] ?? '—',
                     ucfirst($r['estado_pago'] ?? ''),
@@ -847,6 +851,36 @@ class FirmasElectronicasController extends BaseModuloController
             return ['msg' => 'Configuración guardada.', 'url_enlace_fijo' => FirmaElectronicaService::urlEnlaceFijo($cfg['enlace_fijo_codigo'])];
         });
     }
+
+    // ── Enlaces por vendedor (un enlace/QR por negocio vendedor) ──
+
+    public function enlacesVendedorAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(fn() => [
+            'disponible' => $this->service->vendedoresDisponibles(),
+            'enlaces'    => $this->service->getEnlacesVendedor((int) $_SESSION['id_empresa']),
+        ]);
+    }
+
+    public function generarEnlaceVendedorAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(fn() => [
+            'url' => $this->service->generarEnlaceVendedor((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                (int) ($_POST['id_vendedor'] ?? 0), !empty($_POST['regenerar'])),
+        ]);
+    }
+
+    public function quitarEnlaceVendedorAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $this->service->quitarEnlaceVendedor((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (int) ($_POST['id_vendedor'] ?? 0));
+            return ['msg' => 'Enlace quitado.'];
+        });
+    }
+
     // ── Helpers ───────────────────────────────────────────────
 
     private function recogerFormulario(): array
@@ -1049,6 +1083,7 @@ class FirmasElectronicasController extends BaseModuloController
                 'por_correo'   => !empty($_POST['por_correo']),
                 'por_whatsapp' => !empty($_POST['por_whatsapp']),
                 'id_firma'     => (int) ($_POST['id_firma'] ?? 0),
+                'id_vendedor'  => (int) ($_POST['id_vendedor'] ?? 0),
             ]);
             $partes = [];
             if ($res['correo'] === true)  $partes[] = 'Correo enviado.';
@@ -1068,7 +1103,7 @@ class FirmasElectronicasController extends BaseModuloController
         $perPage   = 15;
 
         $this->solRepo->expirarVencidos();
-        $result = $this->solRepo->getListado($idEmpresa, $page, $perPage);
+        $result = $this->solRepo->getListado($idEmpresa, $page, $perPage, $this->service->vendedoresDisponibles());
 
         $rows = array_map(function (array $r) {
             $r['created_at']    = !empty($r['created_at'])    ? date('d-m-Y H:i', strtotime($r['created_at']))    : '—';

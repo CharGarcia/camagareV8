@@ -202,6 +202,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     'numero_identificacion' => 'Identificación',
                     'nombre_producto'       => 'Tipo Firma',
                     'telefono'              => 'Teléfono',
+                    'vendedor'              => 'Vendedor',
                     'correo'                => 'Correo',
                     'estado_pago'           => 'Pago',
                     'factura_estado'        => 'Factura',
@@ -244,6 +245,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="ps-3 sortable-header-f" data-sort="nombres" data-col="nombres" role="button">Nombres <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header-f" data-sort="numero_identificacion" data-col="numero_identificacion" role="button">Identificación <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header-f" data-sort="nombre_producto" data-col="nombre_producto" role="button">Tipo Firma <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header-f" data-sort="vendedor" data-col="vendedor" role="button">Vendedor <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header-f" data-sort="telefono" data-col="telefono" role="button">Teléfono <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header-f" data-sort="correo" data-col="correo" role="button">Correo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header-f" data-sort="estado_pago" data-col="estado_pago" role="button">Pago <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
@@ -256,7 +258,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 <tbody id="tbodyFirmas">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="10" class="text-center py-5 text-muted">
+                            <td colspan="11" class="text-center py-5 text-muted">
                                 <i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.
                             </td>
                         </tr>
@@ -307,6 +309,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                     <code class="text-secondary"><?= htmlspecialchars($row['numero_identificacion'] ?? '') ?></code>
                                 </td>
                                 <td data-col="nombre_producto" class="small text-muted"><?= htmlspecialchars($row['nombre_producto'] ?? '-') ?></td>
+                                <td data-col="vendedor" class="small"><?= htmlspecialchars((string) (($row['vendedor_nombre'] ?? '') ?: '-')) ?></td>
                                 <td data-col="telefono"><?= htmlspecialchars($row['telefono'] ?? '-') ?></td>
                                 <td data-col="correo" class="small"><?= htmlspecialchars($row['correo'] ?? '-') ?></td>
                                 <td class="text-center" data-col="estado_pago"><?= $badgePago ?></td>
@@ -360,6 +363,18 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     <input type="tel" class="form-control form-control-sm" id="solTelefonoDestino" placeholder="Ej. 0958924835" maxlength="10" inputmode="numeric" pattern="09[0-9]{8}">
                     <div class="form-text small">Con la plantilla <code>solicitud_firma</code> aprobada en Meta se envía sola; si no, podrá abrir WhatsApp con el mensaje listo.</div>
                 </div>
+                <?php if (!empty($vendedoresFirma)): ?>
+                <div class="mt-2" id="solBloqueVendedor">
+                    <label class="form-label form-label-sm fw-medium" for="solVendedor">Vendedor <span class="text-muted fw-normal">(opcional)</span></label>
+                    <select class="form-select form-select-sm" id="solVendedor">
+                        <option value="">— Sin vendedor —</option>
+                        <?php foreach ($vendedoresFirma as $vf): ?>
+                            <option value="<?= (int) $vf['id_vendedor'] ?>"><?= htmlspecialchars($vf['nombre']) ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                    <div class="form-text small">La firma y su factura quedan a nombre de este vendedor (para su comisión).</div>
+                </div>
+                <?php endif; ?>
             </div>
             <div class="modal-footer py-2 px-3">
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -409,8 +424,13 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <i class="bi bi-people me-1"></i>Tipo de persona
                             </button>
                         </li>
+                        <li class="nav-item">
+                            <button class="nav-link fw-medium py-1" id="tab-cfg-vendedores-btn" data-bs-toggle="tab" data-bs-target="#tab-cfg-vendedores" type="button">
+                                <i class="bi bi-qr-code me-1"></i>Vendedores
+                            </button>
+                        </li>
                     </ul>
-                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-uanataca-btn' => 'Uanataca', 'tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia', 'tab-cfg-tipopersona-btn' => 'Tipo de persona'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
+                    <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas(['tab-cfg-uanataca-btn' => 'Uanataca', 'tab-cfg-avisos-btn' => 'Avisos', 'tab-cfg-vigencia-btn' => 'Vigencia', 'tab-cfg-tipopersona-btn' => 'Tipo de persona', 'tab-cfg-vendedores-btn' => 'Vendedores'], \App\Helpers\PreferenciasHelper::getPreferenciasVista('firmas_electronicas'), 'firmas_electronicas') ?>
                 </div>
                 <div class="tab-content">
                 <div class="tab-pane fade show active" id="tab-cfg-general" role="tabpanel">
@@ -613,6 +633,12 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         </tbody>
                     </table>
                 </div><!-- /tab-cfg-tipopersona -->
+
+                <!-- Un enlace (y su QR) por vendedor: la firma y su factura quedan a su nombre -->
+                <div class="tab-pane fade" id="tab-cfg-vendedores" role="tabpanel">
+                    <div class="form-text small mb-2">Cada vendedor tiene su propio enlace y su QR. Las solicitudes que entran por él quedan a su nombre, igual que la factura, para calcular su comisión. Los vendedores se registran en el módulo <b>Vendedores</b>.</div>
+                    <div id="cfgVendedoresLista" class="small text-muted">Cargando…</div>
+                </div><!-- /tab-cfg-vendedores -->
                 </div><!-- /tab-content -->
             </div>
             <div class="modal-footer py-2 px-3">
@@ -758,6 +784,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
         document.getElementById('solTelefonoDestino').value = celularLocal(firma?.telefono || '');
         document.getElementById('solPorCorreo').checked     = true;
         document.getElementById('solPorWhatsapp').checked   = !!firma?.telefono;
+        // El vendedor se elige solo en un enlace nuevo; el de una firma ya existente no cambia aquí.
+        const selVen = document.getElementById('solVendedor');
+        if (selVen) selVen.value = '';
+        document.getElementById('solBloqueVendedor')?.classList.toggle('d-none', !!firma?.id);
         enviandoEnlace = false;
         const btn = document.getElementById('btnConfirmarEnviarFormulario');
         btn.disabled = false;
@@ -850,6 +880,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             fd.append('correo_destino', document.getElementById('solCorreoDestino').value.trim());
             fd.append('telefono_destino', document.getElementById('solTelefonoDestino').value.trim());
             fd.append('id_firma', document.getElementById('solIdFirma').value);
+            fd.append('id_vendedor', document.getElementById('solVendedor')?.value || '');
             if (porCorreo) fd.append('por_correo', '1');
             if (porWhatsapp) fd.append('por_whatsapp', '1');
             // Tope en el navegador por si el servidor no responde (el SMTP tiene 20 s por intento).
@@ -952,12 +983,82 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
     };
 
     // Cartel imprimible con el QR del enlace fijo (ventana nueva + window.print(), como el QR de mesas).
-    window.imprimirQrEnlaceFijo = async function () {
+    window.imprimirQrEnlaceFijo = function () {
         const url = document.getElementById('cfgUrlEnlaceFijo').value.trim();
         if (!url) {
             Swal.fire('Sin enlace', 'Active el enlace público fijo y pulse Guardar para generarlo.', 'info');
             return;
         }
+        imprimirQrFirma(url);
+    };
+
+    // ── Enlaces por vendedor (pestaña Vendedores del engranaje) ──
+    const escV = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    async function cargarEnlacesVendedor() {
+        const box = document.getElementById('cfgVendedoresLista');
+        if (!box) return;
+        let d;
+        try { d = await postFirmas('enlacesVendedorAjax'); } catch { d = { ok: false, error: 'Error de conexión.' }; }
+        if (!d.ok) { box.innerHTML = `<div class="text-danger">${escV(d.error || 'No se pudo cargar.')}</div>`; return; }
+        if (!d.disponible) {
+            box.innerHTML = '<div class="alert alert-warning small mb-0">Falta aplicar en la base de datos el script <code>20261110_firmas_enlaces_vendedor.sql</code>.</div>';
+            return;
+        }
+        if (!d.enlaces.length) {
+            box.innerHTML = '<div class="text-muted">No hay vendedores activos. Regístrelos en el módulo Vendedores.</div>';
+            return;
+        }
+        box.innerHTML = '<table class="table table-sm align-middle small mb-0"><tbody>' + d.enlaces.map(e => `
+            <tr>
+                <td class="fw-medium" style="width:38%;">${escV(e.nombre)}</td>
+                <td>${e.url
+                    ? `<div class="input-group input-group-sm">
+                           <input type="text" class="form-control" readonly value="${escV(e.url)}">
+                           <button type="button" class="btn btn-outline-secondary" title="Copiar" data-ven-accion="copiar" data-url="${escV(e.url)}"><i class="bi bi-clipboard"></i></button>
+                           <button type="button" class="btn btn-outline-primary" title="Imprimir QR" data-ven-accion="qr" data-url="${escV(e.url)}"><i class="bi bi-qr-code"></i></button>
+                           <button type="button" class="btn btn-outline-danger" title="Generar un enlace nuevo (el anterior y sus QR dejan de funcionar)" data-ven-accion="regenerar" data-id="${Number(e.id_vendedor)}"><i class="bi bi-arrow-repeat"></i></button>
+                           <button type="button" class="btn btn-outline-danger" title="Quitar el enlace" data-ven-accion="quitar" data-id="${Number(e.id_vendedor)}"><i class="bi bi-x-lg"></i></button>
+                       </div>`
+                    : `<button type="button" class="btn btn-sm btn-outline-success" data-ven-accion="generar" data-id="${Number(e.id_vendedor)}"><i class="bi bi-link-45deg me-1"></i>Generar enlace</button>`}
+                </td>
+            </tr>`).join('') + '</tbody></table>';
+    }
+    document.getElementById('tab-cfg-vendedores-btn')?.addEventListener('shown.bs.tab', cargarEnlacesVendedor);
+
+    let _venEnCurso = false;
+    document.getElementById('cfgVendedoresLista')?.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('[data-ven-accion]');
+        if (!btn || _venEnCurso) return;
+        const accion = btn.dataset.venAccion;
+        if (accion === 'copiar') { copiarTextoFirma(btn.dataset.url); return; }
+        if (accion === 'qr') { imprimirQrFirma(btn.dataset.url); return; }
+        const destino = document.getElementById('modalConfigFirmas');
+        if (accion === 'regenerar' || accion === 'quitar') {
+            const r = await Swal.fire({
+                icon: 'warning', target: destino,
+                title: accion === 'quitar' ? '¿Quitar el enlace?' : '¿Generar un enlace nuevo?',
+                text: 'El enlace actual de este vendedor y los QR impresos con él dejarán de funcionar. Las firmas ya registradas conservan su vendedor.',
+                showCancelButton: true, confirmButtonText: accion === 'quitar' ? 'Sí, quitar' : 'Sí, generar', cancelButtonText: 'Cancelar', reverseButtons: true,
+            });
+            if (!r.isConfirmed) return;
+        }
+        _venEnCurso = true;
+        btn.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.append('id_vendedor', btn.dataset.id);
+            if (accion === 'regenerar') fd.append('regenerar', '1');
+            const d = await postFirmas(accion === 'quitar' ? 'quitarEnlaceVendedorAjax' : 'generarEnlaceVendedorAjax', fd);
+            if (!d.ok) Swal.fire({ icon: 'error', title: 'Error', text: d.error || 'No se pudo completar.', target: destino });
+        } catch {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Error de conexión.', target: destino });
+        } finally {
+            _venEnCurso = false;
+            await cargarEnlacesVendedor();
+        }
+    });
+
+    async function imprimirQrFirma(url) {
         const CLAVE = 'firmas_qr_titulo';
         let previo = 'Firmas electrónicas desde aquí, rápido';
         try { previo = localStorage.getItem(CLAVE) || previo; } catch {}
@@ -1050,7 +1151,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
             tbody.innerHTML = data.rows.map(r => `
                 <tr>
-                    <td class="ps-3">${esc(r.correo_destino || '')}${r.telefono_destino ? `<div class="text-muted"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono_destino)}</div>` : ''}${r.origen === 'enlace_fijo' ? '<div><span class="badge bg-light text-secondary border">Enlace fijo</span></div>' : ''}${r.origen === 'aviso_vencimiento' ? '<div><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Aviso de vencimiento</span></div>' : ''}</td>
+                    <td class="ps-3">${esc(r.correo_destino || '')}${r.telefono_destino ? `<div class="text-muted"><i class="bi bi-whatsapp me-1"></i>${esc(r.telefono_destino)}</div>` : ''}${r.origen === 'enlace_fijo' ? '<div><span class="badge bg-light text-secondary border">Enlace fijo</span></div>' : ''}${r.vendedor_nombre ? `<div class="text-muted"><i class="bi bi-person-badge me-1"></i>${esc(r.vendedor_nombre)}</div>` : ''}${r.origen === 'aviso_vencimiento' ? '<div><span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Aviso de vencimiento</span></div>' : ''}</td>
                     <td>${r.nombre_destino ? esc(r.nombre_destino) : '<span class="text-muted">-</span>'}</td>
                     <td class="text-center">${badges[r.estado] || r.estado}</td>
                     <td class="text-muted">${r.created_at}</td>

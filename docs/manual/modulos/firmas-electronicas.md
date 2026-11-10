@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.16
+etiquetas: firma electronica, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.17
 orden: 20
 estado: activo
 ---
@@ -130,7 +130,7 @@ motivo por correo, corrige desde su enlace y la reenvía.
 
 ## Configuración
 
-Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene cinco pestañas: **General**, **Uanataca** (la conexión con ese proveedor de firmas; ver *Envío automático a Uanataca*), **Avisos** (avisos de vencimiento al cliente), **Vigencia** y **Tipo de persona**; un solo **Guardar** guarda todas:
+Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso de modificar). Tiene seis pestañas: **General**, **Uanataca** (la conexión con ese proveedor de firmas; ver *Envío automático a Uanataca*), **Avisos** (avisos de vencimiento al cliente), **Vigencia**, **Tipo de persona** y **Vendedores** (un enlace y un QR por vendedor; ver *Enlaces y QR por vendedor*, sus botones actúan al instante); un solo **Guardar** guarda las demás:
 
 | Campo | Qué significa |
 |-------|---------------|
@@ -155,6 +155,44 @@ celular llega al formulario para iniciar su solicitud.
 - Si **regenera** el enlace, los carteles ya impresos dejan de funcionar:
   imprímalos de nuevo.
 - El navegador debe permitir ventanas emergentes para abrir la hoja.
+
+## Enlaces y QR por vendedor (comisiones)
+
+Sirve para saber **qué negocio o vendedor generó cada firma** y pagarle su
+comisión. Cada vendedor tiene su propio enlace público y su propio QR.
+
+1. Registre al negocio o persona en el módulo **Vendedores** (debe estar activo).
+2. En el engranaje, pestaña **Vendedores**, pulse **Generar enlace** en su fila.
+   Desde ahí puede **copiar** el enlace, **imprimir su QR** (con el título del
+   cartel), **generar uno nuevo** o **quitarlo**.
+3. Entregue el cartel con el QR al negocio. Toda solicitud que entre por ese
+   enlace queda **a nombre de ese vendedor**, aunque el cliente la termine y la
+   pague días después desde otro lugar.
+
+También puede elegir el **Vendedor** al usar **Enviar link** (campo opcional): la
+firma que nazca de ese enlace queda a su nombre.
+
+| Dónde se ve | Qué muestra |
+|-------------|-------------|
+| Listado de firmas | Columna **Vendedor** (se puede ordenar y ocultar). El buscador encuentra por el nombre del vendedor, y `vendedor:nombre` filtra solo por él |
+| Excel del listado | Columna **Vendedor**, para sumar las firmas de cada uno |
+| Enlaces enviados | El vendedor de cada enlace, bajo el destinatario |
+| Factura de la firma | Sale con ese **vendedor**: la comisión se calcula con los reportes de ventas por vendedor, solo sobre firmas pagadas |
+
+- El enlace público fijo de la pestaña General sigue funcionando: sus solicitudes
+  quedan **sin vendedor**.
+- Una **renovación** (botón Renovar, *Nueva solicitud con estos datos*, el enlace
+  de los avisos de vencimiento o **Solicitar una nueva firma** del cliente)
+  conserva el vendedor de la firma anterior.
+- Si **regenera o quita** el enlace de un vendedor, sus carteles impresos dejan de
+  funcionar; las firmas ya registradas conservan su vendedor.
+- Si el vendedor se desactiva o se elimina, su enlace deja de funcionar y las
+  facturas nuevas ya no salen a su nombre.
+- Si a la factura se le cambia el vendedor en Facturas de Venta, el listado
+  muestra el de la factura.
+- El límite de 5 solicitudes por hora desde una misma conexión también aplica a
+  estos enlaces (por ejemplo, varios clientes usando el wifi del mismo local).
+- Requiere `database/20261110_firmas_enlaces_vendedor.sql`.
 
 ## Cómo corrige el cliente su solicitud
 
@@ -534,6 +572,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.17** — **Enlaces y QR por vendedor**: pestaña **Vendedores** en el engranaje (un enlace y un QR por vendedor), campo **Vendedor** en *Enviar link*, columna **Vendedor** en el listado, en el Excel y en *Enlaces enviados*; la factura de la firma sale con ese vendedor y las renovaciones lo conservan. Requiere `database/20261110_firmas_enlaces_vendedor.sql`.
 - **3.16** — Botón **Renovar** al pie de la ficha de una firma emitida (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.
 - **3.15** — El cliente puede corregir sus datos y reemplazar sus documentos **después de pagar**, mientras la firma esté *Por registrar* (antes de enviarse a Uanataca); la validez y la factura no cambian. La empresa recibe un correo de aviso y, si el cliente cambia su correo, debe confirmarlo de nuevo.
 - **3.14** — Botón **Imprimir QR** junto al enlace público fijo (engranaje, pestaña General): cartel con título editable, QR y enlace. Nueva sección *Cómo corrige el cliente su solicitud*.

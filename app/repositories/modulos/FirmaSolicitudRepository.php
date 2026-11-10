@@ -52,9 +52,11 @@ class FirmaSolicitudRepository extends BaseRepository
         return $row ?: null;
     }
 
-    public function getListado(int $idEmpresa, int $page, int $perPage): array
+    public function getListado(int $idEmpresa, int $page, int $perPage, bool $conVendedor = false): array
     {
         $offset = ($page - 1) * $perPage;
+        $colVen  = $conVendedor ? ', ven.nombre AS vendedor_nombre' : '';
+        $joinVen = $conVendedor ? 'LEFT JOIN vendedores ven ON ven.id = s.id_vendedor' : '';
 
         $sqlCount = "SELECT COUNT(*) FROM {$this->table} WHERE id_empresa = :ie AND eliminado = false";
         $stCount  = $this->db->prepare($sqlCount);
@@ -63,9 +65,10 @@ class FirmaSolicitudRepository extends BaseRepository
 
         $sql = "SELECT s.id, s.token, s.correo_destino, s.nombre_destino, s.telefono_destino, s.origen, s.estado,
                        s.expira_at, s.completado_at, s.created_at, s.id_firma_generada,
-                       f.nombres AS firma_nombres, f.apellidos AS firma_apellidos
+                       f.nombres AS firma_nombres, f.apellidos AS firma_apellidos {$colVen}
                 FROM {$this->table} s
                 LEFT JOIN firmas_electronicas f ON f.id = s.id_firma_generada
+                {$joinVen}
                 WHERE s.id_empresa = :ie AND s.eliminado = false
                 ORDER BY s.created_at DESC, s.id DESC
                 LIMIT :lim OFFSET :off";
