@@ -951,9 +951,9 @@
         actualizarFactItem(opt?.dataset.nombre || data.nombre_producto || '', parseFloat(opt?.dataset.pvp || '0'));
 
         document.getElementById('btnEliminarFirmaModal')?.classList.remove('d-none');
-        // Renovar: igual que «Nueva solicitud con estos datos», no aplica a un borrador.
+        // Renovar: solo una firma emitida.
         _firmaCaducidad = data.fecha_caducidad ? String(data.fecha_caducidad).substring(0, 10) : null;
-        document.getElementById('btnRenovarFirmaModal')?.classList.toggle('d-none', (data.estado || '') === 'borrador');
+        document.getElementById('btnRenovarFirmaModal')?.classList.toggle('d-none', (data.estado || '') !== 'emitida');
 
         const tabInfoBtn = document.getElementById('tab-firma-info-btn');
         if (tabInfoBtn) tabInfoBtn.classList.remove('disabled');
@@ -1627,9 +1627,10 @@
     }
 
     /** Solicitud nueva con los datos y documentos de la firma abierta; luego abre «Enviar enlace». */
-    async function crearNuevaSolicitud() {
+    async function crearNuevaSolicitud(renovar = false) {
         const fd = new FormData();
         fd.append('id', _idFirmaActual);
+        if (renovar) fd.append('renovar', '1');
         mostrarCargando('Creando la nueva solicitud…', 'Se reutilizan los datos y documentos del cliente.');
         let json;
         try {
@@ -1674,7 +1675,7 @@
             } else {
                 ok = await confirmar(base, 'Sí, renovar');
             }
-            if (ok) await crearNuevaSolicitud();
+            if (ok) await crearNuevaSolicitud(true);
         } finally {
             _renovando = false;
             if (btn) btn.disabled = false;

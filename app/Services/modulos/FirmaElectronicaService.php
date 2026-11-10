@@ -2020,11 +2020,15 @@ class FirmaElectronicaService
      * creada desde esta firma, devuelve esa (doble clic / reintento = la misma solicitud).
      * @return array{id_firma:int, url:string, existente:bool, adjuntos:int}
      */
-    public function nuevaSolicitudDesdeFirma(int $idFirma, int $idEmpresa, int $idUsuario): array
+    public function nuevaSolicitudDesdeFirma(int $idFirma, int $idEmpresa, int $idUsuario, bool $renovar = false): array
     {
         $firma = $this->repository->findById($idFirma, $idEmpresa);
         if (!$firma) {
             throw new Exception('Firma no encontrada.');
+        }
+        // Botón «Renovar» de la ficha: solo se renueva una firma ya emitida.
+        if ($renovar && (string) $firma['estado'] !== 'emitida') {
+            throw new Exception('Solo se puede renovar una firma emitida.');
         }
         $r = $this->crearRenovacion($firma, $idUsuario, true);
         return ['id_firma' => $r['id_firma'], 'url' => self::urlPortal($r['token']), 'existente' => $r['existente'], 'adjuntos' => $r['adjuntos']];

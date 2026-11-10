@@ -253,8 +253,9 @@ validez, la anterior se canceló…), no hace falta que llene todo de nuevo.
 renovación con los datos y documentos del cliente y abre **Enviar enlace**. Se
 puede renovar aunque la firma **todavía no haya vencido**: en ese caso aparece
 el aviso *La firma aún no está vencida* con la fecha y los días que faltan, y
-usted decide con **Renovar de todos modos**. Requiere permiso de crear y no
-aparece en una firma en *Borrador*.
+usted decide con **Renovar de todos modos**. Requiere permiso de crear y solo
+aparece en firmas **Emitidas**; para los demás estados use **Nueva solicitud con
+estos datos** en la pestaña Trámite.
 
 Qué **no** se copia: el **pago** (ni el comprobante de transferencia), la factura,
 el cobro y el trámite en Uanataca; todo eso empieza de cero.
@@ -533,7 +534,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
-- **3.16** — Botón **Renovar** al pie de la ficha (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.
+- **3.16** — Botón **Renovar** al pie de la ficha de una firma emitida (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.
 - **3.15** — El cliente puede corregir sus datos y reemplazar sus documentos **después de pagar**, mientras la firma esté *Por registrar* (antes de enviarse a Uanataca); la validez y la factura no cambian. La empresa recibe un correo de aviso y, si el cliente cambia su correo, debe confirmarlo de nuevo.
 - **3.14** — Botón **Imprimir QR** junto al enlace público fijo (engranaje, pestaña General): cartel con título editable, QR y enlace. Nueva sección *Cómo corrige el cliente su solicitud*.
 - **3.13** — El PDF de la factura que se genera por la venta de una firma usa la configuración del **establecimiento de la serie** de la factura (decimales, dirección, leyendas), no la del primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.

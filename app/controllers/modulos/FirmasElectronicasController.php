@@ -700,7 +700,7 @@ class FirmasElectronicasController extends BaseModuloController
     {
         $this->requireCrear();
         $this->responderJson(function () {
-            $r = $this->service->nuevaSolicitudDesdeFirma((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            $r = $this->service->nuevaSolicitudDesdeFirma((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], !empty($_POST['renovar']));
             $firma = $this->repo->findById($r['id_firma'], (int) $_SESSION['id_empresa']) ?? [];
             return $r + [
                 'nombres'   => $firma['nombres'] ?? '',
