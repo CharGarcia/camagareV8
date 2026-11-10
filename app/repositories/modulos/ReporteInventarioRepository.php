@@ -605,7 +605,7 @@ class ReporteInventarioRepository extends BaseRepository
                     FROM consignaciones_ventas_detalles cvd
                     INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                     WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
-                      AND cv.eliminado = false{$condCorteCv}
+                      AND cv.eliminado = false AND " . self::COND_CV_NO_ANULADA . "{$condCorteCv}
                     GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup}
                 )
                 SELECT *, (stock_actual * costo_unitario) AS valor_total,
@@ -1536,6 +1536,12 @@ class ReporteInventarioRepository extends BaseRepository
 
     /** Retorno vigente (mismo criterio que ConsignacionFacturaRepository). */
     private const COND_RETORNO_VIGENTE = "rcd.eliminado = false AND rc.eliminado = false AND rc.estado = 'Emitida'";
+    /**
+     * Una consignación Anulada ya no tiene nada en poder del cliente: su inventario volvió a la
+     * bodega al anularla (ConsignacionVentaService::cambiarEstado). Sin esta condición sus líneas
+     * seguían sumando en "Consignado" y la unidad se contaba dos veces (en bodega y consignada).
+     */
+    private const COND_CV_NO_ANULADA = "COALESCE(cv.estado, '') <> 'Anulada'";
     /** Facturación vigente (documentos 'facturada'). */
     private const COND_FACTURA_VIGENTE = "cfd.eliminado = false AND cf.eliminado = false AND cf.estado = 'facturada'";
 
@@ -1619,7 +1625,7 @@ class ReporteInventarioRepository extends BaseRepository
                     FROM consignaciones_ventas_detalles cvd
                     INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
                     WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
-                      AND cv.eliminado = false{$condCorteCv}{$condCvd}
+                      AND cv.eliminado = false AND " . self::COND_CV_NO_ANULADA . "{$condCorteCv}{$condCvd}
                 ),
                 {$nombre} AS (
                     SELECT l.id_empresa, l.id_producto, l.id_bodega{$columnas},
@@ -1795,10 +1801,14 @@ class ReporteInventarioRepository extends BaseRepository
 
     private function wrapSaldoConsignacion(string $baseSql): string
     {
-        // saldo = consignado − retornado − facturado − entregado a cambio
+        // saldo = consignado − retornado − facturado − entregado a cambio.
+        // Una consignación Anulada se sigue listando (con su estado), pero su saldo es 0: al
+        // anularla el inventario volvió a la bodega y el cliente ya no tiene nada.
+        $saldo = "(CASE WHEN COALESCE(t.estado, '') = 'Anulada' THEN 0
+                        ELSE t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada END)";
         return "
-            SELECT t.*, (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada) AS saldo,
-                   (t.cantidad_consignada - t.cantidad_retornada - t.cantidad_facturada - t.cantidad_cambiada) * t.costo_unitario AS valor_saldo
+            SELECT t.*, {$saldo} AS saldo,
+                   {$saldo} * t.costo_unitario AS valor_saldo
             FROM ({$baseSql}) t
         ";
     }

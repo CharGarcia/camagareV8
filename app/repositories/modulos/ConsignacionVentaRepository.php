@@ -1039,6 +1039,7 @@ class ConsignacionVentaRepository extends BaseRepository
                         AND cvd.id_consignacion <> :excl
                   LEFT JOIN consignaciones_ventas cv
                          ON cv.id = cvd.id_consignacion AND cv.id_empresa = :e AND cv.eliminado = false
+                        AND COALESCE(cv.estado, '') <> 'Anulada'
                  WHERE pd.id IN (" . implode(', ', $in) . ")
                  GROUP BY pd.id, pd.cantidad, {$unidad}, pc.establecimiento, pc.punto_emision, pc.secuencial, pr.codigo, pr.nombre";
         $st = $this->db->prepare($sql);
@@ -1180,7 +1181,8 @@ class ConsignacionVentaRepository extends BaseRepository
 
     /**
      * Deja "Procesado" cada pedido cuyas líneas vigentes quedaron cubiertas por lo consignado en
-     * consignaciones vigentes, y "Pendiente" a los demás, en una sola sentencia. Solo escribe los
+     * consignaciones vigentes (no eliminadas ni Anuladas: una anulada devolvió su inventario y
+     * deja de consumir el pedido), y "Pendiente" a los demás, en una sola sentencia. Solo escribe los
      * pedidos que cambian de estado. Un pedido sin líneas vigentes queda "Procesado".
      *
      * Devuelve qué pedidos cambió y de qué estado a cuál, para que el Service lo deje asentado en
@@ -1207,6 +1209,7 @@ class ConsignacionVentaRepository extends BaseRepository
                     SELECT cvd.id_pedido_detalle, SUM(cvd.cantidad) AS cantidad
                       FROM consignaciones_ventas_detalles cvd
                       JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
+                                                   AND COALESCE(cv.estado, '') <> 'Anulada'
                      WHERE cvd.id_empresa = ? AND cvd.eliminado = false
                        AND cvd.id_pedido_detalle = ANY (ARRAY(SELECT pdx.id FROM pedidos_detalle pdx WHERE pdx.id_pedido IN ($in)))
                      GROUP BY cvd.id_pedido_detalle

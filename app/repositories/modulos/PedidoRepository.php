@@ -589,6 +589,8 @@ class PedidoRepository {
             JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
             {$this->joinsUnidadPedido('cvd', $this->columnaUnidadMedidaExiste())}
             WHERE cv.eliminado = false AND cvd.eliminado = false
+              -- Una consignación Anulada devolvió su inventario: ya no consume el pedido.
+              AND COALESCE(cv.estado, '') <> 'Anulada'
               AND cvd.id_pedido_detalle IN ({$placeholders})
             GROUP BY cvd.id_pedido_detalle
         ";

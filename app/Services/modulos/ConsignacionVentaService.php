@@ -990,6 +990,15 @@ class ConsignacionVentaService
             if ($anular) {
                 $this->revertirInventarioConsignacion($id, $idEmpresa, $idUsuario);
 
+                // Lo anulado deja de consumir sus pedidos: se recalcula su estado (igual que al
+                // eliminar), ya con la consignación en 'Anulada', que el cálculo no cuenta.
+                $this->reconciliarPedidosAfectados(
+                    $idEmpresa,
+                    $idUsuario,
+                    $this->repository->getIdsPedidoDetalle($id, $idEmpresa),
+                    $this->numeroConsignacion($cab)
+                );
+
                 $idAsiento = (int) ($cab['id_asiento_contable'] ?? 0);
                 if ($idAsiento > 0) {
                     (new \App\Services\modulos\AsientoContableService(
