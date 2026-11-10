@@ -21,8 +21,10 @@
 
     <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
     <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
-        <div class="card-header bg-white border-bottom py-2 px-3">
+        <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center gap-2">
             <h5 class="mb-0 fw-bold"><i class="bi bi-file-earmark-bar-graph me-2 text-primary"></i>Reporte de Ventas</h5>
+            <?php // Botón «Personalizar» (columnas y orientación del PDF, por empresa): solo niveles 2 y 3. ?>
+            <?= \App\Helpers\ColumnasReporte::boton($rutaModulo) ?>
         </div>
         <div class="card-body p-3">
             <form id="form-filtros-reporte" onsubmit="event.preventDefault(); window.RV_generarReporte();">
@@ -376,6 +378,10 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
+    // Columnas que la empresa ocultó en pantalla, por agrupación (botón «Personalizar»).
+    window.RV_OCULTAS = <?= json_encode($columnasOcultas ?? new stdClass(), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 </script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<?php // Ventana «Personalizar reporte» (vacía si el usuario no es administrador)
+echo \App\Helpers\ColumnasReporte::modal($rutaModulo); ?>
 <script src="<?php echo BASE_URL; ?>/js/modulos/reporte_ventas.js?v=<?= asset_ver('/js/modulos/reporte_ventas.js') ?>"></script>

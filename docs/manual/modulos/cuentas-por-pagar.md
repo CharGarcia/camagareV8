@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/cuentas_por_pagar
 tipo: modulo
 visibilidad: todos
-etiquetas: cuentas por pagar, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por pagar contable, mayor de proveedores, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, pagar dos veces, doble pago, pago duplicado, importacion no se puede pagar, supera el saldo pendiente, vencimiento segun, plazo del proveedor, plazo del documento, vencer desde la emision, sin credito, antiguedad de cartera, aging, por antiguedad, tramos de dias, 15 30 60 90 dias, vencidos por dias, favoritos, filtro favorito, estrella, datos viejos, limpiar pantalla, pdf lento, pdf de un solo proveedor, sin columna proveedor
-version: 1.33
+etiquetas: cuentas por pagar, personalizar, personalizar columnas, ocultar columnas, columnas del pdf, columnas del excel, pdf horizontal, pdf vertical, comprobar con contabilidad, cuadrar con contabilidad, cartera vs contabilidad, no cuadra con contabilidad, cuenta por pagar contable, mayor de proveedores, cxp, deudas, proveedores, saldo pendiente, vencimiento, pagar, obligaciones, fecha de corte, saldo a una fecha, fecha hasta, consolidado, establecimientos, sucursales, matriz, mismo ruc, deudas consolidadas, todas las sucursales, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, supera el saldo pendiente, filtrar por proveedor, error de conexion, serie, punto de emision, serie inactiva, registrar pago, cedula y ruc, cliente duplicado, proveedor duplicado, mismo cliente dos veces, mismo proveedor dos veces, identificacion repetida, ruc es la cedula mas 001, unificar fichas, cartera partida en dos, tildes, acentos, eñe, buscar sin tildes, no encuentra al proveedor, no aparece el proveedor, buscar por apellido, buscar por varias palabras, mayor, mayor del proveedor, deuda como mayor, agrupado por proveedor, subtotal por proveedor, total general, seccion por proveedor, no carga al entrar, boton aplicar, aplicar filtros, listado vacio al entrar, detalle por proveedor, columnas del detalle, nc, abonos, retenciones, dias vencidos, ordenar, ordenamiento, orden alfabetico, a-z, z-a, ordenar por proveedor, ordenar por saldo, ordenar por vencimiento, clic en la columna, ordenar la tabla, ordenar el excel, ordenar el pdf, flecha de la columna, saldo junto al nombre, saldo del proveedor, pdf vertical, pdf horizontal, orientacion del pdf, hoja vertical, pdf apaisado, acceso total, permiso de ver todos, registros propios, solo mis compras, no veo las compras de otro, cada usuario ve lo suyo, documentos migrados no aparecen, filtros del pdf, filtros aplicados, quitar filtros del pdf, encabezado del pdf, menu del celular, menu bloqueado, menu no responde, lineas montadas, lineas encimadas, lineas pisadas, texto montado en el pdf, filas cortadas, fila partida entre paginas, paginas en blanco, hojas en blanco en el pdf, pdf descuadrado, encabezado de columnas en cada pagina, nota de debito, notas de debito, nd del proveedor, no cuadra el pdf, total menos pagado no da el saldo, totales repetidos, totales en cada hoja, letra del pdf, pdf se lee chiquito, cuadricula del pdf, columna documento cortada, numero de documento montado, documento se pasa a la otra columna, numero cortado en el pdf, pagar dos veces, doble pago, pago duplicado, importacion no se puede pagar, supera el saldo pendiente, vencimiento segun, plazo del proveedor, plazo del documento, vencer desde la emision, sin credito, antiguedad de cartera, aging, por antiguedad, tramos de dias, 15 30 60 90 dias, vencidos por dias, favoritos, filtro favorito, estrella, datos viejos, limpiar pantalla, pdf lento, pdf de un solo proveedor, sin columna proveedor
+version: 1.34
 orden: 50
 estado: activo
 ---
@@ -188,6 +188,50 @@ Con la vista **Detallado** activa (una fila por documento), los botones **PDF** 
   aplicados*, en vez de una hoja con las tarjetas en cero y nada debajo.
 - Cada hoja del PDF —en esta vista y en *Por proveedor*— lleva al pie, a la
   derecha, su **número de página** sobre el total (*Página 2/5*).
+
+## Personalizar las columnas del Detallado (administradores)
+
+El botón **Personalizar**, arriba a la derecha del encabezado de filtros, permite
+al administrador (niveles 2 y 3) elegir para **toda la empresa** las columnas de
+la vista **Detallado**, por separado para la **pantalla**, el **Excel** y el
+**PDF**, y si el PDF sale vertical u horizontal.
+
+Cualquier columna se puede activar en cualquiera de los tres. *Documento* siempre
+se muestra.
+
+| Columna | Qué muestra |
+|---------|-------------|
+| Origen / Tipo | Factura, liquidación, importación o saldo inicial |
+| Documento | Número del documento |
+| Proveedor, RUC | Nombre e identificación del proveedor |
+| F.Emisión, F.Vencimiento | Fechas del documento |
+| Días vencidos | Días de mora (0 si no ha vencido) |
+| Total | Valor del documento |
+| Pagado (abonos) | Solo los pagos registrados |
+| Notas de crédito, Notas de débito, Retenciones | Cada ajuste por separado |
+| NC + retenciones − ND | Los ajustes en una sola cifra (la columna *NC/Ret.* de la pantalla) |
+| Pagado + retenciones + NC | Todo lo ya descontado del documento (*Pagado* en el Excel, *Pagado/Ret/NC* en el PDF) |
+| Saldo | Lo que falta por pagar |
+| Estado | Vigente, vencida o pagada |
+
+| Sin personalizar | Columnas |
+|------------------|----------|
+| Pantalla | Documento, Origen, Proveedor, F.Emisión, F.Vencimiento, Total, Pagado, NC/Ret., Saldo, Estado |
+| Excel | Todas menos *NC + retenciones − ND* |
+| PDF (vertical) | Documento, Proveedor, F.Emisión, F.Vencimiento, Total, Pagado/Ret/NC, Saldo |
+
+Reglas que se mantienen:
+
+- La columna **Acciones** de la pantalla no se puede quitar.
+- En el PDF, **Proveedor** se omite sola cuando el listado es de un único
+  proveedor.
+- En el PDF, el tipo va en pequeño sobre el número y el estado bajo la fecha de
+  vencimiento; si se activan las columnas **Origen** o **Estado**, pasan a su
+  columna.
+- La fila **TOTALES** del PDF suma los importes que estén visibles.
+
+Las vistas **Por proveedor** y **Por antigüedad** no cambian. El paso a paso
+está en la guía *Personalizar un reporte para toda la empresa*.
 
 ## Buscar el proveedor: tildes, ñ y varias palabras
 
@@ -452,6 +496,7 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
+- **1.34** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas de la vista Detallado elegibles por separado para pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Se pueden agregar columnas que antes solo estaban en el Excel (RUC, Días vencidos, Notas de crédito, Notas de débito, Retenciones).
 - **1.33** — Corregido: un documento con un plazo de crédito desmedido (millones de días) hacía fallar la consulta con *timestamp out of range*; el vencimiento ahora se limita a 100 años.
 - **1.32** — Selector **Vencimiento según** (plazo del documento, del proveedor o
   emisión), vista **Por antigüedad** con tramos elegibles (también en PDF y

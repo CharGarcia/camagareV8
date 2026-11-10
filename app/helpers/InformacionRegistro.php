@@ -102,6 +102,23 @@ class InformacionRegistro
             'tabla'  => 'clientes',
             'nombre' => 'el cliente',
         ],
+        // Sin 'kardex': el kardex se enlaza al documento que movió el stock, no al producto.
+        'modulos/productos' => [
+            'tabla'  => 'productos',
+            'nombre' => 'el producto',
+        ],
+        'modulos/empleados' => [
+            'tabla'  => 'empleados',
+            'nombre' => 'el empleado',
+        ],
+        'modulos/vendedores' => [
+            'tabla'  => 'vendedores',
+            'nombre' => 'el vendedor',
+        ],
+        'modulos/proveedores' => [
+            'tabla'  => 'proveedores',
+            'nombre' => 'el proveedor',
+        ],
         'modulos/liquidacion_compra' => [
             'tabla'  => 'liquidaciones_cabecera',
             'nombre' => 'la liquidación',

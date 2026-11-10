@@ -91,9 +91,92 @@ class ReporteVentasController extends BaseModuloController
             'categorias'  => $categorias,
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
+            // Columnas que la empresa ocultó en pantalla, por vista (botón «Personalizar»)
+            'columnasOcultas'  => $this->ocultasPantallaPorVista(),
             'fullWidth'   => true,
             'base'        => BASE_URL
         ]);
+    }
+
+    // ─── Personalización por empresa (botón «Personalizar») ───────────────────
+    // Catálogo: App\Helpers\ColumnasReporte. Cada medio (pantalla, Excel, PDF) conserva
+    // sus columnas de siempre y aquí solo se quitan las que la empresa ocultó. Las columnas
+    // que dependen de los datos (meses, categorías, Motivo, Estab.) no están en el catálogo
+    // y siempre se muestran.
+
+    /** Orientación del PDF pedida por la empresa: 'auto' (la de siempre), 'P' o 'L'. */
+    private static string $orientacionPdf = 'auto';
+
+    /** Configuración resuelta de la vista que corresponde a la agrupación. */
+    private function personalizacion(string $agrupar): array
+    {
+        $ruta  = $this->getRutaModulo();
+        $vista = isset(\App\Helpers\ColumnasReporte::vistas($ruta)[$agrupar]) ? $agrupar : 'NINGUNO';
+        $res   = \App\Services\modulos\ReportePersonalizacionService::crear()
+            ->resolver((int) $_SESSION['id_empresa'], $ruta, $vista);
+        $todas = \App\Helpers\ColumnasReporte::columnas($ruta, $vista);
+        $out   = ['orientacion' => (string) $res['orientacion']];
+        foreach (['pantalla', 'excel', 'pdf'] as $medio) {
+            $out[$medio] = array_fill_keys(array_keys(array_diff_key($todas, $res[$medio])), true);
+        }
+        return $out;
+    }
+
+    /** Columnas ocultas de una agrupación en un medio ('pantalla' | 'excel' | 'pdf'): clave => true. */
+    private function ocultas(string $agrupar, string $medio): array
+    {
+        return $this->personalizacion($agrupar)[$medio];
+    }
+
+    /** Para la vista: por cada agrupación, las claves ocultas en pantalla. */
+    private function ocultasPantallaPorVista(): array
+    {
+        $out = [];
+        foreach (array_keys(\App\Helpers\ColumnasReporte::vistas($this->getRutaModulo())) as $vista) {
+            $out[$vista] = array_keys($this->ocultas((string) $vista, 'pantalla'));
+        }
+        return $out;
+    }
+
+    /** Une las celdas de una fila, sin las columnas ocultas ($celdas: clave => <td>). */
+    private static function unirCeldas(array $celdas, array $ocultas): string
+    {
+        $html = '';
+        foreach ($celdas as $clave => $td) {
+            if (!isset($ocultas[$clave])) {
+                $html .= $td;
+            }
+        }
+        return $html;
+    }
+
+    /**
+     * Fila de totales de la pantalla. $celdas va en el orden de la tabla: clave => <td> del
+     * total, o null si esa columna no totaliza. La etiqueta ocupa las columnas visibles que
+     * van antes del primer total; las que no totalizan después quedan vacías.
+     */
+    private static function filaTotalesHtml(string $etiqueta, array $celdas, array $ocultas): string
+    {
+        $lider = 0;
+        $enLider = true;
+        $html = '';
+        foreach ($celdas as $clave => $td) {
+            if (isset($ocultas[$clave])) {
+                continue;
+            }
+            if ($td === null) {
+                if ($enLider) {
+                    $lider++;
+                } else {
+                    $html .= '<td></td>';
+                }
+                continue;
+            }
+            $enLider = false;
+            $html .= $td;
+        }
+        $etq = $lider > 0 ? "<td class='ps-4'" . ($lider > 1 ? " colspan='{$lider}'" : '') . ">{$etiqueta}</td>" : '';
+        return "<tr class='table-light fw-bold'>{$etq}{$html}</tr>";
     }
 
     private function getFiltrosDesdeRequest(): array
@@ -291,16 +374,16 @@ class ReporteVentasController extends BaseModuloController
     }
 
     /** Número de columnas de la tabla de la pantalla en cada agrupación (para el colspan). */
-    private static function numColumnas(string $agrupar, array $meses, bool $conMotivo = false): int
+    private static function numColumnas(string $agrupar, array $meses, bool $conMotivo = false, int $ocultas = 0): int
     {
-        return match ($agrupar) {
+        return max(1, -$ocultas + match ($agrupar) {
             'NINGUNO'      => $conMotivo ? 12 : 11,
             'PRODUCTO'     => 7,
             'VARIANTE'     => 8,
             'PRODUCTO_MES' => 3 + count($meses),
             'CLIENTE_CATEGORIA' => 3 + count($meses),
             default        => 6,
-        };
+        });
     }
 
     /** Cantidad de unidades: sin decimales si es entera, con dos si no. */
@@ -330,17 +413,20 @@ class ReporteVentasController extends BaseModuloController
     }
 
     /** Fila de totales al pie de la tabla "Unidades por producto y mes" (pantalla). */
-    private function renderFilaTotalesUnidadesHtml(array $rows, array $meses): string
+    private function renderFilaTotalesUnidadesHtml(array $rows, array $meses, array $ocultas = []): string
     {
-        $n    = count($rows);
-        $html = "<tr class='table-light fw-bold'><td class='ps-4' colspan='2'>TOTAL ({$n} producto" . ($n !== 1 ? 's' : '') . ")</td>";
+        $n       = count($rows);
+        $tdMeses = '';
         foreach ($meses as $m) {
-            $html .= "<td class='text-end'>" . self::fmtCantidad(self::sumarUnidades($rows, $m)) . "</td>";
+            $tdMeses .= "<td class='text-end'>" . self::fmtCantidad(self::sumarUnidades($rows, $m)) . "</td>";
         }
-        $html .= "<td class='text-end pe-4 text-primary'>" . self::fmtCantidad(self::sumarUnidades($rows, null)) . "</td></tr>";
-        return $html;
+        return self::filaTotalesHtml("TOTAL ({$n} producto" . ($n !== 1 ? 's' : '') . ")", [
+            'producto_codigo' => null,
+            'producto_nombre' => null,
+            '__meses'         => $tdMeses,
+            'total_unidades'  => "<td class='text-end pe-4 text-primary'>" . self::fmtCantidad(self::sumarUnidades($rows, null)) . "</td>",
+        ], $ocultas);
     }
-
     /** Suma de una categoría (o, con null, del total de unidades) sobre las filas de cliente y categoría. */
     private static function sumarCategoria(array $rows, ?string $cat): float
     {
@@ -351,18 +437,20 @@ class ReporteVentasController extends BaseModuloController
     }
 
     /** Fila de totales al pie de la tabla "Unidades por cliente y categoría" (pantalla). */
-    private function renderFilaTotalesClienteCategoriaHtml(array $rows, array $categorias): string
+    private function renderFilaTotalesClienteCategoriaHtml(array $rows, array $categorias, array $ocultas = []): string
     {
-        $n    = count($rows);
-        $html = "<tr class='table-light fw-bold'><td class='ps-4'>TOTAL GENERAL ({$n} cliente" . ($n !== 1 ? 's' : '') . ")</td>";
+        $n      = count($rows);
+        $tdCats = '';
         foreach (array_keys($categorias) as $c) {
-            $html .= "<td class='text-end'>" . self::fmtCantidad(self::sumarCategoria($rows, (string) $c)) . "</td>";
+            $tdCats .= "<td class='text-end'>" . self::fmtCantidad(self::sumarCategoria($rows, (string) $c)) . "</td>";
         }
-        $html .= "<td class='text-end text-primary'>" . self::fmtCantidad(self::sumarCategoria($rows, null)) . "</td>"
-               . "<td class='text-end pe-4 text-success'>" . number_format(self::sumarCampo($rows, 'total_venta'), 2) . "</td></tr>";
-        return $html;
+        return self::filaTotalesHtml("TOTAL GENERAL ({$n} cliente" . ($n !== 1 ? 's' : '') . ")", [
+            'cliente_nombre' => null,
+            '__categorias'   => $tdCats,
+            'total_unidades' => "<td class='text-end text-primary'>" . self::fmtCantidad(self::sumarCategoria($rows, null)) . "</td>",
+            'total_venta'    => "<td class='text-end pe-4 text-success'>" . number_format(self::sumarCampo($rows, 'total_venta'), 2) . "</td>",
+        ], $ocultas);
     }
-
     /** Suma de un campo sobre las filas del reporte. */
     private static function sumarCampo(array $rows, string $campo): float
     {
@@ -373,13 +461,18 @@ class ReporteVentasController extends BaseModuloController
      * Fila de totales al pie del agrupado por producto (pantalla). El total de venta es sin
      * impuestos, así que no coincide con el "Gran Total" de la tarjeta de control.
      */
-    private function renderFilaTotalesProductoHtml(array $rows): string
+    private function renderFilaTotalesProductoHtml(array $rows, array $ocultas = []): string
     {
         $n = count($rows);
-        return "<tr class='table-light fw-bold'><td class='ps-4' colspan='3'>TOTAL ({$n} producto" . ($n !== 1 ? 's' : '') . ")</td>"
-             . "<td class='text-end text-success'>" . number_format(self::sumarCampo($rows, 'total_venta'), 2) . "</td>"
-             . "<td class='text-end'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td>"
-             . "<td class='text-end'>100.00%</td><td class='text-end pe-4'>100.00%</td></tr>";
+        return self::filaTotalesHtml("TOTAL ({$n} producto" . ($n !== 1 ? 's' : '') . ")", [
+            'producto_codigo'  => null,
+            'producto_nombre'  => null,
+            'unidad_medida'    => null,
+            'total_venta'      => "<td class='text-end text-success'>" . number_format(self::sumarCampo($rows, 'total_venta'), 2) . "</td>",
+            'cantidad_vendida' => "<td class='text-end'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td>",
+            'pct_venta'        => "<td class='text-end'>100.00%</td>",
+            'pct_unidades'     => "<td class='text-end pe-4'>100.00%</td>",
+        ], $ocultas);
     }
 
     /**
@@ -388,30 +481,35 @@ class ReporteVentasController extends BaseModuloController
      * tarjetas de arriba y con la fila "TOTALES GENERALES" del PDF. En "Facturas − NC" las
      * notas de crédito ya vienen en negativo y restan.
      */
-    private function renderFilaTotalesMontosHtml(array $rows, string $agrupar, bool $conMotivo = false): string
+    private function renderFilaTotalesMontosHtml(array $rows, string $agrupar, bool $conMotivo = false, array $ocultas = []): string
     {
-        $spanDet = $conMotivo ? 7 : 6;  // columnas del detallado antes de los importes
         $n      = count($rows);
         $etq    = "TOTAL ({$n} " . $this->sustantivoFilas($agrupar, $n) . ")";
         $num    = static fn (string $c): string => number_format(self::sumarCampo($rows, $c), 2);
-        $montos = "<td class='text-end'>{$num('base_0')}</td>"
-                . "<td class='text-end'>{$num('base_iva')}</td>"
-                . "<td class='text-end'>{$num('valor_iva')}</td>"
-                . "<td class='text-end text-success'>{$num('total')}</td>";
+        $montos = [
+            'base_0'    => "<td class='text-end'>{$num('base_0')}</td>",
+            'base_iva'  => "<td class='text-end'>{$num('base_iva')}</td>",
+            'valor_iva' => "<td class='text-end'>{$num('valor_iva')}</td>",
+            'total'     => "<td class='text-end text-success'>{$num('total')}</td>",
+        ];
+        $docs = "<td class='text-center'>" . (int) self::sumarCampo($rows, 'cantidad_facturas') . "</td>";
 
-        $html = "<tr class='table-light fw-bold'>";
-        $html .= match ($agrupar) {
-            'CLIENTE'  => "<td class='ps-4'>{$etq}</td><td class='text-end'>{$num('saldo')}</td>" . $montos,
-            'VARIANTE' => "<td class='ps-4' colspan='2'>{$etq}</td>"
-                        . "<td class='text-center'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td><td></td>" . $montos,
-            'FECHA', 'CAJERO', 'MES' => "<td class='ps-4'>{$etq}</td>"
-                        . "<td class='text-center'>" . (int) self::sumarCampo($rows, 'cantidad_facturas') . "</td>" . $montos,
-            default    => "<td class='ps-4' colspan='{$spanDet}'>{$etq}</td>" . $montos
-                        . "<td class='text-end text-danger'>{$num('retenciones')}</td>",
+        $celdas = match ($agrupar) {
+            'CLIENTE'  => ['cliente_nombre' => null, 'saldo' => "<td class='text-end'>{$num('saldo')}</td>"] + $montos,
+            'VARIANTE' => ['producto_nombre' => null, 'variante_nombre' => null,
+                           'cantidad_vendida' => "<td class='text-center'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td>",
+                           'tarifa_iva' => null] + $montos,
+            'FECHA'    => ['fecha' => null, 'cantidad_facturas' => $docs] + $montos,
+            'CAJERO'   => ['cajero_nombre' => null, 'cantidad_facturas' => $docs] + $montos,
+            'MES'      => ['mes' => null, 'cantidad_facturas' => $docs] + $montos,
+            default    => ['fecha_emision' => null, 'numero_factura' => null, 'cliente_nombre' => null]
+                        + ($conMotivo ? ['__motivo' => null] : [])
+                        + ['estado' => null, 'vendedor_nombre' => null, 'usuario_nombre' => null]
+                        + $montos
+                        + ['retenciones' => "<td class='text-end text-danger'>{$num('retenciones')}</td>"],
         };
-        return $html . '</tr>';
+        return self::filaTotalesHtml($etq, $celdas, $ocultas);
     }
-
     /** Texto del alcance para el encabezado del PDF ('' si no es consolidado). */
     private function describirAlcance(array $idsEmpresa, bool $consolidado): string
     {
@@ -443,10 +541,14 @@ class ReporteVentasController extends BaseModuloController
             // Resumen de estados
             $resumenEstados = $this->repository->getResumenEstados($idEmpresa, $filtros);
 
+            // Columnas que la empresa ocultó en pantalla para esta agrupación (botón «Personalizar»)
+            $ocultas = $this->ocultas((string) $filtros['agrupar_por'], 'pantalla');
+
             // Generar HTML de las filas según la agrupación
             ob_start();
             if (empty($rows)) {
-                $colSpan = self::numColumnas((string) $filtros['agrupar_por'], $meses, self::conMotivo($filtros));
+                $disponibles = count(\App\Helpers\ColumnasReporte::noDisponibles($this->getRutaModulo(), (string) $filtros['agrupar_por'], 'pantalla'));
+                $colSpan = self::numColumnas((string) $filtros['agrupar_por'], $meses, self::conMotivo($filtros), count($ocultas) - $disponibles);
                 $mensajeVacio = 'No se encontraron resultados.';
                 if (!empty($filtros['fecha_desde']) && !empty($filtros['fecha_hasta'])) {
                     $desde = date('d-m-Y', strtotime($filtros['fecha_desde']));
@@ -456,16 +558,16 @@ class ReporteVentasController extends BaseModuloController
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>'.htmlspecialchars($mensajeVacio).'</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado, $meses, self::conMotivo($filtros));
+                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado, $meses, self::conMotivo($filtros), $ocultas);
                 }
                 if ($filtros['agrupar_por'] === 'PRODUCTO_MES') {
-                    echo $this->renderFilaTotalesUnidadesHtml($rows, $meses);
+                    echo $this->renderFilaTotalesUnidadesHtml($rows, $meses, $ocultas);
                 } elseif ($filtros['agrupar_por'] === 'CLIENTE_CATEGORIA') {
-                    echo $this->renderFilaTotalesClienteCategoriaHtml($rows, $meses);
+                    echo $this->renderFilaTotalesClienteCategoriaHtml($rows, $meses, $ocultas);
                 } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-                    echo $this->renderFilaTotalesProductoHtml($rows);
+                    echo $this->renderFilaTotalesProductoHtml($rows, $ocultas);
                 } else {
-                    echo $this->renderFilaTotalesMontosHtml($rows, (string) $filtros['agrupar_por'], self::conMotivo($filtros));
+                    echo $this->renderFilaTotalesMontosHtml($rows, (string) $filtros['agrupar_por'], self::conMotivo($filtros), $ocultas);
                 }
             }
             $rowsHtml = ob_get_clean();
@@ -488,6 +590,8 @@ class ReporteVentasController extends BaseModuloController
                     : [],
                 'consolidado' => $consolidado,
                 'borradores'  => $filtros['borradores'],
+                // Columnas ocultas en pantalla con que se pintaron las filas: la cabecera usa las mismas.
+                'ocultas'     => array_keys($ocultas),
             ]);
             
             if ($jsonOutput === false) {
@@ -505,7 +609,7 @@ class ReporteVentasController extends BaseModuloController
         exit;
     }
 
-    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false, array $meses = [], bool $conMotivo = false): string
+    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false, array $meses = [], bool $conMotivo = false, array $ocultas = []): string
     {
         // Consolidado por RUC: badge con el establecimiento dueño del documento (solo en el
         // detallado; las agrupaciones suman todos los establecimientos en una fila).
@@ -532,13 +636,22 @@ class ReporteVentasController extends BaseModuloController
                    . ' data-doc-sujeto="' . htmlspecialchars($r['cliente_nombre'] ?? '', ENT_QUOTES) . '"';
         }
 
-        $html = '<tr class="align-middle"' . $attrs . '>';
-
         $base0   = number_format((float)($r['base_0'] ?? 0), 2);
         $baseIva = number_format((float)($r['base_iva'] ?? 0), 2);
         $iva     = number_format((float)($r['valor_iva'] ?? 0), 2);
         $total   = number_format((float)($r['total'] ?? 0), 2);
+        $e       = static fn ($v): string => htmlspecialchars((string) ($v ?? ''));
+        // Importes comunes a las vistas con montos, por clave de columna.
+        $montos  = [
+            'base_0'    => "<td class='text-end'>$base0</td>",
+            'base_iva'  => "<td class='text-end'>$baseIva</td>",
+            'valor_iva' => "<td class='text-end'>$iva</td>",
+            'total'     => "<td class='text-end fw-bold text-success'>$total</td>",
+        ];
+        $docs    = "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
 
+        // Una celda por clave de columna (App\Helpers\ColumnasReporte); las claves '__…' son
+        // columnas que dependen de los datos y siempre se muestran.
         if ($agruparPor === 'CLIENTE') {
             // Saldo por cobrar de los documentos del reporte (reemplaza a "Nro Facturas";
             // el conteo queda como título del nombre). En rojo mientras el cliente deba.
@@ -546,77 +659,77 @@ class ReporteVentasController extends BaseModuloController
             $saldo   = (float) ($r['saldo'] ?? 0);
             $clsSal  = $saldo > 0.001 ? 'text-danger fw-semibold' : 'text-muted';
             $titulo  = $nDocs . ' documento' . ($nDocs !== 1 ? 's' : '') . ' en el reporte';
-            $html .= "<td title='".htmlspecialchars($titulo)."'><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
-            $html .= "<td class='text-end {$clsSal}'>".number_format($saldo, 2)."</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $celdas = [
+                'cliente_nombre' => "<td title='".htmlspecialchars($titulo)."'><span class='fw-bold'>".$e($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".$e($r['cliente_ruc'] ?? '')."</small></td>",
+                'saldo'          => "<td class='text-end {$clsSal}'>".number_format($saldo, 2)."</td>",
+            ] + $montos;
         } elseif ($agruparPor === 'PRODUCTO') {
             // Total de venta sin impuestos (subtotal de las líneas) y participación de cada
             // producto sobre el total del reporte, en importe y en unidades.
-            $html .= "<td class='ps-4'><span class='fw-bold'>".htmlspecialchars($r['producto_codigo'] ?? '')."</span></td>";
-            $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
-            $html .= "<td>".htmlspecialchars($r['unidad_medida'] ?? '')."</td>";
-            $html .= "<td class='text-end fw-bold text-success'>".number_format((float)($r['total_venta'] ?? 0), 2)."</td>";
-            $html .= "<td class='text-end'>".self::fmtCantidad((float)($r['cantidad_vendida'] ?? 0))."</td>";
-            $html .= "<td class='text-end'>".number_format((float)($r['pct_venta'] ?? 0), 2)."%</td>";
-            $html .= "<td class='text-end pe-4'>".number_format((float)($r['pct_unidades'] ?? 0), 2)."%</td>";
+            $celdas = [
+                'producto_codigo'  => "<td class='ps-4'><span class='fw-bold'>".$e($r['producto_codigo'] ?? '')."</span></td>",
+                'producto_nombre'  => "<td>".$e($r['producto_nombre'] ?? '')."</td>",
+                'unidad_medida'    => "<td>".$e($r['unidad_medida'] ?? '')."</td>",
+                'total_venta'      => "<td class='text-end fw-bold text-success'>".number_format((float)($r['total_venta'] ?? 0), 2)."</td>",
+                'cantidad_vendida' => "<td class='text-end'>".self::fmtCantidad((float)($r['cantidad_vendida'] ?? 0))."</td>",
+                'pct_venta'        => "<td class='text-end'>".number_format((float)($r['pct_venta'] ?? 0), 2)."%</td>",
+                'pct_unidades'     => "<td class='text-end pe-4'>".number_format((float)($r['pct_unidades'] ?? 0), 2)."%</td>",
+            ];
         } elseif ($agruparPor === 'VARIANTE') {
             $tarifa = (float)($r['tarifa_iva'] ?? 0);
-            $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
-            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['variante_nombre'] ?? '')."</span>: ".htmlspecialchars($r['variante_valor'] ?? '')."</td>";
-            $html .= "<td class='text-center'>".(float)($r['cantidad_vendida'] ?? 0)."</td>";
-            $html .= "<td class='text-center'>{$tarifa}%</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $celdas = [
+                'producto_nombre'  => "<td>".$e($r['producto_nombre'] ?? '')."</td>",
+                'variante_nombre'  => "<td><span class='fw-bold'>".$e($r['variante_nombre'] ?? '')."</span>: ".$e($r['variante_valor'] ?? '')."</td>",
+                'cantidad_vendida' => "<td class='text-center'>".(float)($r['cantidad_vendida'] ?? 0)."</td>",
+                'tarifa_iva'       => "<td class='text-center'>{$tarifa}%</td>",
+            ] + $montos;
         } elseif ($agruparPor === 'FECHA') {
-            $html .= "<td><span class='fw-bold'>".date('d/m/Y', strtotime($r['fecha'] ?? ''))."</span></td>";
-            $html .= "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $celdas = [
+                'fecha'             => "<td><span class='fw-bold'>".date('d/m/Y', strtotime($r['fecha'] ?? ''))."</span></td>",
+                'cantidad_facturas' => $docs,
+            ] + $montos;
         } elseif ($agruparPor === 'CAJERO') {
-            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cajero_nombre'] ?? '')."</span></td>";
-            $html .= "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $celdas = [
+                'cajero_nombre'     => "<td><span class='fw-bold'>".$e($r['cajero_nombre'] ?? '')."</span></td>",
+                'cantidad_facturas' => $docs,
+            ] + $montos;
         } elseif ($agruparPor === 'MES') {
-            $html .= "<td><span class='fw-bold'>".self::formatearMes($r['mes'] ?? '')."</span></td>";
-            $html .= "<td class='text-center'>".(int)($r['cantidad_facturas'] ?? 0)."</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
+            $celdas = [
+                'mes'               => "<td><span class='fw-bold'>".self::formatearMes($r['mes'] ?? '')."</span></td>",
+                'cantidad_facturas' => $docs,
+            ] + $montos;
         } elseif ($agruparPor === 'PRODUCTO_MES') {
             // Unidades por producto y mes: código, descripción, una celda por mes del
             // período (en gris cuando no hubo ventas) y el total del período.
-            $html .= "<td class='ps-4'><span class='fw-bold'>".htmlspecialchars($r['producto_codigo'] ?? '')."</span></td>";
-            $html .= "<td>".htmlspecialchars($r['producto_nombre'] ?? '')."</td>";
+            $tdMeses = '';
             foreach ($meses as $m) {
                 $c = (float) ($r['meses'][$m] ?? 0);
-                $html .= abs($c) < 0.000001
+                $tdMeses .= abs($c) < 0.000001
                     ? "<td class='text-end text-muted'>0</td>"
                     : "<td class='text-end'>".self::fmtCantidad($c)."</td>";
             }
-            $html .= "<td class='text-end pe-4 fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>";
+            $celdas = [
+                'producto_codigo' => "<td class='ps-4'><span class='fw-bold'>".$e($r['producto_codigo'] ?? '')."</span></td>",
+                'producto_nombre' => "<td>".$e($r['producto_nombre'] ?? '')."</td>",
+                '__meses'         => $tdMeses,
+                'total_unidades'  => "<td class='text-end pe-4 fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>",
+            ];
         } elseif ($agruparPor === 'CLIENTE_CATEGORIA') {
             // Unidades por cliente y categoría: cliente, una celda por categoría (en gris
             // cuando no compró de ella), total de unidades y total vendido sin impuestos.
-            $html .= "<td class='ps-4'><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
+            $tdCats = '';
             foreach (array_keys($meses) as $c) {
                 $v = (float) ($r['categorias'][$c] ?? 0);
-                $html .= abs($v) < 0.000001
+                $tdCats .= abs($v) < 0.000001
                     ? "<td class='text-end text-muted'>0</td>"
                     : "<td class='text-end'>".self::fmtCantidad($v)."</td>";
             }
-            $html .= "<td class='text-end fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>";
-            $html .= "<td class='text-end pe-4 fw-bold text-success'>".number_format((float) ($r['total_venta'] ?? 0), 2)."</td>";
+            $celdas = [
+                'cliente_nombre' => "<td class='ps-4'><span class='fw-bold'>".$e($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".$e($r['cliente_ruc'] ?? '')."</small></td>",
+                '__categorias'   => $tdCats,
+                'total_unidades' => "<td class='text-end fw-bold text-primary'>".self::fmtCantidad((float) ($r['total_unidades'] ?? 0))."</td>",
+                'total_venta'    => "<td class='text-end pe-4 fw-bold text-success'>".number_format((float) ($r['total_venta'] ?? 0), 2)."</td>",
+            ];
         } else {
             // DETALLADO / NINGUNO
             $estado = strtolower($r['estado'] ?? '');
@@ -628,29 +741,28 @@ class ReporteVentasController extends BaseModuloController
             };
             $retenciones = number_format((float)($r['retenciones'] ?? 0), 2);
 
-            $html .= "<td class='text-center'>".date('d/m/Y', strtotime($r['fecha_emision'] ?? ''))."</td>";
-            $html .= "<td>{$badgeEst}<span class='fw-bold'>".htmlspecialchars($r['numero_factura'] ?? '')."</span></td>";
-            $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
+            $celdas = [
+                'fecha_emision'  => "<td class='text-center'>".date('d/m/Y', strtotime($r['fecha_emision'] ?? ''))."</td>",
+                'numero_factura' => "<td>{$badgeEst}<span class='fw-bold'>".$e($r['numero_factura'] ?? '')."</span></td>",
+                'cliente_nombre' => "<td><span class='fw-bold'>".$e($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".$e($r['cliente_ruc'] ?? '')."</small></td>",
+            ];
             if ($conMotivo) {
                 // Motivo de la nota de crédito: una línea con puntos suspensivos; completo al pasar el mouse.
                 $motivo = htmlspecialchars((string) ($r['motivo'] ?? ''), ENT_QUOTES);
-                $html .= "<td title='{$motivo}' style='max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>{$motivo}</td>";
+                $celdas['__motivo'] = "<td title='{$motivo}' style='max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>{$motivo}</td>";
             }
-            $html .= "<td class='text-center'><span class='badge border {$badgeColor}'>".strtoupper($estado)."</span></td>";
-            $html .= "<td>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
-            // Sin columna Cajero: casi siempre repetía al Usuario (el cajero sigue como filtro y agrupación).
-            $html .= "<td>".htmlspecialchars($r['usuario_nombre']  ?? '')."</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end fw-bold text-success'>$total</td>";
-            $html .= "<td class='text-end text-danger'>$retenciones</td>";
+            $celdas += [
+                'estado'          => "<td class='text-center'><span class='badge border {$badgeColor}'>".strtoupper($estado)."</span></td>",
+                'vendedor_nombre' => "<td>".$e($r['vendedor_nombre'] ?? '')."</td>",
+                // Sin columna Cajero: casi siempre repetía al Usuario (el cajero sigue como filtro y agrupación).
+                'usuario_nombre'  => "<td>".$e($r['usuario_nombre']  ?? '')."</td>",
+            ] + $montos + [
+                'retenciones'     => "<td class='text-end text-danger'>$retenciones</td>",
+            ];
         }
-        
-        $html .= '</tr>';
-        return $html;
-    }
 
+        return '<tr class="align-middle"' . $attrs . '>' . self::unirCeldas($celdas, $ocultas) . '</tr>';
+    }
     /**
      * Convierte 'YYYY-MM' a un nombre legible: 'Enero 2026'.
      */
@@ -896,6 +1008,44 @@ class ReporteVentasController extends BaseModuloController
                 }
             }
 
+            // Personalización de la empresa: se quitan del Excel las columnas que ocultó.
+            // $claves va en el mismo orden que $headers (null = columna que depende de los
+            // datos: mes, categoría, Motivo, Estab.; siempre se muestra).
+            $agr    = (string) $filtros['agrupar_por'];
+            $montos = ['base_0', 'base_iva', 'valor_iva', 'total'];
+            $dinamicas = array_fill(0, count($meses), null);
+            $claves = match ($agr) {
+                'CLIENTE'  => array_merge(['cliente_ruc', 'cliente_nombre', 'cantidad_facturas', 'saldo'], $montos),
+                'PRODUCTO' => ['producto_codigo', 'producto_nombre', 'unidad_medida', 'total_venta', 'cantidad_vendida', 'pct_venta', 'pct_unidades'],
+                'VARIANTE' => array_merge(['producto_nombre', 'variante_nombre', 'variante_valor', 'cantidad_vendida', 'tarifa_iva'], $montos),
+                'FECHA'    => array_merge(['fecha', 'cantidad_facturas'], $montos),
+                'CAJERO'   => array_merge(['cajero_nombre', 'cantidad_facturas'], $montos),
+                'MES'      => array_merge(['mes', 'cantidad_facturas'], $montos),
+                'PRODUCTO_MES'      => array_merge(['producto_codigo', 'producto_nombre'], $dinamicas, ['total_unidades']),
+                'CLIENTE_CATEGORIA' => array_merge(['cliente_ruc', 'cliente_nombre'], $dinamicas, ['total_unidades', 'total_venta']),
+                default    => array_merge(
+                    $consolidado ? [null] : [],
+                    ['fecha_emision', 'numero_factura', 'cliente_nombre', 'cliente_ruc'],
+                    self::conMotivo($filtros) ? [null] : [],
+                    $filtros['borradores'] !== 'EXCLUIR' ? ['estado'] : [],
+                    ['vendedor_nombre', 'usuario_nombre', 'clave_acceso'],
+                    $montos,
+                    ['retenciones']
+                ),
+            };
+            $ocultas = $this->ocultas($agr, 'excel');
+            $quitar  = [];
+            foreach ($claves as $i => $clave) {
+                if ($clave !== null && isset($ocultas[$clave])) {
+                    $quitar[$i] = true;
+                }
+            }
+            if ($quitar && count($claves) === count($headers)) {
+                $sinOcultas = static fn (array $fila): array => array_values(array_diff_key(array_values($fila), $quitar));
+                $headers    = $sinOcultas($headers);
+                $exportData = array_map($sinOcultas, $exportData);
+            }
+
             $borradoresTxt = $this->describirBorradores($filtros['borradores']);
             $reportService = new \App\Services\ReportService();
             $reportService->exportToExcel('Ventas', $headers, $exportData, 'Reporte_Ventas', $nombreEmpresa,
@@ -938,6 +1088,9 @@ class ReporteVentasController extends BaseModuloController
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
 
+            // Orientación elegida por la empresa al personalizar ('auto' = la de siempre).
+            self::$orientacionPdf = $this->personalizacion($agrupar)['orientacion'];
+
             $html      = $this->htmlPdf($agrupar, $consolidado, $rows, $totales, $filtrosTxt, $idEmpresaActiva, $nombreEmpresa, $meses, self::conMotivo($filtros));
             $html2pdf = new \Spipu\Html2Pdf\Html2Pdf(self::pdfHorizontal($agrupar, $meses) ? 'L' : 'P', 'A4', 'es');
             $html2pdf->writeHTML($html);
@@ -956,7 +1109,7 @@ class ReporteVentasController extends BaseModuloController
                              array $filtrosTxt, int $idEmpresaActiva, string $nombreEmpresa, array $meses = [],
                              bool $conMotivo = false): string
     {
-        $cols      = $this->columnasPdf($agrupar, $consolidado, $meses, $conMotivo);
+        $cols      = $this->sinOcultasPdf($agrupar, $this->columnasPdf($agrupar, $consolidado, $meses, $conMotivo));
         $nCols     = count($cols);
         $fs        = self::pdfFuentePt($agrupar, $meses) . 'pt';
 
@@ -1105,6 +1258,10 @@ class ReporteVentasController extends BaseModuloController
      */
     private static function pdfHorizontal(string $agrupar, array $meses): bool
     {
+        // La empresa puede fijar la orientación al personalizar el reporte.
+        if (self::$orientacionPdf !== 'auto') {
+            return self::$orientacionPdf === 'L';
+        }
         return $agrupar === 'NINGUNO' || ($agrupar === 'PRODUCTO_MES' && count($meses) > 6)
             || ($agrupar === 'CLIENTE_CATEGORIA' && count($meses) > 4);
     }
@@ -1118,7 +1275,66 @@ class ReporteVentasController extends BaseModuloController
         if (($agrupar === 'PRODUCTO_MES' && count($meses) > 12) || ($agrupar === 'CLIENTE_CATEGORIA' && count($meses) > 10)) {
             return 6.0;
         }
+        // Detallado forzado a vertical: sus columnas necesitan la letra más chica.
+        if ($agrupar === 'NINGUNO' && self::$orientacionPdf === 'P') {
+            return 6.5;
+        }
         return self::pdfHorizontal($agrupar, $meses) ? 7.0 : 8.0;
+    }
+
+    /** Clave del catálogo (ColumnasReporte) de cada columna del PDF, por su etiqueta. */
+    private const CLAVE_PDF = [
+        'NINGUNO'  => ['Fecha' => 'fecha_emision', 'Documento' => 'numero_factura', 'Cliente' => 'cliente_nombre', 'Estado' => 'estado',
+                       'Vendedor' => 'vendedor_nombre', 'Usuario' => 'usuario_nombre', 'Base 0%' => 'base_0', 'Base IVA' => 'base_iva',
+                       'IVA' => 'valor_iva', 'Total' => 'total', 'Retenc.' => 'retenciones'],
+        'CLIENTE'  => ['Cliente' => 'cliente_nombre', 'Documentos' => 'cantidad_facturas', 'Saldo x Cobrar' => 'saldo',
+                       'Base 0%' => 'base_0', 'Base IVA' => 'base_iva', 'IVA' => 'valor_iva', 'Total' => 'total'],
+        'PRODUCTO' => ['Código' => 'producto_codigo', 'Producto' => 'producto_nombre', 'Unidad' => 'unidad_medida', 'Total Venta' => 'total_venta',
+                       'Cantidad' => 'cantidad_vendida', '% Venta' => 'pct_venta', '% Unidades' => 'pct_unidades'],
+        'VARIANTE' => ['Producto' => 'producto_nombre', 'Variante' => 'variante_nombre', 'Cantidad' => 'cantidad_vendida', 'T.IVA' => 'tarifa_iva',
+                       'Base 0%' => 'base_0', 'Base IVA' => 'base_iva', 'IVA' => 'valor_iva', 'Total' => 'total'],
+        'FECHA'    => ['Fecha' => 'fecha', 'Documentos' => 'cantidad_facturas', 'Base 0%' => 'base_0', 'Base IVA' => 'base_iva', 'IVA' => 'valor_iva', 'Total' => 'total'],
+        'CAJERO'   => ['Cajero' => 'cajero_nombre', 'Documentos' => 'cantidad_facturas', 'Base 0%' => 'base_0', 'Base IVA' => 'base_iva', 'IVA' => 'valor_iva', 'Total' => 'total'],
+        'MES'      => ['Mes' => 'mes', 'Documentos' => 'cantidad_facturas', 'Base 0%' => 'base_0', 'Base IVA' => 'base_iva', 'IVA' => 'valor_iva', 'Total' => 'total'],
+    ];
+
+    /**
+     * Quita del PDF las columnas que la empresa ocultó (botón «Personalizar») y reparte su
+     * ancho entre las que quedan, para que la tabla siga ocupando el 100 % de la hoja. Sin
+     * columnas ocultas devuelve la lista tal cual.
+     */
+    private function sinOcultasPdf(string $agrupar, array $cols): array
+    {
+        $ocultas = $this->ocultas($agrupar, 'pdf');
+        if (!$ocultas) {
+            return $cols;
+        }
+        $n = count($cols);
+        // Las vistas con columnas que dependen de los datos se identifican por posición (el
+        // nombre de un mes o de una categoría podría coincidir con una etiqueta fija).
+        $porPosicion = match ($agrupar) {
+            'PRODUCTO_MES'      => [0 => 'producto_codigo', 1 => 'producto_nombre', $n - 1 => 'total_unidades'],
+            'CLIENTE_CATEGORIA' => [0 => 'cliente_nombre', $n - 2 => 'total_unidades', $n - 1 => 'total_venta'],
+            default             => null,
+        };
+        $quedan = [];
+        foreach ($cols as $i => $c) {
+            $clave = $porPosicion !== null ? ($porPosicion[$i] ?? null) : (self::CLAVE_PDF[$agrupar][$c['lbl']] ?? null);
+            if ($clave === null || !isset($ocultas[$clave])) {
+                $quedan[] = $c;
+            }
+        }
+        if (count($quedan) === $n || !$quedan) {
+            return $cols;
+        }
+        $suma = array_sum(array_column($quedan, 'w'));
+        $acum = 0.0;
+        foreach ($quedan as $i => &$c) {
+            $c['w'] = $i === count($quedan) - 1 ? round(100 - $acum, 2) : round($c['w'] * 100 / $suma, 2);
+            $acum  += $c['w'];
+        }
+        unset($c);
+        return $quedan;
     }
 
     /**
@@ -1379,7 +1595,7 @@ class ReporteVentasController extends BaseModuloController
         if ($primera > 0) {
             $anchoEtq = 0;
             for ($i = 0; $i < $primera; $i++) {
-                $anchoEtq += (int) $cols[$i]['w'];
+                $anchoEtq += (float) $cols[$i]['w'];
             }
             $html .= "<td colspan='{$primera}' class='text-end' style='width:{$anchoEtq}%;'>"
                    . htmlspecialchars($etiqueta) . ':</td>';

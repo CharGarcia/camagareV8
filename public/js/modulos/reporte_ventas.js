@@ -282,6 +282,16 @@ window.RV_generarReporte = function () {
     })
     .then(res => {
         if (res.ok) {
+            // El servidor pintó las filas con estas columnas ocultas (personalización de la
+            // empresa): si otro administrador las cambió entretanto, la cabecera se pone al día.
+            if (Array.isArray(res.ocultas) && RV_COLUMNAS[res.agrupacion]) {
+                window.RV_OCULTAS = window.RV_OCULTAS || {};
+                const antes = (window.RV_OCULTAS[res.agrupacion] || []).join(',');
+                window.RV_OCULTAS[res.agrupacion] = res.ocultas;
+                if (antes !== res.ocultas.join(',') && res.agrupacion !== 'PRODUCTO_MES' && res.agrupacion !== 'CLIENTE_CATEGORIA') {
+                    RV_dibujarCabecera(res.agrupacion);
+                }
+            }
             if (res.agrupacion === 'PRODUCTO_MES') {
                 // Cabecera definitiva con los meses del período consultado.
                 window.rv_last_meses = res.meses || {};
@@ -659,23 +669,48 @@ function RV_engancharOrden(modo) {
 // Columnas de un modo. En PRODUCTO_MES intercala una columna por cada mes recibido
 // ({'YYYY-MM': 'Ene 2026', …}) entre la descripción y el total.
 function RV_columnasDe(modo, meses) {
-    const base = RV_COLUMNAS[modo].cols;
+    // Sin las columnas que la empresa ocultó en pantalla para esta agrupación (botón
+    // «Personalizar»; el servidor pinta las filas con la misma lista: res.ocultas).
+    const ocultas = (window.RV_OCULTAS && window.RV_OCULTAS[modo]) || [];
+    const base = RV_COLUMNAS[modo].cols.filter(c => !ocultas.includes(c[0]));
     if (modo === 'CLIENTE_CATEGORIA') {
         // El nombre de la categoría lo escribe el usuario: se escapa antes de ir al innerHTML.
         const esc = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
         const colsCat = (Array.isArray(meses) ? meses : []).map(([clave, nombre]) => ['cat:' + clave, esc(nombre), 'text-end']);
-        return [base[0], ...colsCat, base[1], base[2]];
+        // Las categorías van entre el cliente y los totales.
+        return [...base.filter(c => c[0] === 'cliente_nombre'), ...colsCat, ...base.filter(c => c[0] !== 'cliente_nombre')];
     }
     if (modo === 'NINGUNO') {
         // Notas de crédito: columna "Motivo" tras el cliente (el servidor pinta la celda con
         // la misma regla: ReporteVentasController::conMotivo()).
         const esNc = document.getElementById('rv_tipo_documento')?.value === 'NOTA_CREDITO';
-        return esNc ? [...base.slice(0, 3), ['motivo', 'Motivo', ''], ...base.slice(3)] : base;
+        if (!esNc) return base;
+        // "Motivo" va tras Fecha, Nro Documento y Cliente (las que estén visibles).
+        const antes = base.filter(c => ['fecha_emision', 'numero_factura', 'cliente_nombre'].includes(c[0]));
+        return [...antes, ['motivo', 'Motivo', ''], ...base.filter(c => !antes.includes(c))];
     }
     if (modo !== 'PRODUCTO_MES') return base;
     const colsMes = Object.keys(meses || {}).map(m => ['mes:' + m, meses[m], 'text-end']);
-    return [base[0], base[1], ...colsMes, base[2]];
+    // Los meses van entre código/descripción y el total.
+    return [...base.filter(c => c[0] !== 'total_unidades'), ...colsMes, ...base.filter(c => c[0] === 'total_unidades')];
 }
+
+// Vista que el reporte tiene en pantalla: la ventana «Personalizar» se abre en ella.
+window.CMG_vistaReporteActual = function () {
+    const v = document.getElementById('rv_agrupar_por')?.value || 'NINGUNO';
+    return RV_COLUMNAS[v] ? v : 'NINGUNO';
+};
+
+// Tras guardar la personalización: se toman las columnas ocultas nuevas y, si ya había un
+// reporte en pantalla, se vuelve a consultar (las filas las pinta el servidor).
+document.addEventListener('reportePersonalizado', function (e) {
+    const vistas = e.detail && e.detail.vistas;
+    if (Array.isArray(vistas)) {
+        window.RV_OCULTAS = window.RV_OCULTAS || {};
+        vistas.forEach(v => { window.RV_OCULTAS[v.vista] = v.columnas.filter(c => !c.pantalla).map(c => c.clave); });
+    }
+    if (!window.rv_filtros_pendientes) window.RV_generarReporte();
+});
 
 // Dibuja la cabecera del modo y devuelve el número de columnas (para los colspan).
 function RV_dibujarCabecera(agruparPor, meses) {

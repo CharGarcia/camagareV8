@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico
-version: 1.7
+etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico, personalizar, columnas, ocultar columnas, pdf vertical, pdf horizontal, orientacion del pdf
+version: 1.8
 orden: 20
 estado: activo
 ---
@@ -101,6 +101,17 @@ proveedor y no se agrupan con las demás.
 Disponible en **PDF** y **Excel**. Cada hoja del PDF lleva al pie, a la derecha,
 su **número de página** sobre el total (*Página 2/5*).
 
+## Personalizar columnas y PDF (administradores)
+
+El botón **Personalizar**, arriba a la derecha del encabezado de filtros, permite
+al administrador (niveles 2 y 3) elegir para **toda la empresa** qué columnas
+muestra cada vista del reporte (detallado, por proveedor, por producto, por
+fecha y por mes) en pantalla y Excel, cuáles salen en el PDF y si el PDF va
+vertical u horizontal. Sin personalizar, el reporte se ve como siempre: el PDF
+sale horizontal y, en el detallado, sin *F. Registro* ni *Nro Autorización*.
+
+El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
+
 ## Errores frecuentes
 
 - **Un producto no aparece con todo lo comprado**: hay líneas de compra sin
@@ -112,6 +123,7 @@ su **número de página** sobre el total (*Página 2/5*).
 
 ## Historial de cambios
 
+- **1.8** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas visibles por vista en pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Además, el **PDF** ahora reparte el ancho de la hoja entre sus columnas: ocupa de margen a margen y el detallado ya no se sale por la derecha.
 - **1.7** — Nueva **fila TOTAL** al pie de la tabla en pantalla y al final del **Excel**, en todas las vistas (detallado, por proveedor, por producto, por fecha y por mes). Antes los totales solo se veían en las tarjetas de arriba y en el PDF.
 - **1.6** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.5** — El **gráfico de compras** queda dentro de un acordeón, **cerrado por

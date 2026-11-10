@@ -330,6 +330,13 @@ function CMG_poblarModal(d) {
     document.getElementById('mcId').value                = d.id || '';
     document.getElementById('mcIdProveedor').value       = d.id_proveedor || '';
     document.getElementById('mcBuscarProveedor').value   = d.proveedor_nombre || '';
+    mcPintarInfoProveedor(d.id_proveedor ? {
+        identificacion: d.proveedor_ruc,
+        tipo_id_nombre: d.proveedor_nombre_tipo_id,
+        direccion:      d.proveedor_direccion,
+        telefono:       d.proveedor_telefono,
+        email:          d.proveedor_email
+    } : null);
     mcAsegurarOpcionComprobante(d.tipo_comprobante);
     document.getElementById('mcTipoComprobante').value   = d.tipo_comprobante || '';
     document.getElementById('mcIdEstablecimiento').value = d.id_establecimiento || '';
@@ -910,7 +917,8 @@ function CMG_resetModal() {
         const el = document.getElementById(id);
         if (el) el.value = '';
     });
-    
+    mcPintarInfoProveedor(null);
+
     if (document.getElementById('mcIdEstablecimiento')) {
         document.getElementById('mcIdEstablecimiento').value = window.CMG_sucursal?.id || '';
     }
@@ -1287,6 +1295,7 @@ document.getElementById('mcBuscarProveedor').addEventListener('keydown', functio
     if (['Backspace', 'Delete'].includes(e.key)) {
         this.value = ''; // Limpiar el texto visible
         document.getElementById('mcIdProveedor').value = ''; // Limpiar ID oculto
+        mcPintarInfoProveedor(null);
         // Restablecer deducible por defecto
         mcFijarDeducible('declaracion_iva');
         // Ocultar lista si estaba abierta
@@ -1297,9 +1306,92 @@ document.getElementById('mcBuscarProveedor').addEventListener('keydown', functio
 document.getElementById('mcBuscarProveedor').addEventListener('blur', function() {
     if (this.value.trim() === '') {
         document.getElementById('mcIdProveedor').value = '';
+        mcPintarInfoProveedor(null);
         mcFijarDeducible('declaracion_iva');
     }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PROVEEDOR — LÍNEA DE DATOS BAJO EL BUSCADOR (RUC, dirección, teléfono, correo)
+// Misma línea que el cliente en Facturas de Venta (.cmg-info-tercero, app.css): la
+// dirección y el correo se recortan con «…» y el texto completo sale al pasar el mouse.
+// ─────────────────────────────────────────────────────────────────────────────
+var _mcInfoProv = null;   // datos pintados (también viajan en el borrador local)
+
+/**
+ * Pinta (o esconde, con null) los datos del proveedor elegido.
+ * p: { identificacion, tipo_id_nombre, direccion, telefono, email }
+ */
+window.mcPintarInfoProveedor = function (p) {
+    const bar = document.getElementById('mcInfoProveedor');
+    if (!bar) return;
+    if (!p || !document.getElementById('mcIdProveedor')?.value) {
+        _mcInfoProv = null;
+        bar.classList.add('d-none');
+        return;
+    }
+    _mcInfoProv = {
+        identificacion: p.identificacion || '',
+        tipo_id_nombre: p.tipo_id_nombre || '',
+        direccion:      p.direccion || '',
+        telefono:       p.telefono || '',
+        email:          p.email || ''
+    };
+    const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; return el; };
+
+    set('mcLblProvRuc', _mcInfoProv.identificacion);
+    const tipoEl = set('mcLblProvTipoId', _mcInfoProv.tipo_id_nombre.trim());
+    if (tipoEl) tipoEl.classList.toggle('d-none', _mcInfoProv.tipo_id_nombre.trim() === '');
+    set('mcLblProvDireccion', _mcInfoProv.direccion.trim() || 'No especificada');
+    set('mcLblProvTelefono', _mcInfoProv.telefono.trim() || 'Sin teléfono registrado');
+
+    // Varios correos (separados por coma o punto y coma): se muestra el primero y «+N»;
+    // la lista completa queda en data-completo, que app.js usa como title.
+    const correos = _mcInfoProv.email.split(/[;,]/).map(c => c.trim()).filter(Boolean);
+    const correoEl = set('mcLblProvCorreo', correos.length
+        ? correos[0] + (correos.length > 1 ? ` +${correos.length - 1}` : '')
+        : 'Sin correo registrado');
+    const cajaCorreo = correoEl ? correoEl.closest('.cmg-info-tercero__correo') : null;
+    if (cajaCorreo) {
+        if (correos.length > 1) cajaCorreo.dataset.completo = correos.join(', ');
+        else delete cajaCorreo.dataset.completo;
+        cajaCorreo.removeAttribute('title');
+    }
+    bar.classList.remove('d-none');
+};
+
+/**
+ * «Editar» de la línea de datos: abre la ficha del proveedor (el mismo modal de
+ * Proveedores) encima de la compra. Al guardar, el listener de 'proveedorGuardado'
+ * refresca la línea sin tocar el resto del documento.
+ */
+var _mcAbriendoProveedor = false;
+window.mcEditarProveedor = async function () {
+    const id = document.getElementById('mcIdProveedor')?.value;
+    if (!id || _mcAbriendoProveedor || typeof window.PROV_abrirModalEditar !== 'function') return;
+    _mcAbriendoProveedor = true;
+    const aviso = (texto) => {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'info', title: 'Proveedor', text: texto });
+    };
+    try {
+        // La ficha se abre con el registro completo del listado de Proveedores (respeta
+        // sus permisos y los registros propios), buscado por la identificación.
+        const q    = (_mcInfoProv && _mcInfoProv.identificacion) || document.getElementById('mcBuscarProveedor').value || '';
+        const resp = await fetch(`${window.BASE_URL || ''}/modulos/proveedores/getProveedoresAjax?q=${encodeURIComponent(q)}`);
+        const json = await resp.json();
+        const fila = (json.ok && Array.isArray(json.data)) ? json.data.find(r => String(r.id) === String(id)) : null;
+        if (!fila) {
+            aviso('No se pudo abrir la ficha de este proveedor. Ábrela desde el módulo Proveedores.');
+            return;
+        }
+        await window.PROV_abrirModalEditar(fila);
+    } catch (e) {
+        console.error('Error al abrir el proveedor:', e);
+        aviso('No se pudo abrir la ficha del proveedor.');
+    } finally {
+        _mcAbriendoProveedor = false;
+    }
+};
 
 /**
  * El rubro del gasto personal (vivienda, salud…) solo tiene sentido cuando
@@ -1342,7 +1434,8 @@ window.CMG_seleccionarProveedor = function(p) {
     document.getElementById('mcIdProveedor').value     = p.id;
     document.getElementById('mcBuscarProveedor').value = p.nombre;
     document.getElementById('mcListaProveedores').classList.add('d-none');
-    
+    mcPintarInfoProveedor(p);
+
     // Si el proveedor tiene Cédula (SRI: 05), sugerir Gasto Personal
     // (solo si la empresa es persona natural: mcFijarDeducible lo resuelve).
     mcFijarDeducible(p.tipo_id === '05' ? 'gasto_personal' : 'declaracion_iva');
@@ -1395,9 +1488,31 @@ document.addEventListener('proveedorGuardado', (e) => {
     // retención, que lo toma con su propio listener; no cambia el de la compra.
     if (document.getElementById('modalRetencion')?.classList.contains('show')) return;
 
+    const idGuardado = res.id || res.data.id;
+    const nombreProv = res.nombre || res.data.razon_social || res.data.nombre || '';
+    const infoProv = {
+        identificacion: res.data.identificacion || '',
+        tipo_id_nombre: res.data.tipo_id_nombre || res.data.nombre_tipo_id || '',
+        direccion:      res.data.direccion || '',
+        telefono:       res.data.telefono || '',
+        email:          res.data.email || ''
+    };
+
+    // Edición de la ficha (botón «Editar» de la línea de datos): solo se refrescan el
+    // nombre y la línea del proveedor de ESTA compra. No se vuelve a "seleccionar",
+    // porque eso reiniciaría deducible, crédito y parte relacionada del documento.
+    if (res.nuevo === false) {
+        if (String(idGuardado) !== String(document.getElementById('mcIdProveedor').value)) return;
+        if (nombreProv) document.getElementById('mcBuscarProveedor').value = nombreProv;
+        if (!infoProv.tipo_id_nombre && _mcInfoProv) infoProv.tipo_id_nombre = _mcInfoProv.tipo_id_nombre;
+        mcPintarInfoProveedor(infoProv);
+        return;
+    }
+
     CMG_seleccionarProveedor({
-        id:             res.id || res.data.id,
-        nombre:         res.nombre || res.data.razon_social || res.data.nombre || '',
+        ...infoProv,
+        id:             idGuardado,
+        nombre:         nombreProv,
         tipo_id:        res.data.tipo_id_proveedor || '',
         plazo:          res.data.plazo || 0,
         unidad_tiempo:  res.data.unidad_tiempo || 'DIAS',
@@ -2619,6 +2734,7 @@ function mcCapturarEstado() {
     const estado = {};
     estado.id_proveedor = document.getElementById('mcIdProveedor')?.value || '';
     estado.buscar_proveedor = document.getElementById('mcBuscarProveedor')?.value || '';
+    estado.info_proveedor = _mcInfoProv;
     estado.tipo_comprobante = document.getElementById('mcTipoComprobante')?.value || '';
     estado.sustento = document.getElementById('mcSustento')?.value || '';
     estado.numero = document.getElementById('mcNumeroComprobante')?.value || '';
@@ -2733,6 +2849,7 @@ function mcCheckBorrador() {
 async function mcEjecutarRestauracion(estado) {
     document.getElementById('mcIdProveedor').value = estado.id_proveedor || '';
     document.getElementById('mcBuscarProveedor').value = estado.buscar_proveedor || '';
+    mcPintarInfoProveedor(estado.info_proveedor || null);
     mcAsegurarOpcionComprobante(estado.tipo_comprobante);
     document.getElementById('mcTipoComprobante').value = estado.tipo_comprobante || '';
     

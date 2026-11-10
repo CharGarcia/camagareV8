@@ -43,11 +43,16 @@ $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
                             <li class="nav-item">
                                 <a class="nav-link active py-2 small" id="tab-general-vendedor-btn" data-bs-toggle="tab" href="#pane-general-vendedor" role="tab"><i class="bi bi-card-text me-1"></i>General</a>
                             </li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('vend', 'py-2 small') ?>
                         </ul>
                     </div>
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top px-4 py-3">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('vend', 'modulos/vendedores', 'vendedor_id') ?>
+
                         <div class="tab-pane fade show active" id="pane-general-vendedor" role="tabpanel">
                             <div class="row g-3">
                                 <div class="col-md-12">

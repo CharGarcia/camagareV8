@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante
-version: 1.17
+etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto
+version: 1.18
 orden: 10
 estado: activo
 ---
@@ -289,6 +289,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.18** — Nueva pestaña **Información** en la ventana del producto (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.17** — Botón **IVA temporal** (solo prestadores de servicios turísticos): programa el cambio de tarifa de IVA de los productos entre dos fechas (IVA 8% en feriados) y lo restaura solo al terminar.
 - **1.16** — Al guardar la ficha con su pestaña de bodegas, el saldo de cada bodega sale siempre del Kardex (antes una bodega nueva podía nacer con el número del formulario) y una bodega quitada de la ficha que todavía tiene existencias sigue visible. Desde la ficha ya no se puede mover stock: los ajustes se hacen en Inventario.
 - **1.15** — Nueva sección **Productos equivalentes** en la pestaña *Referencias* de la ficha: se agregan los productos que sirven para lo mismo y, cuando uno no tiene saldo, Facturas de Venta y Car-Wash ofrecen primero sus equivalentes.

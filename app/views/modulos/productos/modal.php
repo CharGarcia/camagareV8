@@ -104,6 +104,8 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                     <i class="bi bi-card-list me-1"></i> Adicionales
                                 </a>
                             </li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('prod', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -115,6 +117,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                 'tab-homologaciones-btn' => 'Referencias',
                                 'tab-info-btn' => 'Adicionales'
                             ];
+                            $pestanasConfig += \App\Helpers\InformacionRegistro::pestanaConfigurable('prod');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfigProd ?? [], 'productos');
                             ?>
                         </div>
@@ -122,6 +125,9 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top px-3 py-3">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('prod', 'modulos/productos', 'prod_id') ?>
+
                         <!-- TAB GENERAL -->
                         <div class="tab-pane fade show active" id="pane-prod-general" role="tabpanel">
                             <div class="row g-3">

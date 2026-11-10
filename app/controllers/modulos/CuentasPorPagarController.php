@@ -73,6 +73,9 @@ class CuentasPorPagarController extends BaseModuloController
             'establecimientos' => $establecimientos,
             'idEmpresa'        => $idEmpresa,
             'puedeComprobarContabilidad' => $this->puedeComprobarContabilidad(),
+            // Columnas del Detallado según la personalización de la empresa (botón «Personalizar»)
+            'columnasDetalle' => \App\Services\modulos\ReportePersonalizacionService::crear()
+                ->pantallaJs($idEmpresa, $this->getRutaModulo(), 'DETALLE'),
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -580,6 +583,44 @@ class CuentasPorPagarController extends BaseModuloController
     // EXPORTACIÓN EXCEL
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Columnas de la vista Detallado según la personalización de la empresa activa (botón
+     * «Personalizar»): ['pantalla' => …, 'excel' => …, 'pdf' => …, 'horizontal' => bool].
+     * Ver App\Helpers\ColumnasReporte.
+     */
+    private function columnasDetalle(): array
+    {
+        return \App\Services\modulos\ReportePersonalizacionService::crear()
+            ->resolver((int) $_SESSION['id_empresa'], $this->getRutaModulo(), 'DETALLE');
+    }
+
+    /**
+     * Importes y días de un documento, por clave de columna (ColumnasReporte). La nota de
+     * débito del proveedor SUMA al documento (saldo = total + ND − NC − pagos − retenciones),
+     * así que resta en las columnas que juntan lo ya descontado, para que
+     * Total − Pagado/Ret/NC siga dando el Saldo. Es lo mismo que hace la pantalla
+     * (`nc + ret - nd` en CXP_filaHtml).
+     */
+    private function valoresDetalle(array $r): array
+    {
+        $abonos = (float) ($r['total_pagado'] ?? 0);
+        $nc     = (float) ($r['total_nc'] ?? 0);
+        $nd     = (float) ($r['total_nd'] ?? 0);
+        $ret    = (float) ($r['total_retenido'] ?? 0);
+
+        return [
+            'dias'        => (int) ($r['dias_vencido'] ?? 0),
+            'total'       => (float) $r['total'],
+            'abonos'      => $abonos,
+            'nc'          => $nc,
+            'nd'          => $nd,
+            'retenciones' => $ret,
+            'nc_ret'      => $nc + $ret - $nd,
+            'descontado'  => $abonos + $nc + $ret - $nd,
+            'saldo'       => (float) $r['saldo'],
+        ];
+    }
+
     public function exportExcel(): void
     {
         $this->requireLeer();
@@ -605,50 +646,40 @@ class CuentasPorPagarController extends BaseModuloController
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
             $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
-            // "Notas de Débito" va junto a las de crédito: la ND del proveedor SUMA al
-            // documento y sin ella la hoja no cuadraba (Total − Pagado ≠ Saldo).
-            $headers = ['Tipo', 'Documento', 'Proveedor', 'RUC', 'F.Emisión', 'F.Vencimiento', 'Días Vencidos', 'Total', 'Abonos', 'Notas de Crédito', 'Notas de Débito', 'Retenciones', 'Pagado', 'Saldo', 'Estado'];
+            // Columnas del Excel según la personalización de la empresa (App\Helpers\ColumnasReporte).
+            // Por defecto lleva "Notas de Débito" junto a las de crédito: la ND del proveedor
+            // SUMA al documento y sin ella la hoja no cuadraría (Total − Pagado ≠ Saldo).
+            $columnas = $this->columnasDetalle()['excel'];
+
+            // Consolidado: primera columna con el establecimiento dueño del documento
+            $headers  = $consolidado ? ['Estab.'] : [];
             // Columnas de montos (1-based): número con 2 decimales, sin separador de miles
-            $formatos = array_fill_keys([8, 9, 10, 11, 12, 13, 14], '0.00');
-            if ($consolidado) {
-                // Consolidado: primera columna con el establecimiento dueño del documento
-                array_unshift($headers, 'Estab.');
-                $formatos = array_fill_keys([9, 10, 11, 12, 13, 14, 15], '0.00');
+            $formatos = [];
+            foreach ($columnas as $col) {
+                $headers[] = $col['excel'][0];
+                if ($col['suma'] !== null) {
+                    $formatos[count($headers)] = '0.00';
+                }
             }
 
             $exportData = [];
             foreach ($filas as $r) {
-                $dias      = (int)($r['dias_vencido'] ?? 0);
-                $saldo     = (float)$r['saldo'];
-                $estadoCxP = $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE');
-                $abonos    = (float)($r['total_pagado'] ?? 0);
-                $nc        = (float)($r['total_nc'] ?? 0);
-                $nd        = (float)($r['total_nd'] ?? 0);
-                $ret       = (float)($r['total_retenido'] ?? 0);
-                $exportData[] = [
-                    ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
-                    match ($r['tipo_fuente']) {
-                        'SALDO_INICIAL' => 'Saldo inicial',
-                        'LIQUIDACION'   => 'Liquidación',
-                        'IMPORTACION'   => 'Importación',
-                        default         => 'Factura',
-                    },
-                    (string)($r['numero_documento'] ?? ''),
-                    (string)($r['proveedor_nombre'] ?? ''),
-                    (string)($r['proveedor_ruc'] ?? ''),
-                    $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
-                    $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
-                    $dias > 0 ? $dias : 0,
-                    round((float)$r['total'], 2),
-                    round($abonos, 2),
-                    round($nc, 2),
-                    round($nd, 2),
-                    round($ret, 2),
-                    // Lo que ya no se debe del documento: la ND resta porque suma al total.
-                    round($abonos + $nc + $ret - $nd, 2),
-                    round($saldo, 2),
-                    $estadoCxP,
-                ];
+                $v    = $this->valoresDetalle($r);
+                $fila = $consolidado ? [(string)($r['establecimiento'] ?? '')] : [];
+                foreach (array_keys($columnas) as $clave) {
+                    $fila[] = match ($clave) {
+                        'origen'            => $this->getTipoLabel((string) $r['tipo_fuente']),
+                        'documento'         => (string)($r['numero_documento'] ?? ''),
+                        'proveedor'         => (string)($r['proveedor_nombre'] ?? ''),
+                        'ruc'               => (string)($r['proveedor_ruc'] ?? ''),
+                        'fecha_emision'     => $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                        'fecha_vencimiento' => $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                        'dias'              => $v['dias'] > 0 ? $v['dias'] : 0,
+                        'estado'            => $v['saldo'] <= 0 ? 'PAGADA' : ($v['dias'] > 0 ? "VENCIDA ({$v['dias']} días)" : 'VIGENTE'),
+                        default             => round((float) ($v[$clave] ?? 0), 2),
+                    };
+                }
+                $exportData[] = $fila;
             }
 
             $reportService = new \App\Services\ReportService();
@@ -693,47 +724,57 @@ class CuentasPorPagarController extends BaseModuloController
             $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'Cuentas por Pagar';
 
-            // Consolidado: columna "Estab." al inicio; se le resta ancho a "Proveedor" para
-            // que la suma siga en 100% (table-layout: fixed). "Documento" necesita 17%: con
-            // la tabla a 8 pt un número como 001-002-000001333 mide 72 pt y en el 14% de
-            // antes (73 pt menos el padding) se salía sobre la columna del proveedor, que en
-            // cambio parte el nombre en varias líneas sin problema.
-            $wEst  = $consolidado ? 6 : 0;
-            $wDoc  = 17;
-            $wProv = 25 - $wEst;
-            $wVen  = 16;
+            // Columnas y orientación según la personalización de la empresa
+            // (App\Helpers\ColumnasReporte); por defecto: vertical con las siete de siempre.
+            $vistaCfg   = $this->columnasDetalle();
+            $columnas   = $vistaCfg['pdf'];
+            $horizontal = (bool) $vistaCfg['horizontal'];
+
             // Un solo proveedor (unSoloProveedor()): sin columna Proveedor —el nombre va en
             // el encabezado—; su ancho se reparte entre Documento y F. Vencimiento.
             $sinProv = $this->unSoloProveedor($filtros, $filas);
-            if ($sinProv) {
-                $wDoc += intdiv($wProv, 2);
-                $wVen += $wProv - intdiv($wProv, 2);
-                $wProv = 0;
+            $pesos   = [];
+            foreach ($columnas as $clave => $col) {
+                $pesos[$clave] = (float) $col['ancho'];
             }
-            $tdEst = fn (array $r): string => $consolidado
-                ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
-                : '';
+            // Consolidado: columna "Estab." al inicio; se le resta ancho a "Proveedor" para
+            // que las demás conserven el suyo. "Documento" necesita 17%: con la tabla a 8 pt
+            // un número como 001-002-000001333 mide 72 pt y en menos se saldría sobre la
+            // columna vecina; el proveedor, en cambio, parte el nombre en varias líneas.
+            if ($consolidado) {
+                $pesos = ['__estab' => 6.0] + $pesos;
+                if (isset($pesos['proveedor'])) {
+                    $pesos['proveedor'] = max(8.0, $pesos['proveedor'] - 6.0);
+                }
+            }
+            if ($sinProv && isset($pesos['proveedor'])) {
+                $wProv = $pesos['proveedor'];
+                unset($pesos['proveedor'], $columnas['proveedor']);
+                if (isset($pesos['documento'], $pesos['fecha_vencimiento'])) {
+                    $pesos['documento']         += intdiv((int) $wProv, 2);
+                    $pesos['fecha_vencimiento'] += $wProv - intdiv((int) $wProv, 2);
+                }
+            }
+            $w     = \App\Helpers\ColumnasReporte::anchosPdf($pesos);
+            $nCols = count($pesos);
+            $pt    = \App\Helpers\ColumnasReporte::fuentePdf($nCols, $horizontal);
+            // Ancho útil de la hoja en puntos (márgenes de 8 mm del <page> + 5 mm de Html2Pdf),
+            // menos 6 pt de padding: lo que mide el contenido de una columna de $pct %.
+            $util    = $horizontal ? 768.2 : 521.6;
+            $anchoPt = static fn (float $pct): float => $pct / 100 * $util - 6.0;
+            $txt     = static fn (string $t, string $clave): string => \App\Helpers\ReportePdf::texto($t, $anchoPt($w[$clave]), $pt);
+            // El tipo va en pequeño sobre el número y el estado bajo el vencimiento, salvo que
+            // tengan su propia columna.
+            $conOrigen = isset($columnas['origen']);
+            $conEstado = isset($columnas['estado']);
 
-            $totalSaldo   = 0;
-            $totalPagRet  = 0;   // pagado + retenido + NC (lo que muestra la columna)
-            $totalTotal   = 0;
-            $filasHtml    = [];
+            $totales   = [];
+            $filasHtml = [];
 
             foreach ($filas as $r) {
-                $dias  = (int)($r['dias_vencido'] ?? 0);
-                $ts    = (float)$r['total'];
-                $tp    = (float)$r['total_pagado'];
-                $tsal  = (float)$r['saldo'];
-                // La nota de débito del proveedor SUMA al documento (el saldo la incluye:
-                // total + ND − NC − pagos − retenciones), así que se resta de esta columna
-                // para que Total − Pagado/Ret/NC siga dando el Saldo. Es lo mismo que hace
-                // la pantalla (`nc + ret - nd` en CXP_filaHtml); sin esto, un documento con
-                // nota de débito salía descuadrado en el PDF.
-                $tret  = (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0)
-                       - (float)($r['total_nd'] ?? 0);
-                $totalTotal  += $ts;
-                $totalPagRet += $tp + $tret;
-                $totalSaldo  += $tsal;
+                $v     = $this->valoresDetalle($r);
+                $dias  = $v['dias'];
+                $tsal  = $v['saldo'];
                 $color = $dias > 0 && $tsal > 0 ? 'color:#dc3545;' : '';
                 $badge = $tsal <= 0
                     ? "<small style='color:#6c757d;'>Pagada</small>"
@@ -742,31 +783,47 @@ class CuentasPorPagarController extends BaseModuloController
                         : "<small style='color:#198754;'>Vigente</small>");
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                $tipo  = match ($r['tipo_fuente']) {
-                    'SALDO_INICIAL' => 'Saldo ini.',
-                    'LIQUIDACION'   => 'Liq.',
-                    'IMPORTACION'   => 'Imp.',
-                    default         => 'Fac.',
-                };
+                $tipo  = $this->getTipoLabel((string) $r['tipo_fuente'], true);
 
-                $filasHtml[] = "<tr style='{$color}'>{$tdEst($r)}
-                    <td style='width:{$wDoc}%;'><small style='color:#6c757d;'>{$tipo}</small><br>" . self::docPdf((string) ($r['numero_documento'] ?? ''), $wDoc) . "</td>
-                    " . ($sinProv ? '' : "<td style='width:{$wProv}%;'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</td>") . "
-                    <td class='text-center' style='width:12%;'>{$fEmis}</td>
-                    <td class='text-center' style='width:{$wVen}%;'>{$fVenc}<br>{$badge}</td>
-                    <td class='text-end' style='width:10%;'>\$" . number_format($ts, 2) . "</td>
-                    <td class='text-end' style='width:10%;color:#198754;'>\$" . number_format($tp + $tret, 2) . "</td>
-                    <td class='text-end' style='width:10%;{$color}font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
-                </tr>";
+                $tds = $consolidado
+                    ? "<td class='text-center' style='width:{$w['__estab']}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . '</td>'
+                    : '';
+                foreach ($columnas as $clave => $col) {
+                    $estilo = '';
+                    $cls    = \App\Helpers\ColumnasReporte::claseAlinear($col['alinear']);
+                    if ($col['suma'] !== null) {
+                        $totales[$clave] = ($totales[$clave] ?? 0.0) + $v[$clave];
+                        $valor  = '$' . number_format($v[$clave], 2);
+                        $estilo = match ($clave) {
+                            'descontado', 'abonos' => 'color:#198754;',
+                            'saldo'                => "{$color}font-weight:bold;",
+                            default                => '',
+                        };
+                    } else {
+                        $valor = match ($clave) {
+                            'documento'         => ($conOrigen ? '' : "<small style='color:#6c757d;'>{$tipo}</small><br>") . $txt((string) ($r['numero_documento'] ?? ''), $clave),
+                            'origen'            => $this->getTipoLabel((string) $r['tipo_fuente']),
+                            'proveedor'         => htmlspecialchars($r['proveedor_nombre'] ?? ''),
+                            'ruc'               => $txt((string) ($r['proveedor_ruc'] ?? ''), $clave),
+                            'fecha_emision'     => $fEmis,
+                            'fecha_vencimiento' => $fVenc . ($conEstado ? '' : "<br>{$badge}"),
+                            'dias'              => (string) max(0, $dias),
+                            'estado'            => $badge,
+                            default             => '',
+                        };
+                    }
+                    $tds .= "<td" . ($cls !== '' ? " class='{$cls}'" : '') . " style='width:{$w[$clave]}%;{$estilo}'>{$valor}</td>";
+                }
+                $filasHtml[] = "<tr style='{$color}'>{$tds}</tr>";
             }
 
             ob_start();
             ?>
             <style>
-                body { font-family: Arial, sans-serif; font-size: 8pt; }
+                body { font-family: Arial, sans-serif; font-size: <?= $pt ?>pt; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; }
-                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: <?= $pt + 0.5 ?>pt; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: <?= $pt ?>pt; overflow: hidden; word-wrap: break-word; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -808,31 +865,49 @@ class CuentasPorPagarController extends BaseModuloController
             </page>
             <?php
             $inicio = ob_get_clean();
-            $thead  = '<tr>'
-                . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
-                . "<th style='width:{$wDoc}%;'>Documento</th>"
-                . ($sinProv ? '' : "<th style='width:{$wProv}%;'>Proveedor</th>")
-                . "<th style='width:12%;'>F. Emisión</th>
-                   <th style='width:{$wVen}%;'>F. Vencimiento</th>
-                   <th style='width:10%;'>Total</th>
-                   <th style='width:10%;'>Pagado/Ret/NC</th>
-                   <th style='width:10%;'>Saldo</th></tr>";
+            $thead = '<tr>' . ($consolidado ? "<th style='width:{$w['__estab']}%;'>Estab.</th>" : '');
+            foreach ($columnas as $clave => $col) {
+                $thead .= "<th style='width:{$w[$clave]}%;'>" . htmlspecialchars($col['corto']) . '</th>';
+            }
+            $thead .= '</tr>';
             // Sin resultados: una fila con el aviso, igual que la vista "Por proveedor".
             if (!$filasHtml) {
                 $filasHtml[] = "<tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por pagar con los filtros aplicados.</td></tr>";
             }
             // Los totales van en su propia tabla, NO en un <tfoot>: Html2Pdf dibuja el tfoot al
-            // pie de CADA página. El 70% de la etiqueta equivale a Documento + Proveedor + las
-            // dos fechas (y al Estab. cuando va), con o sin consolidado.
-            $final = "<table class='tot'><tr>
-                        <td class='text-end' style='width:70%;'>TOTALES:</td>
-                        <td class='text-end' style='width:10%;'>\$" . number_format($totalTotal, 2) . "</td>
-                        <td class='text-end' style='width:10%;color:#198754;'>\$" . number_format($totalPagRet, 2) . "</td>
-                        <td class='text-end' style='width:10%;color:#dc3545;'>\$" . number_format($totalSaldo, 2) . "</td>
-                      </tr></table>";
-            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
+            // pie de CADA página. La etiqueta ocupa las columnas que van antes del primer
+            // importe (Estab., documento, proveedor, fechas…); sin importes visibles no hay fila.
+            $final  = '';
+            $wLider = 0.0;
+            $celdas = '';
+            $enLider = true;
+            foreach ($pesos as $clave => $_) {
+                $esImporte = isset($columnas[$clave]) && $columnas[$clave]['suma'] !== null;
+                if ($enLider && !$esImporte) {
+                    $wLider += $w[$clave];
+                    continue;
+                }
+                $enLider = false;
+                if (!$esImporte) {
+                    $celdas .= "<td style='width:{$w[$clave]}%;'></td>";
+                    continue;
+                }
+                $estilo = match ($clave) {
+                    'descontado', 'abonos' => 'color:#198754;',
+                    'saldo'                => 'color:#dc3545;',
+                    default                => '',
+                };
+                $celdas .= "<td class='text-end' style='width:{$w[$clave]}%;{$estilo}'>\$" . number_format($totales[$clave] ?? 0, 2) . '</td>';
+            }
+            if ($celdas !== '') {
+                $final = "<table class='tot'><tr>"
+                       . ($wLider > 0 ? "<td class='text-end' style='width:" . round($wLider, 2) . "%;'>TOTALES:</td>" : '')
+                       . $celdas . '</tr></table>';
+            }
+            // Vertical (A4 retrato) es la orientación por defecto de los listados del módulo;
+            // la empresa puede pedir horizontal al personalizar el reporte.
             // Por bloques (App\Helpers\PdfPorBloques): lineal con miles de documentos.
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
             \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filasHtml, $final);
             $html2pdf->output('CuentasPorPagar_' . date('Ymd_His') . '.pdf', 'D');
             exit;

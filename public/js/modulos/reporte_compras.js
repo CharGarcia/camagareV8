@@ -230,7 +230,7 @@ window.RC_generarReporte = function () {
     RC_dibujarCabecera(agruparPor);
 
     const tbody       = document.getElementById('rc_tbody');
-    const colSpanAct  = agruparPor === 'NINGUNO' ? 13 : (agruparPor === 'PRODUCTO' ? 8 : 7);
+    const colSpanAct  = Math.max(1, RC_columnasDe(agruparPor).length);
     tbody.innerHTML   = `<tr><td colspan="${colSpanAct}" class="text-center py-4">
         <div class="spinner-border text-danger" role="status"></div>
         <br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span>
@@ -248,6 +248,12 @@ window.RC_generarReporte = function () {
     })
     .then(res => {
         if (res.ok) {
+            // La cabecera sale de las mismas columnas con que el servidor pintó las filas.
+            if (Array.isArray(res.columnas)) {
+                window.RC_COLUMNAS[RC_vistaDe(res.agrupacion)] = res.columnas;
+                RC_dibujarCabecera(res.agrupacion);
+            }
+            window.rc_reporte_generado = true;
             tbody.innerHTML = res.rows;
 
             if (res.stats) {
@@ -281,72 +287,41 @@ window.RC_generarReporte = function () {
 };
 
 // ── Cabecera dinámica ────────────────────────────────────────────────────────
+// Las columnas de cada vista las decide la personalización de la empresa (botón
+// «Personalizar», solo administradores): llegan en window.RC_COLUMNAS al cargar la página
+// y se refrescan con cada respuesta de generarAjax.
+window.RC_COLUMNAS = window.RC_COLUMNAS || {};
+
+function RC_vistaDe(agruparPor) {
+    return window.RC_COLUMNAS[agruparPor] ? agruparPor : 'NINGUNO';
+}
+
+function RC_columnasDe(agruparPor) {
+    return window.RC_COLUMNAS[RC_vistaDe(agruparPor)] || [];
+}
+
 function RC_dibujarCabecera(agruparPor) {
+    const cols = RC_columnasDe(agruparPor);
+    const esc  = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     let th = '<tr class="text-secondary" style="font-family:\'Outfit\',sans-serif;">';
-
-    if (agruparPor === 'PROVEEDOR') {
-        th += `
-            <th class="ps-4">Proveedor</th>
-            <th class="text-center">Nro Comp.</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end">Total ICE</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'PRODUCTO') {
-        th += `
-            <th class="ps-4">Producto</th>
-            <th class="text-center">Cantidad Comprada</th>
-            <th class="text-center">Tipo IVA</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end">Total ICE</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'FECHA') {
-        th += `
-            <th class="ps-4">Fecha</th>
-            <th class="text-center">Nro Comp.</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end">Total ICE</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else if (agruparPor === 'MES') {
-        th += `
-            <th class="ps-4">Mes</th>
-            <th class="text-center">Nro Comp.</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end">Total ICE</th>
-            <th class="text-end pe-4">Gran Total</th>
-        `;
-    } else {
-        // NINGUNO / DETALLADO — 13 columnas
-        th += `
-            <th class="ps-3">F. Emisión</th>
-            <th>F. Registro</th>
-            <th>Nro Documento</th>
-            <th>Proveedor</th>
-            <th class="text-center">Tipo</th>
-            <th>Usuario</th>
-            <th>Nro Autorización</th>
-            <th class="text-end">Base 0% / Exento</th>
-            <th class="text-end">Base IVA</th>
-            <th class="text-end">Total IVA</th>
-            <th class="text-end">Total ICE</th>
-            <th class="text-end pe-3">Gran Total</th>
-            <th class="text-end pe-3">Retenciones</th>
-        `;
-    }
-
+    cols.forEach((c, i) => {
+        const clases = [c.clase || '', i === 0 ? 'ps-3' : '', i === cols.length - 1 ? 'pe-3' : ''].filter(Boolean).join(' ');
+        th += `<th${clases ? ` class="${clases}"` : ''}>${esc(c.titulo)}</th>`;
+    });
     th += '</tr>';
     document.getElementById('rc_thead').innerHTML = th;
 }
+
+// Vista que el reporte tiene en pantalla: la ventana «Personalizar» se abre en ella.
+window.CMG_vistaReporteActual = function () {
+    return RC_vistaDe(document.getElementById('rc_agrupar_por').value);
+};
+
+// Tras guardar la personalización, el reporte ya generado se vuelve a consultar para
+// mostrar las columnas nuevas (si aún no se buscó nada, no hay nada que redibujar).
+document.addEventListener('reportePersonalizado', function () {
+    if (window.rc_reporte_generado) window.RC_generarReporte();
+});
 
 // ── Gráfico ──────────────────────────────────────────────────────────────────
 window.rc_last_raw_data   = null;

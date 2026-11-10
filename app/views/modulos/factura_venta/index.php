@@ -723,20 +723,23 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                 </div>
 
                                                 <div class="col-12 px-3 mt-1 d-none" id="m-info-cliente">
-                                                    <div class="d-flex flex-wrap align-items-center gap-x-3 gap-y-1" style="font-size:0.72rem; text-transform:lowercase; color:#6c757d;">
-                                                        <span class="border-end pe-2 me-1 fw-bold text-dark" id="m-lbl-cliente-ruc"></span>
-                                                        <span class="border-end pe-2 me-1 d-none" id="m-lbl-cliente-tipo-id" title="Tipo de identificación"></span>
-                                                        <div class="d-flex align-items-center gap-1">
-                                                            <i class="bi bi-geo-alt"></i><span id="m-lbl-cliente-direccion"></span>
+                                                    <?php /* .cmg-info-tercero (app.css): un solo renglón; dirección y correo se
+                                                             recortan con «…» y el texto completo sale al pasar el mouse (app.js).
+                                                             Los <span> conservan el texto íntegro: otras funciones lo leen. */ ?>
+                                                    <div class="cmg-info-tercero">
+                                                        <span class="border-end pe-2 fw-bold text-dark" id="m-lbl-cliente-ruc"></span>
+                                                        <span class="border-end pe-2 d-none" id="m-lbl-cliente-tipo-id" title="Tipo de identificación"></span>
+                                                        <div class="cmg-info-tercero__dir">
+                                                            <i class="bi bi-geo-alt me-1"></i><span id="m-lbl-cliente-direccion"></span>
                                                         </div>
-                                                        <div class="d-flex align-items-center gap-1 border-start ps-2">
-                                                            <i class="bi bi-telephone"></i><span id="m-lbl-cliente-telefono"></span>
+                                                        <div class="border-start ps-2">
+                                                            <i class="bi bi-telephone me-1"></i><span id="m-lbl-cliente-telefono"></span>
                                                         </div>
-                                                        <div class="d-flex align-items-center gap-1 border-start ps-2">
-                                                            <i class="bi bi-envelope"></i><span id="m-lbl-cliente-correo"></span>
+                                                        <div class="cmg-info-tercero__correo border-start ps-2">
+                                                            <i class="bi bi-envelope me-1"></i><span id="m-lbl-cliente-correo"></span>
                                                         </div>
                                                         <?php if (!empty($permClientes['actualizar'])): ?>
-                                                        <button type="button" id="m-btn-editar-cliente" class="btn btn-link btn-sm p-0 ms-auto d-none" style="font-size:0.72rem; text-decoration:none;" onclick="editarDatosCliente()" title="Editar datos del cliente">
+                                                        <button type="button" id="m-btn-editar-cliente" class="btn btn-link btn-sm p-0 ms-auto d-none" style="font-size:0.72rem; text-decoration:none; text-transform:none;" onclick="editarDatosCliente()" title="Editar datos del cliente">
                                                             <i class="bi bi-pencil-square me-1"></i>Editar
                                                         </button>
                                                         <?php endif; ?>
@@ -1809,12 +1812,16 @@ $totalPages = $totalPagesOriginal;
         return !document.getElementById('m-search-cliente')?.disabled && !fvFacturaEstaAutorizada();
     }
 
-    // clientes_modal.js emite 'clienteGuardado' al crear y al editar. Se toma el registro
-    // si es nuevo, o si es el cliente ya seleccionado (refresca sus datos); la edición de
-    // otro cliente no pisa la factura. Se vuelve a pedir por getClientesAjax para traer los
-    // mismos campos que usa seleccionarCliente() (tipo de id, vendedor, plazo, forma SRI).
+    // clientes_modal.js emite 'clienteGuardado' al crear y al editar.
+    //  - Cliente NUEVO: se selecciona en la factura (solo si está abierta y en borrador).
+    //  - EDICIÓN del cliente ya elegido (enlace «Editar» de la línea de datos): solo se
+    //    refrescan sus datos; no se vuelve a "seleccionar", para no pisar vendedor, plazo
+    //    ni forma de pago de la factura. La edición de otro cliente no toca la factura.
+    // Se vuelve a pedir por getClientesAjax para traer los mismos campos que usa
+    // seleccionarCliente() (tipo de id, vendedor, plazo, forma SRI).
     document.addEventListener('clienteGuardado', async (e) => {
-        if (!fvFacturaEditableAbierta()) return;
+        const modalFv = document.getElementById('modalNuevaFactura');
+        if (!modalFv || !modalFv.classList.contains('show') || fvFacturaEstaAutorizada()) return;
         // Si encima de la factura está abierta una NC/ND (embebidas en esta página), el
         // cliente se creó para la nota: lo toma su propio listener, no la factura.
         if (['modalNC', 'modalND'].some(id => document.getElementById(id)?.classList.contains('show'))) return;
@@ -1823,17 +1830,25 @@ $totalPages = $totalPagesOriginal;
         const idSel   = document.getElementById('m-id-cliente')?.value || '';
         const esNuevo = res.nuevo === true || /cread/i.test(res.msg || '');
         if (!esNuevo && String(idSel) !== String(res.data.id)) return;
+        if (esNuevo && !fvFacturaEditableAbierta()) return;
 
         const termino = String(res.data.identificacion || res.data.nombre || '').trim();
-        if (!termino) return;
+        let c = null;
         try {
-            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getClientesAjax?q=${encodeURIComponent(termino)}`);
-            const json = await resp.json();
-            const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
-            if (c) seleccionarCliente(c);
+            if (termino) {
+                const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getClientesAjax?q=${encodeURIComponent(termino)}`);
+                const json = await resp.json();
+                c = (json.data || []).find(x => String(x.id) === String(res.data.id)) || null;
+            }
         } catch (err) {
-            console.error('Error al recuperar el cliente recién creado:', err);
+            console.error('Error al recuperar el cliente guardado:', err);
         }
+        if (esNuevo) {
+            if (c) seleccionarCliente(c);
+            return;
+        }
+        // Edición: si el buscador no lo devolvió, se pinta con lo que respondió el guardado.
+        fvRefrescarDatosCliente(c || res.data);
     });
 
     // productos_modal.js emite 'productoGuardado'; solo /store devuelve `id` (al editar no
@@ -4198,100 +4213,62 @@ $totalPages = $totalPagesOriginal;
     }
 
     /**
-     * Edita teléfono, dirección y correo del cliente que está en la factura
-     * ACTUAL (la identificación NO se edita aquí a propósito). Actualiza el
-     * registro real del cliente (no son campos propios de la factura) — por
-     * eso solo aparece con permiso de actualizar en Clientes, y solo mientras
-     * la factura no esté autorizada (ver toggle en actualizarBotonesEstado).
-     * update() del cliente reemplaza todas sus columnas a la vez, así que
-     * primero hay que traer el registro completo.
+     * «Editar» de la línea de datos del cliente: abre la ficha del cliente (el mismo
+     * modal de Clientes) encima de la factura. Al guardar, clientes_modal.js queda abierto
+     * (se cierra con su botón Cerrar) y emite 'clienteGuardado'; el listener de arriba refresca la línea con
+     * fvRefrescarDatosCliente(). Solo aparece con permiso de actualizar en Clientes y
+     * mientras la factura no esté autorizada (ver toggle en actualizarBotonesEstado).
      */
+    let fvAbriendoCliente = false;
     async function editarDatosCliente() {
-        if (fvFacturaEstaAutorizada()) return;
+        if (fvFacturaEstaAutorizada() || fvAbriendoCliente) return;
 
         const idCliente = document.getElementById('m-id-cliente')?.value;
-        if (!idCliente) return;
+        if (!idCliente || typeof window.abrirModalClienteEditar !== 'function') return;
 
+        fvAbriendoCliente = true;
         try {
-            const resp = await fetch(`${B_URL}/modulos/clientes/getAjax?id=${idCliente}`);
+            const resp = await fetch(`${B_URL}/modulos/clientes/getAjax?id=${encodeURIComponent(idCliente)}`);
             const json = await resp.json();
-            if (!json.ok) {
+            if (!json.ok || !json.data) {
                 Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'No se pudo cargar el cliente.' });
                 return;
             }
-            const cliente = json.data;
-
-            const inputSm = 'width:100%;height:28px;font-size:0.75rem;padding:2px 8px;border:1px solid #ced4da;border-radius:.25rem;';
-            const { value: valores } = await Swal.fire({
-                title: 'Editar datos del cliente',
-                html: `
-                    <div class="small text-muted mb-2 text-start" style="font-size:0.7rem;">Se actualiza el registro del cliente en el sistema, no solo esta factura.</div>
-                    <div class="text-start mb-2">
-                        <label class="small fw-bold mb-1 d-block" style="font-size:0.75rem;">Teléfono</label>
-                        <input type="text" id="sw-cliente-telefono" style="${inputSm}" value="${(cliente.telefono || '').replace(/"/g, '&quot;')}">
-                    </div>
-                    <div class="text-start mb-2">
-                        <label class="small fw-bold mb-1 d-block" style="font-size:0.75rem;">Dirección</label>
-                        <input type="text" id="sw-cliente-direccion" style="${inputSm}" value="${(cliente.direccion || '').replace(/"/g, '&quot;')}">
-                    </div>
-                    <div class="text-start">
-                        <label class="small fw-bold mb-1 d-block" style="font-size:0.75rem;">Correo</label>
-                        <input type="text" id="sw-cliente-correo" style="${inputSm}" value="${(cliente.email || '').replace(/"/g, '&quot;')}">
-                    </div>
-                `,
-                target: document.getElementById('modalNuevaFactura'),
-                showCancelButton: true,
-                confirmButtonText: 'Guardar',
-                cancelButtonText: 'Cancelar',
-                focusConfirm: false,
-                preConfirm: () => {
-                    const email = document.getElementById('sw-cliente-correo').value.trim();
-                    if (!email) {
-                        Swal.showValidationMessage('Ingresa un correo.');
-                        return false;
-                    }
-                    return {
-                        telefono: document.getElementById('sw-cliente-telefono').value.trim(),
-                        direccion: document.getElementById('sw-cliente-direccion').value.trim(),
-                        email
-                    };
-                }
-            });
-
-            if (!valores) return;
-
-            cliente.telefono = valores.telefono || null;
-            cliente.direccion = valores.direccion || null;
-            cliente.email = valores.email;
-
-            const fd = new FormData();
-            fd.append('id', idCliente);
-            Object.keys(cliente).forEach(k => {
-                if (cliente[k] !== null && cliente[k] !== undefined) fd.append(k, cliente[k]);
-            });
-
-            const respUpd = await fetch(`${B_URL}/modulos/clientes/update`, { method: 'POST', body: fd });
-            const jsonUpd = await respUpd.json();
-            if (!jsonUpd.ok) {
-                Swal.fire({ icon: 'error', title: 'No se pudo actualizar', text: jsonUpd.error || 'Error desconocido.' });
-                return;
-            }
-
-            const telLbl = document.getElementById('m-lbl-cliente-telefono');
-            if (telLbl) telLbl.textContent = valores.telefono || 'Sin teléfono registrado';
-            const dirLbl = document.getElementById('m-lbl-cliente-direccion');
-            if (dirLbl) dirLbl.textContent = valores.direccion || 'No especificada';
-            const mailLbl = document.getElementById('m-lbl-cliente-correo');
-            if (mailLbl) mailLbl.textContent = valores.email;
-
-            const elCorreoSri = document.getElementById('sri-correo-cliente');
-            if (elCorreoSri) elCorreoSri.value = valores.email;
-            actualizarInfoCorreoCliente(valores.email || '');
-
-            Swal.fire({ icon: 'success', title: 'Datos del cliente actualizados', timer: 1500, showConfirmButton: false });
+            // La ficha no se cierra sola al guardar: se cierra con su botón Cerrar.
+            await window.abrirModalClienteEditar(json.data);
         } catch (e) {
-            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo actualizar los datos del cliente.' });
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo abrir la ficha del cliente.' });
+        } finally {
+            fvAbriendoCliente = false;
         }
+    }
+
+    /**
+     * Refresca en la factura los DATOS del cliente ya elegido después de editar su ficha
+     * (nombre, identificación, tipo, dirección, teléfono y correo). A diferencia de
+     * seleccionarCliente(), no toca vendedor, días de crédito ni forma de pago SRI: eso
+     * ya pudo ajustarlo el usuario en esta factura y corregir un teléfono no debe pisarlo.
+     */
+    function fvRefrescarDatosCliente(c) {
+        if (!c) return;
+        const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+        const val = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+
+        if (c.nombre) val('m-search-cliente', c.nombre);
+        if (c.identificacion) {
+            set('m-lbl-cliente-ruc', c.identificacion);
+            val('sri-identificacion-cliente', c.identificacion);
+        }
+        if (c.tipo_id !== undefined) val('m-tipo-id-cliente', c.tipo_id || '');
+        if (c.nombre_tipo_id !== undefined) {
+            val('m-nombre-tipo-id-cliente', c.nombre_tipo_id || '');
+            fvMostrarTipoIdCliente(c.nombre_tipo_id);
+        }
+        set('m-lbl-cliente-direccion', c.direccion || 'No especificada');
+        set('m-lbl-cliente-telefono', c.telefono || 'Sin teléfono registrado');
+        set('m-lbl-cliente-correo', c.email || 'Sin correo registrado');
+        val('sri-correo-cliente', c.email || '');
+        actualizarInfoCorreoCliente(c.email || '');
     }
 
     /**

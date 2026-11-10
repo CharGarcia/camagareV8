@@ -1414,13 +1414,14 @@
                         // documento ya lo tomó por 'clienteGuardado', así que se cierra para
                         // seguir con el documento. Desde el listado de Clientes el modal no
                         // se cierra: se refresca en sitio para seguir completando la ficha.
-                        // Lo mismo al EDITAR desde un documento (enlace «Editar» de la orden
-                        // de Car-Wash): el documento repinta los datos y se vuelve a él.
+                        // Al EDITAR desde un documento (enlace «Editar» de Facturas de Venta o
+                        // de la orden de Car-Wash) tampoco se cierra sola: el documento repinta
+                        // los datos por 'clienteGuardado' y el usuario la cierra con Cerrar.
                         const modalCliEl = document.getElementById('modalCliente');
                         const sobreOtro = typeof window.CMG_modalSobreOtro === 'function'
                             && window.CMG_modalSobreOtro(modalCliEl);
                         const alVuelo = eraNuevo && sobreOtro;
-                        if (sobreOtro) {
+                        if (alVuelo) {
                             getModalCliente().hide();
                         } else {
                             await cliRefrescarModalTrasGuardar(json, eraNuevo);

@@ -1507,6 +1507,7 @@ class ComprasController extends BaseModuloController
             : 'NULL::varchar';
         $sql = "SELECT p.id, p.razon_social AS nombre, p.identificacion,
                        p.tipo_id_proveedor AS tipo_id, p.email, p.plazo,
+                       p.direccion, p.telefono,
                        p.relacionado, p.unidad_tiempo,
                        COALESCE(icv.nombre, '') AS tipo_id_nombre,
                        {$ultimoRubro} AS ultimo_rubro

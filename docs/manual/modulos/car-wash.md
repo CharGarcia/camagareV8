@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, buscar producto en historial, que ordenes tienen este servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
-version: 1.31
+version: 1.32
 orden: 10
 estado: activo
 ---
@@ -53,7 +53,9 @@ se le entrega al cliente.
 
    Con un cliente o vehículo ya elegido aparece el enlace **Editar** junto a su
    rótulo: abre su ficha encima de la orden para corregir, por ejemplo, la placa,
-   el correo o el teléfono. Al guardar se vuelve a la orden con los datos nuevos.
+   el correo o el teléfono. Al guardar, la orden muestra los datos nuevos. La
+   ficha (del cliente o del vehículo) **no se cierra sola**: ciérrela con
+   **Cerrar** para volver a la orden.
 3. Agregue los **servicios y productos** en la grilla (igual que en una factura).
 4. Anote las novedades en **Info. Adicional** y pulse **Guardar**. La orden **no se cierra**:
    queda abierta, ya guardada y con su número, en la misma pestaña en que estaba, para
@@ -528,6 +530,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.32** — Al **editar el cliente o el vehículo** desde la orden, su ficha ya no se cierra sola al guardar: la orden toma los datos nuevos y la ficha se cierra con **Cerrar**, igual que en Facturas de Venta.
 - **1.31** — Ventana **Servicios** de mantenimiento: las líneas nuevas o modificadas sin guardar se resaltan y, al cerrar, se avisa que hay servicios sin guardar (Guardar y cerrar / Cerrar sin guardar / Seguir editando).
 - **1.30** — Pestaña **Historial**: nuevo campo **Producto o servicio** para ver solo las órdenes que tienen un producto o servicio (por código o descripción), mostrando solo las líneas que coinciden y su cantidad y valor en el resumen.
 - **1.29** — Al guardar, una línea con descripción y sin cantidad ya no se descarta sin aviso: se muestra *Falta la cantidad* con la lista de líneas y se marca la celda. Las filas sin descripción no se guardan (antes el servidor rechazaba la orden si alguna traía cantidad sin descripción).

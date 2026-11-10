@@ -55,8 +55,10 @@
 
     <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
     <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
-        <div class="card-header bg-white border-bottom py-2 px-3">
+        <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center gap-2">
             <h5 class="mb-0 fw-bold"><i class="bi bi-credit-card me-2 text-primary"></i>Cuentas por Pagar</h5>
+            <?php // Botón «Personalizar» (columnas y orientación del PDF, por empresa): solo niveles 2 y 3. ?>
+            <?= \App\Helpers\ColumnasReporte::boton($rutaModulo) ?>
         </div>
         <div class="card-body p-3">
             <form id="form-filtros-cxp" onsubmit="event.preventDefault(); CXP_cargar();" class="d-flex flex-wrap align-items-start gap-2">
@@ -542,9 +544,14 @@ require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 
 <script>
     const RUTA_MODULO_CXP = "<?php echo $rutaModulo; ?>";
+    // Columnas de la vista Detallado según la personalización de la empresa (ColumnasReporte):
+    // todas las del catálogo, con `visible` y `defecto`.
+    window.CXP_COLUMNAS = <?= json_encode($columnasDetalle ?? [], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
 </script>
 <!-- Cédula y RUC del mismo tercero (cédula + '001') se tratan como uno solo -->
 <script src="<?php echo BASE_URL; ?>/js/components/identificacion_tercero.js?v=<?= asset_ver('/js/components/identificacion_tercero.js') ?>"></script>
 <!-- Ordenamiento de la tabla por las cabeceras (mismas reglas que App\Helpers\OrdenFilas) -->
 <script src="<?php echo BASE_URL; ?>/js/components/orden_tabla.js?v=<?= asset_ver('/js/components/orden_tabla.js') ?>"></script>
+<?php // Ventana «Personalizar reporte» (vacía si el usuario no es administrador)
+echo \App\Helpers\ColumnasReporte::modal($rutaModulo); ?>
 <script src="<?php echo BASE_URL; ?>/js/modulos/cuentas_por_pagar.js?v=<?= asset_ver('/js/modulos/cuentas_por_pagar.js') ?>"></script>

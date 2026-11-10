@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, total de una categoria, solo lo de la categoria, la factura completa, el total no cuadra con el filtro, filtrar por producto, filtrar por variante, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente, motivo de la nota de credito, columna motivo, por que se hizo la nota de credito, razon de la devolucion
-version: 1.22
+etiquetas: personalizar, personalizar columnas, ocultar columnas, columnas del pdf, columnas del excel, pdf horizontal, pdf vertical, orientacion del pdf, reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, total de una categoria, solo lo de la categoria, la factura completa, el total no cuadra con el filtro, filtrar por producto, filtrar por variante, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente, motivo de la nota de credito, columna motivo, por que se hizo la nota de credito, razon de la devolucion
+version: 1.23
 orden: 10
 estado: activo
 ---
@@ -428,6 +428,38 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
   *Página X/Y*, y la fila **TOTALES GENERALES** aparece una sola vez al final
   (con el número de productos, clientes o documentos que se sumaron).
 
+## Personalizar columnas y PDF (administradores)
+
+El botón **Personalizar**, arriba a la derecha del encabezado de filtros, permite
+al administrador (niveles 2 y 3) decidir para **toda la empresa** qué columnas
+se ven en cada agrupación del reporte (detallado, por cliente, por producto, por
+variante, por fecha, por cajero, por mes y las dos de unidades), por separado
+para la **pantalla**, el **Excel** y el **PDF**, y si el PDF sale vertical u
+horizontal.
+
+Cada formato conserva sus columnas de siempre y lo que se elige es **cuáles
+ocultar**. Donde la ventana muestra una raya (—) la columna no existe en ese
+formato: por ejemplo, *Clave de acceso* y *RUC/Cédula* como columna aparte solo
+van en el Excel (en pantalla y en el PDF el RUC va bajo el nombre del cliente).
+
+Qué no se personaliza:
+
+- La columna que identifica la fila (Nro Documento, Cliente, Producto, Variante,
+  Fecha, Cajero, Mes): siempre se muestra.
+- Las columnas que dependen de los datos: los **meses** de *Unidades por
+  producto y mes*, las **categorías** de *Unidades por cliente y categoría*,
+  **Motivo** (notas de crédito) y **Estab.** (consolidado).
+
+Al ocultar una columna, las demás se reparten su ancho en el PDF y la fila de
+totales se ajusta sola. Las tarjetas de arriba no cambian.
+
+**Orientación del PDF**: *Automática* es la de siempre (horizontal en el
+detallado, vertical en los agrupados y, en las vistas de unidades, según cuántos
+meses o categorías haya). Si se pide **vertical** en el detallado, la letra se
+reduce para que quepa; conviene ocultar antes algunas columnas en el PDF.
+
+El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
+
 ## Errores frecuentes
 
 - **Las cifras no coinciden con la contabilidad**: revise el selector
@@ -475,6 +507,7 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.23** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas a ocultar por agrupación, por separado para pantalla, Excel y PDF, y orientación del PDF, para toda la empresa.
 - **1.22** — El detallado ya no muestra la columna **Cajero** (pantalla, Excel y PDF): queda solo **Usuario**, quien registró el documento. El filtro **Cajero** y la agrupación **Por cajero** siguen igual.
 - **1.21** — Nueva columna **Motivo** en el detallado cuando el tipo de documento es **Notas de Crédito en Ventas**: en pantalla, en el Excel y en el PDF.
 - **1.20** — Nueva **fila TOTAL** al pie de la tabla en pantalla para el detallado, por cliente, por variante, por fecha, por cajero y por mes (antes solo la tenían las vistas de productos y de cliente / categoría). Suma las filas mostradas y coincide con las tarjetas de arriba y con el PDF.

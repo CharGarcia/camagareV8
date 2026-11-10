@@ -157,8 +157,67 @@ function CXC_initOrden() {
 function CXC_nCols() {
     // Por antigüedad: [chevron] Cliente | Docs | Por vencer | tramos… | Más de N | Total
     if (CXC_vista === 'antiguedad') return 5 + CXC_tramos().length;
+    // Detallado: casilla + las columnas que la empresa dejó visibles + Acciones.
+    if (CXC_vista === 'detalle') return CXC_colsDetalle().length + 2;
     return (CXC_vista === 'agrupado' && CXC_sinAsesor()) ? 10 : 11;
 }
+
+/* ════════════════════════════════════════════════════
+   COLUMNAS DEL DETALLADO (personalización por empresa)
+   El administrador decide con el botón «Personalizar» qué columnas muestra la vista
+   Detallado. Llegan en window.CXC_COLUMNAS: todas las del catálogo
+   (App\Helpers\ColumnasReporte), en orden, con `visible` (lo que eligió la empresa) y
+   `defecto` (lo que se ve sin personalizar). Las demás vistas no cambian: "Por producto"
+   sigue con las columnas de siempre (CXC_colsDefecto).
+════════════════════════════════════════════════════ */
+const CXC_COLS = Array.isArray(window.CXC_COLUMNAS) ? window.CXC_COLUMNAS : [];
+
+/* Columnas visibles del Detallado. La de Vendedor se omite con el listado acotado a un
+   asesor (CXC_sinAsesor), igual que en el PDF y el Excel. */
+function CXC_colsDetalle() {
+    return CXC_COLS.filter(c => c.visible && !(c.clave === 'vendedor' && CXC_sinAsesor()));
+}
+
+function CXC_colsDefecto() {
+    return CXC_COLS.filter(c => c.defecto);
+}
+
+/* ¿La empresa cambió las columnas del Detallado? Sin cambios se usa la cabecera de siempre. */
+function CXC_detallePersonalizado() {
+    return CXC_COLS.some(c => !!c.visible !== !!c.defecto);
+}
+
+/* colgroup, thead y ancho mínimo de la tabla para las columnas visibles del Detallado. */
+function CXC_cabeceraDetalle() {
+    const cols  = CXC_colsDetalle();
+    const extra = { documento: 'ps-2', saldo: 'pe-3' };
+    let cg = '<col style="width:36px;">', th = '<th class="text-center p-1"></th>', ancho = 36 + 190, flexible = false;
+    for (const c of cols) {
+        if (c.px) { cg += `<col style="width:${c.px}px;">`; ancho += c.px; }
+        else      { cg += '<col>'; flexible = true; }
+        const cls = [extra[c.clave] ? (c.clase + ' ' + extra[c.clave]).trim() : c.clase, c.sort ? 'sortable-header' : ''].filter(Boolean).join(' ');
+        th += c.sort
+            ? `<th class="${cls}" data-sort="${esc(c.sort)}" role="button" title="${esc(c.tip || 'Ordenar')}">${esc(c.titulo)} <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>`
+            : `<th${cls ? ` class="${cls}"` : ''}${c.tip ? ` title="${esc(c.tip)}"` : ''}>${esc(c.titulo)}</th>`;
+    }
+    return {
+        cg: cg + '<col style="width:190px;">',
+        th: `<tr>${th}<th class="text-center">Acciones</th></tr>`,
+        minWidth: ancho + (flexible ? 220 : 0),
+    };
+}
+
+/* Tras guardar en «Personalizar»: se toman las columnas nuevas y se repinta la tabla con los
+   datos que ya están en pantalla (no hace falta volver a consultar). */
+document.addEventListener('reportePersonalizado', function (e) {
+    const vistas  = e.detail && e.detail.vistas;
+    const detalle = Array.isArray(vistas) ? vistas.find(v => v.vista === 'DETALLE') : null;
+    if (!detalle) return;
+    const visibles = {};
+    detalle.columnas.forEach(c => { visibles[c.clave] = !!c.pantalla; });
+    CXC_COLS.forEach(c => { if (c.clave in visibles) c.visible = visibles[c.clave]; });
+    CXC_renderTabla(CXC_filtradoLocal);
+});
 
 /* Mensaje de la tabla mientras no se haya aplicado ningún filtro (al entrar al módulo). */
 function CXC_estadoInicial() {
@@ -314,7 +373,8 @@ function CXC_renderTabla(filas) {
 
     label.textContent = filas.length + ' registros';
     let html = '';
-    for (const r of filas) html += CXC_filaHtml(r);
+    const cols = CXC_colsDetalle();
+    for (const r of filas) html += CXC_filaHtml(r, cols);
     tbody.innerHTML = html;
 }
 
@@ -324,9 +384,11 @@ function CXC_keyFila(r) {
     return `${r.origen}:${r.id}`;
 }
 
-/* Construye una fila <tr> de detalle (11 columnas). Reutilizada por la vista
-   detallada y por la vista agrupada (para los documentos dentro de cada cliente). */
-function CXC_filaHtml(r) {
+/* Construye una fila <tr> de detalle: la casilla, una celda por cada columna de `cols` y
+   las acciones. La vista detallada pasa las columnas que la empresa dejó visibles
+   (CXC_colsDetalle); "Por producto" no pasa nada y usa las de siempre (CXC_colsDefecto). */
+function CXC_filaHtml(r, cols) {
+    cols = cols || CXC_colsDefecto();
     const dias     = parseInt(r.dias_vencido) || 0;
     const saldo    = parseFloat(r.saldo);
     const key      = CXC_keyFila(r);
@@ -367,6 +429,28 @@ function CXC_filaHtml(r) {
         origenBadge = `<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 small px-2">Factura</span>`;
     }
 
+    // Importe o raya: las columnas que solo a veces tienen valor.
+    const monto = v => `<td class="text-end" style="font-size:.78rem;white-space:nowrap;">${(parseFloat(v) || 0) > 0.001 ? '$' + CXC_fmt(v) : '<span class="text-muted">—</span>'}</td>`;
+
+    // Una celda por clave de columna (App\Helpers\ColumnasReporte).
+    const celdas = {
+        documento: `<td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${estabBadge}${esc(r.numero_factura)}</td>`,
+        origen: `<td class="text-center" style="white-space:nowrap;">${origenBadge}</td>`,
+        cliente: `<td class="text-truncate" title="${esc(r.cliente_nombre)}" style="font-size:.8rem;">${esc(r.cliente_nombre)}</td>`,
+        ruc: `<td style="font-size:.78rem;white-space:nowrap;">${esc(r.cliente_ruc || '')}</td>`,
+        vendedor: `<td class="text-truncate" title="${esc(r.vendedor_nombre || '')}" style="font-size:.78rem;">${esc(r.vendedor_nombre || '')}</td>`,
+        fecha_emision: `<td style="font-size:.78rem;white-space:nowrap;">${fEmision}</td>`,
+        fecha_vencimiento: `<td style="font-size:.78rem;white-space:nowrap;">${fVenc}</td>`,
+        dias: `<td class="text-center" style="font-size:.78rem;">${Math.max(0, parseInt(r.dias_transcurridos) || 0)}</td>`,
+        total: `<td class="text-end" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(r.total)}</td>`,
+        abonos: monto(r.total_cobrado),
+        nc: monto(r.total_nc),
+        retenciones: monto(r.total_retenido),
+        cobrado: `<td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(CXC_totalCobrado(r))}</td>`,
+        saldo: `<td class="text-end fw-bold pe-3" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>`,
+        estado: `<td class="text-center" style="overflow:hidden;white-space:nowrap;">${badgeHtml}</td>`,
+    };
+
     return `
         <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle" data-id="${r.id}" data-origen="${r.origen}" data-hermana="${esHermana ? 1 : 0}" data-cliente="${esc(r.cliente_nombre)}" data-factura="${esc(r.numero_factura)}">
             <td class="text-center p-1">
@@ -375,15 +459,7 @@ function CXC_filaHtml(r) {
                        ${esHermana ? 'title="Documento de otro establecimiento: no se puede notificar desde aquí"' : ''}
                        onchange="CXC_toggleSeleccion('${key}', this.checked)">
             </td>
-            <td class="ps-2 fw-semibold text-truncate" title="${esc(r.numero_factura)}" style="font-size:.8rem;white-space:nowrap;">${estabBadge}${esc(r.numero_factura)}</td>
-            <td class="text-center" style="white-space:nowrap;">${origenBadge}</td>
-            <td class="text-truncate" title="${esc(r.cliente_nombre)}" style="font-size:.8rem;">${esc(r.cliente_nombre)}</td>
-            <td style="font-size:.78rem;white-space:nowrap;">${fEmision}</td>
-            <td style="font-size:.78rem;white-space:nowrap;">${fVenc}</td>
-            <td class="text-end" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(r.total)}</td>
-            <td class="text-end text-success" style="font-size:.78rem;white-space:nowrap;">$${CXC_fmt(CXC_totalCobrado(r))}</td>
-            <td class="text-end fw-bold pe-3" style="font-size:.82rem;white-space:nowrap;color:${saldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(saldo)}</td>
-            <td class="text-center" style="overflow:hidden;white-space:nowrap;">${badgeHtml}</td>
+            ${cols.map(c => celdas[c.clave] || '<td></td>').join('')}
             <td class="text-center">${CXC_accionesHtml(r)}</td>
         </tr>`;
 }
@@ -514,6 +590,19 @@ function CXC_renderCabecera() {
         th.innerHTML = CXC_thAntiguedad();
         return;
     }
+    // Detallado con columnas personalizadas por la empresa: cabecera y ancho mínimo a medida.
+    // Sin personalizar (o en las demás vistas), la cabecera y el ancho de siempre.
+    const tabla = document.getElementById('tabla-cxc');
+    if (tabla && tabla.dataset.minWidth === undefined) tabla.dataset.minWidth = tabla.style.minWidth || '';
+    if (CXC_vista === 'detalle' && CXC_detallePersonalizado()) {
+        const cab = CXC_cabeceraDetalle();
+        cg.innerHTML = cab.cg;
+        th.innerHTML = cab.th;
+        if (tabla) tabla.style.minWidth = cab.minWidth + 'px';
+        CXC_initOrden();
+        return;
+    }
+    if (tabla) tabla.style.minWidth = tabla.dataset.minWidth;
     cg.innerHTML = mayor ? CXC_colsMayor() : CXC_COLS_ESTANDAR;
     th.innerHTML = mayor ? CXC_thMayor()   : CXC_TH_ESTANDAR;
     // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar

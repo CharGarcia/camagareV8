@@ -112,6 +112,9 @@ class CuentasPorCobrarController extends BaseModuloController
             'puedeHistorial'   => \App\Helpers\Permisos::puedeVer(self::RUTA_CARTERA),
             'puedeCobrar'      => $this->puedeRegistrarCobro($idEmpresa),
             'puedeComprobarContabilidad' => $this->puedeComprobarContabilidad(),
+            // Columnas del Detallado según la personalización de la empresa (botón «Personalizar»)
+            'columnasDetalle' => \App\Services\modulos\ReportePersonalizacionService::crear()
+                ->pantallaJs($idEmpresa, $this->getRutaModulo(), 'DETALLE'),
             'fullWidth'   => true,
             'base'        => BASE_URL,
         ]);
@@ -2414,6 +2417,39 @@ $plantillasFiltradas = [];
     // EXPORTACIÓN EXCEL
     // ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * Columnas de la vista Detallado según la personalización de la empresa activa (botón
+     * «Personalizar»): ['pantalla' => …, 'excel' => …, 'pdf' => …, 'horizontal' => bool].
+     * Ver App\Helpers\ColumnasReporte.
+     */
+    private function columnasDetalle(): array
+    {
+        return \App\Services\modulos\ReportePersonalizacionService::crear()
+            ->resolver((int) $_SESSION['id_empresa'], $this->getRutaModulo(), 'DETALLE');
+    }
+
+    /**
+     * Importes y días de un documento, por clave de columna (ColumnasReporte).
+     * "Cobrado" = abonos + notas de crédito + retenciones aplicadas.
+     */
+    private function valoresDetalle(array $r): array
+    {
+        $abonos = (float) ($r['total_cobrado'] ?? 0);
+        $nc     = (float) ($r['total_nc'] ?? 0);
+        $ret    = (float) ($r['total_retenido'] ?? 0);
+
+        return [
+            'dias'         => max(0, (int) ($r['dias_transcurridos'] ?? 0)),
+            'dias_vencido' => (int) ($r['dias_vencido'] ?? 0),
+            'total'        => (float) $r['total'],
+            'abonos'       => $abonos,
+            'nc'           => $nc,
+            'retenciones'  => $ret,
+            'cobrado'      => $abonos + $nc + $ret,
+            'saldo'        => (float) $r['saldo'],
+        ];
+    }
+
     public function exportExcel(): void
     {
         $this->requireLeer();
@@ -2452,46 +2488,42 @@ $plantillasFiltradas = [];
             // todas las filas (ya va en el resumen de filtros de arriba) y se omite.
             $sinVendedor = $this->filtraPorVendedor($filtros);
 
-            $headers = ['Documento', 'Origen', 'Cliente', 'RUC/Cédula', 'Vendedor', 'F.Emisión', 'F.Vencimiento', 'Días', 'Total', 'Abonos', 'Notas de Crédito', 'Retenciones', 'Cobrado', 'Saldo', 'Estado'];
+            // Columnas del Excel según la personalización de la empresa (App\Helpers\ColumnasReporte).
+            $columnas = $this->columnasDetalle()['excel'];
             if ($sinVendedor) {
-                unset($headers[4]);
-                $headers = array_values($headers);
+                unset($columnas['vendedor']);
             }
-            if ($consolidado) {
-                // Consolidado: primera columna con el establecimiento dueño del documento
-                array_unshift($headers, 'Estab.');
-            }
+
+            // Consolidado: primera columna con el establecimiento dueño del documento
+            $headers  = $consolidado ? ['Estab.'] : [];
             // Columnas de montos (1-based): número con 2 decimales, sin separador de miles.
-            // Son las seis que siguen a "Días", así que su posición se corre con las
-            // columnas opcionales del inicio (Estab.) y con la de Vendedor.
-            $colTotal = 9 + ($consolidado ? 1 : 0) - ($sinVendedor ? 1 : 0);
-            $formatos = array_fill_keys(range($colTotal, $colTotal + 5), '0.00');
+            $formatos = [];
+            foreach ($columnas as $col) {
+                $headers[] = $col['excel'][0];
+                if ($col['suma'] !== null) {
+                    $formatos[count($headers)] = '0.00';
+                }
+            }
 
             $exportData = [];
             foreach ($filas as $r) {
-                $dias = (int)($r['dias_vencido'] ?? 0);
-                $estadoCxC = $dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE';
-                $abonos = (float)($r['total_cobrado'] ?? 0);
-                $nc     = (float)($r['total_nc'] ?? 0);
-                $ret    = (float)($r['total_retenido'] ?? 0);
-                $exportData[] = [
-                    ...($consolidado ? [(string)($r['establecimiento'] ?? '')] : []),
-                    (string)($r['numero_factura'] ?? ''),
-                    $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
-                    (string)($r['cliente_nombre'] ?? ''),
-                    (string)($r['cliente_ruc'] ?? ''),
-                    ...($sinVendedor ? [] : [(string)($r['vendedor_nombre'] ?? '')]),
-                    $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
-                    $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
-                    max(0, (int)($r['dias_transcurridos'] ?? 0)),
-                    round((float)$r['total'], 2),
-                    round($abonos, 2),
-                    round($nc, 2),
-                    round($ret, 2),
-                    round($abonos + $nc + $ret, 2),
-                    round((float)$r['saldo'], 2),
-                    $estadoCxC,
-                ];
+                $v    = $this->valoresDetalle($r);
+                $fila = $consolidado ? [(string)($r['establecimiento'] ?? '')] : [];
+                foreach (array_keys($columnas) as $clave) {
+                    $fila[] = match ($clave) {
+                        'documento'         => (string)($r['numero_factura'] ?? ''),
+                        'origen'            => $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
+                        'cliente'           => (string)($r['cliente_nombre'] ?? ''),
+                        'ruc'               => (string)($r['cliente_ruc'] ?? ''),
+                        'vendedor'          => (string)($r['vendedor_nombre'] ?? ''),
+                        'fecha_emision'     => $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
+                        'fecha_vencimiento' => $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
+                        'dias'              => $v['dias'],
+                        'estado'            => $v['dias_vencido'] > 0 ? "VENCIDA ({$v['dias_vencido']} días)" : 'VIGENTE',
+                        default             => round((float) ($v[$clave] ?? 0), 2),
+                    };
+                }
+                $exportData[] = $fila;
             }
 
             $reportService = new \App\Services\ReportService();
@@ -2550,64 +2582,98 @@ $plantillasFiltradas = [];
             // tiene que decir de qué periodo, estado, vendedor, cliente y producto es.
             $filtrosTxt    = $this->describirFiltros($idsEmpresa, $filtros);
 
-            // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para
-            // que la suma siga en 100% (table-layout: fixed).
-            // "Documento" va al 17%: al 13% el número (001-001-000000123 = 72 pt a 8 pt) no
-            // cabía y Html2Pdf, que no parte una palabra sin espacios, lo dejaba montado sobre
-            // "Origen". Los 4 puntos salen de Cliente y F. Vencimiento, que sí se parten en líneas.
-            $wEst = $consolidado ? 6 : 0;
-            $wCli = 22 - $wEst;
-            $wDoc = 17;
-            $wVen = 14;
+            // Columnas y orientación según la personalización de la empresa
+            // (App\Helpers\ColumnasReporte); por defecto: vertical con las ocho de siempre.
+            $vistaCfg   = $this->columnasDetalle();
+            $columnas   = $vistaCfg['pdf'];
+            $horizontal = (bool) $vistaCfg['horizontal'];
+            // Con el listado acotado a un asesor, su columna repetiría el mismo nombre.
+            if ($this->filtraPorVendedor($filtros)) {
+                unset($columnas['vendedor']);
+            }
+
+            $pesos = [];
+            foreach ($columnas as $clave => $col) {
+                $pesos[$clave] = (float) $col['ancho'];
+            }
+            // Consolidado: columna "Estab." al inicio; se le resta ancho a "Cliente" para que
+            // las demás conserven el suyo. "Documento" va al 17%: en menos el número
+            // (001-001-000000123 = 72 pt a 8 pt) no cabe y Html2Pdf, que no parte una palabra
+            // sin espacios, lo dejaría montado sobre la columna vecina.
+            if ($consolidado) {
+                $pesos = ['__estab' => 6.0] + $pesos;
+                if (isset($pesos['cliente'])) {
+                    $pesos['cliente'] = max(8.0, $pesos['cliente'] - 6.0);
+                }
+            }
             // Un solo cliente: sin columna Cliente (ver unSoloCliente()); su ancho se reparte
             // entre Documento y F. Vencimiento, las que más texto llevan.
             $sinCliente = $this->unSoloCliente($filtros, $filas);
-            if ($sinCliente) {
-                $wDoc += intdiv($wCli, 2);
-                $wVen += $wCli - intdiv($wCli, 2);
-                $wCli  = 0;
+            if ($sinCliente && isset($pesos['cliente'])) {
+                $wCli = $pesos['cliente'];
+                unset($pesos['cliente'], $columnas['cliente']);
+                if (isset($pesos['documento'], $pesos['fecha_vencimiento'])) {
+                    $pesos['documento']         += intdiv((int) $wCli, 2);
+                    $pesos['fecha_vencimiento'] += $wCli - intdiv((int) $wCli, 2);
+                }
             }
-            $docPdf = static fn (array $r): string => self::docPdf((string) ($r['numero_factura'] ?? ''), $wDoc);
-            $tdEst = fn (array $r): string => $consolidado
-                ? "<td class='text-center' style='width:{$wEst}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . "</td>"
-                : '';
+            $w     = \App\Helpers\ColumnasReporte::anchosPdf($pesos);
+            $nCols = count($pesos);
+            $pt    = \App\Helpers\ColumnasReporte::fuentePdf($nCols, $horizontal);
+            // Ancho útil de la hoja en puntos (márgenes de 8 mm del <page> + 5 mm de Html2Pdf),
+            // menos 6 pt de padding: lo que mide el contenido de una columna de $pct %.
+            $util = $horizontal ? 768.2 : 521.6;
+            $txt  = static fn (string $t, string $clave): string => \App\Helpers\ReportePdf::texto($t, $w[$clave] / 100 * $util - 6.0, $pt);
+            // El estado va junto al vencimiento, salvo que tenga su propia columna.
+            $conEstado = isset($columnas['estado']);
+            $centradas = ['origen', 'fecha_emision', 'fecha_vencimiento', 'dias', 'estado'];
 
-            $totalSaldo   = 0;
-            $totalCobrado = 0;
-            $totalTotal   = 0;
+            $totales   = [];
             $filasHtml = [];
             foreach ($filas as $r) {
-                $dias = (int)($r['dias_vencido'] ?? 0);
-                $ts   = (float)$r['total'];
-                // "Cobrado" = abonos + retenciones + notas de crédito aplicadas
-                $tc   = (float)($r['total_cobrado'] ?? 0) + (float)($r['total_retenido'] ?? 0) + (float)($r['total_nc'] ?? 0);
-                $tsal = (float)$r['saldo'];
-                $totalTotal   += $ts;
-                $totalCobrado += $tc;
-                $totalSaldo   += $tsal;
+                $v    = $this->valoresDetalle($r);
+                $dias = $v['dias_vencido'];
                 $badge = $dias > 0 ? "<small style='font-weight:bold;'> ({$dias}d vencida)</small>" : "<small>Vigente</small>";
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
-                $origenTxt = $this->getOrigenLabel($r['origen'] ?? 'FACTURA');
-                $filasHtml[] = "<tr>{$tdEst($r)}
-                    <td style='width:{$wDoc}%;'>" . $docPdf($r) . "</td>
-                    <td class='text-center' style='width:9%;'>{$origenTxt}</td>
-                    " . ($sinCliente ? '' : "<td style='width:{$wCli}%;'>" . htmlspecialchars($r['cliente_nombre'] ?? '') . "</td>") . "
-                    <td class='text-center' style='width:11%;'>{$fEmis}</td>
-                    <td class='text-center' style='width:{$wVen}%;'>{$fVenc} {$badge}</td>
-                    <td class='text-end' style='width:9%;'>\$" . number_format($ts, 2) . "</td>
-                    <td class='text-end' style='width:9%;'>\$" . number_format($tc, 2) . "</td>
-                    <td class='text-end' style='width:9%;font-weight:bold;'>\$" . number_format($tsal, 2) . "</td>
-                </tr>";
+
+                $tds = $consolidado
+                    ? "<td class='text-center' style='width:{$w['__estab']}%;'>" . htmlspecialchars((string)($r['establecimiento'] ?? '')) . '</td>'
+                    : '';
+                foreach ($columnas as $clave => $col) {
+                    $estilo = '';
+                    if ($col['suma'] !== null) {
+                        $totales[$clave] = ($totales[$clave] ?? 0.0) + $v[$clave];
+                        $cls    = 'text-end';
+                        $valor  = '$' . number_format($v[$clave], 2);
+                        $estilo = $clave === 'saldo' ? 'font-weight:bold;' : '';
+                    } else {
+                        $cls   = in_array($clave, $centradas, true) ? 'text-center' : '';
+                        $valor = match ($clave) {
+                            'documento'         => $txt((string) ($r['numero_factura'] ?? ''), $clave),
+                            'origen'            => $this->getOrigenLabel($r['origen'] ?? 'FACTURA'),
+                            'cliente'           => htmlspecialchars($r['cliente_nombre'] ?? ''),
+                            'ruc'               => $txt((string) ($r['cliente_ruc'] ?? ''), $clave),
+                            'vendedor'          => htmlspecialchars((string) ($r['vendedor_nombre'] ?? '')),
+                            'fecha_emision'     => $fEmis,
+                            'fecha_vencimiento' => $fVenc . ($conEstado ? '' : " {$badge}"),
+                            'dias'              => (string) $v['dias'],
+                            'estado'            => $dias > 0 ? "<small style='font-weight:bold;'>{$dias}d vencida</small>" : '<small>Vigente</small>',
+                            default             => '',
+                        };
+                    }
+                    $tds .= '<td' . ($cls !== '' ? " class='{$cls}'" : '') . " style='width:{$w[$clave]}%;{$estilo}'>{$valor}</td>";
+                }
+                $filasHtml[] = "<tr>{$tds}</tr>";
             }
 
             ob_start();
             ?>
             <style>
-                body { font-family: Arial, sans-serif; font-size: 8pt; color: #000; }
+                body { font-family: Arial, sans-serif; font-size: <?= $pt ?>pt; color: #000; }
                 table { width: 100%; border-collapse: collapse; margin-bottom: 10px; table-layout: fixed; }
-                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: 8.5pt; color: #000; }
-                td { border: 1px solid #999; padding: 2px 3px; font-size: 8pt; overflow: hidden; word-wrap: break-word; color: #000; }
+                th { background: #e9ecef; border: 1px solid #999; padding: 3px 3px; text-align: center; font-size: <?= $pt + 0.5 ?>pt; color: #000; }
+                td { border: 1px solid #999; padding: 2px 3px; font-size: <?= $pt ?>pt; overflow: hidden; word-wrap: break-word; color: #000; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 10px; }
@@ -2646,29 +2712,41 @@ $plantillasFiltradas = [];
             </page>
             <?php
             $inicio = ob_get_clean();
-            $thead  = "<tr>"
-                . ($consolidado ? "<th style='width:{$wEst}%;'>Estab.</th>" : '')
-                . "<th style='width:{$wDoc}%;'>Documento</th>
-                   <th style='width:9%;'>Origen</th>"
-                . ($sinCliente ? '' : "<th style='width:{$wCli}%;'>Cliente</th>")
-                . "<th style='width:11%;'>F. Emisión</th>
-                   <th style='width:{$wVen}%;'>F. Vencimiento</th>
-                   <th style='width:9%;'>Total</th>
-                   <th style='width:9%;'>Cobrado</th>
-                   <th style='width:9%;'>Saldo</th></tr>";
+            $thead = '<tr>' . ($consolidado ? "<th style='width:{$w['__estab']}%;'>Estab.</th>" : '');
+            foreach ($columnas as $clave => $col) {
+                $thead .= "<th style='width:{$w[$clave]}%;'>" . htmlspecialchars($col['corto']) . '</th>';
+            }
+            $thead .= '</tr>';
             // Sin resultados: una fila con el aviso, igual que las vistas "Por cliente" y "Por producto".
             if (!$filasHtml) {
                 $filasHtml[] = "<tr><td class='text-center' style='width:100%;'>No se encontraron cuentas por cobrar con los filtros aplicados.</td></tr>";
             }
             // Total único al final (un <tfoot> se repetiría en cada hoja con la cifra global).
-            $final = "<table class='fila'><tr style='background:#f8f9fa;font-weight:bold;'>
-                        <td class='text-end' style='width:73%;'>TOTALES:</td>
-                        <td class='text-end' style='width:9%;'>\$" . number_format($totalTotal, 2) . "</td>
-                        <td class='text-end' style='width:9%;'>\$" . number_format($totalCobrado, 2) . "</td>
-                        <td class='text-end' style='width:9%;'>\$" . number_format($totalSaldo, 2) . "</td>
-                      </tr></table>";
-            // Vertical (A4 retrato): es la orientación por defecto de los listados del módulo.
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            // La etiqueta ocupa las columnas que van antes del primer importe; sin importes
+            // visibles no hay fila de totales.
+            $final   = '';
+            $wLider  = 0.0;
+            $celdas  = '';
+            $enLider = true;
+            foreach ($pesos as $clave => $_) {
+                $esImporte = isset($columnas[$clave]) && $columnas[$clave]['suma'] !== null;
+                if ($enLider && !$esImporte) {
+                    $wLider += $w[$clave];
+                    continue;
+                }
+                $enLider = false;
+                $celdas .= $esImporte
+                    ? "<td class='text-end' style='width:{$w[$clave]}%;'>\$" . number_format($totales[$clave] ?? 0, 2) . '</td>'
+                    : "<td style='width:{$w[$clave]}%;'></td>";
+            }
+            if ($celdas !== '') {
+                $final = "<table class='fila'><tr style='background:#f8f9fa;font-weight:bold;'>"
+                       . ($wLider > 0 ? "<td class='text-end' style='width:" . round($wLider, 2) . "%;'>TOTALES:</td>" : '')
+                       . $celdas . '</tr></table>';
+            }
+            // Vertical (A4 retrato) es la orientación por defecto de los listados del módulo;
+            // la empresa puede pedir horizontal al personalizar el reporte.
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
             \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filasHtml, $final);
             $html2pdf->output('CuentasPorCobrar_' . date('Ymd_His') . '.pdf', 'D');
             exit;

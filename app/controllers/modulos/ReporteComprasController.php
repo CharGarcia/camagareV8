@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\ColumnasReporte;
+use App\Helpers\ReportePdf;
 use App\repositories\modulos\EmpresaRepository;
 use App\repositories\modulos\ReporteComprasRepository;
+use App\Services\modulos\ReportePersonalizacionService;
 
 class ReporteComprasController extends BaseModuloController
 {
@@ -48,6 +51,7 @@ class ReporteComprasController extends BaseModuloController
             'tiposComprobante' => $tiposComprobante,
             'puedeConsolidar'  => !empty($idsConsolidado),
             'establecimientos' => $establecimientos,
+            'columnasVistas'   => $this->cabecerasPantalla(),
             'fullWidth'        => true,
             'base'             => BASE_URL,
         ]);
@@ -114,6 +118,58 @@ class ReporteComprasController extends BaseModuloController
         return 'Consolidado por RUC (' . count($etq) . ' establecimientos: ' . implode(' · ', $etq) . ')';
     }
 
+    /** Vista del reporte que corresponde a "Agrupar por" (lo desconocido es el detallado). */
+    private function vistaDe(string $agrupar): string
+    {
+        return isset(ColumnasReporte::vistas($this->getRutaModulo())[$agrupar]) ? $agrupar : 'NINGUNO';
+    }
+
+    /**
+     * Columnas de la vista según la personalización de la empresa activa (botón
+     * «Personalizar»): ['pantalla' => …, 'pdf' => …, 'orientacion' => …, 'horizontal' => bool].
+     * De aquí salen la tabla de la pantalla, el Excel y el PDF. Ver ColumnasReporte.
+     */
+    private function columnasVista(string $agrupar): array
+    {
+        return ReportePersonalizacionService::crear()->resolver(
+            (int) $_SESSION['id_empresa'],
+            $this->getRutaModulo(),
+            $this->vistaDe($agrupar)
+        );
+    }
+
+    /** Cabecera de la tabla en pantalla: lista de [clave, titulo, clase]. */
+    private static function cabecera(array $columnas): array
+    {
+        $out = [];
+        foreach ($columnas as $clave => $col) {
+            $out[] = ['clave' => $clave, 'titulo' => $col['titulo'], 'clase' => ColumnasReporte::claseAlinear($col['alinear'])];
+        }
+        return $out;
+    }
+
+    /** Cabeceras de todas las vistas, para que la pantalla dibuje la tabla antes de consultar. */
+    private function cabecerasPantalla(): array
+    {
+        $out = [];
+        foreach (array_keys(ColumnasReporte::vistas($this->getRutaModulo())) as $vista) {
+            $out[$vista] = self::cabecera($this->columnasVista((string) $vista)['pantalla']);
+        }
+        return $out;
+    }
+
+    /** Filas del reporte según la agrupación. */
+    private function filasReporte(array $idsEmpresa, array $filtros): array
+    {
+        return match ($filtros['agrupar_por']) {
+            'PROVEEDOR' => $this->repository->getReporteAgrupadoProveedor($idsEmpresa, $filtros),
+            'PRODUCTO'  => $this->repository->getReporteAgrupadoProducto($idsEmpresa, $filtros),
+            'FECHA'     => $this->repository->getReporteAgrupadoFecha($idsEmpresa, $filtros),
+            'MES'       => $this->repository->getReporteAgrupadoMes($idsEmpresa, $filtros),
+            default     => $this->repository->getReporteDetallado($idsEmpresa, $filtros),
+        };
+    }
+
     public function generarAjax(): void
     {
         $this->requireLeer();
@@ -125,30 +181,20 @@ class ReporteComprasController extends BaseModuloController
             [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
             $idEmpresa = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
 
-            if ($filtros['agrupar_por'] === 'PROVEEDOR') {
-                $rows = $this->repository->getReporteAgrupadoProveedor($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-                $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'FECHA') {
-                $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-            } elseif ($filtros['agrupar_por'] === 'MES') {
-                $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
-            } else {
-                $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
-            }
+            $rows     = $this->filasReporte($idEmpresa, $filtros);
+            $columnas = $this->columnasVista((string) $filtros['agrupar_por'])['pantalla'];
 
             $stats          = $this->repository->getEstadisticas($idEmpresa, $filtros);
 
             ob_start();
             if (empty($rows)) {
-                $colSpan = ($filtros['agrupar_por'] === 'NINGUNO') ? 13 :
-                           (($filtros['agrupar_por'] === 'PRODUCTO') ? 8 : 7);
+                $colSpan = max(1, count($columnas));
                 echo '<tr><td colspan="' . $colSpan . '" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>No se encontraron resultados.</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaHtml($r, $filtros['agrupar_por'], $consolidado);
+                    echo $this->renderFilaHtml($r, (string) $filtros['agrupar_por'], $columnas, $consolidado);
                 }
-                echo $this->renderFilaTotalesHtml($rows, (string) $filtros['agrupar_por']);
+                echo $this->renderFilaTotalesHtml($rows, (string) $filtros['agrupar_por'], $columnas);
             }
             $rowsHtml = ob_get_clean();
 
@@ -158,6 +204,7 @@ class ReporteComprasController extends BaseModuloController
                 'rawData'     => $rows,
                 'stats'       => $stats,
                 'agrupacion'  => $filtros['agrupar_por'],
+                'columnas'    => self::cabecera($columnas),
                 'consolidado' => $consolidado,
             ]);
 
@@ -203,30 +250,40 @@ class ReporteComprasController extends BaseModuloController
 
     /**
      * Fila de totales al pie de la tabla (pantalla). Suma las filas mostradas, así que
-     * coincide con las tarjetas de arriba y con la fila "TOTALES" del PDF.
+     * coincide con las tarjetas de arriba y con la fila "TOTALES" del PDF. La etiqueta
+     * ocupa las columnas visibles que van antes del primer importe.
      */
-    private function renderFilaTotalesHtml(array $rows, string $agrupar): string
+    private function renderFilaTotalesHtml(array $rows, string $agrupar, array $columnas): string
     {
-        $etq    = self::etiquetaTotal($agrupar, count($rows));
-        $num    = static fn (string $c): string => number_format(self::sumarCampo($rows, $c), 2);
-        $montos = "<td class='text-end'>{$num('base_0')}</td>"
-                . "<td class='text-end'>{$num('base_iva')}</td>"
-                . "<td class='text-end'>{$num('valor_iva')}</td>"
-                . "<td class='text-end'>{$num('valor_ice')}</td>"
-                . "<td class='text-end text-danger'>{$num('total')}</td>";
-        $docs   = "<td class='text-center'>" . (int) self::sumarCampo($rows, 'cantidad_comprobantes') . "</td>";
+        $celdas  = '';
+        $lider   = 0;
+        $enLider = true;
+        foreach ($columnas as $clave => $col) {
+            if ($col['suma'] === null) {
+                if ($enLider) {
+                    $lider++;
+                } else {
+                    $celdas .= '<td></td>';
+                }
+                continue;
+            }
+            $enLider = false;
+            $suma    = self::sumarCampo($rows, (string) $col['suma']);
+            $celdas .= match ($clave) {
+                'comprobantes' => "<td class='text-center'>" . (int) $suma . '</td>',
+                'cantidad'     => "<td class='text-center'>" . self::fmtCantidad($suma) . '</td>',
+                'total'        => "<td class='text-end text-danger'>" . number_format($suma, 2) . '</td>',
+                'retenciones'  => "<td class='text-end text-warning'>" . number_format($suma, 2) . '</td>',
+                default        => "<td class='text-end'>" . number_format($suma, 2) . '</td>',
+            };
+        }
+        $etq = $lider > 0 ? "<td colspan='{$lider}'>" . self::etiquetaTotal($agrupar, count($rows)) . '</td>' : '';
 
-        $html = "<tr class='table-light fw-bold'>";
-        $html .= match ($agrupar) {
-            'PROVEEDOR', 'FECHA', 'MES' => "<td>{$etq}</td>{$docs}{$montos}",
-            'PRODUCTO' => "<td>{$etq}</td><td class='text-center'>"
-                        . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_comprada')) . "</td><td></td>{$montos}",
-            default    => "<td colspan='7'>{$etq}</td>{$montos}<td class='text-end text-warning'>{$num('retenciones')}</td>",
-        };
-        return $html . '</tr>';
+        return "<tr class='table-light fw-bold'>{$etq}{$celdas}</tr>";
     }
 
-    private function renderFilaHtml(array $r, string $agruparPor, bool $consolidado = false): string
+    /** Una fila de la tabla en pantalla: una celda por cada columna visible. */
+    private function renderFilaHtml(array $r, string $agruparPor, array $columnas, bool $consolidado = false): string
     {
         // Consolidado por RUC: badge con el establecimiento dueño del documento (solo en el
         // detallado; las agrupaciones suman todos los establecimientos en una fila).
@@ -248,70 +305,58 @@ class ReporteComprasController extends BaseModuloController
         }
 
         $html = '<tr class="align-middle"' . $attrs . '>';
-
-        $base0   = number_format((float)($r['base_0']    ?? 0), 2);
-        $baseIva = number_format((float)($r['base_iva']  ?? 0), 2);
-        $iva     = number_format((float)($r['valor_iva'] ?? 0), 2);
-        $ice     = number_format((float)($r['valor_ice'] ?? 0), 2);
-        $total   = number_format((float)($r['total']     ?? 0), 2);
-
-        if ($agruparPor === 'PROVEEDOR') {
-            $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</span><br><small class='text-muted'>" . htmlspecialchars($r['proveedor_ruc'] ?? '') . "</small></td>";
-            $html .= "<td class='text-center'>" . (int)($r['cantidad_comprobantes'] ?? 0) . "</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end'>$ice</td>";
-            $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
-        } elseif ($agruparPor === 'PRODUCTO') {
-            $tarifa = (float)($r['tarifa_iva'] ?? 0);
-            $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['producto_nombre'] ?? '') . "</span><br><small class='text-muted'>" . htmlspecialchars($r['producto_codigo'] ?? '') . "</small></td>";
-            $html .= "<td class='text-center'>" . (float)($r['cantidad_comprada'] ?? 0) . "</td>";
-            $html .= "<td class='text-center'>{$tarifa}%</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end'>$ice</td>";
-            $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
-        } elseif ($agruparPor === 'FECHA') {
-            $html .= "<td><span class='fw-bold'>" . date('d/m/Y', strtotime($r['fecha'] ?? '')) . "</span></td>";
-            $html .= "<td class='text-center'>" . (int)($r['cantidad_comprobantes'] ?? 0) . "</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end'>$ice</td>";
-            $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
-        } elseif ($agruparPor === 'MES') {
-            $html .= "<td><span class='fw-bold'>" . self::formatearMes($r['mes'] ?? '') . "</span></td>";
-            $html .= "<td class='text-center'>" . (int)($r['cantidad_comprobantes'] ?? 0) . "</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end'>$ice</td>";
-            $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
-        } else {
-            // DETALLADO / NINGUNO
-            $retenciones = number_format((float)($r['retenciones'] ?? 0), 2);
-            $tipoDoc     = htmlspecialchars($r['tipo_comprobante_nombre'] ?? '');
-            $nroAut      = htmlspecialchars($r['numero_autorizacion'] ?? '');
-
-            $html .= "<td class='text-center'>"  . date('d/m/Y', strtotime($r['fecha_emision']  ?? '')) . "</td>";
-            $html .= "<td class='text-center text-muted small'>" . date('d/m/Y', strtotime($r['fecha_registro'] ?? $r['fecha_emision'] ?? '')) . "</td>";
-            $html .= "<td>{$badgeEst}<span class='fw-bold'>" . htmlspecialchars($r['numero_documento'] ?? '') . "</span></td>";
-            $html .= "<td><span class='fw-bold'>" . htmlspecialchars($r['proveedor_nombre'] ?? '') . "</span><br><small class='text-muted'>" . htmlspecialchars($r['proveedor_ruc'] ?? '') . "</small></td>";
-            $html .= "<td><span class='badge bg-primary bg-opacity-10 text-primary border border-primary' style='font-size:.7rem;'>$tipoDoc</span></td>";
-            $html .= "<td>" . htmlspecialchars($r['usuario_nombre'] ?? '') . "</td>";
-            $html .= "<td class='text-muted small' title='" . htmlspecialchars($nroAut) . "'>" . (strlen($nroAut) > 15 ? substr($nroAut, 0, 12) . '…' : $nroAut) . "</td>";
-            $html .= "<td class='text-end'>$base0</td>";
-            $html .= "<td class='text-end'>$baseIva</td>";
-            $html .= "<td class='text-end'>$iva</td>";
-            $html .= "<td class='text-end'>$ice</td>";
-            $html .= "<td class='text-end fw-bold text-danger'>$total</td>";
-            $html .= "<td class='text-end text-warning'>$retenciones</td>";
+        foreach (array_keys($columnas) as $clave) {
+            $html .= $this->celdaHtml((string) $clave, $r, $badgeEst);
         }
+        return $html . '</tr>';
+    }
 
-        $html .= '</tr>';
-        return $html;
+    /** Celda de una columna en pantalla (claves de ColumnasReporte). */
+    private function celdaHtml(string $clave, array $r, string $badgeEst): string
+    {
+        $e     = static fn ($v): string => htmlspecialchars((string) ($v ?? ''));
+        $num   = static fn (string $c): string => number_format((float) ($r[$c] ?? 0), 2);
+        $fecha = static fn ($v): string => date('d/m/Y', strtotime((string) $v));
+
+        switch ($clave) {
+            case 'fecha_emision':
+                return "<td class='text-center'>" . $fecha($r['fecha_emision'] ?? '') . '</td>';
+            case 'fecha_registro':
+                return "<td class='text-center text-muted small'>" . $fecha($r['fecha_registro'] ?? $r['fecha_emision'] ?? '') . '</td>';
+            case 'numero_documento':
+                return "<td>{$badgeEst}<span class='fw-bold'>" . $e($r['numero_documento'] ?? '') . '</span></td>';
+            case 'proveedor':
+                return "<td><span class='fw-bold'>" . $e($r['proveedor_nombre'] ?? '') . "</span><br><small class='text-muted'>" . $e($r['proveedor_ruc'] ?? '') . '</small></td>';
+            case 'tipo':
+                return "<td><span class='badge bg-primary bg-opacity-10 text-primary border border-primary' style='font-size:.7rem;'>" . $e($r['tipo_comprobante_nombre'] ?? '') . '</span></td>';
+            case 'usuario':
+                return '<td>' . $e($r['usuario_nombre'] ?? '') . '</td>';
+            case 'autorizacion':
+                $nroAut = (string) ($r['numero_autorizacion'] ?? '');
+                return "<td class='text-muted small' title='" . $e($nroAut) . "'>" . $e(strlen($nroAut) > 15 ? substr($nroAut, 0, 12) . '…' : $nroAut) . '</td>';
+            case 'comprobantes':
+                return "<td class='text-center'>" . (int) ($r['cantidad_comprobantes'] ?? 0) . '</td>';
+            case 'producto':
+                return "<td><span class='fw-bold'>" . $e($r['producto_nombre'] ?? '') . "</span><br><small class='text-muted'>" . $e($r['producto_codigo'] ?? '') . '</small></td>';
+            case 'cantidad':
+                return "<td class='text-center'>" . (float) ($r['cantidad_comprada'] ?? 0) . '</td>';
+            case 'tarifa':
+                return "<td class='text-center'>" . (float) ($r['tarifa_iva'] ?? 0) . '%</td>';
+            case 'fecha':
+                return "<td><span class='fw-bold'>" . $fecha($r['fecha'] ?? '') . '</span></td>';
+            case 'mes':
+                return "<td><span class='fw-bold'>" . self::formatearMes((string) ($r['mes'] ?? '')) . '</span></td>';
+            case 'total':
+                return "<td class='text-end fw-bold text-danger'>" . $num('total') . '</td>';
+            case 'retenciones':
+                return "<td class='text-end text-warning'>" . $num('retenciones') . '</td>';
+            case 'base_0':
+            case 'base_iva':
+            case 'valor_iva':
+            case 'valor_ice':
+                return "<td class='text-end'>" . $num($clave) . '</td>';
+        }
+        return '<td></td>';
     }
 
     /**
@@ -394,21 +439,56 @@ class ReporteComprasController extends BaseModuloController
         exit;
     }
 
-    /** Fila TOTAL del Excel, alineada con las columnas de cada agrupación. */
-    private function filaTotalesExcel(array $rows, string $agrupar, bool $consolidado): array
+    /**
+     * Valores de una columna en el Excel: tantos como cabeceras declara su `excel`.
+     * $vista decide el orden de las columnas dobles (igual que sus cabeceras del catálogo).
+     */
+    private function celdasExcel(string $clave, array $r, string $vista): array
     {
-        $etq    = self::etiquetaTotal($agrupar, count($rows));
-        $s      = static fn (string $c): float => round(self::sumarCampo($rows, $c), 2);
-        $montos = [$s('base_0'), $s('base_iva'), $s('valor_iva'), $s('valor_ice'), $s('total')];
-        $docs   = (int) self::sumarCampo($rows, 'cantidad_comprobantes');
+        $fecha = static fn ($v): string => date('d/m/Y', strtotime((string) $v));
 
-        return match ($agrupar) {
-            'PROVEEDOR'     => array_merge([$etq, '', $docs], $montos),
-            'PRODUCTO'      => array_merge([$etq, '', self::sumarCampo($rows, 'cantidad_comprada'), ''], $montos),
-            'FECHA', 'MES'  => array_merge([$etq, $docs], $montos),
-            // Detallado: 8 columnas de texto (+ "Estab." en consolidado), montos y retenciones.
-            default         => array_merge([$etq], array_fill(0, $consolidado ? 8 : 7, ''), $montos, [$s('retenciones')]),
+        return match ($clave) {
+            'fecha_emision'    => [$fecha($r['fecha_emision'] ?? '')],
+            'fecha_registro'   => [$fecha($r['fecha_registro'] ?? $r['fecha_emision'] ?? '')],
+            'numero_documento' => [$r['numero_documento'] ?? ''],
+            'proveedor'        => $vista === 'NINGUNO'
+                                    ? [$r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '']   // Proveedor, RUC/Cédula
+                                    : [$r['proveedor_ruc'] ?? '', $r['proveedor_nombre'] ?? ''],  // RUC/Cédula, Proveedor
+            'tipo'             => [$r['tipo_comprobante_nombre'] ?? ''],
+            'usuario'          => [$r['usuario_nombre'] ?? ''],
+            'autorizacion'     => [$r['numero_autorizacion'] ?? ''],
+            'comprobantes'     => [$r['cantidad_comprobantes'] ?? 0],
+            'producto'         => [$r['producto_codigo'] ?? '', $r['producto_nombre'] ?? ''],
+            'cantidad'         => [(float) ($r['cantidad_comprada'] ?? 0)],
+            'tarifa'           => [($r['tarifa_iva'] ?? 0) . '%'],
+            'fecha'            => [$fecha($r['fecha'] ?? '')],
+            'mes'              => [self::formatearMes((string) ($r['mes'] ?? ''))],
+            'base_0', 'base_iva', 'valor_iva', 'valor_ice', 'total', 'retenciones'
+                               => [(float) ($r[$clave] ?? 0)],
+            default            => [''],
         };
+    }
+
+    /** Fila TOTAL del Excel, alineada con las columnas visibles. */
+    private function filaTotalesExcel(array $rows, string $agrupar, array $columnas, bool $conEstab): array
+    {
+        $fila = $conEstab ? [''] : [];
+        foreach ($columnas as $clave => $col) {
+            if ($col['suma'] === null) {
+                $fila = array_merge($fila, array_fill(0, count($col['excel']), ''));
+                continue;
+            }
+            $suma   = self::sumarCampo($rows, (string) $col['suma']);
+            $fila[] = match ($clave) {
+                'comprobantes' => (int) $suma,
+                'cantidad'     => $suma,
+                default        => round($suma, 2),
+            };
+        }
+        if ($fila) {
+            $fila[0] = self::etiquetaTotal($agrupar, count($rows));
+        }
+        return $fila;
     }
 
     public function exportExcel(): void
@@ -417,116 +497,38 @@ class ReporteComprasController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltrosDesdeRequest();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
-        $idEmpresaActiva = $idEmpresa;
-        $idEmpresa       = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
+        $agrupar   = (string) $filtros['agrupar_por'];
+        $vista     = $this->vistaDe($agrupar);
 
-        if ($filtros['agrupar_por'] === 'PROVEEDOR') {
-            $rows = $this->repository->getReporteAgrupadoProveedor($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-            $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'FECHA') {
-            $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'MES') {
-            $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
-        } else {
-            $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
-        }
+        $rows     = $this->filasReporte($idsEmpresa, $filtros);
+        $columnas = $this->columnasVista($agrupar)['pantalla'];
+        // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento.
+        $conEstab = $consolidado && $vista === 'NINGUNO';
 
         try {
-            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresaActiva);
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
             if ($consolidado) {
                 $nombreEmpresa .= ' — ' . $this->describirAlcance($idsEmpresa, true);
             }
 
-            if ($filtros['agrupar_por'] === 'PROVEEDOR') {
-                $headers = ['RUC/Cédula', 'Proveedor', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
-                $exportData = [];
-                foreach ($rows as $r) {
-                    $exportData[] = [
-                        $r['proveedor_ruc'],
-                        $r['proveedor_nombre'],
-                        $r['cantidad_comprobantes'],
-                        (float)$r['base_0'],
-                        (float)$r['base_iva'],
-                        (float)$r['valor_iva'],
-                        (float)($r['valor_ice'] ?? 0),
-                        (float)$r['total'],
-                    ];
+            $headers = $conEstab ? ['Estab.'] : [];
+            foreach ($columnas as $col) {
+                $headers = array_merge($headers, $col['excel']);
+            }
+
+            $exportData = [];
+            foreach ($rows as $r) {
+                $fila = $conEstab ? [(string) ($r['establecimiento'] ?? '')] : [];
+                foreach (array_keys($columnas) as $clave) {
+                    $fila = array_merge($fila, $this->celdasExcel((string) $clave, $r, $vista));
                 }
-            } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-                $headers = ['Código', 'Producto', 'Cant. Comprada', 'Tipo IVA', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
-                $exportData = [];
-                foreach ($rows as $r) {
-                    $exportData[] = [
-                        $r['producto_codigo'],
-                        $r['producto_nombre'],
-                        (float)$r['cantidad_comprada'],
-                        $r['tarifa_iva'] . '%',
-                        (float)$r['base_0'],
-                        (float)$r['base_iva'],
-                        (float)$r['valor_iva'],
-                        (float)($r['valor_ice'] ?? 0),
-                        (float)$r['total'],
-                    ];
-                }
-            } elseif ($filtros['agrupar_por'] === 'FECHA') {
-                $headers = ['Fecha', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
-                $exportData = [];
-                foreach ($rows as $r) {
-                    $exportData[] = [
-                        date('d/m/Y', strtotime($r['fecha'])),
-                        $r['cantidad_comprobantes'],
-                        (float)$r['base_0'],
-                        (float)$r['base_iva'],
-                        (float)$r['valor_iva'],
-                        (float)($r['valor_ice'] ?? 0),
-                        (float)$r['total'],
-                    ];
-                }
-            } elseif ($filtros['agrupar_por'] === 'MES') {
-                $headers = ['Mes', 'Nro Comprobantes', 'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total'];
-                $exportData = [];
-                foreach ($rows as $r) {
-                    $exportData[] = [
-                        self::formatearMes($r['mes'] ?? ''),
-                        $r['cantidad_comprobantes'],
-                        (float)$r['base_0'],
-                        (float)$r['base_iva'],
-                        (float)$r['valor_iva'],
-                        (float)($r['valor_ice'] ?? 0),
-                        (float)$r['total'],
-                    ];
-                }
-            } else {
-                // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento
-                $headers = array_merge($consolidado ? ['Estab.'] : [], ['F. Emisión', 'F. Registro', 'Nro Documento', 'Proveedor', 'RUC/Cédula',
-                            'Tipo', 'Usuario', 'Nro Autorización',
-                            'Base 0%', 'Base IVA', 'IVA', 'ICE', 'Total', 'Retenciones']);
-                $exportData = [];
-                foreach ($rows as $r) {
-                    $exportData[] = array_merge($consolidado ? [(string) ($r['establecimiento'] ?? '')] : [], [
-                        date('d/m/Y', strtotime($r['fecha_emision'])),
-                        date('d/m/Y', strtotime($r['fecha_registro'] ?? $r['fecha_emision'])),
-                        $r['numero_documento']         ?? '',
-                        $r['proveedor_nombre']         ?? '',
-                        $r['proveedor_ruc']            ?? '',
-                        $r['tipo_comprobante_nombre']  ?? '',
-                        $r['usuario_nombre']           ?? '',
-                        $r['numero_autorizacion']      ?? '',
-                        (float)($r['base_0']      ?? 0),
-                        (float)($r['base_iva']    ?? 0),
-                        (float)($r['valor_iva']   ?? 0),
-                        (float)($r['valor_ice']   ?? 0),
-                        (float)($r['total']       ?? 0),
-                        (float)($r['retenciones'] ?? 0),
-                    ]);
-                }
+                $exportData[] = $fila;
             }
 
             // Fila TOTAL al final, con las mismas sumas que la pantalla.
             if ($rows) {
-                $exportData[] = $this->filaTotalesExcel($rows, (string) $filtros['agrupar_por'], $consolidado);
+                $exportData[] = $this->filaTotalesExcel($rows, $agrupar, $columnas, $conEstab);
             }
 
             $reportService = new \App\Services\ReportService();
@@ -537,31 +539,81 @@ class ReporteComprasController extends BaseModuloController
         }
     }
 
+    /**
+     * Celda de una columna en el PDF: [html, clase]. Los textos largos se parten a la
+     * medida de la columna ($anchoPt) para que no desborden sobre la vecina.
+     */
+    private function celdaPdf(string $clave, array $r, float $anchoPt, float $pt): array
+    {
+        $txt   = static fn ($v): string => ReportePdf::texto((string) ($v ?? ''), $anchoPt, $pt);
+        $num   = static fn (string $c): string => number_format((float) ($r[$c] ?? 0), 2);
+        $fecha = static fn ($v): string => date('d/m/Y', strtotime((string) $v));
+
+        return match ($clave) {
+            'fecha_emision'    => [$fecha($r['fecha_emision'] ?? ''), 'text-center'],
+            'fecha_registro'   => [$fecha($r['fecha_registro'] ?? $r['fecha_emision'] ?? ''), 'text-center'],
+            'numero_documento' => [$txt($r['numero_documento'] ?? ''), ''],
+            'proveedor'        => [$txt($r['proveedor_nombre'] ?? '') . '<br><small>' . htmlspecialchars((string) ($r['proveedor_ruc'] ?? '')) . '</small>', ''],
+            'tipo'             => [$txt($r['tipo_comprobante_nombre'] ?? ''), 'text-center'],
+            'usuario'          => [$txt($r['usuario_nombre'] ?? ''), ''],
+            'autorizacion'     => [$txt($r['numero_autorizacion'] ?? ''), ''],
+            'comprobantes'     => [(string) (int) ($r['cantidad_comprobantes'] ?? 0), 'text-center'],
+            'producto'         => [$txt($r['producto_nombre'] ?? ''), ''],
+            'cantidad'         => [(string) (float) ($r['cantidad_comprada'] ?? 0), 'text-center'],
+            'tarifa'           => [htmlspecialchars((string) ($r['tarifa_iva'] ?? 0)) . '%', 'text-center'],
+            'fecha'            => [$fecha($r['fecha'] ?? ''), 'text-center'],
+            'mes'              => [self::formatearMes((string) ($r['mes'] ?? '')), 'text-center'],
+            'total'            => ['<strong>' . $num('total') . '</strong>', 'text-end'],
+            'base_0', 'base_iva', 'valor_iva', 'valor_ice', 'retenciones'
+                               => [$num($clave), 'text-end'],
+            default            => ['', ''],
+        };
+    }
+
     public function exportPdf(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltrosDesdeRequest();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
-        $idEmpresaActiva = $idEmpresa;
-        $idEmpresa       = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
+        $agrupar   = (string) $filtros['agrupar_por'];
 
-        if ($filtros['agrupar_por'] === 'PROVEEDOR') {
-            $rows = $this->repository->getReporteAgrupadoProveedor($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
-            $rows = $this->repository->getReporteAgrupadoProducto($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'FECHA') {
-            $rows = $this->repository->getReporteAgrupadoFecha($idEmpresa, $filtros);
-        } elseif ($filtros['agrupar_por'] === 'MES') {
-            $rows = $this->repository->getReporteAgrupadoMes($idEmpresa, $filtros);
-        } else {
-            $rows = $this->repository->getReporteDetallado($idEmpresa, $filtros);
+        $rows    = $this->filasReporte($idsEmpresa, $filtros);
+        $totales = $this->repository->getEstadisticas($idsEmpresa, $filtros);
+
+        // Columnas y orientación según la personalización de la empresa (por defecto: horizontal).
+        $vista      = $this->columnasVista($agrupar);
+        $columnas   = $vista['pdf'];
+        $horizontal = (bool) $vista['horizontal'];
+        $conEstab   = $consolidado && $this->vistaDe($agrupar) === 'NINGUNO';
+
+        // Ancho en % de cada columna (repartido entre las visibles). Va repetido en cada
+        // <th>/<td>: es lo único que hace que Html2Pdf respete el ancho.
+        $pesos = $conEstab ? ['__estab' => 6.0] : [];
+        foreach ($columnas as $clave => $col) {
+            $pesos[$clave] = (float) $col['ancho'];
         }
+        $w     = ColumnasReporte::anchosPdf($pesos);
+        $nCols = count($pesos);
+        // En vertical la hoja es un 30 % más angosta: letra y relleno más chicos según las columnas.
+        $pt  = $horizontal ? 8.5 : ($nCols > 10 ? 6.5 : ($nCols > 8 ? 7.0 : 8.0));
+        $pad = $horizontal ? 5 : 3;
 
-        $totales = $this->repository->getEstadisticas($idEmpresa, $filtros);
+        // Fila de totales: la etiqueta ocupa las columnas que van antes del primer importe.
+        $lider  = 0;
+        $wLider = 0.0;
+        foreach ($pesos as $clave => $_) {
+            if (($columnas[$clave]['stat'] ?? null) !== null) {
+                break;
+            }
+            $lider++;
+            $wLider += $w[$clave];
+        }
+        $hayTotales = $lider < $nCols;
+        $saltar     = $lider - ($conEstab ? 1 : 0);   // columnas del catálogo que cubre la etiqueta
 
         try {
-            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresaActiva) ?? [];
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE COMPRAS';
             $alcanceTxt    = $this->describirAlcance($idsEmpresa, $consolidado);
 
@@ -571,9 +623,9 @@ class ReporteComprasController extends BaseModuloController
             ob_start();
             ?>
             <style>
-                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0 auto 20px auto; }
-                th { background: #f2f2f2; border: 1px solid #ccc; padding: 5px; text-align: center; }
-                td { border: 1px solid #ccc; padding: 5px; }
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: <?= $pt ?>pt; margin: 0 auto 20px auto; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: <?= $pad ?>px; text-align: center; }
+                td { border: 1px solid #ccc; padding: <?= $pad ?>px; }
                 .text-end { text-align: right; }
                 .text-center { text-align: center; }
                 .header { text-align: center; margin-bottom: 20px; }
@@ -589,95 +641,45 @@ class ReporteComprasController extends BaseModuloController
             </div>
             <table>
                 <thead>
-                    <?php if ($filtros['agrupar_por'] === 'PROVEEDOR'): ?>
-                        <tr><th>Proveedor</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                        <tr><th>Producto</th><th>Cant.</th><th>T. IVA</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
-                        <tr><th>Fecha</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
-                    <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
-                        <tr><th>Mes</th><th>Nro Comp.</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th></tr>
-                    <?php else: ?>
-                        <tr><?php if ($consolidado): ?><th>Estab.</th><?php endif; ?><th>F. Emisión</th><th>Nro Documento</th><th>Proveedor</th><th>Tipo</th><th>Usuario</th><th>Base 0%</th><th>Base IVA</th><th>IVA</th><th>ICE</th><th>Total</th><th>Retenciones</th></tr>
-                    <?php endif; ?>
+                    <tr>
+                        <?php if ($conEstab): ?><th style="width:<?= $w['__estab'] ?>%;">Estab.</th><?php endif; ?>
+                        <?php foreach ($columnas as $clave => $col): ?><th style="width:<?= $w[$clave] ?>%;"><?= htmlspecialchars($col['corto']) ?></th><?php endforeach; ?>
+                    </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($rows as $r): ?>
                         <tr>
-                            <?php if ($filtros['agrupar_por'] === 'PROVEEDOR'): ?>
-                                <td><?= htmlspecialchars($r['proveedor_nombre']) ?><br><small><?= htmlspecialchars($r['proveedor_ruc']) ?></small></td>
-                                <td class="text-center"><?= $r['cantidad_comprobantes'] ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                                <td><?= htmlspecialchars($r['producto_nombre']) ?></td>
-                                <td class="text-center"><?= (float)$r['cantidad_comprada'] ?></td>
-                                <td class="text-center"><?= $r['tarifa_iva'] ?>%</td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'FECHA'): ?>
-                                <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha'])) ?></td>
-                                <td class="text-center"><?= $r['cantidad_comprobantes'] ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php elseif ($filtros['agrupar_por'] === 'MES'): ?>
-                                <td class="text-center"><?= self::formatearMes($r['mes'] ?? '') ?></td>
-                                <td class="text-center"><?= $r['cantidad_comprobantes'] ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_0'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['base_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)$r['valor_iva'], 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)$r['total'], 2) ?></strong></td>
-                            <?php else: ?>
-                                <?php if ($consolidado): ?><td class="text-center"><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td><?php endif; ?>
-                                <td class="text-center"><?= date('d/m/Y', strtotime($r['fecha_emision'])) ?></td>
-                                <td><?= htmlspecialchars($r['numero_documento']) ?></td>
-                                <td><?= htmlspecialchars($r['proveedor_nombre']) ?><br><small><?= htmlspecialchars($r['proveedor_ruc']) ?></small></td>
-                                <td class="text-center"><?= htmlspecialchars($r['tipo_comprobante_nombre'] ?? '') ?></td>
-                                <td><?= htmlspecialchars($r['usuario_nombre'] ?? '') ?></td>
-                                <td class="text-end"><?= number_format((float)($r['base_0'] ?? 0), 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['base_iva'] ?? 0), 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_iva'] ?? 0), 2) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['valor_ice'] ?? 0), 2) ?></td>
-                                <td class="text-end"><strong><?= number_format((float)($r['total'] ?? 0), 2) ?></strong></td>
-                                <td class="text-end"><?= number_format((float)($r['retenciones'] ?? 0), 2) ?></td>
-                            <?php endif; ?>
+                            <?php if ($conEstab): ?><td class="text-center" style="width:<?= $w['__estab'] ?>%;"><?= htmlspecialchars((string) ($r['establecimiento'] ?? '')) ?></td><?php endif; ?>
+                            <?php foreach ($columnas as $clave => $col):
+                                [$valor, $cls] = $this->celdaPdf((string) $clave, $r, ReportePdf::anchoPt($w[$clave], $horizontal), $pt); ?>
+                                <td class="<?= $cls ?>" style="width:<?= $w[$clave] ?>%;"><?= $valor ?></td>
+                            <?php endforeach; ?>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
+                <?php if ($hayTotales): ?>
                 <tfoot>
                     <tr style="background-color: #e9ecef;">
-                        <?php if ($filtros['agrupar_por'] === 'PROVEEDOR' || $filtros['agrupar_por'] === 'FECHA' || $filtros['agrupar_por'] === 'MES'): ?>
-                            <th colspan="2" class="text-center" style="font-size: 10pt;">TOTALES:</th>
-                        <?php elseif ($filtros['agrupar_por'] === 'PRODUCTO'): ?>
-                            <th colspan="3" class="text-center" style="font-size: 10pt;">TOTALES:</th>
-                        <?php else: ?>
-                            <th colspan="5" class="text-center" style="font-size: 10pt;">TOTALES:</th>
-                        <?php endif; ?>
-                        <th class="text-end"><?= number_format((float)$totales['total_base_0'],   2) ?></th>
-                        <th class="text-end"><?= number_format((float)$totales['total_base_iva'], 2) ?></th>
-                        <th class="text-end"><?= number_format((float)$totales['total_iva'],      2) ?></th>
-                        <th class="text-end"><?= number_format((float)($totales['total_ice'] ?? 0), 2) ?></th>
-                        <th class="text-end" style="color:#dc3545;font-weight:bold;">$<?= number_format((float)$totales['gran_total'], 2) ?></th>
-                        <?php if ($filtros['agrupar_por'] === 'NINGUNO'): ?>
-                        <th class="text-end">-</th>
-                        <?php endif; ?>
+                        <?php if ($lider > 0): ?><th colspan="<?= $lider ?>" class="text-center" style="width:<?= $wLider ?>%;font-size: <?= $pt + 1.5 ?>pt;">TOTALES:</th><?php endif; ?>
+                        <?php $i = 0; foreach ($columnas as $clave => $col):
+                            if ($i++ < $saltar) { continue; }
+                            $stat = $col['stat']; ?>
+                            <?php if ($stat === null): ?>
+                                <th class="text-end" style="width:<?= $w[$clave] ?>%;">-</th>
+                            <?php elseif ($stat === 'gran_total'): ?>
+                                <th class="text-end" style="width:<?= $w[$clave] ?>%;color:#dc3545;font-weight:bold;">$<?= number_format((float) ($totales[$stat] ?? 0), 2) ?></th>
+                            <?php else: ?>
+                                <th class="text-end" style="width:<?= $w[$clave] ?>%;"><?= number_format((float) ($totales[$stat] ?? 0), 2) ?></th>
+                            <?php endif; ?>
+                        <?php endforeach; ?>
                     </tr>
                 </tfoot>
+                <?php endif; ?>
             </table>
             </page>
             <?php
             $html = ob_get_clean();
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('ReporteCompras_' . date('Ymd_His') . '.pdf', 'D');
             exit;

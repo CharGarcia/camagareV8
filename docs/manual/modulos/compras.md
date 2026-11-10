@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor
-version: 2.46
+etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado
+version: 2.47
 orden: 20
 estado: activo
 ---
@@ -518,6 +518,29 @@ se ensancha hasta verse completo; si la tabla no cabe, aparece una barra de
 desplazamiento horizontal. La descripción se guarda en una sola línea: Enter no
 inserta saltos.
 
+### Datos del proveedor bajo el buscador
+
+Al elegir el proveedor (y al abrir una compra ya guardada) aparece debajo, en una
+sola línea, su **identificación** con el tipo (*Ruc*, *Cedula*…), la
+**dirección**, el **teléfono** y el **correo**. Es la misma línea que muestra el
+cliente en Facturas de Venta.
+
+- La línea ocupa siempre **un solo renglón**. Si la dirección o el correo son
+  largos, se recortan con puntos suspensivos (**…**); al dejar el puntero encima
+  se ve el texto completo. En el celular, la línea baja a más renglones y se
+  muestra todo.
+- Si el proveedor tiene **varios correos**, se muestra el primero y cuántos más
+  hay (*+2*); la lista completa sale al dejar el puntero encima.
+- A la derecha está **Editar**, que abre la **ficha del proveedor** encima de la
+  compra. Al guardar la ficha, la línea (y el nombre, si cambió) se actualizan
+  solos; el resto de la compra no se toca. Cierre la ficha para seguir con la
+  compra.
+- **Editar** solo aparece si usted tiene permiso de **modificar** en el módulo
+  Proveedores. Está disponible también en compras electrónicas, porque cambia la
+  ficha del proveedor, no el comprobante.
+- La ficha que se edita es la del proveedor **para toda la empresa**, no solo
+  para esta compra.
+
 ### Columna Adicional de cada ítem
 
 Junto a la descripción está la columna **Adicional**, igual que en Factura de
@@ -857,6 +880,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.47** — Bajo el buscador del proveedor aparece una **línea con sus datos** (identificación, dirección, teléfono y correo), como la del cliente en Facturas de Venta, con el enlace **Editar** que abre la ficha del proveedor sin salir de la compra. La dirección y el correo largos se recortan con «…» y se ven completos al dejar el puntero encima. Ver *Datos del proveedor bajo el buscador*.
 - **2.46** — Nueva pestaña **Información** en la ventana de la compra (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, sus acciones registradas y los movimientos de inventario que generó. Ver la guía *Pestaña Información*.
 - **2.45** — Pestaña **Pagos**: registrar un pago pide **confirmar monto y forma de pago** (también al pulsar Enter), el monto queda vacío después de cada pago y las **observaciones** usan el mismo formato que Egresos (*Pago factura de compra 42869; Pagado con …*). Antes decían *Pago de Compra #…*.
 - **2.44** — Los **días de crédito** de una compra manual admiten como máximo **3.650 días (10 años)**. En la compra electrónica, un plazo mayor que venga en el XML del proveedor se guarda en el tope, sin rechazar el comprobante (el XML se conserva intacto). Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).

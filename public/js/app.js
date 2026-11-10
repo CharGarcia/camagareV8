@@ -1015,3 +1015,18 @@ window.CMG_Identificacion = (function () {
         if (document.dispatchEvent(ev)) location.reload();
     }, true);
 })();
+
+/**
+ * Línea de datos del tercero (.cmg-info-tercero: cliente en Factura de Venta, proveedor
+ * en Compras). La dirección y el correo se recortan con «…» por CSS; al pasar el mouse
+ * se les pone como title el texto completo (data-completo si el módulo lo fijó, o el
+ * texto del propio elemento). Así ningún módulo tiene que mantener el title a mano.
+ */
+(function () {
+    document.addEventListener('mouseover', function (e) {
+        var el = e.target.closest ? e.target.closest('.cmg-info-tercero__dir, .cmg-info-tercero__correo') : null;
+        if (!el) return;
+        var txt = (el.dataset.completo || el.textContent || '').trim();
+        if (el.title !== txt) el.title = txt;
+    });
+})();

@@ -880,8 +880,19 @@
 
                 if (json.ok) {
                     Swal.fire({ icon: 'success', title: '¡Guardado!', text: json.msg || 'Guardado correctamente.', timer: 2000, showConfirmButton: false });
-                    setTimeout(() => { 
-                        getModalVeh()?.hide(); 
+                    // Al EDITAR desde un documento (enlace «Editar» de la orden de Car-Wash, modal
+                    // sobre modal) la ficha no se cierra sola: el documento repinta los datos por
+                    // 'vehiculoGuardado' y el usuario la cierra con Cerrar. Al crear, o desde el
+                    // listado de Vehículos, se cierra como siempre.
+                    const quedaAbierta = !!id && typeof window.CMG_modalSobreOtro === 'function'
+                        && window.CMG_modalSobreOtro(formVeh.closest('.modal'));
+                    setTimeout(() => {
+                        if (quedaAbierta) {
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+                        } else {
+                            getModalVeh()?.hide();
+                        }
                         if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
                         window.dispatchEvent(new CustomEvent('vehiculoGuardado', { detail: { ...json, nuevo: !id } }));
                     }, 800);

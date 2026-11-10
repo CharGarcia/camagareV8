@@ -161,8 +161,60 @@ function CXP_recargar() {
 /* Columnas de la tabla según la vista (para el colspan de los mensajes). */
 function CXP_nCols() {
     // Por antigüedad: [chevron] Proveedor | Docs | Por vencer | tramos… | Más de N | Total
-    return CXP_vista === 'antiguedad' ? 5 + CXP_tramos().length : 11;
+    if (CXP_vista === 'antiguedad') return 5 + CXP_tramos().length;
+    // Detallado: las columnas que la empresa dejó visibles + Acciones. Por proveedor: 9.
+    return CXP_agrupado ? 9 : CXP_colsDetalle().length + 1;
 }
+
+/* ════════════════════════════════════════════════════
+   COLUMNAS DEL DETALLADO (personalización por empresa)
+   El administrador decide con el botón «Personalizar» qué columnas muestra la vista
+   Detallado. Llegan en window.CXP_COLUMNAS: todas las del catálogo
+   (App\Helpers\ColumnasReporte), en orden, con `visible` (lo que eligió la empresa) y
+   `defecto` (lo que se ve sin personalizar). Las demás vistas no cambian.
+════════════════════════════════════════════════════ */
+const CXP_COLS = Array.isArray(window.CXP_COLUMNAS) ? window.CXP_COLUMNAS : [];
+
+function CXP_colsDetalle() {
+    return CXP_COLS.filter(c => c.visible);
+}
+
+/* ¿La empresa cambió las columnas del Detallado? Sin cambios se usa la cabecera de siempre. */
+function CXP_detallePersonalizado() {
+    return CXP_COLS.some(c => !!c.visible !== !!c.defecto);
+}
+
+/* colgroup, thead y ancho mínimo de la tabla para las columnas visibles del Detallado. */
+function CXP_cabeceraDetalle() {
+    const cols  = CXP_colsDetalle();
+    const extra = { documento: 'ps-2', saldo: 'pe-2 fw-bold' };
+    let cg = '', th = '', ancho = 80, flexible = false;
+    for (const c of cols) {
+        if (c.px) { cg += `<col style="width:${c.px}px;">`; ancho += c.px; }
+        else      { cg += '<col>'; flexible = true; }
+        const cls = [extra[c.clave] ? (c.clase + ' ' + extra[c.clave]).trim() : c.clase, c.sort ? 'sortable-header' : ''].filter(Boolean).join(' ');
+        th += c.sort
+            ? `<th class="${cls}" data-sort="${cxpEsc(c.sort)}" role="button" title="${cxpEsc(c.tip || 'Ordenar')}">${cxpEsc(c.titulo)} <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>`
+            : `<th${cls ? ` class="${cls}"` : ''}${c.tip ? ` title="${cxpEsc(c.tip)}"` : ''}>${cxpEsc(c.titulo)}</th>`;
+    }
+    return {
+        cg: cg + '<col style="width:80px;">',
+        th: `<tr>${th}<th class="text-center">Acciones</th></tr>`,
+        minWidth: ancho + (flexible ? 200 : 0),
+    };
+}
+
+/* Tras guardar en «Personalizar»: se toman las columnas nuevas y se repinta la tabla con los
+   datos que ya están en pantalla (no hace falta volver a consultar). */
+document.addEventListener('reportePersonalizado', function (e) {
+    const vistas  = e.detail && e.detail.vistas;
+    const detalle = Array.isArray(vistas) ? vistas.find(v => v.vista === 'DETALLE') : null;
+    if (!detalle) return;
+    const visibles = {};
+    detalle.columnas.forEach(c => { visibles[c.clave] = !!c.pantalla; });
+    CXP_COLS.forEach(c => { if (c.clave in visibles) c.visible = visibles[c.clave]; });
+    CXP_renderTabla(CXP_filtradoLocal);
+});
 
 /* Borra de la pantalla los datos de la consulta anterior: tabla, tarjetas, contador y
    filtro local. Así nunca se ven cifras que no corresponden a los filtros puestos
@@ -290,8 +342,8 @@ function CXP_renderTabla(filas) {
     tbody.innerHTML = html;
 }
 
-/* Construye una fila <tr> de detalle (11 columnas). Reutilizada por la vista
-   detallada y por la vista agrupada (para los documentos dentro de cada proveedor). */
+/* Construye una fila <tr> de la vista detallada: una celda por cada columna visible
+   (CXP_colsDetalle) y, al final, la de acciones. */
 function CXP_filaHtml(r) {
         const dias    = parseInt(r.dias_vencido) || 0;
         const saldo   = parseFloat(r.saldo);
@@ -354,48 +406,44 @@ function CXP_filaHtml(r) {
                </a>`
             : `<small class="text-muted">—</small>`;
 
+        // Importe o raya: las columnas que solo a veces tienen valor.
+        const monto = (v, cls = '') => `<td class="text-end ${cls}" style="font-size:.78rem;">${v > 0.001 ? '$' + CXP_fmt(v) : '<span class="text-muted">—</span>'}</td>`;
+        const pagado = parseFloat(r.total_pagado) || 0;
+
+        // Una celda por clave de columna (App\Helpers\ColumnasReporte).
+        const celdas = {
+            documento: `
+            <td class="ps-2" title="${cxpEsc(r.numero_documento)}">
+                ${estabBadge}<span class="fw-semibold" style="font-size:.79rem;">${cxpEsc(r.numero_documento)}</span>
+            </td>`,
+            origen: `<td class="text-center" style="white-space:nowrap;">${origenBadge}</td>`,
+            proveedor: `
+            <td title="${cxpEsc(r.proveedor_nombre)}" style="font-size:.8rem;">
+                ${cxpEsc(r.proveedor_nombre)}
+            </td>`,
+            ruc: `<td style="font-size:.78rem;white-space:nowrap;">${cxpEsc(r.proveedor_ruc || '')}</td>`,
+            fecha_emision: `<td class="text-center text-muted" style="font-size:.77rem;">${fEmision}</td>`,
+            fecha_vencimiento: `<td class="text-center" style="font-size:.77rem;">${fVencimiento || '<span class=text-muted>—</span>'}</td>`,
+            dias: `<td class="text-center" style="font-size:.78rem;">${dias > 0 ? dias : 0}</td>`,
+            total: `<td class="text-end" style="font-size:.78rem;">$${CXP_fmt(r.total)}</td>`,
+            abonos: `
+            <td class="text-end text-success" style="font-size:.78rem;">
+                ${pagado > 0 ? '$' + CXP_fmt(r.total_pagado) : '<span class="text-muted">—</span>'}
+            </td>`,
+            nc: monto(nc),
+            nd: monto(nd),
+            retenciones: monto(ret),
+            nc_ret: `<td class="text-end" style="font-size:.78rem;">${ncRetHtml}</td>`,
+            descontado: monto(pagado + ncRet, 'text-success'),
+            saldo: `<td class="text-end pe-2 fw-bold ${clsSaldo}" style="font-size:.82rem;">$${CXP_fmt(saldo > 0 ? saldo : 0)}</td>`,
+            estado: `<td class="text-center">${badgeHtml}</td>`,
+        };
+
         return `
         <tr class="${rowClass}" style="cursor:pointer;" title="Clic para ver el detalle"
             data-id="${r.id}" data-tipo="${cxpEsc(r.tipo_fuente)}" data-hermana="${esHermana ? 1 : 0}"
             data-proveedor="${cxpEsc(r.proveedor_nombre)}" data-doc="${cxpEsc(r.numero_documento)}">
-
-            <!-- Documento -->
-            <td class="ps-2" title="${cxpEsc(r.numero_documento)}">
-                ${estabBadge}<span class="fw-semibold" style="font-size:.79rem;">${cxpEsc(r.numero_documento)}</span>
-            </td>
-
-            <!-- Origen -->
-            <td class="text-center" style="white-space:nowrap;">${origenBadge}</td>
-
-            <!-- Proveedor -->
-            <td title="${cxpEsc(r.proveedor_nombre)}" style="font-size:.8rem;">
-                ${cxpEsc(r.proveedor_nombre)}
-            </td>
-
-            <!-- F.Emisión -->
-            <td class="text-center text-muted" style="font-size:.77rem;">${fEmision}</td>
-
-            <!-- F.Vencimiento -->
-            <td class="text-center" style="font-size:.77rem;">${fVencimiento || '<span class=text-muted>—</span>'}</td>
-
-            <!-- Total -->
-            <td class="text-end" style="font-size:.78rem;">$${CXP_fmt(r.total)}</td>
-
-            <!-- Pagado -->
-            <td class="text-end text-success" style="font-size:.78rem;">
-                ${parseFloat(r.total_pagado) > 0 ? '$' + CXP_fmt(r.total_pagado) : '<span class="text-muted">—</span>'}
-            </td>
-
-            <!-- NC/Ret. -->
-            <td class="text-end" style="font-size:.78rem;">${ncRetHtml}</td>
-
-            <!-- Saldo -->
-            <td class="text-end pe-2 fw-bold ${clsSaldo}" style="font-size:.82rem;">$${CXP_fmt(saldo > 0 ? saldo : 0)}</td>
-
-            <!-- Estado -->
-            <td class="text-center">${badgeHtml}</td>
-
-            <!-- Acciones -->
+            ${CXP_colsDetalle().map(c => celdas[c.clave] || '<td></td>').join('')}
             <td class="text-center">${CXP_accionesHtml(r)}</td>
         </tr>`;
 }
@@ -486,6 +534,19 @@ function CXP_renderCabecera() {
         th.innerHTML = CXP_thAntiguedad();
         return;
     }
+    // Detallado con columnas personalizadas por la empresa: cabecera y ancho mínimo a medida.
+    // Sin personalizar (o en "Por proveedor"), la cabecera y el ancho de siempre.
+    const tabla = document.getElementById('tabla-cxp');
+    if (tabla && tabla.dataset.minWidth === undefined) tabla.dataset.minWidth = tabla.style.minWidth || '';
+    if (!CXP_agrupado && CXP_detallePersonalizado()) {
+        const cab = CXP_cabeceraDetalle();
+        cg.innerHTML = cab.cg;
+        th.innerHTML = cab.th;
+        if (tabla) tabla.style.minWidth = cab.minWidth + 'px';
+        CXP_initOrden();
+        return;
+    }
+    if (tabla) tabla.style.minWidth = tabla.dataset.minWidth;
     cg.innerHTML = CXP_agrupado ? CXP_COLS_MAYOR : CXP_COLS_ESTANDAR;
     th.innerHTML = CXP_agrupado ? CXP_TH_MAYOR   : CXP_TH_ESTANDAR;
     // Los <th> recién creados no tienen el clic de ordenar: se vuelven a enganchar

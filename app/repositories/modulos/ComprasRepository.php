@@ -655,6 +655,7 @@ class ComprasRepository extends BaseRepository
                        p.identificacion        AS proveedor_ruc,
                        p.direccion             AS proveedor_direccion,
                        p.email                 AS proveedor_email,
+                       p.telefono              AS proveedor_telefono,
                        p.tipo_id_proveedor     AS proveedor_tipo_id,
                        COALESCE(icv.nombre,'') AS proveedor_nombre_tipo_id,
                        st.nombre               AS sustento_nombre,

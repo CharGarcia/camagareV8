@@ -1785,3 +1785,44 @@ th[data-det-col] .cmg-resizer {
     text-align: right;
     white-space: nowrap;
 }
+
+/* ── Línea de datos del tercero en un documento (cliente en Factura de Venta,
+   proveedor en Compras): identificación, dirección, teléfono, correo y «Editar».
+   Siempre ocupa UN renglón: la dirección y el correo se recortan con «…» y el texto
+   completo sale al pasar el mouse (lo pone app.js). En celular no hay hover, así que
+   ahí sí baja a más renglones. */
+.cmg-info-tercero {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    min-width: 0;
+    font-size: .72rem;
+    color: #6c757d;
+    text-transform: lowercase;
+}
+.cmg-info-tercero > * {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.cmg-info-tercero > .cmg-info-tercero__dir,
+.cmg-info-tercero > .cmg-info-tercero__correo {
+    flex: 0 1 auto;
+    min-width: 3rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cmg-info-tercero > .cmg-info-tercero__correo {
+    max-width: 220px;
+}
+@media (max-width: 767.98px) {
+    .cmg-info-tercero {
+        flex-wrap: wrap;
+        row-gap: .15rem;
+    }
+    .cmg-info-tercero > .cmg-info-tercero__dir,
+    .cmg-info-tercero > .cmg-info-tercero__correo {
+        max-width: 100%;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+}

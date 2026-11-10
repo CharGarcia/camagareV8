@@ -214,6 +214,8 @@ $vacacionesEmpleado = [
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-credenciales-btn" data-bs-toggle="tab" href="#tab-credenciales" role="tab" onclick="window.empCredCargar && window.empCredCargar()"><i class="bi bi-person-vcard me-1"></i>Credenciales</a>
                             </li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('emp', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -228,6 +230,7 @@ $vacacionesEmpleado = [
                                 $pestanasConfigEmp['tab-vacaciones-btn'] = 'Vacaciones';
                             }
                             $pestanasConfigEmp['tab-rubros-btn'] = 'Rubros Fijos';
+                            $pestanasConfigEmp += \App\Helpers\InformacionRegistro::pestanaConfigurable('emp');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigEmp, $vistaConfigEmp ?? [], 'empleados');
                             ?>
                         </div>
@@ -235,6 +238,9 @@ $vacacionesEmpleado = [
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top px-3 py-3" id="tabsEmpleadoContent" style="overflow: visible !important;">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('emp', 'modulos/empleados', 'emp_id') ?>
+
                         <!-- Panel General -->
                         <div class="tab-pane fade show active" id="tab-general" role="tabpanel">
                             <div class="row g-3">

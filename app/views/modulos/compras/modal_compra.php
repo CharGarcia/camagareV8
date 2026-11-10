@@ -147,6 +147,23 @@
                 <input type="text" id="mcNumeroComprobante" class="form-control form-control-sm text-center" placeholder="000-000-000000000">
               </div>
 
+              <!-- Datos del proveedor elegido (misma línea que el cliente en Facturas de Venta).
+                   La pinta mcPintarInfoProveedor() en compras.js; «Editar» abre la ficha del proveedor. -->
+              <div class="col-12 d-none" id="mcInfoProveedor" style="margin-top:2px;">
+                <div class="cmg-info-tercero px-1">
+                  <span class="border-end pe-2 fw-bold text-dark" id="mcLblProvRuc"></span>
+                  <span class="border-end pe-2 d-none" id="mcLblProvTipoId" title="Tipo de identificación"></span>
+                  <div class="cmg-info-tercero__dir"><i class="bi bi-geo-alt me-1"></i><span id="mcLblProvDireccion"></span></div>
+                  <div class="border-start ps-2"><i class="bi bi-telephone me-1"></i><span id="mcLblProvTelefono"></span></div>
+                  <div class="cmg-info-tercero__correo border-start ps-2"><i class="bi bi-envelope me-1"></i><span id="mcLblProvCorreo"></span></div>
+                  <?php if (\App\Helpers\Permisos::puedeActualizar('modulos/proveedores')): ?>
+                  <button type="button" id="mcBtnEditarProveedor" class="btn btn-link btn-sm p-0 ms-auto" style="font-size:0.72rem; text-decoration:none; text-transform:none;" onclick="mcEditarProveedor()" title="Abrir la ficha del proveedor para editarla">
+                    <i class="bi bi-pencil-square me-1"></i>Editar
+                  </button>
+                  <?php endif; ?>
+                </div>
+              </div>
+
               <!-- Fila 2 -->
               <?php
               $tipoEmp = (string) ($empresa['tipo'] ?? '1');

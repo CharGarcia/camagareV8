@@ -116,6 +116,8 @@ if (!defined('LEAFLET_LOADED')) {
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="prov-tab-ubicacion-btn" data-bs-toggle="tab" data-bs-target="#prov-pane-ubicacion" href="#prov-pane-ubicacion" role="tab" title="Ubicación"><i class="bi bi-geo-alt-fill me-1"></i> Ubicación</a>
                             </li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('prov') ?>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
                             <?php
@@ -139,6 +141,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 $pestanasConfigProv['prov-tab-contable'] = 'Contable';
                             }
                             $pestanasConfigProv['prov-pane-ubicacion'] = 'Ubicación';
+                            $pestanasConfigProv += \App\Helpers\InformacionRegistro::pestanaConfigurable('prov');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigProv, $vistaConfigProv ?? [], 'proveedores');
                             ?>
                         </div>
@@ -146,6 +149,9 @@ if (!defined('LEAFLET_LOADED')) {
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top px-3 py-3" id="tabsProveedorContent" style="overflow: visible !important;">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('prov', 'modulos/proveedores', 'prov_id') ?>
+
                         <!-- Pestaña General -->
                         <div class="tab-pane fade show active" id="prov-tab-general" role="tabpanel">
                             <div class="row g-3">

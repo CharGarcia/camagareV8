@@ -313,6 +313,72 @@ abstract class BaseModuloController extends Controller
         exit;
     }
 
+    // ─── Personalización del reporte por empresa (botón «Personalizar») ───────
+    // Común a los reportes del catálogo App\Helpers\ColumnasReporte. Solo niveles 2 y 3.
+
+    /** Corta con 403 si el usuario no es administrador o el módulo no es personalizable. */
+    private function requirePersonalizarReporte(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        if (!\App\Helpers\ColumnasReporte::puedePersonalizar()
+            || \App\Helpers\ColumnasReporte::definicion($this->getRutaModulo()) === null) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'Solo un administrador puede personalizar este reporte.']);
+            exit;
+        }
+    }
+
+    /** AJAX: vistas del reporte con sus columnas (marcas pantalla/PDF) y orientación. */
+    public function getPersonalizacionReporteAjax(): void
+    {
+        $this->requirePersonalizarReporte();
+        try {
+            $data = \App\Services\modulos\ReportePersonalizacionService::crear()
+                ->paraModal((int) $_SESSION['id_empresa'], $this->getRutaModulo());
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar la personalización del reporte.']);
+        }
+        exit;
+    }
+
+    /**
+     * AJAX: guarda la personalización. POST `vistas` = JSON {vista: {ocultas, ocultas_pdf,
+     * orientacion}}; con `restablecer=1` devuelve todo el reporte a sus valores por defecto.
+     */
+    public function guardarPersonalizacionReporteAjax(): void
+    {
+        $this->requirePersonalizarReporte();
+        try {
+            if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+                throw new \Exception('Método no permitido.');
+            }
+            $service   = \App\Services\modulos\ReportePersonalizacionService::crear();
+            $idUsuario = (int) $_SESSION['id_usuario'];
+            $nivel     = (int) ($_SESSION['nivel'] ?? 1);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            if (!empty($_POST['restablecer'])) {
+                $service->restablecer($idUsuario, $nivel, $idEmpresa, $this->getRutaModulo());
+            } else {
+                $vistas = json_decode((string) ($_POST['vistas'] ?? ''), true);
+                if (!is_array($vistas)) {
+                    throw new \Exception('Datos de personalización no válidos.');
+                }
+                $service->guardar($idUsuario, $nivel, $idEmpresa, $this->getRutaModulo(), $vistas);
+            }
+            echo json_encode(['ok' => true]);
+        } catch (\PDOException $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo guardar la personalización del reporte.']);
+        } catch (\Throwable $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function getHistorialAjax(): void
     {
         $this->requireLeer();

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/vendedores
 tipo: modulo
 visibilidad: todos
-etiquetas: vendedores, buscar vendedor, buscador, filtros, filtrar vendedores, vendedores sin clientes, chips, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados
-version: 1.5
+etiquetas: vendedores, buscar vendedor, buscador, filtros, filtrar vendedores, vendedores sin clientes, chips, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados, pestaña informacion, quien creo el vendedor, quien modifico el vendedor, historial del vendedor
+version: 1.6
 orden: 50
 estado: activo
 ---
@@ -108,6 +108,7 @@ la guía *Importar datos desde Excel*.
 
 ## Historial de cambios
 
+- **1.6** — Nueva pestaña **Información** en la ventana del vendedor (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.5** — El modal ya no tiene pestaña *Información*; el número de clientes asignados se
   muestra al pie de la pestaña **General**. El historial del registro se consulta en
   el log del sistema.
