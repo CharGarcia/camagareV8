@@ -150,6 +150,7 @@
             const body = document.getElementById('mant_srv_body');
             if (!body.querySelector('tr[data-id]')) body.innerHTML = '';
             body.insertAdjacentHTML('beforeend', fila({ id: 0, nombre: '', intervalo_km: '', aviso_km: 500, orden: body.querySelectorAll('tr[data-id]').length + 1, activo: true }));
+            marcarPendiente(body.lastElementChild, true); // nueva: pendiente hasta que se guarde
             body.lastElementChild.querySelector('.mant-srv-nombre').focus();
             return;
         }
@@ -159,6 +160,8 @@
         const tr = (btnG || btnE).closest('tr');
         const id = parseInt(tr.dataset.id, 10) || 0;
         if (guardando) return;
+
+        if (btnG) { await guardarFila(tr); return; }
 
         if (btnE) {
             if (!id) { tr.remove(); return; }
@@ -173,29 +176,108 @@
             if (!c.isConfirmed) return;
         }
         guardando = true;
-        (btnG || btnE).disabled = true;
+        btnE.disabled = true;
         try {
             const fd = new FormData();
             fd.append('id', id);
-            if (btnG) {
-                fd.append('nombre', tr.querySelector('.mant-srv-nombre').value.trim());
-                fd.append('intervalo_km', tr.querySelector('.mant-srv-int').value);
-                fd.append('aviso_km', tr.querySelector('.mant-srv-aviso').value || 0);
-                fd.append('orden', tr.querySelector('.mant-srv-orden').value || 0);
-                fd.append('activo', tr.querySelector('.mant-srv-activo').checked ? '1' : '0');
-            }
-            const j = await (await fetch(`${urlActual}/${btnG ? 'mantGuardarServicioAjax' : 'mantEliminarServicioAjax'}`, { method: 'POST', body: fd })).json();
-            if (!j.ok) throw new Error(j.error || 'No se pudo guardar.');
-            // El id queda puesto antes de liberar el botón: un segundo clic ya edita, no crea otro.
-            if (btnG && j.data) tr.dataset.id = j.data.id;
-            if (btnE) tr.remove();
+            const j = await (await fetch(`${urlActual}/mantEliminarServicioAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo eliminar.');
+            tr.remove();
             Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: j.msg, timer: 1500, showConfirmButton: false });
-            document.dispatchEvent(new CustomEvent('mantenimientoServicioGuardado', { detail: { ...(j.data || { id }), nuevo: !!j.nuevo, eliminado: !!btnE } }));
+            document.dispatchEvent(new CustomEvent('mantenimientoServicioGuardado', { detail: { ...(j.data || { id }), nuevo: false, eliminado: true } }));
         } catch (e) {
             Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: el, heightAuto: false });
         } finally {
             guardando = false;
-            (btnG || btnE).disabled = false;
+            btnE.disabled = false;
         }
     });
+
+    // ─── Cambios sin guardar ──────────────────────────────────────────────────
+    // Cada fila se guarda con su propio botón: una fila nueva o editada que no se guardó
+    // queda resaltada y, al cerrar el modal, se avisa antes de perderla.
+    let cerrarSinAvisar = false;
+
+    function marcarPendiente(tr, on) {
+        tr.dataset.sucio = on ? '1' : '';
+        tr.classList.toggle('table-warning', on);
+        const b = tr.querySelector('.mant-srv-guardar');
+        if (b) {
+            b.classList.toggle('btn-primary', on);
+            b.classList.toggle('btn-outline-primary', !on);
+            b.title = on ? 'Sin guardar: clic para guardar' : 'Guardar';
+        }
+    }
+
+    /** Filas con cambios sin guardar (una fila nueva que quedó totalmente vacía no cuenta). */
+    function filasPendientes() {
+        return [...document.querySelectorAll('#mant_srv_body tr[data-id]')].filter(tr => {
+            if (tr.dataset.sucio !== '1') return false;
+            const nueva = !(parseInt(tr.dataset.id, 10) || 0);
+            return !(nueva && !tr.querySelector('.mant-srv-nombre').value.trim() && !tr.querySelector('.mant-srv-int').value);
+        });
+    }
+
+    /** Guarda una fila. Devuelve true si quedó guardada. */
+    async function guardarFila(tr) {
+        if (guardando) return false;
+        const el = modalEl();
+        const btn = tr.querySelector('.mant-srv-guardar');
+        const id = parseInt(tr.dataset.id, 10) || 0;
+        guardando = true;
+        btn.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('nombre', tr.querySelector('.mant-srv-nombre').value.trim());
+            fd.append('intervalo_km', tr.querySelector('.mant-srv-int').value);
+            fd.append('aviso_km', tr.querySelector('.mant-srv-aviso').value || 0);
+            fd.append('orden', tr.querySelector('.mant-srv-orden').value || 0);
+            fd.append('activo', tr.querySelector('.mant-srv-activo').checked ? '1' : '0');
+            const j = await (await fetch(`${urlActual}/mantGuardarServicioAjax`, { method: 'POST', body: fd })).json();
+            if (!j.ok) throw new Error(j.error || 'No se pudo guardar.');
+            // El id queda puesto antes de liberar el botón: un segundo clic ya edita, no crea otro.
+            if (j.data) tr.dataset.id = j.data.id;
+            marcarPendiente(tr, false);
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: j.msg, timer: 1500, showConfirmButton: false });
+            document.dispatchEvent(new CustomEvent('mantenimientoServicioGuardado', { detail: { ...(j.data || { id }), nuevo: !!j.nuevo, eliminado: false } }));
+            return true;
+        } catch (e) {
+            await Swal.fire({ icon: 'error', title: 'Error', text: e.message, target: el, heightAuto: false });
+            return false;
+        } finally {
+            guardando = false;
+            btn.disabled = false;
+        }
+    }
+
+    document.addEventListener('input', (ev) => {
+        const tr = ev.target.closest?.('#mant_srv_body tr[data-id]');
+        if (tr) marcarPendiente(tr, true);
+    });
+
+    document.addEventListener('hide.bs.modal', async (e) => {
+        const el = modalEl();
+        if (e.target !== el || cerrarSinAvisar) return;
+        const pend = filasPendientes();
+        if (!pend.length) return;
+        e.preventDefault(); // no se cierra hasta que el usuario decida
+        const nombres = pend.map(tr => tr.querySelector('.mant-srv-nombre').value.trim() || '(sin nombre)');
+        const r = await Swal.fire({
+            icon: 'warning', target: el, heightAuto: false,
+            title: pend.length === 1 ? 'Hay un servicio sin guardar' : `Hay ${pend.length} servicios sin guardar`,
+            html: `<div class="small">${nombres.map(n => `<b>${esc(n)}</b>`).join(', ')}<br>Si cierra ahora, esos cambios se pierden.</div>`,
+            showDenyButton: true, showCancelButton: true,
+            confirmButtonText: 'Guardar y cerrar', denyButtonText: 'Cerrar sin guardar', cancelButtonText: 'Seguir editando',
+        });
+        if (r.isDismissed) { pend[0].querySelector('.mant-srv-nombre').focus(); return; }
+        if (r.isConfirmed) {
+            for (const tr of pend) {
+                if (!(await guardarFila(tr))) { tr.querySelector('.mant-srv-nombre').focus(); return; } // el error ya se mostró
+            }
+        }
+        cerrarSinAvisar = true;
+        bootstrap.Modal.getOrCreateInstance(el).hide();
+    });
+    document.addEventListener('hidden.bs.modal', (e) => { if (e.target === modalEl()) cerrarSinAvisar = false; });
 })(window, document);

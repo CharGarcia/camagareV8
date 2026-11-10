@@ -6,7 +6,7 @@ ruta_modulo: modulos/car-wash
 tipo: modulo
 visibilidad: todos
 etiquetas: car wash, lavado, lavadora de autos, lubricadora, cambio de aceite, mecanica, taller, orden de servicio, orden mecanica, orden de trabajo, vehiculo, placa, historial del vehiculo, historial del cliente, visitas, ultima visita, facturar orden, recibo de venta, refacturar, factura anulada, proxima cita, proximo chequeo, editar cliente, editar vehiculo, corregir placa, cambiar datos del cliente, actualizar correo, migracion, sistema anterior, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, buscar orden, buscar placa, buscador, filtros, filtrar ordenes, filtro de fechas, buscar por servicio, buscar producto en historial, que ordenes tienen este servicio, chips, imprimir, impresora, aviso, avisos, ordenes en borrador, ordenes sin facturar, pendientes de facturar, barra superior, sin saldo, sin stock, productos similares, productos equivalentes, equivalencias, reemplazo, otra marca, sugerir otro producto, misma categoria, usar este, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, historial del vehiculo, transacciones del vehiculo, que se le hizo al carro, reporte de salida, acta de salida, informe de entrega, entrega del vehiculo, trabajo realizado, recomendaciones, proxima cita, anular orden, orden anulada, devolver repuestos, stock descontado dos veces, mantenimiento, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, cambio de aceite de caja, kilometraje, km, cada cuantos km, intervalo, filtro de aire, servicios de mantenimiento, sticker de aceite, vencido, cambio pendiente, aviso de cambio de aceite, avisar al cliente, aviso automatico de mantenimiento, km estimado
-version: 1.30
+version: 1.31
 orden: 10
 estado: activo
 ---
@@ -254,7 +254,10 @@ aplican** permite volver a activarlo. Requiere permiso de modificar en Car-Wash.
 **Servicios:** el botón **Servicios** abre la lista de la empresa: nombre, cada cuántos
 km, cuántos km antes avisar, orden y si está activo. La primera vez se crean *Aceite de
 motor* (5.000 km, avisar 500 km antes) y *Aceite de caja* (50.000 km, avisar 3.000 km
-antes). Un servicio nuevo aparece de inmediato en la orden abierta.
+antes). Un servicio nuevo aparece de inmediato en la orden abierta. Cada línea se guarda
+con su botón **✓**: una línea nueva o modificada queda resaltada en amarillo hasta
+guardarla y, si se cierra la ventana con líneas pendientes, el sistema avisa y ofrece
+**Guardar y cerrar**, **Cerrar sin guardar** o **Seguir editando**.
 
 **Dónde sale:** en el PDF de la orden y en el Reporte de salida (tabla *Próximos
 mantenimientos*), en el correo de la orden, y en la **Información adicional** de la
@@ -525,6 +528,7 @@ documentos admite cada periodo) está en el manual de **Empresa**, sección
 
 ## Historial de cambios
 
+- **1.31** — Ventana **Servicios** de mantenimiento: las líneas nuevas o modificadas sin guardar se resaltan y, al cerrar, se avisa que hay servicios sin guardar (Guardar y cerrar / Cerrar sin guardar / Seguir editando).
 - **1.30** — Pestaña **Historial**: nuevo campo **Producto o servicio** para ver solo las órdenes que tienen un producto o servicio (por código o descripción), mostrando solo las líneas que coinciden y su cantidad y valor en el resumen.
 - **1.29** — Al guardar, una línea con descripción y sin cantidad ya no se descarta sin aviso: se muestra *Falta la cantidad* con la lista de líneas y se marca la celda. Las filas sin descripción no se guardan (antes el servidor rechazaba la orden si alguna traía cantidad sin descripción).
 - **1.28** — Al pulsar **Guardar**, la orden ya no se cierra: queda abierta y guardada (con su número) en la misma pestaña; se cierra con **Cerrar**.
