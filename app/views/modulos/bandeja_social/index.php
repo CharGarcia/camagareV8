@@ -18,7 +18,9 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 ?>
 <script>document.body.classList.add('cmg-no-app-shell');</script>
 <style>
-    #bandeja { display:grid; grid-template-columns: 320px 1fr 290px; gap:12px; height: calc(100dvh - 130px); min-height:480px; }
+    /* La bandeja ocupa justo el alto visible (sin scroll de página): el JS de abajo fija
+       la altura exacta desde donde empieza; esto es el respaldo si el JS no corre. */
+    #bandeja { display:grid; grid-template-columns: 320px 1fr 290px; gap:10px; height: calc(100dvh - var(--cmg-sticky-h, 80px) - 46px); min-height:420px; }
     #bandeja .bs-col { background:#fff; border-radius:.75rem; box-shadow:0 1px 3px rgba(0,0,0,.06); display:flex; flex-direction:column; min-height:0; }
     #bandeja .bs-lista { overflow-y:auto; flex:1; }
     #bandeja .bs-item { padding:10px 12px; border-bottom:1px solid #f1f3f5; cursor:pointer; }
@@ -39,18 +41,17 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     #bandeja .bs-vacio { color:#adb5bd; text-align:center; margin:auto; }
     /* Celular y tablet: una columna a la vez. */
     @media (max-width: 991.98px) {
-        #bandeja { grid-template-columns: 1fr; height: calc(100dvh - 120px); }
+        #bandeja { grid-template-columns: 1fr; height: calc(100dvh - var(--cmg-sticky-h, 80px) - 40px); }
         #bandeja.ver-chat .bs-col-lista, #bandeja:not(.ver-chat) .bs-col-chat, #bandeja .bs-col-panel { display:none; }
         #bandeja.ver-panel .bs-col-chat { display:none; }
         #bandeja.ver-panel .bs-col-panel { display:flex; }
     }
 </style>
 
-<div class="container-fluid pt-2 pb-2 px-0 px-md-3" id="modulo-bandeja-social">
-    <div class="d-flex align-items-center justify-content-between mb-2">
+<div class="container-fluid pt-1 pb-0 px-0 px-md-3" id="modulo-bandeja-social">
+    <div class="d-flex align-items-center mb-1">
         <h5 class="mb-0 fw-bold"><i class="bi bi-chat-square-heart me-2 text-danger"></i>Bandeja social
             <span class="badge bg-danger ms-1 d-none" id="bs-total-sin-leer">0</span></h5>
-        <a href="<?= $base ?>/modulos/crm" class="btn btn-outline-secondary btn-sm"><i class="bi bi-kanban me-1"></i>CRM</a>
     </div>
 
 <?php if (!$disponible): ?>
@@ -200,5 +201,24 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         };
     </script>
     <script src="<?= $base ?>/js/modulos/bandeja_social.js?v=<?= asset_ver('/js/modulos/bandeja_social.js') ?>"></script>
+    <script>
+        // La bandeja llena el alto visible desde donde empieza hasta el borde inferior
+        // (sin scroll de la página): cada columna hace su propio scroll.
+        (function () {
+            const caja = document.getElementById('bandeja');
+            if (!caja) return;
+            const ajustar = () => {
+                const arriba = caja.getBoundingClientRect().top + window.scrollY;
+                const alto = Math.max(420, Math.floor(window.innerHeight - arriba - 8));
+                caja.style.height = alto + 'px';
+            };
+            ajustar();
+            window.addEventListener('resize', ajustar);
+            window.addEventListener('orientationchange', ajustar);
+            // El encabezado del sistema termina de medirse después de cargar.
+            window.addEventListener('load', ajustar);
+            setTimeout(ajustar, 300);
+        })();
+    </script>
 <?php endif; ?>
 </div>

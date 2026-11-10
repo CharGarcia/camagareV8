@@ -6,7 +6,7 @@ ruta_modulo: modulos/bandeja_social
 tipo: modulo
 visibilidad: todos
 etiquetas: bandeja, bandeja social, instagram, mensajes de instagram, dm, mensaje directo, inbox, chat de instagram, comentarios, responder comentarios, respuesta privada, respuesta publica, redes sociales, atender clientes, ventana de 24 horas, no puedo responder, human agent, asignar conversacion, cerrar conversacion, respuestas rapidas, crm, enviar imagen, enviar foto, adjuntar imagen, foto por instagram, asistente virtual, bot, chatbot, pausar bot, reactivar bot, pasada a persona, traspaso
-version: 1.5
+version: 1.6
 orden: 16
 estado: activo
 ---
@@ -163,6 +163,7 @@ por una persona.
 
 ## Historial de cambios
 
+- **1.6** — La pantalla ocupa justo el alto visible (cada columna hace su propio scroll) y se quitó el botón «CRM» del encabezado (las oportunidades del panel siguen abriendo el CRM).
 - **1.5** — Mensajes de error más claros: lo escrito antes de conectar la cuenta no se puede responder, y aviso cuando Meta revoca el acceso.
 - **1.4** — Los comentarios de las publicaciones hechas desde **Publicaciones** se
   atribuyen a esa publicación (conversaciones, contactos y oportunidades).
