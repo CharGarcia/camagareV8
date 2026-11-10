@@ -389,7 +389,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 <?php if ($perm['actualizar']): $cfgM = $configModulo ?? []; ?>
 <!-- ── Modal: Configuración del módulo ─────────────────────── -->
 <div class="modal fade" id="modalConfigFirmas" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered" style="max-width:560px;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width:760px;">
         <div class="modal-content rounded-3">
             <div class="modal-header py-2 px-3">
                 <h6 class="modal-title fw-semibold"><i class="bi bi-gear me-2 text-secondary"></i>Configuración de firmas electrónicas</h6>
