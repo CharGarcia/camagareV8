@@ -599,6 +599,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-notas-debito-btn" data-bs-toggle="tab" href="#m-tab-notas-debito" role="tab" style="white-space: nowrap;"><i class="bi bi-file-earmark-plus me-1"></i> Notas de débito</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-guias-btn" data-bs-toggle="tab" href="#m-tab-guias" role="tab" style="white-space: nowrap;"><i class="bi bi-truck me-1"></i> Guías de remisión</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-sri-btn" data-bs-toggle="tab" href="#m-tab-respuestas-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('fv', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -613,6 +615,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             if (\App\Helpers\AsientoPestana::puedeVer()) {
                                 $pestanasConfig = ['tab-fv-asiento-btn' => 'Asiento contable'] + $pestanasConfig;
                             }
+                            $pestanasConfig += \App\Helpers\InformacionRegistro::pestanaConfigurable('fv');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/factura-venta');
                             ?>
                         </div>
@@ -954,6 +957,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Pestaña: Información (solo lectura; el id sale de FV_ID_ACTIVO) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('fv', 'modulos/factura-venta', 'fn:FV_idRegistroInformacion') ?>
 
                         <!-- Pestaña: Asiento Contable -->
                         <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
@@ -1512,6 +1518,8 @@ $totalPages = $totalPagesOriginal;
     const RUTA_MODULO = '<?= $rutaModulo ?>';
     // ID de la factura actualmente abierta en el modal (0 = nueva)
     let FV_ID_ACTIVO = 0;
+    // La pestaña Información (informacion-registro.js) pide por aquí el id de la factura abierta.
+    window.FV_idRegistroInformacion = () => FV_ID_ACTIVO;
     // ¿La serie activa tiene secuenciales configurados? (se actualiza en cargarSecuencial)
     window.FV_SECUENCIAL_CONFIGURADO = true;
     let FV_FECHA_EMISION = null; // 'YYYY-MM-DD' de la factura activa; null si es nueva

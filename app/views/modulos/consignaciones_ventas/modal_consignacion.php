@@ -98,16 +98,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link" id="cons-tab-entrega-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-entrega" href="#cons-tab-entrega" role="tab" title="Entrega"><i class="bi bi-geo-alt me-1"></i> Entrega</a>
                             </li>
-                            <?php
-                            // Pestaña Información: solo administradores y superadministradores (niveles
-                            // 2 y 3). El servidor aplica la misma regla en getInformacionAjax().
-                            $consVerInformacion = (int) ($_SESSION['nivel'] ?? 1) >= 2;
-                            ?>
-                            <?php if ($consVerInformacion): ?>
-                            <li class="nav-item" role="presentation">
-                                <a class="nav-link" id="cons-tab-info-btn" data-bs-toggle="tab" data-bs-target="#cons-tab-info" href="#cons-tab-info" role="tab" title="Información"><i class="bi bi-clock-history me-1"></i> Información</a>
-                            </li>
-                            <?php endif; ?>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('cons') ?>
                         </ul>
                         <div class="pb-1 flex-shrink-0">
                             <?php
@@ -117,9 +109,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 'cons-tab-pedidos'  => 'Pedidos',
                                 'cons-tab-entrega'  => 'Entrega'
                             ];
-                            if ($consVerInformacion) {
-                                $pestanasConfigCons['cons-tab-info'] = 'Información';
-                            }
+                            $pestanasConfigCons += \App\Helpers\InformacionRegistro::pestanaConfigurable('cons');
                             // La pestaña del asiento solo es configurable si el usuario la ve.
                             if (\App\Helpers\AsientoPestana::puedeVer()) {
                                 $pestanasConfigCons = ['cons-tab-asiento' => 'Asiento contable'] + $pestanasConfigCons;
@@ -391,13 +381,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                         </div>
 
                         <!-- Pestaña Información (solo lectura): quién registró/modificó, acciones auditadas y movimientos de inventario. -->
-                        <?php if ($consVerInformacion): ?>
-                        <div class="tab-pane fade p-3" id="cons-tab-info" role="tabpanel">
-                            <div id="cons_info_contenido">
-                                <div class="p-4 text-center text-muted">Cargando información...</div>
-                            </div>
-                        </div>
-                        <?php endif; ?>
+                        <?= \App\Helpers\InformacionRegistro::panel('cons', 'modulos/consignaciones_ventas', 'cons_id') ?>
 
                     </div>
                 </div>
@@ -3602,166 +3586,6 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         if (btnTabResumen) {
             btnTabResumen.addEventListener('shown.bs.tab', () => {
                 consCargarResumen(document.getElementById('cons_id').value);
-            });
-        }
-    });
-
-    // ── Pestaña Información (solo lectura): registro, acciones auditadas y movimientos de inventario ──
-    window.consCargarInformacion = async function(id) {
-        const cont = document.getElementById('cons_info_contenido');
-        if (!cont) return;
-        const aviso = (txt, cls = 'text-muted') => { cont.innerHTML = `<div class="p-4 text-center ${cls}">${txt}</div>`; };
-        if (!id) { aviso('Guarde la consignación para ver su información.'); return; }
-        aviso('Cargando información...');
-        try {
-            const res = await fetch(`${RUTA_MODULO_CONSIGNACION}/getInformacionAjax?id=${id}`);
-            const json = await res.json();
-            // Si mientras tanto se abrió otra consignación, esta respuesta ya no corresponde.
-            if (String(document.getElementById('cons_id').value) !== String(id)) return;
-            if (!json.ok || !json.data || !json.data.registro) { aviso(consEscHtml(json.error || 'No hay información disponible.')); return; }
-
-            const esc = consEscHtml;
-            const { registro, historial = [], inventario = [] } = json.data;
-            const th = 'py-2 small fw-bold text-muted';
-            // Mismo diseño que la pestaña Detalle del modal de Pedidos: ficha Creado / Última
-            // edición y línea de tiempo con las acciones asentadas en log_sistema.
-            const etiquetaAccion = a => {
-                a = String(a || '');
-                if (a.includes('CAMBIAR_ESTADO'))    return 'Cambio de estado';
-                if (a.includes('REGISTRAR_ENTREGA')) return 'Entrega registrada';
-                if (a.includes('CREAR'))             return 'Consignación creada';
-                if (a.includes('ACTUALIZAR'))        return 'Consignación editada';
-                if (a.includes('ELIMINAR'))          return 'Consignación eliminada';
-                return a.replace(/_/g, ' ');
-            };
-            const iconoAccion = a => {
-                a = String(a || '');
-                return a.includes('CAMBIAR_ESTADO')    ? 'bi-arrow-repeat text-info' :
-                       a.includes('REGISTRAR_ENTREGA') ? 'bi-geo-alt-fill text-success' :
-                       a.includes('CREAR')             ? 'bi-plus-circle-fill text-success' :
-                       a.includes('ACTUALIZAR')        ? 'bi-pencil-fill text-primary' :
-                       a.includes('ELIMINAR')          ? 'bi-trash-fill text-danger' :
-                                                         'bi-clock-history text-secondary';
-            };
-            const renderCambios = detalles => {
-                if (!Array.isArray(detalles) || !detalles.length) return '<span class="text-muted">Sin cambios registrados</span>';
-                return `<ul class="list-unstyled mb-0">${detalles.map(d => {
-                    const antes = (d.antes !== null && d.antes !== undefined)
-                        ? `<span class="text-decoration-line-through text-muted">${esc(d.antes)}</span> ` : '';
-                    return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${esc(d.campo)}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${esc(d.despues)}</li>`;
-                }).join('')}</ul>`;
-            };
-            // "DD-MM-YYYY HH:MM:SS" → milisegundos, para cuadrar la última edición con su evento.
-            const ts = v => {
-                const m = String(v || '').match(/^(\d{2})-(\d{2})-(\d{4}) (\d{2}):(\d{2}):(\d{2})/);
-                return m ? new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +m[6]).getTime() : null;
-            };
-
-            // Última edición: quién y cuándo salen de la cabecera; el "qué hizo", del último
-            // evento del historial, solo si su fecha cuadra con updated_at (si no, ese cambio no
-            // quedó detallado: consignación migrada o anterior al registro de cambios).
-            const hayEdicion = !!(registro.modificado_por || registro.updated_at);
-            const ultimo = historial.find(h => !String(h.accion || '').includes('CREAR'));
-            const tsCab = ts(registro.updated_at), tsEv = ultimo ? ts(ultimo.fecha) : null;
-            let ultimaAccion;
-            if (!hayEdicion) {
-                ultimaAccion = '<span class="text-muted">La consignación no se ha modificado desde que se creó.</span>';
-            } else if (ultimo && tsCab !== null && tsEv !== null && Math.abs(tsCab - tsEv) <= 60000) {
-                ultimaAccion = `<span class="fw-semibold">${esc(etiquetaAccion(ultimo.accion))}</span><div class="mt-1">${renderCambios(ultimo.detalles)}</div>`;
-            } else {
-                ultimaAccion = '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>Este último cambio no quedó detallado en el historial (consignación anterior al registro de cambios, o tocada por una migración).</span>';
-            }
-
-            const timeline = historial.length
-                ? '<div class="position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>'
-                  + historial.map(h => `
-                    <div class="position-relative mb-3 ps-4">
-                        <div class="position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border"
-                             style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                            <i class="bi ${iconoAccion(h.accion)}" style="font-size: 0.7rem;"></i>
-                        </div>
-                        <div>
-                            <div class="d-flex justify-content-between align-items-center mb-0 gap-2">
-                                <span class="fw-bold" style="font-size: 0.75rem;">${esc(etiquetaAccion(h.accion))}</span>
-                                <span class="text-muted text-nowrap" style="font-size: 0.65rem;">${esc(h.fecha || '')}</span>
-                            </div>
-                            <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                <i class="bi bi-person me-1"></i> ${esc(h.usuario || 'SISTEMA')}
-                            </div>
-                            <div class="bg-light rounded p-1 border border-light-subtle" style="font-size: 0.65rem;">
-                                ${renderCambios(h.detalles)}
-                            </div>
-                        </div>
-                    </div>`).join('')
-                : '<div class="text-center py-4 text-muted small">No hay ediciones registradas para esta consignación.</div>';
-
-            const filasInventario = inventario.map(m => {
-                const cant = parseFloat(m.cantidad || 0);
-                const estado = m.eliminado
-                    ? `<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>
-                       <div class="small text-muted">${esc(m.anulado_por || '—')} · ${esc(m.deleted_at || '')}</div>`
-                    : `<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Vigente</span>`;
-                return `<tr>
-                    <td class="ps-3 text-nowrap">${esc(m.created_at)}</td>
-                    <td class="text-nowrap">${esc(m.usuario_nombre || '—')}</td>
-                    <td class="text-nowrap">${esc(m.tipo_movimiento || '')}</td>
-                    <td><span class="text-truncate d-inline-block" style="max-width:260px" title="${esc((m.producto_codigo || '') + ' - ' + (m.producto_nombre || ''))}">${m.producto_codigo ? `<code class="text-secondary me-1">${esc(m.producto_codigo)}</code>` : ''}${esc(m.producto_nombre || '')}</span></td>
-                    <td class="text-nowrap">${esc(m.bodega_nombre || '—')}</td>
-                    <td class="text-nowrap">${esc(m.numero_lote || '—')}</td>
-                    <td class="text-nowrap">${esc(m.nup || '—')}</td>
-                    <td class="text-end text-nowrap fw-bold ${cant < 0 ? 'text-danger' : 'text-success'}">${cant.toFixed(2)}</td>
-                    <td class="pe-3">${estado}</td>
-                </tr>`;
-            }).join('');
-
-            const vacio = (cols, txt) => `<tr><td colspan="${cols}" class="text-center py-3 text-muted">${txt}</td></tr>`;
-
-            cont.innerHTML = `
-                <div class="row g-2 mb-3">
-                    <div class="col-md-4">
-                        <div class="border rounded-3 p-2 bg-white h-100">
-                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem;"><i class="bi bi-person-check me-1"></i> Creado</div>
-                            <div class="fw-bold text-truncate" style="font-size: 0.85rem;" title="${esc(registro.creado_por || '')}">${esc(registro.creado_por || '—')}</div>
-                            <div class="text-muted" style="font-size: 0.72rem;">${esc(registro.created_at || '—')}</div>
-                        </div>
-                    </div>
-                    <div class="col-md-8">
-                        <div class="border rounded-3 p-2 bg-white h-100">
-                            <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem;"><i class="bi bi-pencil-square me-1"></i> Última edición</div>
-                            <div class="d-flex flex-wrap align-items-baseline gap-2">
-                                <span class="fw-bold text-truncate" style="font-size: 0.85rem;">${esc(hayEdicion ? (registro.modificado_por || 'Usuario no identificado') : 'Sin ediciones')}</span>
-                                <span class="text-muted" style="font-size: 0.72rem;">${hayEdicion && registro.updated_at ? '· ' + esc(registro.updated_at) : ''}</span>
-                            </div>
-                            <div class="mt-1" style="font-size: 0.72rem;">${ultimaAccion}</div>
-                        </div>
-                    </div>
-                </div>
-                <h6 class="fw-bold small text-muted text-uppercase mb-2"><i class="bi bi-list-ul me-1"></i> Ediciones de la consignación</h6>
-                <div class="border rounded-3 bg-white p-3 mb-3" style="max-height: 320px; overflow-y: auto;">
-                    <div class="position-relative">${timeline}</div>
-                </div>
-                <h6 class="fw-bold small text-muted text-uppercase mb-2"><i class="bi bi-box-seam me-1"></i> Movimientos de inventario generados</h6>
-                <div class="border rounded-3 overflow-hidden bg-white">
-                    <div class="table-responsive" style="max-height: 260px;">
-                        <table class="table table-sm table-hover mb-0">
-                            <thead><tr class="table-light border-bottom">
-                                <th class="ps-3 ${th}">Fecha y hora</th><th class="${th}">Usuario</th><th class="${th}">Tipo</th><th class="${th}">Producto</th>
-                                <th class="${th}">Bodega</th><th class="${th}">Lote</th><th class="${th}">NUP</th><th class="${th} text-end">Cantidad</th><th class="${th} pe-3">Estado</th>
-                            </tr></thead>
-                            <tbody>${filasInventario || vacio(9, 'Esta consignación no generó movimientos de inventario.')}</tbody>
-                        </table>
-                    </div>
-                </div>`;
-        } catch (e) {
-            aviso('Error al cargar la información.', 'text-danger');
-        }
-    };
-
-    document.addEventListener('DOMContentLoaded', () => {
-        const btnTabInfo = document.getElementById('cons-tab-info-btn');
-        if (btnTabInfo) {
-            btnTabInfo.addEventListener('shown.bs.tab', () => {
-                consCargarInformacion(document.getElementById('cons_id').value);
             });
         }
     });

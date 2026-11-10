@@ -66,9 +66,14 @@
                             </a>
                         </li>
                         <?php endif; ?>
+                        <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                        <?= \App\Helpers\InformacionRegistro::boton('retv', 'py-2 small') ?>
                     </ul>
 
                     <div class="tab-content border-top">
+                    <!-- Pestaña Información (solo lectura) -->
+                    <?= \App\Helpers\InformacionRegistro::panel('retv', 'modulos/retenciones_ventas', 'retv_id') ?>
+
                     <div class="tab-pane fade show active" id="retv-tab-general" role="tabpanel">
 
                         <!-- Datos del comprobante del cliente -->

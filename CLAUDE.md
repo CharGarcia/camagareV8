@@ -303,12 +303,21 @@ eliminado (boolean), deleted_at, deleted_by
 - Diseño estandarizado: mismos campos, botones, orden y estilo en todas.
 - El botón **Eliminar** va en el **footer, a la izquierda**.
 - Las **pestañas** dentro de un modal deben poder **ocultarse/mostrarse por cada usuario**.
-- **Nada de pestaña "Información"**: en los módulos nuevos NO se agrega una pestaña
-  *Información* (tarjeta de permisos + datos de auditoría) al modal. Los permisos ya se
-  administran en `/config/permisos-modulos` y el historial del registro se consulta en
-  `log_sistema`; ocupar una pestaña con eso solo estorba. Si algún dato de registro
-  (quién y cuándo) aporta al usuario, va como una línea discreta al pie del contenido
-  del modal, no como pestaña.
+- **Pestaña "Información" (pieza común, no reinventar)**: la pestaña *Información* de un modal
+  es de **solo lectura** y muestra quién creó y quién modificó el registro (con fecha y hora), la
+  línea de tiempo de sus acciones (`log_sistema`) y, si el documento mueve stock, los movimientos
+  de inventario que generó (también los anulados). **Solo la ven los niveles 2 y 3.** **Nunca**
+  lleva tarjeta de permisos (se administran en `/config/permisos-modulos`) y **nunca** se arma a
+  mano en un módulo: se registra el módulo en `App\Helpers\InformacionRegistro::CATALOGO` (ruta →
+  tabla, nombre, `kardex`) y en la vista van tres líneas — `InformacionRegistro::boton($prefijo)`
+  en la barra de pestañas, `+= InformacionRegistro::pestanaConfigurable($prefijo)` en las pestañas
+  configurables y `InformacionRegistro::panel($prefijo, $rutaModulo, $idInputRegistro)` en el
+  `tab-content` (fuera del `<form>` si el modal deshabilita sus controles). Sin JS ni endpoint
+  propios: `public/js/informacion-registro.js` (cargado en `partials/scripts.php`) consulta
+  `{ruta}/getInformacionRegistroAjax`, de `BaseModuloController`, que aplica el nivel y los
+  registros propios (§6). La tabla debe tener los campos de auditoría de §5 y el Service debe
+  registrar sus acciones con `LogSistemaService` (§7), o la línea de tiempo sale vacía.
+  Ref.: `consignaciones_ventas/modal_consignacion.php`. Manual: `docs/manual/guias/pestana-informacion.md`.
 - **Crear al vuelo (modal sobre modal) — obligatorio**: todo botón de un documento que abre el
   modal de otro catálogo para registrar algo nuevo (cliente, proveedor, producto, vehículo,
   transportista, etc.) debe dejar lo creado **puesto en el documento** al guardar, sin pasos extra.

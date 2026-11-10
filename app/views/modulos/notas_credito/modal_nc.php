@@ -43,6 +43,8 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-nc-contable-btn" data-bs-toggle="tab" data-bs-target="#tab-nc-contable" href="#tab-nc-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <?php endif; ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-nc-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-nc-sri" href="#tab-nc-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('nc', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -51,12 +53,16 @@ $vistaConfigNC = \App\Helpers\PreferenciasHelper::getPreferenciasVista('notas_cr
                             if (\App\Helpers\AsientoPestana::puedeVer()) {
                                 $pestanasConfigNC = ['tab-nc-contable' => 'Asiento contable'] + $pestanasConfigNC;
                             }
+                            $pestanasConfigNC += \App\Helpers\InformacionRegistro::pestanaConfigurable('nc');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigNC, $vistaConfigNC ?? [], 'notas_credito');
                             ?>
                         </div>
                     </div>
 
                     <div class="tab-content border-top">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('nc', 'modulos/notas_credito', 'nc_id') ?>
+
                         <!-- Pestaña Principal: Nota de Crédito -->
                         <div class="tab-pane fade show active" id="tab-nc-principal" role="tabpanel">
                             <div class="p-3 bg-white border-bottom">

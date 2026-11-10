@@ -424,14 +424,19 @@ $pestanasConfigLiq = array_merge(
                                     </a>
                                 </li>
                             <?php endforeach; ?>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('liq', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
-                            <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigLiqDropdown, $vistaConfig, 'liquidacion-compra') ?>
+                            <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigLiqDropdown + \App\Helpers\InformacionRegistro::pestanaConfigurable('liq'), $vistaConfig, 'liquidacion-compra') ?>
                         </div>
                     </div>
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top px-3 py-3">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('liq', 'modulos/liquidacion-compra', 'liq-id') ?>
+
                         <!-- Pestaña Liquidación -->
                         <div class="tab-pane fade show active" id="tab-liq-compra">
                             <div class="row g-3">

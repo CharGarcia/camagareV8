@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.15
+version: 1.16
 orden: 40
 estado: activo
 ---
@@ -176,6 +176,7 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.16** — Nueva pestaña **Información** en la ventana de la retención (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.15** — El botón **Registrar nuevo cliente** no hacía nada: ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la retención.
 - **1.14** — La búsqueda libre encuentra la retención por el **número del documento
   sustento** (con o sin guiones, o solo una parte). Antes solo se buscaba desde la

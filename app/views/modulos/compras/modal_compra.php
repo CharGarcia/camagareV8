@@ -73,6 +73,8 @@
             <li class="nav-item"><a class="nav-link" id="tab_ats" data-bs-toggle="tab" data-bs-target="#tabAts" href="#tabAts" role="tab"><i class="bi bi-clipboard-data me-1"></i>ATS<span id="mcBadgePagoExterior" class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 ms-1 d-none">!</span></a></li>
             <li class="nav-item d-none" id="tab-relacionados-li"><a class="nav-link" id="tab-relacionados-tab" data-bs-toggle="tab" data-bs-target="#tabRelacionados" href="#tabRelacionados" role="tab"><i class="bi bi-link-45deg me-1"></i><span id="tab-relacionados-label">Documento Relacionado</span></a></li>
             <li class="nav-item d-none" id="tab-reembolso-li"><a class="nav-link" id="tab-reembolso-tab" data-bs-toggle="tab" data-bs-target="#tabReembolso" href="#tabReembolso" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Detalle de Reembolso</a></li>
+            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+            <?= \App\Helpers\InformacionRegistro::boton('mc') ?>
           </ul>
           <div class="ms-auto pb-1">
             <?php
@@ -87,6 +89,7 @@
             if (\App\Helpers\AsientoPestana::puedeVer()) {
               $pestanasConfig = ['tabAsiento' => 'Asiento contable'] + $pestanasConfig;
             }
+            $pestanasConfig += \App\Helpers\InformacionRegistro::pestanaConfigurable('mc');
             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/compras');
             ?>
           </div>
@@ -477,6 +480,9 @@
           <!-- ════════════════════════════════════════
                TAB 2: ASIENTO CONTABLE
           ════════════════════════════════════════ -->
+          <!-- Pestaña Información (solo lectura) -->
+          <?= \App\Helpers\InformacionRegistro::panel('mc', 'modulos/compras', 'mcId') ?>
+
           <?php if (\App\Helpers\AsientoPestana::puedeVer()): ?>
           <div class="tab-pane fade" id="tabAsiento" role="tabpanel">
             <?php $prefijo = 'mc'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>

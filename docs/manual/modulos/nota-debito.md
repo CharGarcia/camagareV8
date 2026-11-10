@@ -6,7 +6,7 @@ ruta_modulo: modulos/nota_debito
 tipo: modulo
 visibilidad: todos
 etiquetas: nota de debito, notas de debito, cargo adicional, interes por mora, sri, buscar nota de debito, buscador, filtros, filtrar notas de debito, buscar por motivo, filtro de fechas, documento modificado, chips, aparecen notas que no busque, resultados que no corresponden, buscar por clave de acceso, imprimir, impresora, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, error 45, secuencial registrado, no autorizada, reusar numero, estado:eliminada, ver notas eliminadas, nota de debito eliminada, nota borrada, restaurar nota de debito, recuperar nota eliminada, deshacer eliminar
-version: 1.16
+version: 1.17
 orden: 31
 estado: activo
 ---
@@ -209,6 +209,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.17** — Nueva pestaña **Información** en la ventana de la nota de débito (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.16** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.15** — **Número saltado**: si el generador salta un número porque el SRI ya tiene recibida o autorizada una nota eliminada con ese número, el secuencial de la nota nueva muestra un aviso con el detalle (y, para el superadministrador, el botón para restaurarla). Nuevo filtro `estado:eliminada` (solo superadministrador) para ver las notas eliminadas y **restaurarlas** como borrador con su mismo número.
 - **1.14** — La configuración de facturación (decimales, logo, dirección, leyendas) sale del **establecimiento de la serie** de la nota de débito, también al guardar (XML); antes se tomaba el primer establecimiento de la empresa. Las notas antiguas sin establecimiento guardado lo toman de su punto de emisión.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/liquidacion-compra
 tipo: modulo
 visibilidad: todos
 etiquetas: liquidacion de compra, liquidacion, proveedor sin factura, comprobante 03, sri, sustento, eliminar, borrar, borrador, anular, buscar liquidacion, buscador, filtros, filtrar liquidaciones, buscar por producto, saldo pendiente, estado de pago, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, totales, subtotal, descuento, iva, redondeo, centavos, decimales, decimales de precio, calculo del iva, al subtotal, linea por linea, no cuadra, diferencia de un centavo, error en diferencias, exento, no objeto de iva, codigo del item, item sin codigo, item sin descripcion, falta el codigo, error en estructura de comprobante, rechazado por estructura, no autorizado, informacion adicional, ruc proveedor, campo que no se puede borrar, no me deja eliminar la fila, concepto muy largo, limite de caracteres, maximo 100 caracteres, value too long, no se pudo guardar la liquidacion, registrar pago, pagar liquidacion, egreso de liquidacion, pestaña pagos, no deja pagar, error al registrar pago, secuencial de egreso, imprimir, impresora, retencion, emitir retencion, retener liquidacion, pestaña retenciones, comprobante de retencion, columna saldo, cuanto se debe, saldo por pagar, datos de otra liquidacion, modal no se actualiza, pestaña liquidacion, pagada en el sistema anterior, liquidaciones migradas pendientes, liquidaciones 2020, liquidaciones antiguas sin pago, sistema anterior no registraba pagos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, proveedor del exterior, proveedor extranjero, no residente, identificacion del exterior, pasaporte, importacion de servicios, servicios del exterior, pago al exterior, pais de pago, convenio de doble tributacion, ats pago exterior, no aparece el proveedor, numero saltado, secuencial saltado, falta un numero, error 45, secuencial registrado, restaurar liquidacion, recuperar liquidacion eliminada, liquidaciones eliminadas, estado:eliminada
-version: 1.30
+version: 1.31
 orden: 40
 estado: activo
 ---
@@ -445,6 +445,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.31** — Nueva pestaña **Información** en la ventana de la liquidación (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.30** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.29** — **Número saltado**: si el siguiente número de la serie lo tiene el SRI
   recibido o autorizado de una liquidación eliminada, el secuencial de la

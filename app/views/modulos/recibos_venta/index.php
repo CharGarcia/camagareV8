@@ -559,6 +559,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-asiento-btn" data-bs-toggle="tab" href="#m-tab-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <?php endif; ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-fv-pagos-btn" data-bs-toggle="tab" href="#m-tab-pagos-historial" role="tab" style="white-space: nowrap;"><i class="bi bi-cash-coin me-1"></i> Pagos</a></li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('rv', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -567,6 +569,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             if (\App\Helpers\AsientoPestana::puedeVer()) {
                                 $pestanasConfig = ['tab-fv-asiento-btn' => 'Asiento contable'] + $pestanasConfig;
                             }
+                            $pestanasConfig += \App\Helpers\InformacionRegistro::pestanaConfigurable('rv');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'modulos/recibo-venta');
                             ?>
                         </div>
@@ -574,6 +577,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top">
+                        <!-- Pestaña Información (solo lectura; el id sale de RV_ID_ACTIVO) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('rv', 'modulos/recibo-venta', 'fn:RV_idRegistroInformacion') ?>
+
                         <div class="tab-pane fade show active" id="m-tab-detalle" role="tabpanel">
                             <!-- Cabecera de Facturación Optimizada -->
                             <div class="p-3 bg-white border-bottom">
@@ -1102,6 +1108,8 @@ $totalPages = $totalPagesOriginal;
     const RUTA_MODULO = '<?= $rutaModulo ?>';
     // ID del recibo actualmente abierta en el modal (0 = nueva)
     let RV_ID_ACTIVO = 0;
+    // La pestaña Información (informacion-registro.js) pide por aquí el id del recibo abierto.
+    window.RV_idRegistroInformacion = () => RV_ID_ACTIVO;
     let RV_ESTADO_ACTIVO = ''; // estado del recibo activo: borrador/anulado/facturado
     // Refleja el último esBorrador aplicado en la lógica de solo-lectura: cargarLotesFila()
     // lo necesita para no volver a habilitar Lote/Caducidad en un recibo no editable cuando

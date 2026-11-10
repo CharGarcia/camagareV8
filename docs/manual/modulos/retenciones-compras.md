@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_compras
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion, retenciones, retencion de liquidacion, retener liquidacion de compra, liquidacion de compra, vincular compra, vincular documento, documento sustento, buscar compra para retener, comprobante de retencion, proveedor, iva, renta, sustento tributario, sri, plazo, base imponible, porcentaje, advertencias, ruc proveedor, ruc del proveedor del sistema, informacion adicional, resolucion 27, pdf, ride, imprimir, imprimir retencion, impresora, descargar pdf, ver pdf, buscar retencion, buscador, filtros, filtrar retenciones, buscar por codigo de retencion, estado de correo, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, archivo no cumple estructura xml, totalDigits, tarifa 14.99, retencion antes de la factura, enlazar retencion, retencion sin compra, factura registrada despues, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, eliminar retencion autorizada, borrar retencion, volver a cargar retencion, superadmin, conceptos sugeridos, retencion predeterminada del proveedor, conceptos del proveedor, codigos sugeridos, numero saltado, secuencial saltado, falta un numero, error 45, secuencial registrado, restaurar retencion, recuperar retencion eliminada, retenciones eliminadas, estado:eliminada, no autorizada, anular retencion, anular fuera de plazo, dia 7, plazo para anular, motivo de la excepcion, codigo repetido, codigo duplicado, mismo codigo dos veces
-version: 1.35
+version: 1.36
 orden: 30
 estado: activo
 ---
@@ -574,6 +574,7 @@ El valor lo configura el superadministrador en `/config/sri-proveedor`.
 
 ## Historial de cambios
 
+- **1.36** — Nueva pestaña **Información** en la ventana de la retención (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.35** — Anular fuera del plazo del SRI: el servidor solo lo permite al superadministrador y con motivo (antes lo controlaba solo la pantalla). Los avisos dicen claramente que se está anulando **fuera de las reglas de anulación**.
 - **1.34** — No se puede ingresar el **mismo código de retención en dos líneas** (del mismo impuesto): se avisa al elegirlo y el servidor lo rechaza al guardar.
 - **1.33** — Se corrigió el botón **Anular** de las retenciones autorizadas: aparecía deshabilitado y no se podía usar.

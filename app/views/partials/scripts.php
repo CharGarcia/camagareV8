@@ -87,6 +87,8 @@
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/tabs-deslizables.js?v=<?= asset_ver('/js/tabs-deslizables.js') ?>"></script>
 <!-- Anterior / Siguiente en los modales abiertos desde una fila de listado (automático). -->
 <script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/modal-nav.js?v=<?= asset_ver('/js/modal-nav.js') ?>"></script>
+<!-- Pestaña «Información» de los modales (automática: paneles con data-info-registro; ver App\Helpers\InformacionRegistro). -->
+<script src="<?= rtrim(BASE_URL ?? '', '/') ?>/js/informacion-registro.js?v=<?= asset_ver('/js/informacion-registro.js') ?>"></script>
 <!-- favoritos.js ahora se carga en <head> (ver head.php) para que CMG_initSort esté
      disponible antes de los scripts inline de las vistas. -->
 <?= \App\Helpers\PreferenciasHelper::getJavascriptVariables($rutaModulo ?? '') ?>

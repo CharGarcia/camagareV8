@@ -63,6 +63,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-asiento-btn" data-bs-toggle="tab" data-bs-target="#tab-ret-asiento" href="#tab-ret-asiento" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <?php endif; ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-ret-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-ret-sri" href="#tab-ret-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('ret', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -71,12 +73,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigR
                             if (\App\Helpers\AsientoPestana::puedeVer()) {
                                 $pestanasRet = ['tab-ret-asiento' => 'Asiento contable'] + $pestanasRet;
                             }
+                            $pestanasRet += \App\Helpers\InformacionRegistro::pestanaConfigurable('ret');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasRet, $vistaConfigRet ?? [], $rutaModulo);
                             ?>
                         </div>
                     </div>
 
                     <div class="tab-content border-top px-3 py-3">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('ret', 'modulos/retenciones_compras', 'ret_id') ?>
+
 
                         <!-- ── PESTAÑA PRINCIPAL ──────────────────────────────────────── -->
                         <div class="tab-pane fade show active" id="tab-ret-principal" role="tabpanel">

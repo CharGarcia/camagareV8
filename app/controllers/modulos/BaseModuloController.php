@@ -277,6 +277,42 @@ abstract class BaseModuloController extends Controller
     /**
      * AJAX: Obtiene el historial de cambios de un registro.
      */
+    /**
+     * AJAX común de la pestaña «Información» de los modales (App\Helpers\InformacionRegistro):
+     * quién creó/modificó el registro, sus acciones auditadas y sus movimientos de inventario.
+     * Solo lectura; solo niveles 2 y 3. El módulo debe estar en InformacionRegistro::CATALOGO.
+     */
+    public function getInformacionRegistroAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            if (!\App\Helpers\InformacionRegistro::puedeVer()) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver esta información.']);
+                exit;
+            }
+            $id = (int) ($_GET['id'] ?? 0);
+            // Registros propios (§6): sin acceso total solo se consulta lo que el usuario creó.
+            $idUsuarioFiltro = empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+            $data = (new \App\Services\InformacionRegistroService())->obtener(
+                $this->getRutaModulo(),
+                $id,
+                (int) ($_SESSION['id_empresa'] ?? 0),
+                $idUsuarioFiltro
+            );
+            echo json_encode($data === null
+                ? ['ok' => false, 'error' => 'No hay información disponible para este registro.']
+                : ['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar la información.']);
+        }
+        exit;
+    }
+
     public function getHistorialAjax(): void
     {
         $this->requireLeer();

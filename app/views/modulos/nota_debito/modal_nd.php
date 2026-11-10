@@ -42,6 +42,8 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-contable-btn" data-bs-toggle="tab" data-bs-target="#tab-nd-contable" href="#tab-nd-contable" role="tab" style="white-space: nowrap;"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                             <?php endif; ?>
                             <li class="nav-item"><a class="nav-link py-2 small" id="tab-nd-sri-btn" data-bs-toggle="tab" data-bs-target="#tab-nd-sri" href="#tab-nd-sri" role="tab" style="white-space: nowrap;"><i class="bi bi-cloud-check me-1"></i> SRI</a></li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('nd', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -53,12 +55,16 @@ $vistaConfigND = \App\Helpers\PreferenciasHelper::getPreferenciasVista('nota_deb
                             if (\App\Helpers\AsientoPestana::puedeVer()) {
                                 $pestanasConfigND['tab-nd-contable'] = 'Asiento contable';
                             }
+                            $pestanasConfigND += \App\Helpers\InformacionRegistro::pestanaConfigurable('nd');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigND, $vistaConfigND ?? [], 'nota_debito');
                             ?>
                         </div>
                     </div>
 
                     <div class="tab-content border-top">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('nd', 'modulos/nota_debito', 'nd_id') ?>
+
                         <!-- Pestaña Principal: Nota de Débito -->
                         <div class="tab-pane fade show active" id="tab-nd-principal" role="tabpanel">
                             <div class="p-3 bg-white border-bottom">

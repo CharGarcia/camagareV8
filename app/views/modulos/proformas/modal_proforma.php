@@ -205,6 +205,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                                 <i class="bi bi-images me-1"></i>Info Productos
                             </a>
                         </li>
+                        <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                        <?= \App\Helpers\InformacionRegistro::boton('pf', 'py-2 small') ?>
                     </ul>
                     <div class="ms-auto pb-1">
                         <?php
@@ -212,13 +214,16 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigP
                             'pf-tab-facturas'   => 'Facturas',
                             'pf-tab-pedidos'    => 'Pedidos',
                             'pf-tab-productos'  => 'Info Productos',
-                        ], $vistaConfigPF, 'modulos/proformas');
+                        ] + \App\Helpers\InformacionRegistro::pestanaConfigurable('pf'), $vistaConfigPF, 'modulos/proformas');
                         ?>
                     </div>
                 </div>
                 <div class="border-bottom bg-light mb-0"></div>
 
                 <div class="tab-content border-top">
+
+                    <!-- Pestaña Información (solo lectura) -->
+                    <?= \App\Helpers\InformacionRegistro::panel('pf', 'modulos/proformas', 'pf_id') ?>
 
                     <!-- ── TAB PROFORMA ───────────────────────── -->
                     <div class="tab-pane fade show active" id="pf-tab-proforma" role="tabpanel">

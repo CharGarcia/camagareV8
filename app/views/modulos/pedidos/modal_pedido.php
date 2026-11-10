@@ -85,8 +85,8 @@ $pedVistaConfig = $vistaConfig ?? [];
                         <?php if ($pedVerDetalle): ?>
                         <li class="nav-item" role="presentation">
                             <a class="nav-link" id="ped-tab-detalle-btn" data-bs-toggle="tab"
-                               data-bs-target="#ped-pane-detalle" href="#ped-pane-detalle" role="tab" title="Detalle del registro">
-                                <i class="bi bi-clock-history me-1"></i> Detalle
+                               data-bs-target="#ped-pane-detalle" href="#ped-pane-detalle" role="tab" title="Información del registro">
+                                <i class="bi bi-clock-history me-1"></i> Información
                             </a>
                         </li>
                         <?php endif; ?>
@@ -98,7 +98,7 @@ $pedVistaConfig = $vistaConfig ?? [];
                         // oculta renderEstilosPestanasOcultas(). "General" no se lista a
                         // propósito — es el formulario, no se puede esconder.
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
-                            ['ped-pane-detalle' => 'Detalle'],
+                            ['ped-pane-detalle' => 'Información'],
                             $pedVistaConfig,
                             $pedRutaModulo
                         );
