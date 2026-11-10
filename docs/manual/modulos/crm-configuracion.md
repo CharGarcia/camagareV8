@@ -256,7 +256,7 @@ catálogos.
 
 ## Historial de cambios
 
-- **1.4** — Canales en **secciones plegables** (Instagram y LinkedIn). **Unified login** (apps de Meta nuevas): **paso a paso en un modal** (una tarjeta por paso, con la ruta de menús y los campos como en Meta), **Conectar** Instagram y LinkedIn en una **ventana aparte** que se cierra sola y devuelve el resultado al sistema, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
+- **1.4** — Sin el botón «Ir al CRM» en el encabezado (el CRM se abre desde el menú). Canales en **secciones plegables** (Instagram y LinkedIn). **Unified login** (apps de Meta nuevas): **paso a paso en un modal** (una tarjeta por paso, con la ruta de menús y los campos como en Meta), **Conectar** Instagram y LinkedIn en una **ventana aparte** que se cierra sola y devuelve el resultado al sistema, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
 - **1.3** — **LinkedIn**: app de la empresa y conexión de perfil y páginas (solo
   para publicar). Aviso para reconectar Instagram y dar los permisos de publicar y
   de estadísticas.

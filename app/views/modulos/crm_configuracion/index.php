@@ -26,9 +26,8 @@ $claseFlash = ['success' => 'alert-success', 'warning' => 'alert-warning', 'erro
 </style>
 
 <div class="container-fluid pt-2 pb-3 px-0 px-md-3" id="modulo-crm-config">
-    <div class="d-flex align-items-center justify-content-between mb-2">
+    <div class="d-flex align-items-center mb-2">
         <h5 class="mb-0 fw-bold"><i class="bi bi-gear me-2 text-primary"></i>Configuración del CRM</h5>
-        <a href="<?= $base ?>/modulos/crm" class="btn btn-outline-secondary btn-sm"><i class="bi bi-kanban me-1"></i>Ir al CRM</a>
     </div>
 
 <?php if (!$disponible): ?>
