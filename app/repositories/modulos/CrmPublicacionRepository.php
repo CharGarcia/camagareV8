@@ -185,6 +185,47 @@ class CrmPublicacionRepository extends BaseRepository
 
     private ?bool $admiteEnlace = null;
 
+    // ── Respuesta automática a comentarios (Instagram) ───────────────────────
+
+    /** ¿Está aplicado database/2026-11-10_crm_publicaciones_respuesta_auto.sql? */
+    public function admiteRespuestaAuto(): bool
+    {
+        return $this->admiteRespuestaAuto ??= $this->columnaExiste('crm_publicaciones', 'auto_palabra');
+    }
+
+    private ?bool $admiteRespuestaAuto = null;
+
+    public function guardarRespuestaAuto(int $id, int $idEmpresa, ?string $palabra, ?string $mensaje, int $idUsuario): void
+    {
+        $st = $this->db->prepare(
+            'UPDATE crm_publicaciones SET auto_palabra = :p, auto_mensaje = :m, updated_at = NOW(), updated_by = :u
+              WHERE id = :id AND id_empresa = :e AND eliminado = false'
+        );
+        $st->execute([':p' => $palabra, ':m' => $mensaje, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
+    /**
+     * Respuesta automática de la publicación que salió en esa cuenta con ese id
+     * de Instagram (el que trae el comentario). null si no tiene.
+     * @return array{id:int, auto_palabra:string, auto_mensaje:string}|null
+     */
+    public function respuestaAutoDeExterna(int $idEmpresa, int $idCanal, string $idExterno): ?array
+    {
+        if ($idExterno === '' || !$this->admiteRespuestaAuto()) {
+            return null;
+        }
+        $st = $this->db->prepare(
+            "SELECT p.id, p.auto_palabra, p.auto_mensaje
+               FROM crm_publicaciones_destinos d
+               JOIN crm_publicaciones p ON p.id = d.id_publicacion AND p.id_empresa = d.id_empresa AND p.eliminado = false
+              WHERE d.id_empresa = :e AND d.id_canal = :c AND d.id_externo = :x AND d.eliminado = false
+                AND COALESCE(TRIM(p.auto_palabra), '') <> '' AND COALESCE(TRIM(p.auto_mensaje), '') <> ''
+              ORDER BY d.id DESC LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':c' => $idCanal, ':x' => $idExterno]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
     /** Destinos con los datos de su cuenta (sin token). */
     public function destinos(int $idPub): array
     {

@@ -59,6 +59,46 @@ class CrmPublicacionRules
         return [$url !== '' ? $url : null, $titulo !== '' ? $titulo : null];
     }
 
+    public const MAX_AUTO_PALABRA = 40;
+
+    /**
+     * Respuesta automática a comentarios de Instagram: palabra clave (una sola
+     * palabra) y mensaje privado. Las dos vacías = sin respuesta automática.
+     * @return array{0:?string,1:?string} [palabra, mensaje] limpios
+     */
+    public function validarRespuestaAuto(?string $palabra, ?string $mensaje): array
+    {
+        $palabra = trim((string) $palabra);
+        $mensaje = trim(str_replace("\r\n", "\n", (string) $mensaje));
+        if ($palabra === '' && $mensaje === '') {
+            return [null, null];
+        }
+        if ($palabra === '' || $mensaje === '') {
+            throw new \InvalidArgumentException('La respuesta automática necesita la palabra clave y el mensaje (o deje los dos vacíos para quitarla).');
+        }
+        if (!preg_match('/^[\p{L}\p{N}_]{2,' . self::MAX_AUTO_PALABRA . '}$/u', $palabra)) {
+            throw new \InvalidArgumentException('La palabra clave es una sola palabra de 2 a ' . self::MAX_AUTO_PALABRA . ' letras o números, sin espacios (por ejemplo INFO).');
+        }
+        if (strlen($mensaje) > \App\Services\InstagramApiService::MAX_BYTES_MENSAJE) {
+            throw new \InvalidArgumentException('El mensaje automático es demasiado largo para Instagram (máximo unos 1000 caracteres).');
+        }
+        return [mb_strtoupper($palabra), $mensaje];
+    }
+
+    /** ¿El comentario trae la palabra clave? Palabra completa, sin distinguir mayúsculas ni tildes. */
+    public static function comentarioPide(string $comentario, string $palabra): bool
+    {
+        $norm = static function (string $s): string {
+            $s = mb_strtolower(trim($s));
+            return strtr($s, ['á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'à' => 'a', 'è' => 'e', 'ì' => 'i', 'ò' => 'o', 'ù' => 'u']);
+        };
+        $p = $norm($palabra);
+        if ($p === '') {
+            return false;
+        }
+        return (bool) preg_match('/(?<![\p{L}\p{N}_])' . preg_quote($p, '/') . '(?![\p{L}\p{N}_])/u', $norm($comentario));
+    }
+
     public function validarCabecera(array $d): void
     {
         $t = trim((string) ($d['titulo'] ?? ''));

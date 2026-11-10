@@ -338,6 +338,7 @@
 
     function nueva(dia) {
         st.pub = null;
+        st.copia = null;
         st.medios = [];
         $('pub-form').reset();
         $('pub-m-id').value = '';
@@ -356,6 +357,7 @@
         catch (e) { aviso('error', 'No se pudo abrir', e.message); return; }
         const p = d.publicacion;
         st.pub = p;
+        st.copia = null;
         st.medios = p.medios || [];
         $('pub-m-id').value = p.id;
         $('pub-m-token').value = '';
@@ -377,6 +379,7 @@
         ['pub-m-nombre', 'pub-m-texto', 'pub-m-ia'].forEach((i) => { $(i).disabled = !ed || !(p ? cfg.perm.actualizar : cfg.perm.crear); });
         pintarMedios();
         pintarDestinos();
+        pintarAuto();
         pintarBotones();
         pintarResultados();
         contar();
@@ -421,7 +424,7 @@
     function pintarDestinos() {
         const ed = editable() && (st.pub ? cfg.perm.actualizar : cfg.perm.crear);
         const elegidos = {};
-        (st.pub ? st.pub.destinos : []).forEach((d) => { elegidos[d.id_canal] = d; });
+        (st.pub ? st.pub.destinos : (st.copia ? st.copia.destinos : [])).forEach((d) => { elegidos[d.id_canal] = d; });
         const canales = (st.datos.canales || []).filter((c) => c.estado !== 'desconectado' || elegidos[c.id]);
         $('pub-m-destinos').innerHTML = canales.length ? canales.map((c) => {
             const d = elegidos[c.id];
@@ -455,6 +458,14 @@
                                placeholder="Lo que se lee bajo la imagen" value="${esc(d ? d.link_titulo || '' : '')}">
                     </div>
                     <div class="col-12 small text-muted">Sale como una tarjeta: la primera imagen de «Contenido» y el título llevan a esa dirección. LinkedIn usa una sola imagen en este formato.</div>
+                    ${ed ? `<div class="col-12">
+                        <button type="button" class="btn btn-link btn-sm p-0" onclick="PUB.waAlternar(this)"><i class="bi bi-whatsapp text-success me-1"></i>Llevar a WhatsApp (que escriban directo)</button>
+                        <div class="row g-2 mt-1 d-none" data-campo="wa-wrap">
+                            <div class="col-md-4"><input type="tel" class="form-control form-control-sm" data-campo="wa-numero" maxlength="20" placeholder="Número con WhatsApp: 0991234567"></div>
+                            <div class="col-md-6"><input type="text" class="form-control form-control-sm" data-campo="wa-texto" maxlength="300" placeholder="Mensaje con el que empieza el cliente"></div>
+                            <div class="col-md-2"><button type="button" class="btn btn-outline-success btn-sm w-100" onclick="PUB.waPoner(this)">Poner</button></div>
+                        </div>
+                    </div>` : ''}
                 </div>`}
                 <div class="mt-2 ${d && d.texto ? '' : 'd-none'}" data-campo="texto-wrap">
                     <textarea class="form-control form-control-sm" rows="3" data-campo="texto" maxlength="3000" ${ed ? '' : 'disabled'} oninput="PUB.contar()"
@@ -475,6 +486,98 @@
             wrap.classList.toggle('d-none', sel.value !== 'enlace');
             if (sel.value === 'enlace') wrap.querySelector('[data-campo="link-url"]').focus();
         }
+    }
+
+    // ── LinkedIn: tarjeta que abre WhatsApp con el mensaje ya escrito ─────────
+    function waAlternar(btn) {
+        const fila = btn.closest('[data-destino]');
+        const wrap = fila.querySelector('[data-campo="wa-wrap"]');
+        wrap.classList.toggle('d-none');
+        if (wrap.classList.contains('d-none')) return;
+        const txt = wrap.querySelector('[data-campo="wa-texto"]');
+        if (!txt.value) txt.value = 'Hola, vi su publicación en LinkedIn y quiero más información.';
+        wrap.querySelector('[data-campo="wa-numero"]').focus();
+    }
+    function waPoner(btn) {
+        const fila = btn.closest('[data-destino]');
+        let num = fila.querySelector('[data-campo="wa-numero"]').value.replace(/\D/g, '');
+        if (/^0\d{9}$/.test(num)) num = '593' + num.slice(1);   // celular de Ecuador escrito como 09…
+        if (num.length < 10 || num.length > 15) {
+            aviso('info', 'Revise el número', 'Escriba el número con WhatsApp, por ejemplo 0991234567 (o con el código del país: 593991234567).');
+            return;
+        }
+        const texto = fila.querySelector('[data-campo="wa-texto"]').value.trim();
+        fila.querySelector('[data-campo="link-url"]').value = `https://wa.me/${num}` + (texto ? '?text=' + encodeURIComponent(texto) : '');
+        const titulo = fila.querySelector('[data-campo="link-titulo"]');
+        if (!titulo.value.trim()) titulo.value = 'Escríbenos por WhatsApp';
+        fila.querySelector('[data-campo="wa-wrap"]').classList.add('d-none');
+        toast('Enlace de WhatsApp puesto. Revise el título y pulse Guardar.', 'info');
+    }
+
+    // ── Instagram: respuesta automática a los comentarios ────────────────────
+    const admiteAuto = () => !!(st.datos.config && st.datos.config.admite_respuesta_auto) && !!$('pub-auto-box');
+    const autoActual = () => ({ palabra: $('pub-auto-palabra').value.trim().toUpperCase(), mensaje: $('pub-auto-mensaje').value.trim() });
+    const autoCambio = (base) => {
+        const a = autoActual();
+        return a.palabra !== String(base.auto_palabra || '') || a.mensaje !== String(base.auto_mensaje || '').trim();
+    };
+    function pintarAuto() {
+        const box = $('pub-auto-box');
+        if (!box) return;
+        box.classList.toggle('d-none', !admiteAuto());
+        const src = st.pub || st.copia || {};
+        const campos = [$('pub-auto-palabra'), $('pub-auto-mensaje')];
+        if (!campos.includes(document.activeElement)) {   // el refresco automático no pisa lo que se está escribiendo
+            campos[0].value = src.auto_palabra || '';
+            campos[1].value = src.auto_mensaje || '';
+        }
+        campos.forEach((c) => { c.disabled = !cfg.perm.crear; });
+        // Editable: se guarda con «Guardar». Ya programada o publicada: con su propio botón.
+        $('pub-auto-btn').classList.toggle('d-none', !(cfg.perm.crear && st.pub && !editable()));
+    }
+    async function guardarAuto() {
+        if (!st.pub || st.accionando) return;
+        st.accionando = true;
+        try {
+            const a = autoActual();
+            const r = await api('guardarRespuestaAutoAjax', { post: { id: st.pub.id, palabra: a.palabra, mensaje: a.mensaje } });
+            st.pub.auto_palabra = a.palabra;
+            st.pub.auto_mensaje = a.mensaje;
+            $('pub-auto-palabra').value = a.palabra;
+            toast(r.mensaje);
+        } catch (e) { aviso('error', 'No se pudo guardar la respuesta automática', e.message); }
+        finally { st.accionando = false; }
+    }
+
+    // ── Duplicar ─────────────────────────────────────────────────────────────
+    /** Deja en el formulario una publicación NUEVA con el contenido de la actual (no guarda todavía). */
+    function duplicar() {
+        const p = st.pub;
+        if (!p || !cfg.perm.crear) return;
+        const datos = {
+            titulo: ('Copia de ' + ($('pub-m-nombre').value.trim() || p.titulo)).slice(0, 150),
+            texto: $('pub-m-texto').value, ia: $('pub-m-ia').checked, medios: st.medios.slice(),
+        };
+        const copia = {
+            destinos: (p.destinos || []).filter((d) => d.estado !== 'cancelada').map((d) => ({
+                id_canal: d.id_canal, formato: d.formato, texto: d.texto, link_url: d.link_url, link_titulo: d.link_titulo, estado: 'pendiente',
+            })),
+            auto_palabra: p.auto_palabra || '', auto_mensaje: p.auto_mensaje || '',
+        };
+        clearTimeout(st.refresco);
+        st.pub = null;
+        st.copia = copia;
+        st.medios = datos.medios;
+        $('pub-m-id').value = '';
+        $('pub-m-token').value = window.CMG_nuevoTokenGuardado ? CMG_nuevoTokenGuardado() : '';
+        $('pub-m-titulo').textContent = datos.titulo;
+        $('pub-m-nombre').value = datos.titulo;
+        $('pub-m-texto').value = datos.texto;
+        $('pub-m-ia').checked = datos.ia;
+        $('pub-m-fecha').value = '';
+        pintarTodo();
+        bootstrap.Tab.getOrCreateInstance(document.querySelector('[data-bs-target="#pub-pane-contenido"]')).show();
+        toast('Copia lista: es una publicación nueva. Ajústela y pulse Guardar o Programar.', 'info');
     }
 
     function leerDestinos() {
@@ -520,6 +623,7 @@
         ver('pub-m-btn-cancelar', cfg.perm.crear && ['programada', 'publicando', 'parcial', 'con_error'].includes(estado)
             && (p.destinos || []).some((d) => ['pendiente', 'preparando', 'con_error'].includes(d.estado)));
         if ($('pub-m-btn-eliminar')) ver('pub-m-btn-eliminar', !!p);
+        if ($('pub-m-btn-duplicar')) { ver('pub-m-btn-duplicar', !!p); ver('pub-m-sep-duplicar', !!p); }
         ver('pub-m-btn-guardar', EDITABLES.concat(['nueva']).includes(estado) && (p ? cfg.perm.actualizar : cfg.perm.crear));
         $('pub-m-btn-programar').querySelector('span').textContent = $('pub-m-fecha').value ? 'Programar' : 'Publicar ahora';
         $('pub-m-ayuda').textContent = estado === 'programada' ? `Sale el ${fecha(p.programada_at)}.`
@@ -607,9 +711,22 @@
                 token_guardado: $('pub-m-token').value,
             } });
             $('pub-m-id').value = r.id;   // el siguiente clic actualiza, no crea otra
-            if (!silencioso) toast(r.mensaje);
+            // La respuesta automática va por su propio guardado (no le quita la aprobación a la publicación).
+            const auto = admiteAuto() ? autoActual() : null;
+            let errAuto = null;
+            if (auto && cfg.perm.crear && autoCambio(st.pub || {})) {
+                try { await api('guardarRespuestaAutoAjax', { post: { id: r.id, palabra: auto.palabra, mensaje: auto.mensaje } }); }
+                catch (e) { errAuto = e.message; }
+            }
+            if (!silencioso && !errAuto) toast(r.mensaje);
             await abrir(r.id, true);
             recargar();
+            if (errAuto) {
+                $('pub-auto-palabra').value = auto.palabra;   // lo escrito no se pierde
+                $('pub-auto-mensaje').value = auto.mensaje;
+                await aviso('warning', 'La publicación se guardó, pero la respuesta automática no', errAuto);
+                return false;
+            }
             return true;
         } catch (e) {
             aviso('error', 'No se pudo guardar', e.message);
@@ -868,5 +985,6 @@
         nueva, abrir, guardar: () => guardar(false), accion, reintentar, eliminar,
         moverMedio, quitarMedio, contar, vistaPrevia, abrirConfig, guardarConfig,
         panelIa, proponerIa, usarIa, editarIa, cambioFormato,
+        waAlternar, waPoner, guardarAuto, duplicar,
     };
 })();

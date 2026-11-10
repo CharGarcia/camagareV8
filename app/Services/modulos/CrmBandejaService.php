@@ -315,6 +315,37 @@ class CrmBandejaService
         return $this->despachar($prep['id'], $prep['det'], 'dm', $texto, $prep['destino'], $idEmpresa, 'Asistente: ');
     }
 
+    /**
+     * Respuesta automática de una publicación («Comenta INFO y te escribimos»):
+     * mensaje privado a quien dejó ese comentario. Mismo envío en dos tiempos.
+     * Instagram permite UNA respuesta privada por comentario: si ya tiene (o la
+     * cuenta no está activa) no envía nada y devuelve null. No pausa al asistente
+     * ni cuenta como respuesta de una persona.
+     */
+    public function enviarRespuestaAutomatica(int $idConv, string $idComentario, string $texto, int $idEmpresa, int $idPublicacion): ?array
+    {
+        $texto = $this->rules->validarTexto($texto);
+        $prep = $this->enTransaccion(function () use ($idConv, $idComentario, $texto, $idEmpresa, $idPublicacion) {
+            if ($idComentario === '' || !$this->conversaciones->bloquear($idConv, $idEmpresa)) {
+                return null;
+            }
+            $det = $this->conversaciones->getDetalle($idConv, $idEmpresa);
+            if (!$det || $det['tipo'] !== 'comentario' || $det['canal_estado'] !== 'activo'
+                || $this->conversaciones->tieneRespuestaPrivada($idConv, $idComentario)) {
+                return null;
+            }
+            $destino = ['comment_id' => $idComentario, 'automatica' => true, 'id_publicacion' => $idPublicacion];
+            $idMsg = $this->conversaciones->insertarSaliente($idEmpresa, $idConv, 'private_reply', $texto, null, $destino, null, 'bot');
+            $this->log->registrar(0, $idEmpresa, 'ENVIAR_MENSAJE', 'crm_mensajes', $idMsg, null,
+                ['id_conversacion' => $idConv, 'modo' => 'privada', 'autor' => 'respuesta_automatica', 'id_publicacion' => $idPublicacion]);
+            return ['id' => $idMsg, 'det' => $det, 'destino' => $destino];
+        });
+        if (!$prep) {
+            return null;
+        }
+        return $this->despachar($prep['id'], $prep['det'], 'privada', $texto, $prep['destino'], $idEmpresa, 'Automático: ');
+    }
+
     private function despachar(int $idMsg, array $det, string $modo, string $texto, array $destino, int $idEmpresa, string $prefijo = 'Tú: '): array
     {
         $error = null;

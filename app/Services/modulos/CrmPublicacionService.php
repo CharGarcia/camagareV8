@@ -70,7 +70,28 @@ class CrmPublicacionService
 
     public function config(int $idEmpresa): array
     {
-        return $this->repo->config($idEmpresa) + ['admite_enlace' => $this->repo->admiteEnlace()];
+        return $this->repo->config($idEmpresa) + ['admite_enlace' => $this->repo->admiteEnlace(),
+                                                    'admite_respuesta_auto' => $this->repo->admiteRespuestaAuto()];
+    }
+
+    /**
+     * Respuesta automática a comentarios de Instagram («Comenta INFO y te escribimos»).
+     * Se puede poner, cambiar o quitar en cualquier estado, también ya publicada:
+     * no cambia lo que sale en la red ni le quita la aprobación.
+     */
+    public function guardarRespuestaAuto(int $id, ?string $palabra, ?string $mensaje, int $idEmpresa, int $idUsuario): void
+    {
+        if (!$this->repo->admiteRespuestaAuto()) {
+            throw new \InvalidArgumentException('La respuesta automática aún no está habilitada en este servidor. Avise al administrador del sistema.');
+        }
+        [$palabra, $mensaje] = $this->rules->validarRespuestaAuto($palabra, $mensaje);
+        $this->enTransaccion(function () use ($id, $palabra, $mensaje, $idEmpresa, $idUsuario) {
+            $antes = $this->repo->bloquear($id, $idEmpresa) ?? throw new \RuntimeException('Publicación no encontrada.');
+            $this->repo->guardarRespuestaAuto($id, $idEmpresa, $palabra, $mensaje, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'RESPUESTA_AUTOMATICA', 'crm_publicaciones', $id,
+                ['auto_palabra' => $antes['auto_palabra'] ?? null, 'auto_mensaje' => $antes['auto_mensaje'] ?? null],
+                ['auto_palabra' => $palabra, 'auto_mensaje' => $mensaje]);
+        });
     }
 
     public function guardarConfig(int $idEmpresa, bool $aprobacion, int $maxDia, int $idUsuario): void

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/crm_publicaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: publicaciones, publicar, enlace, link, url, pagina web, tarjeta con link, redes sociales, instagram, linkedin, programar publicacion, calendario de contenidos, calendario editorial, post, posteo, reel, carrusel, historia, biblioteca de medios, imagenes, videos, subir fotos, aprobar publicacion, aprobacion, redactar con ia, inteligencia artificial, hashtags, texto alternativo, estadisticas, metricas, alcance, me gusta, seguidores, resultados, marketing, community manager, crm
-version: 1.2
+etiquetas: publicaciones, publicar, duplicar, copiar publicacion, volver a publicar, respuesta automatica, comenta info, palabra clave, mensaje privado, whatsapp, pedir producto, enlace, link, url, pagina web, tarjeta con link, redes sociales, instagram, linkedin, programar publicacion, calendario de contenidos, calendario editorial, post, posteo, reel, carrusel, historia, biblioteca de medios, imagenes, videos, subir fotos, aprobar publicacion, aprobacion, redactar con ia, inteligencia artificial, hashtags, texto alternativo, estadisticas, metricas, alcance, me gusta, seguidores, resultados, marketing, community manager, crm
+version: 1.3
 orden: 17
 estado: activo
 ---
@@ -101,6 +101,55 @@ Límites de texto: Instagram hasta 2200 caracteres y 30 hashtags; LinkedIn hasta
 - **Instagram no permite** poner un enlace sobre la imagen de una publicación ni
   de un reel.
 
+## Que el cliente escriba y pida el producto desde la publicación
+
+Ninguna red deja poner un botón «Pedir» en una publicación normal (eso solo
+existe en los anuncios pagados). El sistema ofrece dos caminos:
+
+### Instagram: «Comenta INFO y te escribimos»
+
+En **Dónde → Respuesta automática a los comentarios (Instagram)**:
+
+1. Escriba la **Palabra clave** (una sola palabra, por ejemplo `INFO`).
+2. Escriba el **Mensaje privado que recibe** (precio, cómo pedir, su WhatsApp…).
+3. En el texto de la publicación ponga la invitación: «Comenta INFO y te
+   escribimos».
+
+Cuando alguien comenta esa palabra en la publicación, el sistema le envía solo el
+mensaje privado. El comentario y la respuesta quedan en la **Bandeja social**,
+atribuidos a la publicación, para que una persona continúe la venta.
+
+- No distingue mayúsculas ni tildes, y la palabra puede venir dentro de una
+  frase («quiero info por favor»). No responde a palabras que solo la contienen
+  («informe»).
+- Instagram permite **un solo mensaje privado por comentario** y hasta **7 días**
+  después del comentario. Si la persona contesta, la conversación sigue por
+  mensaje directo.
+- Se puede poner, cambiar o quitar **aunque la publicación ya esté publicada**
+  (botón **Guardar respuesta automática**). Solo responde a los comentarios que
+  lleguen desde ese momento.
+- Para quitarla, deje los dos campos vacíos.
+- Requiere que la cuenta de Instagram esté conectada con el permiso de mensajes
+  (el mismo de la Bandeja social).
+
+### LinkedIn: tarjeta que abre WhatsApp
+
+Con el formato **Enlace**, pulse **Llevar a WhatsApp (que escriban directo)**,
+escriba el número con WhatsApp y el mensaje con el que empieza el cliente, y
+pulse **Poner**. La tarjeta de la publicación abre WhatsApp con ese mensaje ya
+escrito. Un celular de Ecuador se puede escribir como `0991234567`; de otro
+país, con su código (`57…`, `51…`).
+
+## Duplicar una publicación
+
+El botón **Duplicar** (barra superior de la publicación, permiso de **Crear**)
+arma una publicación **nueva** con el mismo texto, imágenes, cuentas, formatos,
+enlace y respuesta automática. Sirve para volver a publicar algo que ya salió.
+
+- La copia queda como «Copia de …» y **no se guarda sola**: ajústela y pulse
+  **Guardar** o **Programar**.
+- La original no cambia. Las estadísticas de cada una van por separado.
+
 ## Redactar con IA
 
 En **Contenido → Proponer con IA**, escriba de qué trata (producto, oferta, a quién
@@ -165,7 +214,8 @@ En la misma ventana se fija el **tope de publicaciones por día** de la empresa
 
 - **Ver**: calendario, lista, biblioteca y resultados.
 - **Crear**: subir archivos, crear publicaciones, enviar a revisión, programar,
-  desprogramar, cancelar lo pendiente, reintentar y proponer con IA.
+  desprogramar, cancelar lo pendiente, reintentar, proponer con IA, **duplicar**
+  y poner o cambiar la **respuesta automática**.
 - **Modificar**: editar publicaciones, **aprobar** y devolver, editar los datos
   de un archivo y la configuración (aprobación y tope).
 - **Eliminar**: publicaciones y archivos de la biblioteca.
@@ -223,3 +273,6 @@ En la misma ventana se fija el **tope de publicaciones por día** de la empresa
   pueden editar en su propio cuadro antes de pulsar **Usar**.
 - **1.2** — LinkedIn: formato **Enlace** (tarjeta con imagen que lleva a una
   dirección web). Un enlace con `#` escrito en el texto ya no se rompe.
+- **1.3** — **Respuesta automática** a los comentarios de Instagram (palabra
+  clave + mensaje privado), botón **Llevar a WhatsApp** en el formato Enlace de
+  LinkedIn y botón **Duplicar**.

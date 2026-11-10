@@ -31,6 +31,10 @@ use App\Helpers\PreferenciasHelper;
                     <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="pub-m-btn-devolver" onclick="PUB.accion('devolver')"><i class="bi bi-arrow-counterclockwise me-1"></i>Devolver a borrador</button>
                     <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="pub-m-btn-desprogramar" onclick="PUB.accion('desprogramar')"><i class="bi bi-calendar-x me-1"></i>Desprogramar</button>
                     <button type="button" class="btn btn-sm btn-outline-warning d-none" id="pub-m-btn-cancelar" onclick="PUB.accion('cancelar')"><i class="bi bi-slash-circle me-1"></i>Cancelar lo pendiente</button>
+                    <?php if (!empty($perm['crear'])): ?>
+                        <div class="vr mx-1 d-none" id="pub-m-sep-duplicar"></div>
+                        <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="pub-m-btn-duplicar" onclick="PUB.duplicar()" title="Crea una publicación nueva con este contenido para volver a publicarla"><i class="bi bi-copy me-1"></i>Duplicar</button>
+                    <?php endif; ?>
                     <div class="small text-muted ms-auto" id="pub-m-ayuda"></div>
                 </div>
 
@@ -102,6 +106,27 @@ use App\Helpers\PreferenciasHelper;
                         <div class="tab-pane fade" id="pub-pane-destinos">
                             <div class="small text-muted mb-2">Marque dónde sale y en qué formato. El texto propio es opcional: si lo deja vacío, sale el de «Contenido».</div>
                             <div id="pub-m-destinos" class="d-flex flex-column gap-2"></div>
+
+                            <!-- «Comenta INFO y te escribimos»: mensaje privado automático a quien comenta la palabra clave -->
+                            <div class="border rounded-3 p-2 bg-white mt-3 d-none" id="pub-auto-box">
+                                <div class="small fw-bold"><i class="bi bi-instagram text-danger me-1"></i>Respuesta automática a los comentarios (Instagram)</div>
+                                <div class="small text-muted mb-2">Cuando alguien comente la palabra clave en esta publicación, el sistema le envía solo este mensaje privado y la conversación queda en la Bandeja social. Ponga en el texto algo como «Comenta INFO y te escribimos». Deje los dos campos vacíos para no usarla.</div>
+                                <div class="row g-2">
+                                    <div class="col-md-3">
+                                        <label class="form-label small fw-bold mb-1 d-block" for="pub-auto-palabra">Palabra clave</label>
+                                        <input type="text" class="form-control form-control-sm text-uppercase" id="pub-auto-palabra" maxlength="40" placeholder="INFO">
+                                    </div>
+                                    <div class="col-md-9">
+                                        <label class="form-label small fw-bold mb-1 d-block" for="pub-auto-mensaje">Mensaje privado que recibe</label>
+                                        <textarea class="form-control form-control-sm" id="pub-auto-mensaje" rows="3" maxlength="900"
+                                                  placeholder="¡Hola! Gracias por tu interés. El precio es… Para pedirlo escríbenos aquí mismo o al WhatsApp 09…"></textarea>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center gap-2 mt-2">
+                                    <span class="small text-muted">Instagram permite un solo mensaje privado por comentario y hasta 7 días después. Si la persona contesta, la conversación sigue por mensaje directo.</span>
+                                    <button type="button" class="btn btn-outline-primary btn-sm ms-auto text-nowrap d-none" id="pub-auto-btn" onclick="PUB.guardarAuto()"><i class="bi bi-check2 me-1"></i>Guardar respuesta automática</button>
+                                </div>
+                            </div>
                         </div>
 
                         <div class="tab-pane fade" id="pub-pane-previa">

@@ -271,6 +271,21 @@ class CrmPublicacionesController extends BaseModuloController
         }
     }
 
+    /** Respuesta automática a comentarios de Instagram: palabra clave y mensaje (vacíos = quitarla). */
+    public function guardarRespuestaAutoAjax(): void
+    {
+        $this->requireCrear();
+        $this->requireFase3();
+        $p = $this->publicacionAccesible($this->postInt('id'));
+        try {
+            $palabra = (string) ($_POST['palabra'] ?? '');
+            $this->pubs()->guardarRespuestaAuto((int) $p['id'], $palabra, (string) ($_POST['mensaje'] ?? ''), $this->idEmpresa(), $this->idUsuario());
+            $this->json(['ok' => true, 'mensaje' => trim($palabra) === '' ? 'Respuesta automática quitada.' : 'Respuesta automática guardada.']);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
     /** accion: revision | aprobar | devolver | programar | desprogramar | cancelar | reintentar */
     public function accionAjax(): void
     {

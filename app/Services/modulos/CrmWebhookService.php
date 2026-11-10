@@ -369,8 +369,11 @@ class CrmWebhookService
         $perfil = ['name' => '', 'username' => (string) ($v['from']['username'] ?? '')];
         $texto = trim((string) ($v['text'] ?? ''));
 
-        return $this->enTransaccion(function () use ($canal, $hilo, $autor, $perfil, $v, $idComentario, $texto, $fecha) {
+        $idConv = 0;
+        $esNuevo = false;
+        $ok = $this->enTransaccion(function () use ($canal, $hilo, $autor, $perfil, $v, $idComentario, $texto, $fecha, &$idConv, &$esNuevo) {
             $conv = $this->obtenerConversacion($canal, 'comentario', $hilo, (string) ($v['media']['id'] ?? '') ?: null, $perfil, 'instagram_comentario', $autor);
+            $idConv = (int) $conv['id'];
             $nuevo = $this->conversaciones->insertarMensajeSiNuevo((int) $canal['id_empresa'], [
                 'id_conversacion' => $conv['id'],
                 'direccion'       => 'IN',
@@ -382,10 +385,36 @@ class CrmWebhookService
                 'fecha'           => $fecha,
             ]);
             if ($nuevo !== null) {
+                $esNuevo = true;
                 $this->conversaciones->registrarMensaje((int) $conv['id'], mb_substr($texto, 0, 120) ?: '[Comentario]', $fecha, true);
             }
             return true;
         });
+        // Fuera de la transacción (llama a Instagram) y solo la primera vez que llega el comentario.
+        if ($esNuevo && $idConv > 0 && $texto !== '') {
+            $this->respuestaAutomatica($canal, $idConv, $idComentario, (string) ($v['media']['id'] ?? ''), $texto);
+        }
+        return $ok;
+    }
+
+    /**
+     * «Comenta INFO y te escribimos»: si la publicación comentada tiene respuesta
+     * automática y el comentario trae su palabra clave, envía el mensaje privado.
+     * Nunca hace fallar el evento: el comentario ya quedó en la Bandeja y una
+     * persona puede responderlo a mano.
+     */
+    private function respuestaAutomatica(array $canal, int $idConv, string $idComentario, string $idPublicacionExterna, string $texto): void
+    {
+        try {
+            $idEmpresa = (int) $canal['id_empresa'];
+            $auto = (new \App\repositories\modulos\CrmPublicacionRepository())->respuestaAutoDeExterna($idEmpresa, (int) $canal['id'], $idPublicacionExterna);
+            if (!$auto || !\App\Rules\modulos\CrmPublicacionRules::comentarioPide($texto, (string) $auto['auto_palabra'])) {
+                return;
+            }
+            CrmBandejaService::crear($this->apiFija)->enviarRespuestaAutomatica($idConv, $idComentario, (string) $auto['auto_mensaje'], $idEmpresa, (int) $auto['id']);
+        } catch (\Throwable $e) {
+            ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'respuestaAutomatica', 'id_conversacion' => $idConv]);
+        }
     }
 
     // ── Conversación y contacto ──────────────────────────────────────────────
