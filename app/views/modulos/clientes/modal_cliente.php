@@ -123,6 +123,8 @@ if (!defined('LEAFLET_LOADED')) {
                             <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-ubicacion-btn" data-bs-toggle="tab" data-bs-target="#pane-ubicacion" href="#pane-ubicacion" role="tab"><i class="bi bi-geo-alt-fill me-1"></i>Ubicación</a>
                             </li>
+                            <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                            <?= \App\Helpers\InformacionRegistro::boton('cli', 'py-2 small') ?>
                         </ul>
                         <div class="ms-auto pb-1">
                             <?php
@@ -146,6 +148,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 $pestanasConfigCli['cli-pane-contable'] = 'Contable';
                             }
                             $pestanasConfigCli['pane-ubicacion'] = 'Ubicación';
+                            $pestanasConfigCli += \App\Helpers\InformacionRegistro::pestanaConfigurable('cli');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
                                 $pestanasConfigCli,
                                 $vistaConfigCli ?? [],
@@ -159,6 +162,9 @@ if (!defined('LEAFLET_LOADED')) {
                     <div class="border-bottom bg-light mb-0"></div>
 
                     <div class="tab-content border-top px-3 py-3" id="tabsClienteContent">
+                        <!-- Pestaña Información (solo lectura) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('cli', 'modulos/clientes', 'cliente_id') ?>
+
                         <!-- Pestaña 1: GENERAL -->
                         <div class="tab-pane fade show active" id="pane-general" role="tabpanel">
                             <div class="row g-3">

@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 3.2
+version: 3.3
 orden: 10
 estado: activo
 ---
@@ -489,6 +489,7 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **3.3** — Nueva pestaña **Información** en la ventana del cliente (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **3.2** — Pestaña **General** del modal reordenada: identificación, vendedor y estado en la primera fila; razón social sola; correo y dirección; y provincia, ciudad, teléfono y plazo en la última fila.
 - **3.1** — El **Plazo de Crédito (Días)** admite como máximo **3.650 días (10 años)**; un valor mayor (p. ej. un teléfono escrito por error) se rechaza al guardar. Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).
 - **3.0** — Creado desde un documento (factura, nota, retención, pedido…), el cliente nuevo se **cierra solo y queda seleccionado** en el documento. Desde el listado de Clientes la ficha sigue sin cerrarse al guardar.

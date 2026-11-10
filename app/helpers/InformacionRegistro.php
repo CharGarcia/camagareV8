@@ -98,6 +98,10 @@ class InformacionRegistro
             'tabla'  => 'retencion_venta_cabecera',
             'nombre' => 'la retención',
         ],
+        'modulos/clientes' => [
+            'tabla'  => 'clientes',
+            'nombre' => 'el cliente',
+        ],
         'modulos/liquidacion_compra' => [
             'tabla'  => 'liquidaciones_cabecera',
             'nombre' => 'la liquidación',

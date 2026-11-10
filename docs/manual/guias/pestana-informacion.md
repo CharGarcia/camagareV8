@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
 etiquetas: información, informacion, pestaña información, quién creó, quien creo, quién modificó, quien modifico, quién lo hizo, historial, historial de cambios, auditoría, auditoria, fecha y hora, última edición, ultima edicion, movimientos de inventario, kardex del documento, anulado por, solo administradores, nivel 2, nivel 3, no veo la pestaña
-version: 1.2
+version: 1.3
 orden: 36
 estado: activo
 ---
@@ -42,6 +42,7 @@ Las fechas se muestran como día-mes-año y hora (`dd-mm-aaaa hh:mm:ss`).
 - **Facturas de Venta**, **Recibos de Venta**, **Notas de Crédito**, **Notas de
   Débito**, **Proformas** y **Retenciones de Ventas**.
 - **Compras**, **Liquidaciones de Compra** y **Retenciones de Compras**.
+- **Clientes**.
 - **Pedidos** (sin la sección de movimientos de inventario: un pedido no mueve
   stock).
 
@@ -62,6 +63,7 @@ La pestaña se irá agregando a los demás módulos; en todos se llama
 
 ## Historial de cambios
 
+- **1.3** — Se agrega a Clientes.
 - **1.2** — Se agrega a Recibos de Venta, Notas de Crédito, Notas de Débito,
   Proformas, Retenciones de Ventas, Retenciones de Compras y Liquidaciones de Compra.
 - **1.1** — Se agrega a Facturas de Venta y Compras; la pestaña *Detalle* de

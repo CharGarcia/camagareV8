@@ -20,7 +20,7 @@
     }
 
     function etiquetaAccion(accion) {
-        const a = String(accion || '');
+        const a = String(accion || '').toUpperCase();
         if (a.includes('CAMBIAR_ESTADO')) return 'Cambio de estado';
         if (a.includes('ENTREGA'))        return 'Entrega registrada';
         if (a.includes('ANULAR'))         return 'Registro anulado';
@@ -34,7 +34,7 @@
     }
 
     function iconoAccion(accion) {
-        const a = String(accion || '');
+        const a = String(accion || '').toUpperCase();
         return a.includes('CAMBIAR_ESTADO') ? 'bi-arrow-repeat text-info' :
                a.includes('ENTREGA')        ? 'bi-geo-alt-fill text-success' :
                a.includes('ANULAR')         ? 'bi-x-circle-fill text-danger' :
@@ -70,8 +70,9 @@
         // Última edición: quién y cuándo salen de la cabecera; el "qué hizo", del último evento
         // del historial, solo si su fecha cuadra con updated_at. Si no cuadra, ese cambio no
         // quedó detallado (registro migrado o anterior al registro de cambios) y se avisa.
-        const hayEdicion = !!(registro.modificado_por || registro.updated_at);
-        const ultimo = historial.find(h => !String(h.accion || '').includes('CREAR'));
+        // Varias tablas llenan updated_at al crear: eso no es una edición.
+        const hayEdicion = !!(registro.modificado_por || (registro.updated_at && registro.updated_at !== registro.created_at));
+        const ultimo = historial.find(h => !String(h.accion || '').toUpperCase().includes('CREAR'));
         const tsCab = ts(registro.updated_at);
         const tsEv = ultimo ? ts(ultimo.fecha) : null;
         let ultimaAccion;
