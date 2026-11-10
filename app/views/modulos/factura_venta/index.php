@@ -1821,7 +1821,10 @@ $totalPages = $totalPagesOriginal;
     // seleccionarCliente() (tipo de id, vendedor, plazo, forma SRI).
     document.addEventListener('clienteGuardado', async (e) => {
         const modalFv = document.getElementById('modalNuevaFactura');
-        if (!modalFv || !modalFv.classList.contains('show') || fvFacturaEstaAutorizada()) return;
+        if (!modalFv || !modalFv.classList.contains('show')) return;
+        // Factura AUTORIZADA: no recibe clientes nuevos; de una edición solo toma los datos
+        // de contacto (ver fvRefrescarDatosCliente).
+        const autorizada = fvFacturaEstaAutorizada();
         // Si encima de la factura está abierta una NC/ND (embebidas en esta página), el
         // cliente se creó para la nota: lo toma su propio listener, no la factura.
         if (['modalNC', 'modalND'].some(id => document.getElementById(id)?.classList.contains('show'))) return;
@@ -1830,7 +1833,7 @@ $totalPages = $totalPagesOriginal;
         const idSel   = document.getElementById('m-id-cliente')?.value || '';
         const esNuevo = res.nuevo === true || /cread/i.test(res.msg || '');
         if (!esNuevo && String(idSel) !== String(res.data.id)) return;
-        if (esNuevo && !fvFacturaEditableAbierta()) return;
+        if (esNuevo && (autorizada || !fvFacturaEditableAbierta())) return;
 
         const termino = String(res.data.identificacion || res.data.nombre || '').trim();
         let c = null;
@@ -1848,7 +1851,7 @@ $totalPages = $totalPagesOriginal;
             return;
         }
         // Edición: si el buscador no lo devolvió, se pinta con lo que respondió el guardado.
-        fvRefrescarDatosCliente(c || res.data);
+        fvRefrescarDatosCliente(c || res.data, autorizada);
     });
 
     // productos_modal.js emite 'productoGuardado'; solo /store devuelve `id` (al editar no
@@ -2839,10 +2842,12 @@ $totalPages = $totalPagesOriginal;
         // Recibo: disponible en cualquier factura guardada salvo anulada.
         if (btnRecibo) btnRecibo.disabled = st.includes('anulad');
 
-        // Editar datos del cliente desde la factura: solo mientras no esté
-        // autorizada (el XML ya autorizado no cambia si se edita el cliente).
+        // Editar la ficha del cliente desde la factura: disponible en cualquier estado,
+        // también autorizada (p. ej. corregir el correo para reenviarla). El XML ya
+        // autorizado no cambia; en ese caso solo se refrescan los datos de contacto
+        // (ver fvRefrescarDatosCliente). La barra que lo contiene se oculta sin cliente.
         const btnEditarClienteEstado = document.getElementById('m-btn-editar-cliente');
-        if (btnEditarClienteEstado) btnEditarClienteEstado.classList.toggle('d-none', esAutorizado);
+        if (btnEditarClienteEstado) btnEditarClienteEstado.classList.remove('d-none');
         if (btnPdf) btnPdf.disabled = false;
         if (btnCorreo) btnCorreo.disabled = !esAutorizado;
         if (btnWhatsapp) btnWhatsapp.disabled = !esAutorizado;
@@ -4216,12 +4221,12 @@ $totalPages = $totalPagesOriginal;
      * «Editar» de la línea de datos del cliente: abre la ficha del cliente (el mismo
      * modal de Clientes) encima de la factura. Al guardar, clientes_modal.js queda abierto
      * (se cierra con su botón Cerrar) y emite 'clienteGuardado'; el listener de arriba refresca la línea con
-     * fvRefrescarDatosCliente(). Solo aparece con permiso de actualizar en Clientes y
-     * mientras la factura no esté autorizada (ver toggle en actualizarBotonesEstado).
+     * fvRefrescarDatosCliente(). Solo aparece con permiso de actualizar en Clientes; está
+     * disponible en cualquier estado de la factura, también autorizada.
      */
     let fvAbriendoCliente = false;
     async function editarDatosCliente() {
-        if (fvFacturaEstaAutorizada() || fvAbriendoCliente) return;
+        if (fvAbriendoCliente) return;
 
         const idCliente = document.getElementById('m-id-cliente')?.value;
         if (!idCliente || typeof window.abrirModalClienteEditar !== 'function') return;
@@ -4249,10 +4254,21 @@ $totalPages = $totalPagesOriginal;
      * seleccionarCliente(), no toca vendedor, días de crédito ni forma de pago SRI: eso
      * ya pudo ajustarlo el usuario en esta factura y corregir un teléfono no debe pisarlo.
      */
-    function fvRefrescarDatosCliente(c) {
+    function fvRefrescarDatosCliente(c, soloContacto = false) {
         if (!c) return;
         const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
         const val = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+
+        // Factura autorizada: el comprobante ya salió con su nombre, identificación e
+        // información adicional, y eso no se toca. Solo se refrescan dirección, teléfono y
+        // correo (el correo es el que se usa al reenviar la factura).
+        if (soloContacto) {
+            set('m-lbl-cliente-direccion', c.direccion || 'No especificada');
+            set('m-lbl-cliente-telefono', c.telefono || 'Sin teléfono registrado');
+            set('m-lbl-cliente-correo', c.email || 'Sin correo registrado');
+            val('sri-correo-cliente', c.email || '');
+            return;
+        }
 
         if (c.nombre) val('m-search-cliente', c.nombre);
         if (c.identificacion) {
@@ -4308,7 +4324,7 @@ $totalPages = $totalPagesOriginal;
         if (mailLbl) mailLbl.textContent = c.email || 'Sin correo registrado';
         if (infoBar) infoBar.classList.remove('d-none');
         const btnEditarCliente = document.getElementById('m-btn-editar-cliente');
-        if (btnEditarCliente) btnEditarCliente.classList.toggle('d-none', fvFacturaEstaAutorizada());
+        if (btnEditarCliente) btnEditarCliente.classList.toggle('d-none', !(c && c.id));
 
         // Insertar o actualizar fila de correo en info adicional
         actualizarInfoCorreoCliente(c.email || '');

@@ -274,8 +274,12 @@ del módulo Clientes.
   tenga la factura.
 - Lo que se edita es la ficha del cliente **para toda la empresa**, no solo
   para esta factura.
-- **Editar** aparece solo si usted tiene permiso de **modificar** en Clientes y
-  mientras la factura **no esté autorizada**.
+- **Editar** aparece solo si usted tiene permiso de **modificar** en Clientes.
+- También está disponible en una factura **autorizada**, por ejemplo para
+  corregir el correo antes de reenviarla. En ese caso la factura solo refresca en
+  pantalla la **dirección, el teléfono y el correo**; el nombre y la
+  identificación que muestra son los del comprobante autorizado y no cambian. El
+  **PDF y el XML** de la factura autorizada tampoco cambian.
 
 ## Qué pasa con el modal después de enviar al SRI
 
@@ -780,7 +784,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
-- **2.64** — La línea de datos del cliente (bajo el buscador) ocupa siempre **un renglón**: la dirección y el correo largos se recortan con «…» y se ven completos al dejar el puntero encima. Antes una dirección larga partía la línea en varios renglones y empujaba las Observaciones. Ver *Tipo de identificación del cliente*. Además, **Editar** abre ahora la **ficha completa del cliente** (antes era una ventana con solo teléfono, dirección y correo). Ver *Editar el cliente sin salir de la factura*.
+- **2.64** — La línea de datos del cliente (bajo el buscador) ocupa siempre **un renglón**: la dirección y el correo largos se recortan con «…» y se ven completos al dejar el puntero encima. Antes una dirección larga partía la línea en varios renglones y empujaba las Observaciones. Ver *Tipo de identificación del cliente*. Además, **Editar** abre ahora la **ficha completa del cliente** (antes era una ventana con solo teléfono, dirección y correo). Ver *Editar el cliente sin salir de la factura*. **Editar** está disponible también en facturas **autorizadas** (antes se ocultaba).
 - **2.63** — Nueva pestaña **Información** en la ventana de la factura (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, sus acciones registradas y los movimientos de inventario que generó. Ver la guía *Pestaña Información*.
 - **2.62** — Anular fuera de las reglas del SRI (Consumidor Final o plazo del día 7): el servidor solo lo permite al superadministrador y con motivo (antes lo controlaba solo la pantalla). Los avisos dicen claramente que se está anulando **fuera de las reglas de anulación**. Ver *Reglas del SRI para anular*.
 - **2.61** — Al elegir o cambiar el cliente, la **forma de pago SRI** que se pone sola ya es la correcta. Antes, en algunos casos se ponía otra: por ejemplo, *Otros con utilización del sistema financiero* en lugar de *Sin utilización del sistema financiero*, o *Dinero electrónico* en lugar de *Tarjeta de crédito*. Ver *Forma de pago SRI al elegir el cliente*.
