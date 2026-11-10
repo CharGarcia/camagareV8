@@ -75,6 +75,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                 <a id="btnExportExcel" href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar??'') ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                 </a>
+                <button type="button" class="btn btn-outline-primary" onclick="FP_cuentasBancarias()" title="Datos de las cuentas bancarias para enviar a un cliente">
+                    <i class="bi bi-bank"></i> Cuentas
+                </button>
             </div>
         </div>
         
@@ -204,6 +207,155 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
 </div>
 
 <?php include __DIR__ . '/modal_forma_pago.php'; ?>
+
+<!-- MODAL: CUENTAS BANCARIAS PARA ENVIAR A CLIENTES -->
+<div class="modal fade" id="modalCuentasBancariasFP" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-bank text-primary me-2"></i>Cuentas bancarias para depósitos</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div id="fpCtasCargando" class="text-center text-muted py-4">
+                    <span class="spinner-border spinner-border-sm me-2"></span>Cargando cuentas…
+                </div>
+                <div id="fpCtasVacio" class="alert alert-warning small mb-0 d-none">
+                    No hay cuentas bancarias para mostrar. Registre una forma de tipo <strong>Bancaria</strong>,
+                    activa, que aplique a <strong>Ingresos</strong>, con su banco y número de cuenta.
+                </div>
+                <div id="fpCtasContenido" class="d-none">
+                    <label class="form-label small fw-bold d-block mb-1">Cuentas a incluir</label>
+                    <div id="fpCtasLista" class="border rounded-3 px-2 py-1 mb-3"></div>
+                    <label class="form-label small fw-bold d-block mb-1" for="fpCtasTexto">Mensaje para el cliente</label>
+                    <textarea id="fpCtasTexto" class="form-control form-control-sm" rows="10" style="font-size:.85rem;"></textarea>
+                    <div class="form-text">Puede ajustar el texto antes de copiarlo o enviarlo.</div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary me-auto" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="fpCtasBtnCopiar" onclick="FP_ctasCopiar()" disabled>
+                    <i class="bi bi-clipboard me-1"></i>Copiar
+                </button>
+                <button type="button" class="btn btn-sm btn-success" id="fpCtasBtnWhatsapp" onclick="FP_ctasWhatsapp()" disabled>
+                    <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── Cuentas bancarias para enviar a clientes ────────────────────────────────
+let fpCtasData = null;
+
+async function FP_cuentasBancarias(){
+    const modalEl = document.getElementById('modalCuentasBancariasFP');
+    const ver = (id, mostrar) => document.getElementById(id).classList.toggle('d-none', !mostrar);
+    ver('fpCtasCargando', true); ver('fpCtasVacio', false); ver('fpCtasContenido', false);
+    document.getElementById('fpCtasBtnCopiar').disabled = true;
+    document.getElementById('fpCtasBtnWhatsapp').disabled = true;
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+    try {
+        const resp = await fetch('<?= $urlBase ?>/getCuentasBancariasAjax', { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        const res = await resp.json();
+        if (!res.ok) throw new Error(res.mensaje || 'No se pudieron cargar las cuentas bancarias.');
+        fpCtasData = res.data;
+    } catch (e) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        Swal.fire('Error', e.message || 'No se pudieron cargar las cuentas bancarias.', 'error');
+        return;
+    }
+
+    ver('fpCtasCargando', false);
+    const cuentas = fpCtasData.cuentas || [];
+    if (!cuentas.length) { ver('fpCtasVacio', true); return; }
+
+    const lista = document.getElementById('fpCtasLista');
+    lista.innerHTML = '';
+    cuentas.forEach((c, i) => {
+        const div = document.createElement('div');
+        div.className = 'form-check my-1';
+        const chk = document.createElement('input');
+        chk.type = 'checkbox'; chk.className = 'form-check-input'; chk.id = 'fpCta' + i;
+        chk.value = String(i); chk.checked = true;
+        chk.addEventListener('change', FP_ctasArmarTexto);
+        const lbl = document.createElement('label');
+        lbl.className = 'form-check-label small'; lbl.htmlFor = chk.id;
+        const b = document.createElement('strong');
+        b.textContent = c.banco;
+        lbl.appendChild(b);
+        lbl.appendChild(document.createTextNode(' — ' + FP_ctasTipo(c.tipo_cuenta) + ' N.° ' + c.numero));
+        div.appendChild(chk); div.appendChild(lbl);
+        lista.appendChild(div);
+    });
+    ver('fpCtasContenido', true);
+    FP_ctasArmarTexto();
+}
+
+function FP_ctasTipo(tipo){
+    switch (String(tipo || '').toUpperCase()) {
+        case 'AHORROS':   return 'Cuenta de Ahorros';
+        case 'CORRIENTE': return 'Cuenta Corriente';
+        case 'VIRTUAL':   return 'Cuenta Virtual';
+        default:          return 'Cuenta';
+    }
+}
+
+function FP_ctasArmarTexto(){
+    const d = fpCtasData || {};
+    const elegidas = Array.from(document.querySelectorAll('#fpCtasLista input:checked'))
+        .map(chk => (d.cuentas || [])[parseInt(chk.value, 10)]).filter(Boolean);
+
+    const lineas = [];
+    if (elegidas.length) {
+        lineas.push('*DATOS PARA DEPÓSITO O TRANSFERENCIA*', '');
+        elegidas.forEach(c => {
+            lineas.push('*' + c.banco + '*');
+            lineas.push(FP_ctasTipo(c.tipo_cuenta) + ' N.° ' + c.numero);
+            lineas.push('');
+        });
+        if (d.titular) lineas.push('Titular: ' + d.titular);
+        if (d.ruc)     lineas.push('RUC: ' + d.ruc);
+        if (d.correo)  lineas.push('Correo: ' + d.correo);
+        lineas.push('', 'Por favor, envíenos el comprobante una vez realizado el pago.');
+    }
+    document.getElementById('fpCtasTexto').value = lineas.join('\n');
+    document.getElementById('fpCtasBtnCopiar').disabled = !elegidas.length;
+    document.getElementById('fpCtasBtnWhatsapp').disabled = !elegidas.length;
+}
+
+async function FP_ctasCopiar(){
+    const ta = document.getElementById('fpCtasTexto');
+    if (!ta.value.trim()) return;
+    let ok = false;
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(ta.value);
+            ok = true;
+        }
+    } catch (e) {}
+    if (!ok) {
+        ta.focus(); ta.select();
+        try { ok = document.execCommand('copy'); } catch (e) {}
+    }
+    const btn = document.getElementById('fpCtasBtnCopiar');
+    if (ok) {
+        btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copiado';
+        setTimeout(() => { btn.innerHTML = '<i class="bi bi-clipboard me-1"></i>Copiar'; }, 1800);
+    } else {
+        Swal.fire('Atención', 'No se pudo copiar automáticamente. Seleccione el texto y cópielo a mano.', 'warning');
+    }
+}
+
+// Abre WhatsApp con el mensaje listo; el contacto se elige allí.
+function FP_ctasWhatsapp(){
+    const texto = document.getElementById('fpCtasTexto').value.trim();
+    if (!texto) return;
+    window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank', 'noopener');
+}
+</script>
 
 <script>
 let currentSort = '<?= $ordenCol ?>';

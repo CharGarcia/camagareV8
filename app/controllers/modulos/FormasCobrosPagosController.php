@@ -84,6 +84,22 @@ class FormasCobrosPagosController extends BaseModuloController
         exit;
     }
 
+    /** Datos de las cuentas bancarias de la empresa, para enviarlos a un cliente. */
+    public function getCuentasBancariasAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            $data = $this->service->getCuentasBancariasParaClientes((int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudieron cargar las cuentas bancarias.']);
+        }
+        exit;
+    }
+
     public function searchCuentasAjax(): void
     {
         $this->requireLeer();

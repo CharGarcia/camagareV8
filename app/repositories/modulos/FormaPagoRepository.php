@@ -175,6 +175,31 @@ class FormaPagoRepository extends BaseRepository
         return $row ?: null;
     }
 
+    /**
+     * Cuentas bancarias de la empresa a las que un cliente puede depositar o transferir:
+     * formas activas de tipo Bancaria que aplican a cobros y tienen banco y número de cuenta.
+     * Trae además el titular (razón social, RUC y correo de la empresa).
+     */
+    public function getCuentasBancariasParaClientes(int $idEmpresa): array
+    {
+        $sql = "SELECT fp.id, fp.nombre, fp.tipo_cuenta, fp.numero_cuenta,
+                       b.nombre_banco AS banco_nombre,
+                       e.nombre AS titular, e.ruc AS titular_ruc, e.mail AS titular_mail
+                FROM {$this->table} fp
+                JOIN empresas e ON e.id = fp.id_empresa
+                LEFT JOIN bancos_ecuador b ON b.id = fp.id_banco
+                WHERE fp.id_empresa = :id_empresa
+                  AND fp.eliminado = FALSE
+                  AND fp.activo = TRUE
+                  AND UPPER(fp.tipo) = 'BANCO'
+                  AND UPPER(fp.aplica_en) IN ('INGRESO', 'AMBAS')
+                  AND COALESCE(TRIM(fp.numero_cuenta), '') <> ''
+                ORDER BY b.nombre_banco ASC, fp.numero_cuenta ASC, fp.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getBancosDisponibles(): array
     {
         $sql = "SELECT id, nombre_banco FROM bancos_ecuador ORDER BY nombre_banco ASC";

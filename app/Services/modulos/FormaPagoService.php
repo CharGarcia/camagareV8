@@ -33,6 +33,40 @@ class FormaPagoService
         return $this->repository->getBancosDisponibles();
     }
 
+    /**
+     * Datos bancarios para enviar a un cliente que pregunta a qué cuenta depositar.
+     * Dos formas que comparten la misma cuenta física (p. ej. "Cheques Pichincha" y
+     * "Transferencias Pichincha") salen una sola vez.
+     *
+     * @return array{titular:string, ruc:string, correo:string, cuentas:array<int,array<string,string>>}
+     */
+    public function getCuentasBancariasParaClientes(int $idEmpresa): array
+    {
+        $rows = $this->repository->getCuentasBancariasParaClientes($idEmpresa);
+
+        $cuentas = [];
+        foreach ($rows as $r) {
+            $numero = trim((string) $r['numero_cuenta']);
+            $banco  = trim((string) ($r['banco_nombre'] ?? ''));
+            $clave  = mb_strtoupper($banco) . '|' . preg_replace('/\s+/', '', $numero);
+            if (isset($cuentas[$clave])) {
+                continue;
+            }
+            $cuentas[$clave] = [
+                'banco'       => $banco !== '' ? $banco : trim((string) $r['nombre']),
+                'tipo_cuenta' => trim((string) ($r['tipo_cuenta'] ?? '')),
+                'numero'      => $numero,
+            ];
+        }
+
+        return [
+            'titular' => trim((string) ($rows[0]['titular'] ?? '')),
+            'ruc'     => trim((string) ($rows[0]['titular_ruc'] ?? '')),
+            'correo'  => trim((string) ($rows[0]['titular_mail'] ?? '')),
+            'cuentas' => array_values($cuentas),
+        ];
+    }
+
     public function buscarCuentas(int $idEmpresa, string $q): array
     {
         return $this->repository->getCuentasContables($idEmpresa, $q);

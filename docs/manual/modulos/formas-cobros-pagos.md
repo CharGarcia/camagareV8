@@ -5,8 +5,8 @@ categoria: Tesorería
 ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
-etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco, mueve dinero, monetario, no monetario, otros, cruce, compensación, nuvei, bancaria
-version: 1.8
+etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco, mueve dinero, monetario, no monetario, otros, cruce, compensación, nuvei, bancaria, cuentas bancarias, datos bancarios, número de cuenta, a qué cuenta depositar, depósito, enviar cuenta al cliente, whatsapp, copiar cuenta
+version: 1.9
 orden: 70
 estado: activo
 ---
@@ -87,6 +87,32 @@ puede ordenar por ellas.
 Estos campos solo cambian lo que se **muestra** al registrar Ingresos y Egresos:
 no alteran el saldo, ni la contabilidad, ni el orden de las formas en otros
 módulos (Compras, Traspasos, punto de venta…), que siguen listándolas por nombre.
+
+## Enviar las cuentas bancarias a un cliente
+
+Cuando un cliente pregunta **a qué cuenta depositar o transferir**, el botón
+**Cuentas** (junto a PDF y Excel) arma el mensaje con los datos bancarios de la
+empresa, listo para enviar.
+
+1. Pulse **Cuentas**. Se abre una ventana con las cuentas bancarias de la empresa.
+2. En **Cuentas a incluir**, desmarque las que no quiera enviar. El mensaje se
+   rearma solo.
+3. Si hace falta, ajuste el texto en **Mensaje para el cliente**.
+4. Pulse **Copiar** para pegarlo donde quiera (correo, chat…) o **WhatsApp** para
+   abrir WhatsApp con el mensaje escrito; allí se elige el contacto.
+
+El mensaje incluye, por cada cuenta, el banco, el tipo de cuenta y el número, y al
+final el **titular** (razón social de la empresa), su **RUC** y su correo.
+
+Aparecen las formas que cumplen todo esto:
+
+- son de tipo **Bancaria** y están **activas**;
+- aplican a **Ingresos** (o a ambos);
+- tienen banco y **número de cuenta**.
+
+Dos formas que comparten la misma cuenta física (p. ej. *Cheques Pichincha* y
+*Transferencias Pichincha*) salen **una sola vez**. Para usar el botón basta el
+permiso de **ver** el módulo; no modifica nada.
 
 ## Cuenta contable
 
@@ -170,8 +196,15 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
   edite esa forma de pago y cambie su cuenta contable a una que no sea la del
   banco (o conviértala a tipo Banco si de verdad corresponde a esa cuenta).
 
+- **El botón Cuentas dice que no hay cuentas bancarias para mostrar**: ninguna forma
+  cumple las condiciones. Revise que la forma del banco sea de tipo **Bancaria**,
+  esté activa, aplique a **Ingresos** y tenga banco y número de cuenta.
+- **El titular o el RUC del mensaje no son correctos**: salen de los datos de la
+  empresa; corríjalos allí.
+
 ## Historial de cambios
 
+- **1.9** — Nuevo botón **Cuentas**, junto a PDF y Excel: arma el mensaje con los datos de las cuentas bancarias de la empresa (banco, tipo, número, titular y RUC) para copiarlo o enviarlo por WhatsApp al cliente que pregunta a qué cuenta depositar.
 - **1.8** — Cada tipo indica si **mueve dinero**: el modal lo muestra debajo del selector y el listado marca con un ícono las formas que no lo mueven (Anticipo y Otros). El Reporte de Ingresos y Egresos usa esa marca para separar lo no monetario de la entrada y salida de dinero. Se agregan Bancaria y Nuvei a la tabla de tipos.
 - **1.7** — Se documenta que la cuenta de una forma **inactiva** que ya se usa se asigna
   desde este módulo (Configuración Contable solo muestra las activas).
