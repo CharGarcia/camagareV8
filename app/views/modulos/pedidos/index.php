@@ -334,6 +334,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <script>
     window.BASE_URL    = '<?= $base ?>';
     window.CMG_urlBase = '<?= $base ?>/modulos/pedidos';
+    // Cambiar el estado a mano es solo de administradores (niveles 2 y 3); el servidor lo revalida.
+    window.PED_ES_ADMIN = <?= (int) ($_SESSION['nivel'] ?? 1) >= 2 ? 'true' : 'false' ?>;
     window.APP_FAVORITOS = window.APP_FAVORITOS || {};
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir  = '<?= $ordenDir ?>';

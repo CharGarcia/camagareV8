@@ -236,6 +236,24 @@ class PedidoService {
                 $id_pedido = $cabecera['id'];
                 $cabeceraAnterior = $this->repository->obtenerPorId((int) $id_pedido, $id_empresa);
 
+                // Sin estado en la petición (p. ej. la app móvil) el pedido conserva el que tenía.
+                if ($cabeceraAnterior && trim((string) ($cabecera['estado'] ?? '')) === '') {
+                    $cabecera['estado'] = $cabeceraAnterior['estado'];
+                }
+
+                // Cambiar el estado a mano es solo de administradores.
+                if ($cabeceraAnterior && ($cabecera['estado'] ?? '') !== ($cabeceraAnterior['estado'] ?? '')) {
+                    $this->exigirAdministradorParaEstado();
+                }
+
+                // Un pedido que procesó una consignación no cambia de estado desde aquí.
+                if ($cabeceraAnterior
+                    && ($cabeceraAnterior['estado'] ?? '') === 'Procesado'
+                    && ($cabecera['estado'] ?? 'Pendiente') !== 'Procesado'
+                    && !$this->estadoEsManual($cabeceraAnterior, (int) $id_empresa)) {
+                    throw new Exception('Este pedido lo procesó una consignación de venta: su estado no se cambia a mano. Para devolverlo a Pendiente, anule o elimine la consignación.');
+                }
+
                 $sql = "UPDATE pedidos_cabecera SET
                         id_cliente = :id_cliente, 
                         fecha_pedido = :fecha_pedido, 
@@ -427,6 +445,88 @@ class PedidoService {
             $params['id_unidad_medida'] = $det['id_unidad_medida'] ?? null;
         }
         return $params;
+    }
+
+    public const ESTADOS = ['Pendiente', 'Procesado', 'Anulado'];
+
+    /**
+     * El estado de un pedido solo lo cambia a mano un administrador (niveles 2 y 3). Vive en el
+     * Service porque el pedido se guarda desde la web y desde la app móvil: así ninguna entrada
+     * se lo salta. El cambio automático por consignación no pasa por aquí.
+     */
+    private function exigirAdministradorParaEstado(): void {
+        if ((int) ($_SESSION['nivel'] ?? 1) < 2) {
+            throw new Exception('Solo un usuario administrador puede cambiar el estado de un pedido.');
+        }
+    }
+
+    /**
+     * ¿El estado actual del pedido se puso a mano? Un pedido congelado (Procesado / Anulado) se
+     * puede volver a cambiar de estado solo en ese caso: si lo dejó Procesado una consignación,
+     * el estado depende de ese documento y cambiarlo aquí lo dejaría contradiciéndolo.
+     */
+    public function estadoEsManual(array $cabecera, int $idEmpresa): bool {
+        $estado = (string) ($cabecera['estado'] ?? '');
+        if ($estado === 'Anulado') {
+            return true; // ningún documento anula un pedido: siempre es manual
+        }
+        if ($estado !== 'Procesado') {
+            return false;
+        }
+        return !$this->repository->estaCubiertoPorConsignacion((int) $cabecera['id'], $idEmpresa);
+    }
+
+    /**
+     * Cambia SOLO el estado de un pedido congelado cuyo estado se puso a mano (p. ej. alguien lo
+     * marcó Procesado sin consignarlo y hay que devolverlo a Pendiente). No toca nada más.
+     */
+    public function cambiarEstadoManual(int $id, string $nuevoEstado, int $idEmpresa, int $idUsuario): void {
+        if (!in_array($nuevoEstado, self::ESTADOS, true)) {
+            throw new Exception('Estado no válido.');
+        }
+
+        $enUso = $this->bloqueoService->verificarLibreOPropio(self::TABLA_BLOQUEO, $id, $idEmpresa, $idUsuario);
+        if ($enUso !== null) {
+            throw new Exception("Este pedido lo está usando ahora mismo {$enUso['usuario']}. Espera a que termine e intenta de nuevo.");
+        }
+
+        try {
+            $this->db->beginTransaction();
+
+            // Candado antes de leer (§8): una consignación guardándose a la vez recalcula este mismo estado.
+            $this->repository->lockEstado($id, $idEmpresa);
+
+            $anterior = $this->repository->obtenerPorId($id, $idEmpresa);
+            if (!$anterior) {
+                throw new Exception('El pedido no existe.');
+            }
+            $estadoAnterior = (string) ($anterior['estado'] ?? '');
+
+            if ($estadoAnterior !== $nuevoEstado) {
+                $this->exigirAdministradorParaEstado();
+
+                if ($estadoAnterior === 'Procesado' && !$this->estadoEsManual($anterior, $idEmpresa)) {
+                    throw new Exception('Este pedido lo procesó una consignación de venta: su estado no se cambia a mano. Para devolverlo a Pendiente, anule o elimine la consignación.');
+                }
+
+                $this->repository->actualizarEstado($id, $idEmpresa, $nuevoEstado, $idUsuario);
+
+                $this->logService->registrar(
+                    $idUsuario,
+                    $idEmpresa,
+                    'CAMBIAR_ESTADO_PEDIDO',
+                    'pedidos_cabecera',
+                    $id,
+                    ['estado' => $estadoAnterior],
+                    ['estado' => $nuevoEstado]
+                );
+            }
+
+            $this->db->commit();
+        } catch (Exception $e) {
+            $this->db->rollBack();
+            throw $e;
+        }
     }
 
     public function eliminarPedido($id, $id_empresa, $id_usuario) {

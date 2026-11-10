@@ -631,6 +631,12 @@ class PedidosController extends BaseModuloController {
             }
             unset($d);
 
+            // Pedido congelado cuyo estado se puso a mano (no por una consignación): el modal
+            // deja activo el combo Estado para poder corregirlo.
+            if ($pedido) {
+                $pedido['estado_manual'] = $this->service->estadoEsManual($pedido, (int) $_SESSION['id_empresa']);
+            }
+
             $this->json([
                 'status' => true,
                 'data' => [
@@ -728,6 +734,22 @@ class PedidosController extends BaseModuloController {
                 'message' => 'Pedido guardado con éxito',
                 'id' => $res
             ]);
+        } catch (Exception $e) {
+            $this->json(['status' => false, 'message' => $e->getMessage()]);
+        }
+    }
+
+    /** Cambia solo el estado de un pedido Procesado/Anulado cuyo estado se puso a mano. */
+    public function cambiarEstadoAjax() {
+        $this->requireActualizar();
+        try {
+            $this->service->cambiarEstadoManual(
+                (int) ($_POST['id'] ?? 0),
+                trim((string) ($_POST['estado'] ?? '')),
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+            $this->json(['status' => true, 'message' => 'Estado del pedido actualizado']);
         } catch (Exception $e) {
             $this->json(['status' => false, 'message' => $e->getMessage()]);
         }

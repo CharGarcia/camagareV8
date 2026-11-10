@@ -670,6 +670,51 @@ class PedidoRepository {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /**
+     * ¿Las consignaciones vigentes cubren TODAS las líneas vigentes del pedido? Es la misma regla
+     * con la que ConsignacionVentaRepository::actualizarEstadoPedidosPorConsignado() lo deja
+     * "Procesado". Si el pedido está Procesado y esto da false, nadie lo procesó con un documento:
+     * el estado se puso a mano (o viene de la migración) y por eso se puede volver a cambiar.
+     * Un pedido sin líneas vigentes no está cubierto por nada: false.
+     */
+    public function estaCubiertoPorConsignacion(int $idPedido, int $idEmpresa): bool {
+        $sql = "SELECT COUNT(pd.id) > 0 AND COALESCE(BOOL_AND(COALESCE(c.cantidad, 0) >= pd.cantidad), false)
+                  FROM pedidos_cabecera p
+                  JOIN pedidos_detalle pd ON pd.id_pedido = p.id AND pd.eliminado = false
+                  LEFT JOIN (
+                        SELECT cvd.id_pedido_detalle, SUM(cvd.cantidad) AS cantidad
+                          FROM consignaciones_ventas_detalles cvd
+                          JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion AND cv.eliminado = false
+                                                       AND COALESCE(cv.estado, '') <> 'Anulada'
+                         WHERE cvd.id_empresa = :id_empresa_cons AND cvd.eliminado = false
+                           AND cvd.id_pedido_detalle IN (SELECT pdx.id FROM pedidos_detalle pdx WHERE pdx.id_pedido = :id_pedido_cons)
+                         GROUP BY cvd.id_pedido_detalle
+                  ) c ON c.id_pedido_detalle = pd.id
+                 WHERE p.id = :id_pedido AND p.id_empresa = :id_empresa AND p.eliminado = false";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':id_empresa_cons' => $idEmpresa,
+            ':id_pedido_cons'  => $idPedido,
+            ':id_pedido'       => $idPedido,
+            ':id_empresa'      => $idEmpresa,
+        ]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /** Candado transaccional del estado del pedido (§8): la misma clave que usa Consignaciones al recalcularlo. */
+    public function lockEstado(int $idPedido, int $idEmpresa): void {
+        $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('pedido_estado:' || ? || ':' || ?))")
+                 ->execute([$idEmpresa, $idPedido]);
+    }
+
+    /** Cambia solo el estado de la cabecera. */
+    public function actualizarEstado(int $idPedido, int $idEmpresa, string $estado, int $idUsuario): void {
+        $this->db->prepare(
+            "UPDATE pedidos_cabecera SET estado = :estado, updated_at = CURRENT_TIMESTAMP, updated_by = :usuario
+              WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false"
+        )->execute([':estado' => $estado, ':usuario' => $idUsuario, ':id' => $idPedido, ':id_empresa' => $idEmpresa]);
+    }
+
     public function obtenerUltimoNumero($id_empresa) {
         $sql = "SELECT MAX(CAST(numero_pedido AS INTEGER)) FROM pedidos_cabecera WHERE id_empresa = :id_empresa";
         $stmt = $this->db->prepare($sql);

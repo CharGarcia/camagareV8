@@ -377,6 +377,9 @@ function PED_bloquearControles(bloquear) {
     if (form) {
         form.querySelectorAll('input, select, button').forEach(el => { el.disabled = bloquear; });
     }
+    // El estado solo lo cambia a mano un administrador: para el resto el combo es informativo.
+    const selEstado = document.getElementById('estado');
+    if (selEstado && !window.PED_ES_ADMIN) selEstado.disabled = true;
     const btnGuardar = document.getElementById('btn-guardar-pedido');
     if (btnGuardar) btnGuardar.classList.toggle('d-none', bloquear);
     const btnEliminar = document.getElementById('btn-eliminar-modal');
@@ -453,8 +456,39 @@ document.addEventListener('DOMContentLoaded', () => {
 // Guardado único (CLAUDE.md §8): clave del formulario de pedido NUEVO, viaja en cada intento.
 let PED_TOKEN_GUARDADO = '';
 let PED_GUARDANDO = false;
+// Pedido Procesado/Anulado cuyo estado se puso a mano: Guardar cambia solo el estado.
+let PED_SOLO_ESTADO = false;
+
+/** Guarda únicamente el estado de un pedido congelado cuyo estado se puso a mano. */
+async function guardarSoloEstadoPedido() {
+    if (PED_GUARDANDO) return;
+    PED_GUARDANDO = true;
+    const btnGuardar = document.getElementById('btn-guardar-pedido');
+    if (btnGuardar) btnGuardar.disabled = true;
+    try {
+        const formData = new FormData();
+        formData.append('id', document.getElementById('pedido_id').value);
+        formData.append('estado', document.getElementById('estado').value);
+        const resp = await fetch(`${window.CMG_urlBase}/cambiarEstadoAjax`, { method: 'POST', body: formData });
+        const res = await resp.json();
+        if (res.status) {
+            Swal.fire({ icon: 'success', title: 'Éxito', text: res.message });
+            bootstrap.Modal.getInstance(document.getElementById('modalPedido')).hide();
+            listarPedidos();
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: res.message });
+        }
+    } catch (err) {
+        console.error('Error al cambiar el estado:', err);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'No se recibió respuesta del servidor. Vuelva a abrir el pedido para comprobar su estado.' });
+    } finally {
+        PED_GUARDANDO = false;
+        if (btnGuardar) btnGuardar.disabled = false;
+    }
+}
 
 function nuevoPedido() {
+    PED_SOLO_ESTADO = false;
     PED_TOKEN_GUARDADO = window.CMG_nuevoTokenGuardado ? window.CMG_nuevoTokenGuardado() : '';
     const form = document.getElementById('form-pedido-cabecera');
     if (form) form.reset();
@@ -1105,6 +1139,8 @@ function validarFechasYHoras() {
 }
 
 async function guardarPedido() {
+    if (PED_SOLO_ESTADO) return guardarSoloEstadoPedido();
+
     const selectPuntos = document.getElementById('id_punto_emision');
     const optionPunto = selectPuntos.options[selectPuntos.selectedIndex];
 
@@ -1342,11 +1378,26 @@ async function editarPedido(id) {
             // pedido no cambia su estado (solo Consignaciones lo pasa a Procesado),
             // así que este caso es normal, no una inconsistencia.
             const estadoBloqueado = (p.estado === 'Procesado' || p.estado === 'Anulado');
+            // Estado puesto a mano (no por una consignación): el pedido sigue congelado,
+            // pero el combo Estado y Guardar quedan activos para poder corregirlo.
+            // Solo un administrador (niveles 2 y 3) puede cambiarlo.
+            const estadoManual = estadoBloqueado && !!p.estado_manual;
+            PED_SOLO_ESTADO = estadoManual && !!window.PED_ES_ADMIN;
             bloquearPedidoProcesado(
                 estadoBloqueado,
-                `Este pedido está ${p.estado}: no se puede editar.`,
+                PED_SOLO_ESTADO
+                    ? `Este pedido está ${p.estado} porque el estado se cambió a mano, no por una consignación. Puede cambiar el Estado y guardar; el resto no se edita.`
+                    : estadoManual
+                        ? `Este pedido está ${p.estado} porque el estado se cambió a mano, no por una consignación. No se puede editar; un administrador puede corregir el estado.`
+                        : `Este pedido está ${p.estado}: no se puede editar.`,
                 todoRegistrado
             );
+            if (PED_SOLO_ESTADO) {
+                const selEstado = document.getElementById('estado');
+                if (selEstado) selEstado.disabled = false;
+                const btnG = document.getElementById('btn-guardar-pedido');
+                if (btnG) { btnG.classList.remove('d-none'); btnG.disabled = false; }
+            }
 
             const modalEl = document.getElementById('modalPedido');
             if (modalEl) {
@@ -1567,6 +1618,7 @@ function pedEtiquetaAccion(log) {
             ? `Estado actualizado al guardar la consignación ${numero}`
             : 'Estado actualizado por una consignación';
     }
+    if (accion.includes('CAMBIAR_ESTADO')) return 'Estado cambiado a mano';
     if (accion.includes('CREAR'))      return 'Pedido creado';
     if (accion.includes('ACTUALIZAR')) return 'Pedido editado';
     if (accion.includes('ELIMINAR'))   return 'Pedido eliminado';

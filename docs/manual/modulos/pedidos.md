@@ -125,6 +125,7 @@ El pedido cambia por dos caminos, y los dos quedan en la lista de ediciones:
 |---|---|
 | Alguien abrió el pedido y lo guardó | *Pedido editado*, con los campos que tocó |
 | Alguien guardó o eliminó una **consignación** que usa líneas de este pedido, y eso cambió su estado | *Estado actualizado al guardar la consignación 001-001-000000123* |
+| Alguien corrigió el estado de un pedido Procesado o Anulado que se había cambiado a mano | *Estado cambiado a mano*, con el estado anterior y el nuevo |
 
 El segundo caso es automático: nadie abrió el pedido, pero el sistema recalcula si
 quedó **Procesado** (todas sus líneas ya salieron en consignación) o vuelve a
@@ -279,6 +280,19 @@ Se administran en **Configuración → Permisos por módulo**, sobre la ruta
   **Procesado** cuando todas sus líneas quedan completas, y vuelve a **Pendiente**
   si aún falta algo. *Facturado* no se asigna desde este módulo; existe como filtro
   del buscador para los pedidos que se resolvieron por factura.
+- **El estado a mano es solo de administradores**: únicamente los usuarios
+  administradores (niveles 2 y 3) pueden cambiar el campo *Estado* de un pedido. Para
+  el resto el campo se ve pero no se puede tocar, y el servidor rechaza el intento.
+  El cambio automático por una consignación no depende de quién la guarde.
+- **Corregir un estado puesto a mano**: un pedido en **Procesado** o **Anulado** no
+  se edita. Pero si ese estado lo puso una persona desde el campo *Estado* —y no una
+  consignación—, al abrirlo un administrador el campo *Estado* y el botón **Guardar** siguen activos:
+  se puede devolver a *Pendiente* (o pasarlo a otro estado) y el resto del pedido no
+  se toca. El aviso superior del modal lo indica. Si lo procesó una consignación
+  (todas sus líneas están cubiertas por consignaciones vigentes), el estado no se
+  cambia a mano: hay que anular o eliminar la consignación. Los pedidos que llegaron
+  como Procesado desde el sistema anterior, sin consignación enlazada, cuentan como
+  puestos a mano.
 - **Auditoría**: crear, actualizar y eliminar un pedido quedan registrados en la
   bitácora del sistema (`/config/log-sistema`, módulo *Pedidos*).
 
@@ -339,6 +353,14 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 - **"No se puede quitar / cambiar / reducir ... ya tiene N registrado en una
   consignación o factura"**: esa línea ya se despachó. Corrija primero el documento
   que la consumió.
+- **"Este pedido lo procesó una consignación de venta: su estado no se cambia a
+  mano"**: todas sus líneas están entregadas en consignaciones vigentes. Para
+  devolverlo a Pendiente, anule o elimine la consignación.
+- **"Solo un usuario administrador puede cambiar el estado de un pedido"**: su
+  usuario es de nivel 1. Pida el cambio a un administrador.
+- **Un pedido quedó en Procesado y nadie lo consignó**: alguien cambió el campo
+  *Estado* a mano. Un administrador lo abre, pone *Pendiente* en *Estado* y guarda. La pestaña
+  *Información* muestra quién lo cambió y cuándo.
 - **"La fecha de entrega no puede ser menor a la fecha actual"**: la entrega quedó
   en el pasado; corrija la fecha.
 - **"La fecha de emisión no puede ser anterior a la fecha actual"**: se está
@@ -355,6 +377,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.23** — **El estado a mano es solo de administradores** (niveles 2 y 3): para los demás usuarios el campo *Estado* queda de solo lectura. **Corregir un estado puesto a mano**: un pedido en *Procesado* o *Anulado* cuyo estado se cambió a mano (no por una consignación) deja activo el campo *Estado* para devolverlo a *Pendiente*; antes quedaba congelado sin forma de corregirlo. Un pedido procesado por una consignación ya no puede cambiar de estado a mano.
 - **1.22** — La pestaña *Detalle* del modal pasa a llamarse **Información**, igual que en el resto del sistema. Muestra lo mismo.
 - **1.21** — **Pestaña Detalle solo para administradores**: la pestaña *Detalle* del modal (quién creó y editó el pedido, y su historial) la ven únicamente los usuarios de nivel 2 y 3.
 - **1.20** — **Consignaciones anuladas no consumen el pedido**: lo consignado en una consignación *Anulada* ya no se resta del saldo de la línea; el pedido vuelve a *Pendiente* si deja de estar cubierto. La consignación anulada se sigue viendo en el historial de la línea, con su estado.
