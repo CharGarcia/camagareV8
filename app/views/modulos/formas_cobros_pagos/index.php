@@ -237,8 +237,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig 
                 <button type="button" class="btn btn-sm btn-outline-primary" id="fpCtasBtnCopiar" onclick="FP_ctasCopiar()" disabled>
                     <i class="bi bi-clipboard me-1"></i>Copiar
                 </button>
-                <button type="button" class="btn btn-sm btn-success" id="fpCtasBtnWhatsapp" onclick="FP_ctasWhatsapp()" disabled>
-                    <i class="bi bi-whatsapp me-1"></i>WhatsApp
+                <button type="button" class="btn btn-sm btn-outline-danger" id="fpCtasBtnPdf" onclick="FP_ctasPdf()" disabled>
+                    <i class="bi bi-file-earmark-pdf me-1"></i>PDF
                 </button>
             </div>
         </div>
@@ -254,7 +254,7 @@ async function FP_cuentasBancarias(){
     const ver = (id, mostrar) => document.getElementById(id).classList.toggle('d-none', !mostrar);
     ver('fpCtasCargando', true); ver('fpCtasVacio', false); ver('fpCtasContenido', false);
     document.getElementById('fpCtasBtnCopiar').disabled = true;
-    document.getElementById('fpCtasBtnWhatsapp').disabled = true;
+    document.getElementById('fpCtasBtnPdf').disabled = true;
     bootstrap.Modal.getOrCreateInstance(modalEl).show();
 
     try {
@@ -323,7 +323,14 @@ function FP_ctasArmarTexto(){
     }
     document.getElementById('fpCtasTexto').value = lineas.join('\n');
     document.getElementById('fpCtasBtnCopiar').disabled = !elegidas.length;
-    document.getElementById('fpCtasBtnWhatsapp').disabled = !elegidas.length;
+    document.getElementById('fpCtasBtnPdf').disabled = !elegidas.length;
+}
+
+// PDF con el logo de la empresa y las cuentas marcadas (Imprimir / Descargar / Ver).
+function FP_ctasPdf(){
+    const idx = Array.from(document.querySelectorAll('#fpCtasLista input:checked')).map(chk => chk.value);
+    if (!idx.length) return;
+    CMG_pdfDocumento('<?= $urlBase ?>/cuentasBancariasPdf?c=' + encodeURIComponent(idx.join(',')));
 }
 
 async function FP_ctasCopiar(){
@@ -347,13 +354,6 @@ async function FP_ctasCopiar(){
     } else {
         Swal.fire('Atención', 'No se pudo copiar automáticamente. Seleccione el texto y cópielo a mano.', 'warning');
     }
-}
-
-// Abre WhatsApp con el mensaje listo; el contacto se elige allí.
-function FP_ctasWhatsapp(){
-    const texto = document.getElementById('fpCtasTexto').value.trim();
-    if (!texto) return;
-    window.open('https://wa.me/?text=' + encodeURIComponent(texto), '_blank', 'noopener');
 }
 </script>
 

@@ -5,7 +5,7 @@ categoria: Tesorería
 ruta_modulo: modulos/formas_cobros_pagos
 tipo: modulo
 visibilidad: todos
-etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco, mueve dinero, monetario, no monetario, otros, cruce, compensación, nuvei, bancaria, cuentas bancarias, datos bancarios, número de cuenta, a qué cuenta depositar, depósito, enviar cuenta al cliente, whatsapp, copiar cuenta
+etiquetas: formas de pago, formas de cobro, efectivo, caja, banco, tarjeta, payphone, anticipo, transferencia, cheque, orden, ordenar formas de pago, primera forma de pago, orden en ingresos, orden en egresos, saldo, mostrar saldo, ocultar saldo, saldo disponible, saldo de caja, saldo del banco, mueve dinero, monetario, no monetario, otros, cruce, compensación, nuvei, bancaria, cuentas bancarias, datos bancarios, número de cuenta, a qué cuenta depositar, depósito, enviar cuenta al cliente, pdf cuentas bancarias, copiar cuenta
 version: 1.9
 orden: 70
 estado: activo
@@ -98,8 +98,15 @@ empresa, listo para enviar.
 2. En **Cuentas a incluir**, desmarque las que no quiera enviar. El mensaje se
    rearma solo.
 3. Si hace falta, ajuste el texto en **Mensaje para el cliente**.
-4. Pulse **Copiar** para pegarlo donde quiera (correo, chat…) o **WhatsApp** para
-   abrir WhatsApp con el mensaje escrito; allí se elige el contacto.
+4. Pulse **PDF** para obtener una hoja con el **logo y el nombre de la empresa** y
+   las cuentas marcadas, lista para imprimir, descargar o ver y enviarla al
+   cliente. O pulse **Copiar** y pegue el texto donde quiera enviarlo (WhatsApp,
+   correo, chat…).
+
+El PDF lleva solo las cuentas marcadas, con el banco, el tipo y el número de cada
+una, y debajo el titular, el RUC y el correo. El logo es el del establecimiento
+(o el del punto de emisión, si solo se cargó ahí); sin logo, sale el nombre de la
+empresa centrado.
 
 El mensaje incluye, por cada cuenta, el banco, el tipo de cuenta y el número, y al
 final el **titular** (razón social de la empresa), su **RUC** y su correo.
@@ -204,7 +211,7 @@ por dos medios (p. ej. "Cheques Pichincha" y "Transferencias Pichincha").
 
 ## Historial de cambios
 
-- **1.9** — Nuevo botón **Cuentas**, junto a PDF y Excel: arma el mensaje con los datos de las cuentas bancarias de la empresa (banco, tipo, número, titular y RUC) para copiarlo o enviarlo por WhatsApp al cliente que pregunta a qué cuenta depositar.
+- **1.9** — Nuevo botón **Cuentas**, junto a PDF y Excel: arma el mensaje con los datos de las cuentas bancarias de la empresa (banco, tipo, número, titular y RUC) para sacarlo en **PDF con el logo de la empresa** o copiarlo como texto, y enviarlo al cliente que pregunta a qué cuenta depositar.
 - **1.8** — Cada tipo indica si **mueve dinero**: el modal lo muestra debajo del selector y el listado marca con un ícono las formas que no lo mueven (Anticipo y Otros). El Reporte de Ingresos y Egresos usa esa marca para separar lo no monetario de la entrada y salida de dinero. Se agregan Bancaria y Nuvei a la tabla de tipos.
 - **1.7** — Se documenta que la cuenta de una forma **inactiva** que ya se usa se asigna
   desde este módulo (Configuración Contable solo muestra las activas).
