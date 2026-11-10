@@ -1324,10 +1324,68 @@ class ConsignacionVentaService
      */
     public function getKardexDeConsignacion(int $idConsignacion, int $idEmpresa): array
     {
-        if (!$this->repository->find($idConsignacion, $idEmpresa)) {
+        $cab = $this->repository->find($idConsignacion, $idEmpresa);
+        if (!$cab) {
             return [];
         }
-        return $this->repository->getKardex($idConsignacion, $idEmpresa);
+        $filas = $this->repository->getKardex($idConsignacion, $idEmpresa);
+        if (($cab['estado'] ?? '') === 'Anulada') {
+            $filas = $this->agregarFilasAnulacion($filas, $cab);
+        }
+        return $filas;
+    }
+
+    /**
+     * Una consignación Anulada devolvió a la bodega lo que el cliente aún tenía: se agrega al
+     * resumen una fila "Anulación" por cada línea con saldo, para que el saldo cierre en 0
+     * (antes seguía mostrando lo consignado como si el cliente todavía lo tuviera).
+     */
+    private function agregarFilasAnulacion(array $filas, array $cab): array
+    {
+        $saldoLinea    = []; // id_consignacion_detalle => pendiente de la línea
+        $saldoProducto = []; // id_producto => pendiente del producto
+        $iniciales     = []; // filas "Consignación Inicial", de donde salen producto, lote y NUP
+        $fecha         = substr((string) ($cab['updated_at'] ?? ''), 0, 10);
+
+        foreach ($filas as $f) {
+            $idLinea = (int) ($f['id_consignacion_detalle'] ?? 0);
+            $idProd  = (int) $f['id_producto'];
+            $mov     = (float) $f['mov'];
+            $saldoLinea[$idLinea]   = ($saldoLinea[$idLinea] ?? 0) + $mov;
+            $saldoProducto[$idProd] = ($saldoProducto[$idProd] ?? 0) + $mov;
+            if ((int) $f['orden'] === 1) {
+                $iniciales[] = $f;
+            }
+            // La anulación va después de todo lo demás, aunque un documento tenga fecha posterior.
+            $fechaFila = substr((string) $f['fecha'], 0, 10);
+            if ($fechaFila > $fecha) {
+                $fecha = $fechaFila;
+            }
+        }
+
+        $numero = $this->numeroConsignacion($cab);
+        foreach ($iniciales as $ini) {
+            $idLinea = (int) $ini['id_consignacion_detalle'];
+            $idProd  = (int) $ini['id_producto'];
+            // Tope por producto: cubre retornos viejos que no quedaron enlazados a su línea.
+            $cantidad = round(min($saldoLinea[$idLinea] ?? 0, $saldoProducto[$idProd] ?? 0), 6);
+            if ($cantidad <= 0) {
+                continue;
+            }
+            $saldoProducto[$idProd] = round($saldoProducto[$idProd] - $cantidad, 6);
+            $filas[] = array_merge($ini, [
+                'fecha'      => $fecha,
+                'orden'      => 5,
+                'tipo'       => 'Anulación',
+                'documento'  => $numero,
+                'estado_doc' => 'Anulada',
+                'entrada'    => 0,
+                'salida'     => $cantidad,
+                'mov'        => -$cantidad,
+                'saldo'      => $saldoProducto[$idProd],
+            ]);
+        }
+        return $filas;
     }
 
     /** Asiento sugerido (reclasificación de inventario a costo) para la pestaña. */

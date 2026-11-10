@@ -466,6 +466,9 @@ consumido**: el saldo del pedido queda otra vez disponible para consignar o fact
 y el pedido vuelve a **Pendiente** si ya no está cubierto. En el Reporte de
 Inventarios la consignación anulada queda con **saldo 0**.
 
+En la pestaña **Resumen** del modal aparece una fila **Anulación** por cada línea
+que el cliente aún tenía, y el **Saldo total** cierra en 0.
+
 Una consignación anulada **ya no se puede reactivar**: el selector de estado queda
 bloqueado. Si se anuló por error, hay que registrar una consignación nueva.
 
@@ -608,7 +611,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
-- **1.49** — **Anular libera el pedido**: una consignación Anulada ya no cuenta como consumo de su pedido; al anularla se recalcula el estado del pedido (vuelve a *Pendiente* si queda saldo), igual que al eliminarla.
+- **1.49** — **Anular libera el pedido**: una consignación Anulada ya no cuenta como consumo de su pedido; al anularla se recalcula el estado del pedido (vuelve a *Pendiente* si queda saldo), igual que al eliminarla. La pestaña **Resumen** de una anulada muestra la fila *Anulación* y saldo 0.
 - **1.48** — Al cargar desde un pedido, el stock de cada fila se actualiza al cambiar el **lote** (muestra el stock de ese lote en la bodega de la fila), la **bodega** o la cantidad, y **cuadra entre filas**: descuenta lo que ya tomaron las filas de arriba y las líneas de la consignación.
 - **1.47** — **Unidad de medida por línea** (Empresa → Facturación → *Mostrar unidad de medida*), como en Facturas de venta: 4 CIENTO descuentan 400 unidades del inventario. Antes no había selector y la cantidad salía siempre en la unidad del producto (4 cajas salían como 4 unidades). Las líneas cargadas desde un pedido heredan su unidad; retornos, cambios y facturación convierten igual.
 - **1.46** — Corregido: editar una consignación con el punto de partida o de llegada vacío fallaba al guardar.

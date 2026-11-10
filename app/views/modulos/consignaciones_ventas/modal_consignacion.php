@@ -3501,6 +3501,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
             'Retorno':              'bg-warning bg-opacity-10 text-warning border-warning',
             'Facturación':          'bg-success bg-opacity-10 text-success border-success',
             'Cambio de producto':   'bg-primary bg-opacity-10 text-primary border-primary',
+            'Anulación':            'bg-danger bg-opacity-10 text-danger border-danger',
         };
         const cls = clases[tipo] || 'bg-secondary bg-opacity-10 text-secondary border-secondary';
         return `<span class="badge ${cls} border border-opacity-25">${consEscHtml(tipo)}</span>`;
