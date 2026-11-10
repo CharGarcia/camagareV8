@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, total de una categoria, solo lo de la categoria, la factura completa, el total no cuadra con el filtro, filtrar por producto, filtrar por variante, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente, motivo de la nota de credito, columna motivo, por que se hizo la nota de credito, razon de la devolucion
-version: 1.21
+version: 1.22
 orden: 10
 estado: activo
 ---
@@ -22,7 +22,7 @@ qué, en el periodo que se indique.
 | Fecha desde / hasta | El periodo a consultar |
 | Cliente | Ventas de un cliente concreto |
 | Vendedor | Ventas de un vendedor concreto. Las notas de crédito entran por **su propio vendedor** (el campo *Vendedor* de la nota), también en *Facturas − NC* |
-| Cajero | Documentos de un usuario concreto: el **responsable** del documento, el que aparece en la columna *Cajero* del detallado. Lista los usuarios asignados a la empresa. A un usuario que solo ve sus propios documentos (o los de su vendedor) no se le muestra: su alcance ya lo limita |
+| Cajero | Documentos de un usuario concreto: el **responsable** del documento (casi siempre el mismo que la columna *Usuario* del detallado, que muestra quién lo registró). Lista los usuarios asignados a la empresa. A un usuario que solo ve sus propios documentos (o los de su vendedor) no se le muestra: su alcance ya lo limita |
 | Producto / Variante | Solo lo vendido de los productos cuya descripción o código (o variante) contiene el texto. Ver la sección *Filtrar por producto, variante, marca o categoría* |
 | Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por producto, variante, marca o categoría* |
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
@@ -183,8 +183,7 @@ los demás tipos de documento ni en las vistas agrupadas.
 
 ### Por cajero
 
-Una fila por usuario responsable de los documentos (la columna *Cajero* del
-detallado), con el número de documentos, bases, IVA y total; con gráfico, PDF y
+Una fila por usuario responsable de los documentos, con el número de documentos, bases, IVA y total; con gráfico, PDF y
 Excel. Los documentos sin usuario (por ejemplo, algunos migrados) se juntan en
 *Sin cajero*. Combinada con el filtro **Cajero** muestra solo ese usuario.
 
@@ -417,7 +416,7 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 - **El listado ocupa todo el ancho de la hoja.** En las vistas agrupadas la hoja
   va vertical y la columna descriptiva (producto, cliente) se lleva el espacio
   que sobra, para que los nombres largos se lean; en la vista **Detallado**, que
-  tiene doce columnas, la hoja sale **horizontal**, igual que **Unidades por
+  tiene once columnas, la hoja sale **horizontal**, igual que **Unidades por
   producto / mes** cuando el período pasa de seis meses (con más de doce, la
   letra se reduce un punto para que entren todas las columnas). Un nombre o un
   código más largo que su columna se parte en varias líneas: nunca se pisa con
@@ -476,6 +475,7 @@ El PDF es la misma pantalla en hoja, pensado para imprimir o enviar por correo:
 
 ## Historial de cambios
 
+- **1.22** — El detallado ya no muestra la columna **Cajero** (pantalla, Excel y PDF): queda solo **Usuario**, quien registró el documento. El filtro **Cajero** y la agrupación **Por cajero** siguen igual.
 - **1.21** — Nueva columna **Motivo** en el detallado cuando el tipo de documento es **Notas de Crédito en Ventas**: en pantalla, en el Excel y en el PDF.
 - **1.20** — Nueva **fila TOTAL** al pie de la tabla en pantalla para el detallado, por cliente, por variante, por fecha, por cajero y por mes (antes solo la tenían las vistas de productos y de cliente / categoría). Suma las filas mostradas y coincide con las tarjetas de arriba y con el PDF.
 - **1.19** — Los filtros **Producto**, **Variante**, **Marca** y **Categoría** cuentan solo lo vendido de lo filtrado en todas las vistas: en el detallado, por cliente, por fecha, por mes, por cajero y en las tarjetas de totales ya no se suma la factura completa, sino solo sus líneas que cumplen el filtro. *Producto* y *Variante* ahora también acotan las líneas en *Por producto* y demás vistas por producto (antes mostraban todos los productos de esas facturas). Corregido el error que daba el buscador *Variante* con notas de crédito o *Facturas − NC*.

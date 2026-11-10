@@ -294,7 +294,7 @@ class ReporteVentasController extends BaseModuloController
     private static function numColumnas(string $agrupar, array $meses, bool $conMotivo = false): int
     {
         return match ($agrupar) {
-            'NINGUNO'      => $conMotivo ? 13 : 12,
+            'NINGUNO'      => $conMotivo ? 12 : 11,
             'PRODUCTO'     => 7,
             'VARIANTE'     => 8,
             'PRODUCTO_MES' => 3 + count($meses),
@@ -390,7 +390,7 @@ class ReporteVentasController extends BaseModuloController
      */
     private function renderFilaTotalesMontosHtml(array $rows, string $agrupar, bool $conMotivo = false): string
     {
-        $spanDet = $conMotivo ? 8 : 7;   // columnas del detallado antes de los importes
+        $spanDet = $conMotivo ? 7 : 6;  // columnas del detallado antes de los importes
         $n      = count($rows);
         $etq    = "TOTAL ({$n} " . $this->sustantivoFilas($agrupar, $n) . ")";
         $num    = static fn (string $c): string => number_format(self::sumarCampo($rows, $c), 2);
@@ -638,7 +638,7 @@ class ReporteVentasController extends BaseModuloController
             }
             $html .= "<td class='text-center'><span class='badge border {$badgeColor}'>".strtoupper($estado)."</span></td>";
             $html .= "<td>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
-            $html .= "<td>".htmlspecialchars($r['cajero_nombre']   ?? '')."</td>";
+            // Sin columna Cajero: casi siempre repetía al Usuario (el cajero sigue como filtro y agrupación).
             $html .= "<td>".htmlspecialchars($r['usuario_nombre']  ?? '')."</td>";
             $html .= "<td class='text-end'>$base0</td>";
             $html .= "<td class='text-end'>$baseIva</td>";
@@ -875,7 +875,7 @@ class ReporteVentasController extends BaseModuloController
                 $conEstado = $filtros['borradores'] !== 'EXCLUIR';
                 // Notas de crédito: columna "Motivo" tras el cliente, como en la pantalla.
                 $conMotivo = self::conMotivo($filtros);
-                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula'], $conMotivo ? ['Motivo'] : [], $conEstado ? ['Estado'] : [], ['Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
+                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula'], $conMotivo ? ['Motivo'] : [], $conEstado ? ['Estado'] : [], ['Vendedor', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = array_merge($consolidado ? [(string) ($r['establecimiento'] ?? '')] : [], [
@@ -885,7 +885,6 @@ class ReporteVentasController extends BaseModuloController
                         $r['cliente_ruc'],
                     ], $conMotivo ? [(string) ($r['motivo'] ?? '')] : [], $conEstado ? [strtoupper((string) ($r['estado'] ?? ''))] : [], [
                         $r['vendedor_nombre'] ?? '',
-                        $r['cajero_nombre']   ?? '',
                         $r['usuario_nombre']  ?? '',
                         $r['clave_acceso']    ?? '',
                         (float)($r['base_0']    ?? 0),
@@ -913,7 +912,7 @@ class ReporteVentasController extends BaseModuloController
      * <td>, que es lo único que hace que Html2Pdf respete el ancho — con el ancho solo en
      * el <th> ensancha la columna hasta que el texto quepa en una línea y la tabla se sale
      * de la hoja (ver docs/manual/modulos/reporte-ventas.md, "Exportar" › "Qué trae el PDF").
-     * El detallado sale horizontal (sus doce columnas —trece en consolidado— no caben en A4
+     * El detallado sale horizontal (sus once columnas —doce en consolidado o con Motivo— no caben en A4
      * retrato); los agrupados, retrato con la columna descriptiva lo más ancha posible.
      */
     public function exportPdf(): void
@@ -1101,7 +1100,7 @@ class ReporteVentasController extends BaseModuloController
     }
 
     /**
-     * Orientación de la hoja: horizontal para el detallado (doce columnas) y para
+     * Orientación de la hoja: horizontal para el detallado (once columnas) y para
      * "Unidades por producto y mes" cuando el período pasa de seis meses.
      */
     private static function pdfHorizontal(string $agrupar, array $meses): bool
@@ -1325,11 +1324,11 @@ class ReporteVentasController extends BaseModuloController
             $cols[] = ['lbl' => 'Estab.', 'w' => 5, 'cls' => 'text-center',
                        'val' => static fn (array $r): string => $wrap((string) ($r['establecimiento'] ?? ''), $pt(5), $ptFila)];
         }
-        // Notas de crédito: entra la columna "Motivo" tras el cliente. Su ancho (12 %; 10 % en
+        // Notas de crédito: entra la columna "Motivo" tras el cliente. Su ancho (15 %; 13 % en
         // consolidado) sale de recortar un poco las demás columnas de texto; la suma sigue en 100.
-        [$wFec, $wDoc, $wCli, $wMot, $wEst, $wVen, $wCaj, $wUsu, $wRet] = $conMotivo
-            ? ($consolidado ? [6, 9, 11, 10, 7, 7, 6, 6, 5] : [6, 9, 14, 12, 7, 7, 6, 6, 5])
-            : ($consolidado ? [7, 10, 12, 0, 8, 9, 8, 7, 6] : [7, 10, 16, 0, 8, 9, 8, 8, 6]);
+        [$wFec, $wDoc, $wCli, $wMot, $wEst, $wVen, $wUsu, $wRet] = $conMotivo
+            ? ($consolidado ? [6, 9, 11, 13, 7, 8, 8, 5] : [6, 9, 14, 15, 7, 8, 8, 5])
+            : ($consolidado ? [7, 10, 16, 0, 8, 11, 9, 6] : [7, 10, 20, 0, 8, 11, 10, 6]);
         $colMotivo = $conMotivo ? [
             ['lbl' => 'Motivo', 'w' => $wMot, 'cls' => '',
              'val' => static fn (array $r): string => $wrap((string) ($r['motivo'] ?? ''), $pt($wMot), $ptFila)],
@@ -1346,8 +1345,6 @@ class ReporteVentasController extends BaseModuloController
              'val' => static fn (array $r): string => $wrap(strtoupper((string) ($r['estado'] ?? '')), $pt($wEst), $ptFila)],
             ['lbl' => 'Vendedor', 'w' => $wVen, 'cls' => '',
              'val' => static fn (array $r): string => $wrap((string) ($r['vendedor_nombre'] ?? ''), $pt($wVen), $ptFila)],
-            ['lbl' => 'Cajero', 'w' => $wCaj, 'cls' => '',
-             'val' => static fn (array $r): string => $wrap((string) ($r['cajero_nombre'] ?? ''), $pt($wCaj), $ptFila)],
             ['lbl' => 'Usuario', 'w' => $wUsu, 'cls' => '',
              'val' => static fn (array $r): string => $wrap((string) ($r['usuario_nombre'] ?? ''), $pt($wUsu), $ptFila)],
             ['lbl' => 'Base 0%', 'w' => 7, 'cls' => 'text-end', 'tot' => 'total_base_0',

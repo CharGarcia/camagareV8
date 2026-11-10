@@ -600,7 +600,6 @@ const RV_COLUMNAS = {
             ['cliente_nombre',    'Cliente',          ''],
             ['estado',            'Estado',           'text-center'],
             ['vendedor_nombre',   'Vendedor',         ''],
-            ['cajero_nombre',     'Cajero',           ''],
             ['usuario_nombre',    'Usuario',          ''],
             ['base_0',            'Base 0% / Exento', 'text-end'],
             ['base_iva',          'Base IVA',         'text-end'],
