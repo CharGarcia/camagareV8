@@ -16,7 +16,6 @@ use App\Helpers\PreferenciasHelper;
             <div class="modal-header bg-light py-2">
                 <h5 class="modal-title fw-bold fs-6"><i class="bi bi-megaphone text-primary me-2"></i><span id="pub-m-titulo">Nueva publicación</span>
                     <span class="badge ms-2" id="pub-m-estado"></span></h5>
-                <?= PreferenciasHelper::renderDropdownPestanas(['pub-pane-previa' => 'Vista previa', 'pub-pane-resultados' => 'Resultados'], $vistaConfig ?? [], $rutaModulo) ?>
                 <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body pt-2">
@@ -38,12 +37,18 @@ use App\Helpers\PreferenciasHelper;
                     <div class="small text-muted ms-auto" id="pub-m-ayuda"></div>
                 </div>
 
-                <ul class="nav nav-tabs nav-sm mb-2" role="tablist">
-                    <li class="nav-item"><button class="nav-link active py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-contenido" type="button"><i class="bi bi-card-text me-1"></i>Contenido</button></li>
-                    <li class="nav-item"><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-destinos" type="button"><i class="bi bi-diagram-3 me-1"></i>Dónde</button></li>
-                    <li class="nav-item"><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-previa" type="button" onclick="PUB.vistaPrevia()"><i class="bi bi-phone me-1"></i>Vista previa</button></li>
-                    <li class="nav-item"><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-resultados" type="button"><i class="bi bi-graph-up me-1"></i>Resultados</button></li>
-                </ul>
+                <!-- Pestañas; el engranaje de «Pestañas visibles» va al final de la barra, como en los demás modales (ref.: proveedores) -->
+                <div class="d-flex align-items-center border-bottom mb-2">
+                    <ul class="nav nav-tabs nav-sm border-bottom-0 flex-grow-1" role="tablist">
+                        <li class="nav-item"><button class="nav-link active py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-contenido" type="button"><i class="bi bi-card-text me-1"></i>Contenido</button></li>
+                        <li class="nav-item"><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-destinos" type="button"><i class="bi bi-diagram-3 me-1"></i>Dónde</button></li>
+                        <li class="nav-item"><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-previa" type="button" onclick="PUB.vistaPrevia()"><i class="bi bi-phone me-1"></i>Vista previa</button></li>
+                        <li class="nav-item"><button class="nav-link py-1" data-bs-toggle="tab" data-bs-target="#pub-pane-resultados" type="button"><i class="bi bi-graph-up me-1"></i>Resultados</button></li>
+                    </ul>
+                    <div class="pb-1 flex-shrink-0">
+                        <?= PreferenciasHelper::renderDropdownPestanas(['pub-pane-previa' => 'Vista previa', 'pub-pane-resultados' => 'Resultados'], $vistaConfig ?? [], $rutaModulo) ?>
+                    </div>
+                </div>
 
                 <form id="pub-form" autocomplete="off" onsubmit="event.preventDefault(); PUB.guardar();">
                     <input type="hidden" id="pub-m-id">
