@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.13
+etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.15
 orden: 20
 estado: activo
 ---
@@ -142,6 +142,49 @@ Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso d
 | Pago con tarjeta / por transferencia | Qué formas de pago ve el cliente. Al menos una. |
 | Datos para la transferencia | Banco, cuenta y titular que el cliente ve para transferir. |
 | Enlace público fijo | Un enlace permanente (para su web, redes o un QR) donde cualquiera inicia su solicitud. Se puede regenerar; el anterior deja de funcionar. Máximo 5 solicitudes por hora desde una misma conexión. |
+
+### Imprimir el QR del enlace fijo
+
+Junto al enlace público fijo está el botón **Imprimir QR**. Pide el **título del
+cartel** (viene con *Firmas electrónicas desde aquí, rápido*; puede cambiarlo y
+el navegador lo recuerda) y abre una hoja lista para imprimir con el título, el
+código QR y el enlace escrito debajo. Quien lo escanea con la cámara del
+celular llega al formulario para iniciar su solicitud.
+
+- El enlace debe existir: active **Enlace público fijo** y pulse **Guardar**.
+- Si **regenera** el enlace, los carteles ya impresos dejan de funcionar:
+  imprímalos de nuevo.
+- El navegador debe permitir ventanas emergentes para abrir la hoja.
+
+## Cómo corrige el cliente su solicitud
+
+El cliente edita con **el mismo enlace** que recibió, sin pedir otro:
+
+| Estado | Qué puede cambiar el cliente |
+|--------|------------------------------|
+| Borrador / Pendiente de pago | Botón **Editar** en la tarjeta *Tus datos* (abre el formulario; al final **Guardar cambios**) y tocar cualquier documento para reemplazarlo |
+| Observada | El formulario aparece abierto con el motivo; corrige y pulsa **Enviar corrección** |
+| Por registrar (pagada, aún sin enviar a Uanataca) | Sus datos del titular (botón **Editar**) y sus documentos (los reemplaza; no puede dejarlos vacíos). **No** puede cambiar la validez de la firma ni los datos de la factura |
+| En trámite en adelante | Nada: solo ve el estado y el historial. Para corregir, use **Pedir corrección al cliente** (pestaña Trámite) mientras no esté aprobada ni emitida |
+
+Cuando el cliente cambia algo **después de pagar**:
+
+- La empresa recibe el correo *Solicitud de firma modificada por el cliente* (uno
+  cada 10 minutos como máximo por firma, aunque cambie varios documentos seguidos) y
+  cada cambio queda en el historial interno de la ficha. Revise la ficha antes de
+  registrar la firma en Uanataca.
+- Si cambia su **correo**, la confirmación anterior se anula: se le reenvía la
+  factura al correo nuevo con el botón **«Confirmo que recibí mi factura»** y el
+  enlace del correo anterior deja de servir.
+- La edición se cierra sola en cuanto la solicitud se envía a Uanataca (por API)
+  o usted pulsa **Ya la registré en Uanataca**. Con el envío automático activo,
+  ese margen puede ser de pocos minutos.
+
+**Cada firma tiene su propio enlace.** Un enlace corresponde a una sola solicitud:
+si la misma persona pide dos firmas (dos veces desde el enlace fijo o el QR, o con
+**Solicitar una nueva firma**), cada una queda con su enlace y se edita desde el
+suyo. El enlace de cada solicitud llega en los correos de esa solicitud y usted
+puede copiarlo desde **Enlaces enviados**.
 
 ## Fecha de vencimiento automática
 
@@ -292,8 +335,9 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 - Un enlace genera **una sola** solicitud; un pago genera **una sola** factura y
   un solo cobro aunque se repita el clic o Payphone avise dos veces.
 - El cliente puede corregir sus datos y documentos mientras la solicitud está
-  en *Borrador*, *Pendiente de pago* u *Observada*. Después de pagar no puede
-  cambiar la validez elegida.
+  en *Borrador*, *Pendiente de pago*, *Observada* o *Por registrar* (pagada y aún
+  sin enviar a Uanataca). Después de pagar no puede cambiar la validez elegida ni
+  los datos de la factura (ver *Cómo corrige el cliente su solicitud*).
 - El precio cobrado por Payphone es el total de la factura (IVA según la serie
   configurada).
 - La **dirección** del titular es obligatoria y debe tener al menos 10
@@ -481,6 +525,8 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.15** — El cliente puede corregir sus datos y reemplazar sus documentos **después de pagar**, mientras la firma esté *Por registrar* (antes de enviarse a Uanataca); la validez y la factura no cambian. La empresa recibe un correo de aviso y, si el cliente cambia su correo, debe confirmarlo de nuevo.
+- **3.14** — Botón **Imprimir QR** junto al enlace público fijo (engranaje, pestaña General): cartel con título editable, QR y enlace. Nueva sección *Cómo corrige el cliente su solicitud*.
 - **3.13** — El PDF de la factura que se genera por la venta de una firma usa la configuración del **establecimiento de la serie** de la factura (decimales, dirección, leyendas), no la del primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.
 - **3.12** — Número de identificación: con cédula solo se pueden escribir 10 dígitos
   y con pasaporte letras y números hasta 20, tanto en la ficha como en el enlace del

@@ -37,6 +37,8 @@ if (!$firma) {
 }
 $mostrarForm = !$firma || $estado === 'observada';
 $puedePagar  = $firma && $estado === 'pendiente' && in_array($estadoPago, ['pendiente', 'rechazado'], true);
+// Pago confirmado: la validez y la facturación quedan como se facturaron.
+$pagada      = $firma && $estadoPago === 'confirmado';
 
 $documentos = [
     'cedula_frontal'          => ['bi-credit-card-fill',    'image/*'],
@@ -172,6 +174,9 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             <div class="flex-grow-1 small">
                 <div class="section-title mb-1"><i class="bi bi-person-check me-1"></i>Tus datos</div>
                 <?= $e(($f['apellidos'] ?? '') . ' ' . ($f['nombres'] ?? '')) ?> · <?= $e($f['numero_identificacion'] ?? '') ?> · <?= $e($f['correo'] ?? '') ?>
+                <?php if ($estado === 'por_registrar'): ?>
+                    <div class="text-muted mt-1">Todavía puedes corregir tus datos y documentos, hasta que ingresemos tu solicitud en la entidad certificadora.</div>
+                <?php endif; ?>
             </div>
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-toggle="collapse" data-bs-target="#bloqueDatos">
                 <i class="bi bi-pencil me-1"></i>Editar
@@ -228,6 +233,9 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 </div>
                 <p class="text-muted small mb-0 d-none" id="sinFirmasTipoPersona">No hay firmas disponibles para este tipo de persona. Si eres representante legal o persona natural, revisa la opción elegida arriba.</p>
                 <div class="small text-muted mt-2">Precios con IVA incluido.</div>
+                <?php if ($pagada): ?>
+                    <div class="alert alert-info small py-2 mt-2 mb-0"><i class="bi bi-info-circle me-1"></i>Ya registramos tu pago: la validez de la firma y los datos de la factura no se pueden cambiar.</div>
+                <?php endif; ?>
             <?php endif; ?>
         </div>
     </div>
@@ -397,6 +405,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         </div>
     </div>
 
+    <?php if (!$pagada): ?>
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
             <div class="form-check form-switch mb-0">
@@ -441,6 +450,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <div class="d-grid mb-4">
         <button type="submit" class="btn btn-primary btn-lg fw-semibold" id="btnGuardarDatos">

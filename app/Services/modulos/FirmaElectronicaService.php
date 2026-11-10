@@ -787,7 +787,7 @@ class FirmaElectronicaService
                 'transferencia' => $cfg['transferencia_activa'],
                 'datos'         => $cfg['datos_transferencia'],
             ],
-            'editable'   => !$firma || in_array((string) $firma['estado'], FirmaElectronicaRules::ESTADOS_EDITABLES_PORTAL, true),
+            'editable'   => !$firma || $this->editableEnPortal($firma),
         ];
     }
 
@@ -800,10 +800,19 @@ class FirmaElectronicaService
         $sol = $this->solicitudActiva($token);
         $idEmpresa = (int) $sol['id_empresa'];
 
+        // Con el pago confirmado el portal ya no muestra la facturación: se valida con la guardada.
+        $previa = $this->repository->getPorSolicitud((int) $sol['id'], $idEmpresa);
+        if ($previa) {
+            $data = $this->conservarFacturado($data, $previa);
+        }
+
         $tipos = $this->repository->getTiposFirma($idEmpresa);
         $this->rules->validarPortal($data, array_map(static fn($t) => (int) $t['id'], $tipos));
         $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         $data['nombre_producto'] = $this->nombreProducto($tipos, (int) $data['id_producto']);
+
+        $editoPagada  = null;   // firma (antes del cambio) editada con el pago ya confirmado
+        $cambioCorreo = false;
 
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -815,10 +824,18 @@ class FirmaElectronicaService
             $firma = $this->repository->getPorSolicitud((int) $sol['id'], $idEmpresa);
             if ($firma) {
                 $this->repository->lockFirma((int) $firma['id']);
+                // Se vuelve a leer con el candado: el envío a Uanataca pudo reservarla entretanto.
+                $firma = $this->repository->getPorSolicitud((int) $sol['id'], $idEmpresa);
                 $this->exigirEditable($firma);
                 $pagoEnCurso = in_array((string) $firma['estado_pago'], ['en_revision', 'confirmado'], true);
                 if ($pagoEnCurso && (int) $firma['id_producto'] !== (int) $data['id_producto']) {
                     throw new Exception('Ya registró el pago de esta firma: no puede cambiar la validez elegida.');
+                }
+                // La factura ya se emitió con esos datos: no cambian aunque el pago se confirmara recién.
+                $data = $this->conservarFacturado($data, $firma);
+                if ((string) $firma['estado_pago'] === 'confirmado') {
+                    $editoPagada  = $firma;
+                    $cambioCorreo = mb_strtolower(trim((string) $firma['correo']), 'UTF-8') !== mb_strtolower(trim((string) $data['correo']), 'UTF-8');
                 }
                 $data['id_empresa'] = $idEmpresa;
                 // El portal no pide observaciones ni motivo: se conserva lo que tenía la ficha.
@@ -832,6 +849,17 @@ class FirmaElectronicaService
                         $this->repository->actualizarTramite((int) $firma['id'], $idEmpresa, ['fecha_caducidad' => $estimada], null);
                     }
                 }
+                if ($cambioCorreo) {
+                    // El correo confirmado era el anterior: el nuevo debe confirmarse con un enlace nuevo
+                    // (el del correo viejo deja de servir). Si el reenvío falla, lo reintenta el cron.
+                    $this->repository->actualizarTramite((int) $firma['id'], $idEmpresa, [
+                        'correo_confirmado_at' => null, 'correo_confirmacion_token' => null, 'correo_confirmacion_enviado_at' => null,
+                    ], null);
+                }
+                if ($editoPagada) {
+                    $this->repository->crearEvento($idEmpresa, (int) $firma['id'], 'edicion_cliente', 'Actualizaste tus datos',
+                        $cambioCorreo ? 'Cambiaste tu correo: te enviamos la factura al nuevo para que lo confirmes.' : null, true, null);
+                }
                 $this->logService->registrar(0, $idEmpresa, 'actualizar_portal', 'firmas_electronicas', (int) $firma['id'], $firma, $data);
             } else {
                 $this->crearFirmaDesdePortal($sol, $data);
@@ -842,6 +870,76 @@ class FirmaElectronicaService
                 $db->rollBack();
             }
             throw $e;
+        }
+
+        if ($editoPagada) {
+            if ($cambioCorreo) {
+                try {
+                    $this->enviarCorreoConfirmacion((int) $editoPagada['id'], $idEmpresa);
+                } catch (\Throwable $e) {
+                    error_log('[Firmas] Reenvío de confirmación tras cambio de correo, firma #' . $editoPagada['id'] . ': ' . $e->getMessage());
+                }
+            }
+            $this->avisarEdicionTrasPago(array_merge($editoPagada, $data),
+                'Cambió sus datos' . ($cambioCorreo ? ' y su correo (antes: ' . $editoPagada['correo'] . '); se le reenvió la factura para confirmarlo' : '') . '.');
+        }
+    }
+
+    /** Con el pago confirmado, los datos de facturación quedan como se facturaron. */
+    private function conservarFacturado(array $data, array $firma): array
+    {
+        if ((string) ($firma['estado_pago'] ?? '') !== 'confirmado') {
+            return $data;
+        }
+        foreach (self::CAMPOS_FACTURADOS as $campo) {
+            if (str_starts_with($campo, 'facturacion_')) {
+                $data[$campo] = $firma[$campo] ?? null;
+            }
+        }
+        $data['facturacion_mismos_datos'] = !empty($firma['facturacion_mismos_datos']) && $firma['facturacion_mismos_datos'] !== 'f';
+        return $data;
+    }
+
+    /**
+     * El cliente cambió datos o documentos con la firma ya pagada (aún sin enviar a Uanataca):
+     * queda en el historial interno y se avisa al correo de la empresa, como mucho una vez
+     * cada 10 minutos por firma (varios documentos seguidos = un solo correo).
+     */
+    private function avisarEdicionTrasPago(array $firma, string $detalle): void
+    {
+        $idEmpresa = (int) $firma['id_empresa'];
+        $idFirma   = (int) $firma['id'];
+        try {
+            $reciente = false;
+            foreach ($this->repository->getEventos($idFirma, $idEmpresa) as $ev) {
+                if ($ev['tipo'] === 'edicion_pagada' && strtotime((string) $ev['created_at']) > time() - 600) {
+                    $reciente = true;
+                }
+            }
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'edicion_pagada', 'El cliente modificó su solicitud después del pago', $detalle, false, null);
+            if ($reciente) {
+                return;
+            }
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $correo  = trim((string) ($empresa['mail'] ?? ''));
+            if ($correo === '') {
+                return;
+            }
+            $nomEmp  = (string) (($empresa['nombre_comercial'] ?? '') ?: ($empresa['nombre'] ?? ''));
+            $titular = trim(($firma['nombres'] ?? '') . ' ' . ($firma['apellidos'] ?? ''));
+            $url     = url_absoluta('modulos/firmas_electronicas');
+            $cuerpo  = '<p>El cliente <b>' . self::h($titular) . '</b> (' . self::h((string) ($firma['numero_identificacion'] ?? '')) . ') '
+                . '<b>modificó su solicitud de firma electrónica después de pagar</b>, antes de que se registre en Uanataca.</p>'
+                . '<p style="background:#fef9c3;padding:8px 12px;border-radius:6px;">' . self::h($detalle) . '</p>'
+                . '<p>Revise la ficha antes de registrar la firma en Uanataca. La factura no cambia.</p>'
+                . '<p style="text-align:center;margin:24px 0;"><a href="' . self::h($url) . '" '
+                . 'style="background:#2563eb;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;">'
+                . 'Revisar solicitud</a></p>';
+            (new \App\Services\EnvioDocumentosSRIService())->enviarAvisoSimple(
+                $idEmpresa, $correo, $nomEmp, 'Solicitud de firma modificada por el cliente - ' . ($titular !== '' ? $titular : 'cliente'), $cuerpo, $nomEmp
+            );
+        } catch (\Throwable $e) {
+            error_log('[Firmas] Aviso de edición tras el pago, firma #' . $idFirma . ': ' . $e->getMessage());
         }
     }
 
@@ -923,13 +1021,20 @@ class FirmaElectronicaService
         if ($tipo === 'comprobante_transferencia' || !in_array($tipo, FirmaElectronicaRules::TIPOS_ADJUNTO, true)) {
             throw new Exception('Tipo de documento no válido.');
         }
-        return $this->guardarAdjunto($firma, $tipo, $file, null, true);
+        $res = $this->guardarAdjunto($firma, $tipo, $file, null, true);
+        if ((string) $firma['estado'] === 'por_registrar') {
+            $this->avisarEdicionTrasPago($firma, 'Reemplazó el documento: ' . (FirmaElectronicaRules::ETIQUETAS_ADJUNTO[$tipo] ?? $tipo) . '.');
+        }
+        return $res;
     }
 
     public function quitarAdjuntoPortal(string $token, int $idAdjunto): void
     {
         [$sol, $firma] = $this->firmaDelPortal($token);
         $this->exigirEditable($firma);
+        if ((string) $firma['estado'] === 'por_registrar') {
+            throw new Exception('Su firma ya está pagada: para cambiar un documento, suba el nuevo en su lugar.');
+        }
         $idEmpresa = (int) $firma['id_empresa'];
         $adj = $this->repository->getAdjuntoPorId($idAdjunto, $idEmpresa);
         if (!$adj || (int) $adj['id_firma'] !== (int) $firma['id'] || $adj['tipo'] === 'comprobante_transferencia') {
@@ -2877,9 +2982,28 @@ class FirmaElectronicaService
         return [$sol, $firma];
     }
 
+    /**
+     * El cliente puede corregir desde su enlace mientras no pagó (o está observada) y, ya
+     * pagada, hasta que la solicitud se envía o se registra en Uanataca: "por registrar",
+     * sin uuid y sin un envío en curso.
+     */
+    private function editableEnPortal(array $firma): bool
+    {
+        $estado = (string) ($firma['estado'] ?? '');
+        if (in_array($estado, FirmaElectronicaRules::ESTADOS_EDITABLES_PORTAL, true)) {
+            return true;
+        }
+        if ($estado !== 'por_registrar' || !empty($firma['uanataca_uuid'])) {
+            return false;
+        }
+        $enviando = ($firma['uanataca_estado'] ?? '') === self::UANATACA_ENVIANDO
+            && strtotime((string) ($firma['uanataca_estado_at'] ?? '')) > time() - 300;
+        return !$enviando;
+    }
+
     private function exigirEditable(array $firma): void
     {
-        if (!in_array((string) $firma['estado'], FirmaElectronicaRules::ESTADOS_EDITABLES_PORTAL, true)) {
+        if (!$this->editableEnPortal($firma)) {
             throw new Exception('Su solicitud ya está en trámite y no se puede modificar. Si necesita un cambio, comuníquese con la empresa.');
         }
     }

@@ -458,6 +458,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <div class="input-group input-group-sm mt-1">
                             <input type="text" class="form-control" id="cfgUrlEnlaceFijo" readonly value="<?= htmlspecialchars($urlEnlaceFijo ?? '') ?>" placeholder="Se genera al guardar">
                             <button type="button" class="btn btn-outline-secondary" title="Copiar" onclick="copiarTextoFirma(document.getElementById('cfgUrlEnlaceFijo').value)"><i class="bi bi-clipboard"></i></button>
+                            <button type="button" class="btn btn-outline-primary" title="Imprimir un QR con este enlace" onclick="imprimirQrEnlaceFijo()"><i class="bi bi-qr-code"></i><span class="d-none d-md-inline"> Imprimir QR</span></button>
                             <button type="button" class="btn btn-outline-danger" title="Generar un enlace nuevo (el anterior deja de funcionar)" onclick="guardarConfigFirmas(true)"><i class="bi bi-arrow-repeat"></i></button>
                         </div>
                         <div class="form-text small">Cualquier persona con este enlace puede iniciar una solicitud (máximo 5 por hora desde la misma conexión).</div>
@@ -948,6 +949,52 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
 
     window.abrirConfigFirmas = function () {
         bootstrap.Modal.getOrCreateInstance(document.getElementById('modalConfigFirmas')).show();
+    };
+
+    // Cartel imprimible con el QR del enlace fijo (ventana nueva + window.print(), como el QR de mesas).
+    window.imprimirQrEnlaceFijo = async function () {
+        const url = document.getElementById('cfgUrlEnlaceFijo').value.trim();
+        if (!url) {
+            Swal.fire('Sin enlace', 'Active el enlace público fijo y pulse Guardar para generarlo.', 'info');
+            return;
+        }
+        const CLAVE = 'firmas_qr_titulo';
+        let previo = 'Firmas electrónicas desde aquí, rápido';
+        try { previo = localStorage.getItem(CLAVE) || previo; } catch {}
+        const r = await Swal.fire({
+            title: 'Imprimir QR', input: 'text', inputLabel: 'Título del cartel', inputValue: previo,
+            inputAttributes: { maxlength: 80 },
+            target: document.getElementById('modalConfigFirmas'),
+            showCancelButton: true, confirmButtonText: 'Imprimir', cancelButtonText: 'Cancelar', reverseButtons: true,
+        });
+        if (!r.isConfirmed) return;
+        const titulo = (r.value || '').trim();
+        try { localStorage.setItem(CLAVE, titulo); } catch {}
+
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+        const qr  = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=10&data=' + encodeURIComponent(url);
+        const html = `<!DOCTYPE html><html lang="es"><head>
+            <meta charset="UTF-8">
+            <title>QR - Firmas electrónicas</title>
+            <style>
+                @page { size: A4 portrait; margin: 15mm; }
+                * { box-sizing: border-box; }
+                body { font-family: Arial, Helvetica, sans-serif; text-align: center; margin: 0; padding: 20px 0 0; color: #1c1f24; }
+                .titulo { font-size: 40px; font-weight: 800; line-height: 1.15; margin: 0 auto 24px; max-width: 16cm; }
+                img { width: 11cm; height: 11cm; }
+                .instr { font-size: 20px; font-weight: 600; margin-top: 20px; }
+                .url { font-size: 12px; color: #6c7688; margin-top: 10px; word-break: break-all; }
+            </style>
+        </head><body>
+            ${titulo ? `<div class="titulo">${esc(titulo)}</div>` : ''}
+            <img src="${esc(qr)}" alt="QR" onload="window.print()" onerror="document.body.insertAdjacentHTML('beforeend','<p>No se pudo generar el QR. Revise su conexión.</p>')">
+            <div class="instr">Escanea el código con la cámara de tu celular</div>
+            <div class="url">${esc(url)}</div>
+        </body></html>`;
+        const win = window.open('', '_blank', 'width=700,height=900,scrollbars=yes');
+        if (!win) { Swal.fire('Ventana bloqueada', 'Permita las ventanas emergentes para imprimir el QR.', 'warning'); return; }
+        win.document.write(html);
+        win.document.close();
     };
 
     window.guardarConfigFirmas = async function (regenerar) {
