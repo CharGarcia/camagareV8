@@ -726,6 +726,46 @@ class ConsignacionVentaRepository extends BaseRepository
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    /** Quién y cuándo registró y modificó la consignación (pestaña Información del modal). */
+    public function getDatosRegistro(int $idConsignacion, int $idEmpresa): ?array
+    {
+        $sql = "SELECT cv.estado, cv.created_at, cv.updated_at,
+                       uc.nombre AS creado_por, uu.nombre AS modificado_por
+                  FROM consignaciones_ventas cv
+                  LEFT JOIN usuarios uc ON uc.id = cv.created_by
+                  LEFT JOIN usuarios uu ON uu.id = cv.updated_by
+                 WHERE cv.id = :id AND cv.id_empresa = :e";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idConsignacion, ':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
+     * Movimientos de inventario que generó la consignación, INCLUIDOS los anulados (con quién y
+     * cuándo los anuló): es el rastro completo para la pestaña Información, no el stock vigente.
+     */
+    public function getMovimientosInventario(int $idConsignacion, int $idEmpresa): array
+    {
+        $sql = "SELECT k.id, k.created_at, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo,
+                       p.codigo AS producto_codigo, p.nombre AS producto_nombre,
+                       b.nombre AS bodega_nombre, k.numero_lote, k.nup,
+                       k.cantidad, k.stock_anterior, k.stock_posterior, k.observaciones,
+                       u.nombre AS usuario_nombre,
+                       k.eliminado, k.deleted_at, ua.nombre AS anulado_por
+                  FROM inventario_kardex k
+                  LEFT JOIN productos p ON p.id = k.id_producto
+                  LEFT JOIN bodegas   b ON b.id = k.id_bodega
+                  LEFT JOIN usuarios  u ON u.id = k.created_by
+                  LEFT JOIN usuarios ua ON ua.id = k.deleted_by
+                 WHERE k.id_empresa = :e AND k.referencia_id = :id
+                   AND k.referencia_tipo IN ('CONSIGNACION_VENTA', 'EDICION_CONSIGNACION_VENTA')
+                 ORDER BY k.created_at ASC, k.id ASC";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id' => $idConsignacion, ':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     /** ¿La consignación proviene de una migración? (tiene fila en migracion_mysql_map). */
     public function esMigrado(int $id, int $idEmpresa): bool
     {

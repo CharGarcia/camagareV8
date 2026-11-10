@@ -76,13 +76,22 @@ $pedVistaConfig = $vistaConfig ?? [];
                                 <i class="bi bi-info-circle me-1"></i> General
                             </a>
                         </li>
+                        <?php
+                        // La pestaña Detalle (quién creó/editó y el historial) es solo para
+                        // administradores y superadministradores (niveles 2 y 3). El servidor
+                        // aplica la misma regla en PedidosController::getHistorialAjax().
+                        $pedVerDetalle = (int) ($_SESSION['nivel'] ?? 1) >= 2;
+                        ?>
+                        <?php if ($pedVerDetalle): ?>
                         <li class="nav-item" role="presentation">
                             <a class="nav-link" id="ped-tab-detalle-btn" data-bs-toggle="tab"
                                data-bs-target="#ped-pane-detalle" href="#ped-pane-detalle" role="tab" title="Detalle del registro">
                                 <i class="bi bi-clock-history me-1"></i> Detalle
                             </a>
                         </li>
+                        <?php endif; ?>
                     </ul>
+                    <?php if ($pedVerDetalle): ?>
                     <div class="pb-1 flex-shrink-0">
                         <?php
                         // La clave debe ser el id del .tab-pane (no el del <a>): es lo que
@@ -95,6 +104,7 @@ $pedVistaConfig = $vistaConfig ?? [];
                         );
                         ?>
                     </div>
+                    <?php endif; ?>
                 </div>
                 <div class="border-bottom bg-light mb-0"></div>
 
@@ -254,6 +264,7 @@ $pedVistaConfig = $vistaConfig ?? [];
                      Va FUERA del <form> a propósito: PED_bloquearControles() deshabilita
                      todos los input/select/button del formulario cuando el pedido está
                      bloqueado, y el historial se debe poder seguir consultando. -->
+                <?php if ($pedVerDetalle): ?>
                 <div class="tab-pane fade" id="ped-pane-detalle" role="tabpanel">
                     <div id="ped-detalle-vacio" class="text-center text-muted py-5 d-none">
                         <i class="bi bi-clock-history d-block mb-2" style="font-size: 1.6rem;"></i>
@@ -312,6 +323,7 @@ $pedVistaConfig = $vistaConfig ?? [];
                         </div>
                     </div>
                 </div><!-- /ped-pane-detalle -->
+                <?php endif; ?>
                 </div><!-- /tab-content -->
             </div>
 

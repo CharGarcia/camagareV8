@@ -600,6 +600,22 @@ class PedidosController extends BaseModuloController {
         exit;
     }
 
+    /**
+     * Historial del pedido (pestaña Detalle del modal): solo administradores y
+     * superadministradores (niveles 2 y 3), igual que la pestaña en la vista.
+     */
+    public function getHistorialAjax(): void
+    {
+        if (($_GET['tabla'] ?? '') === 'pedidos_cabecera' && (int) ($_SESSION['nivel'] ?? 1) < 2) {
+            $this->requireLeer();
+            header('Content-Type: application/json');
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver el historial del pedido.']);
+            exit;
+        }
+        parent::getHistorialAjax();
+    }
+
     public function obtenerPedidoAjax() {
         $this->requireLeer();
         try {

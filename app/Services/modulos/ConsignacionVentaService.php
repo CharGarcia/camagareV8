@@ -1336,6 +1336,43 @@ class ConsignacionVentaService
     }
 
     /**
+     * Pestaña Información (solo lectura): quién y cuándo registró/modificó la consignación, las
+     * acciones asentadas en log_sistema y los movimientos de inventario que generó (también los
+     * anulados). Fechas ya en d-m-Y H:i:s.
+     */
+    public function getInformacion(int $idConsignacion, int $idEmpresa): array
+    {
+        $registro = $this->repository->getDatosRegistro($idConsignacion, $idEmpresa);
+        if (!$registro) {
+            return [];
+        }
+        $fmt = static fn($f): string => !empty($f) ? date('d-m-Y H:i:s', strtotime((string) $f)) : '';
+
+        $registro['created_at'] = $fmt($registro['created_at']);
+        $registro['updated_at'] = $fmt($registro['updated_at']);
+
+        $historial = [];
+        foreach ($this->logService->getHistorial('consignaciones_ventas', $idConsignacion, $idEmpresa) as $log) {
+            $historial[] = [
+                'fecha'    => $log['created_at'], // getHistorial ya la entrega en d-m-Y H:i:s
+                'usuario'  => $log['usuario_nombre'] ?? '',
+                'accion'   => $log['accion'] ?? '',
+                'detalles' => $log['detalles'] ?? [],
+            ];
+        }
+
+        $inventario = $this->repository->getMovimientosInventario($idConsignacion, $idEmpresa);
+        foreach ($inventario as &$m) {
+            $m['created_at'] = $fmt($m['created_at']);
+            $m['deleted_at'] = $fmt($m['deleted_at']);
+            $m['eliminado']  = \App\Helpers\Booleano::es($m['eliminado']);
+        }
+        unset($m);
+
+        return ['registro' => $registro, 'historial' => $historial, 'inventario' => $inventario];
+    }
+
+    /**
      * Una consignación Anulada devolvió a la bodega lo que el cliente aún tenía: se agrega al
      * resumen una fila "Anulación" por cada línea con saldo, para que el saldo cierre en 0
      * (antes seguía mostrando lo consignado como si el cliente todavía lo tuviera).

@@ -820,6 +820,34 @@ class ConsignacionesVentasController extends BaseModuloController
         exit;
     }
 
+    /** Pestaña Información del modal (solo lectura): registro, acciones auditadas y movimientos de inventario. */
+    public function getInformacionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        try {
+            // Solo administradores y superadministradores (niveles 2 y 3), igual que la vista.
+            if ((int) ($_SESSION['nivel'] ?? 1) < 2) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver esta información.']);
+                exit;
+            }
+            $idCons    = (int) ($_GET['id'] ?? 0);
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            if ($idCons <= 0) {
+                echo json_encode(['ok' => true, 'data' => []]);
+                exit;
+            }
+            $this->docPropioOCortar($idCons);
+            echo json_encode(['ok' => true, 'data' => $this->service->getInformacion($idCons, $idEmpresa)]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar la información.']);
+        }
+        exit;
+    }
+
     /** Cambia el estado de la consignación (Borrador | Entregada | Anulada). */
     public function cambiarEstadoAjax(): void
     {

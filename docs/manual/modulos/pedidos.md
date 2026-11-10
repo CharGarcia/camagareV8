@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, unidad de medida, cajas, caja, ciento, docena, pedir por caja, medida, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.20
+version: 1.21
 orden: 0
 estado: activo
 ---
@@ -91,7 +91,8 @@ El formulario está dividido en dos pestañas, debajo de la barra de acciones:
   entrega, responsable, observaciones y las líneas de productos. Es lo que se
   llena y se guarda, y es la pestaña que se abre siempre.
 - **Detalle**: quién registró el pedido y qué se le ha cambiado desde entonces.
-  No se edita nada aquí; es solo de consulta.
+  No se edita nada aquí; es solo de consulta. **Solo la ven los administradores
+  y superadministradores (niveles 2 y 3)**; a un usuario de nivel 1 no le aparece.
 
 La pestaña **Detalle** se puede ocultar con el **engranaje** que está a la derecha
 de las pestañas, y cada usuario decide si la quiere ver: la preferencia se guarda
@@ -354,6 +355,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.21** — **Pestaña Detalle solo para administradores**: la pestaña *Detalle* del modal (quién creó y editó el pedido, y su historial) la ven únicamente los usuarios de nivel 2 y 3.
 - **1.20** — **Consignaciones anuladas no consumen el pedido**: lo consignado en una consignación *Anulada* ya no se resta del saldo de la línea; el pedido vuelve a *Pendiente* si deja de estar cubierto. La consignación anulada se sigue viendo en el historial de la línea, con su estado.
 - **1.19** — **Unidad de medida por línea.** Con *Mostrar unidad de medida* activo (Empresa → Facturación) cada producto se puede pedir en otra unidad del mismo tipo (CIENTO, DOCENA…); la consignación y la factura generadas desde el pedido la respetan y el inventario descuenta la cantidad convertida. Lo consignado o facturado se cuenta en la unidad del pedido.
 - **1.18** — Los productos del pedido se muestran siempre en el **orden en que se capturaron** (pantalla, PDF, Excel y app móvil). Antes, después de editar un pedido, las líneas podían aparecer en otro orden.

@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, unidad de medida, cajas, caja, ciento, docena, consignar por caja, salen unidades en vez de cajas, medida, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, stock por lote, stock del lote, el stock no se actualiza, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion, anular consignacion, consignacion anulada, anular devuelve el stock, reactivar consignacion anulada, no descuenta inventario, facturacion afecta al inventario, producto no inventariable en consignacion
-version: 1.49
+version: 1.50
 orden: 45
 estado: activo
 ---
@@ -476,6 +476,25 @@ Las consignaciones que se anularon **antes** de este cambio pudieron quedar con 
 mercadería fuera de la bodega. Para devolverla, use **Eliminar** en esa
 consignación: el botón también aparece en las anuladas.
 
+## La pestaña Información
+
+En el modal de la consignación, la pestaña **Información** es solo de consulta y
+tiene el mismo diseño que la pestaña *Detalle* de Pedidos. **Solo la ven los
+administradores y superadministradores (niveles 2 y 3)**. Muestra:
+
+- **Creado**: quién registró la consignación, con fecha y hora.
+- **Última edición**: quién la modificó por última vez, cuándo y qué cambió.
+- **Ediciones de la consignación**: línea de tiempo con cada acción registrada
+  (creación, ediciones, cambios de estado, entrega, eliminación), su usuario, la
+  fecha y hora, y los campos que cambiaron.
+- **Movimientos de inventario generados**: cada salida que la consignación sacó de
+  la bodega, con usuario, fecha y hora, producto, bodega, lote, NUP y cantidad.
+  Los movimientos **anulados** también aparecen, con quién y cuándo los anuló.
+
+Se puede ocultar con el **engranaje** de las pestañas, como las demás. En una
+consignación migrada o anterior al registro de cambios, la última edición puede
+no tener detalle: la pestaña lo avisa.
+
 ## Qué productos descuentan del inventario
 
 La consignación sigue la **misma regla que la factura**: descuenta stock solo si el
@@ -611,6 +630,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.50** — Nueva pestaña **Información** en el modal (solo niveles 2 y 3, solo lectura): quién creó y modificó la consignación, con fecha y hora, la línea de tiempo de sus acciones y los movimientos de inventario que generó, incluidos los anulados.
 - **1.49** — **Anular libera el pedido**: una consignación Anulada ya no cuenta como consumo de su pedido; al anularla se recalcula el estado del pedido (vuelve a *Pendiente* si queda saldo), igual que al eliminarla. La pestaña **Resumen** de una anulada muestra la fila *Anulación* y saldo 0.
 - **1.48** — Al cargar desde un pedido, el stock de cada fila se actualiza al cambiar el **lote** (muestra el stock de ese lote en la bodega de la fila), la **bodega** o la cantidad, y **cuadra entre filas**: descuenta lo que ya tomaron las filas de arriba y las líneas de la consignación.
 - **1.47** — **Unidad de medida por línea** (Empresa → Facturación → *Mostrar unidad de medida*), como en Facturas de venta: 4 CIENTO descuentan 400 unidades del inventario. Antes no había selector y la cantidad salía siempre en la unidad del producto (4 cajas salían como 4 unidades). Las líneas cargadas desde un pedido heredan su unidad; retornos, cambios y facturación convierten igual.
