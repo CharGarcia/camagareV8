@@ -34,7 +34,7 @@ pantalla registra **acciones de negocio**.
    (solo nivel 3), **Acción** o **Módulo**. Los cuatro tienen **buscador**: haga
    clic en el filtro y escriba parte del nombre (sin importar mayúsculas ni tildes)
    para acortar la lista, y elija con el ratón o con Enter. Para quitar el filtro
-   borre lo elegido con **Retroceso** o use **Limpiar**.
+   haga clic en él y pulse **Suprimir** o **Retroceso**, o use **Limpiar**.
 4. Para encontrar un evento por lo que dice adentro, escriba en **Contenido del
    mensaje** (ver más abajo).
 5. Haga clic en cualquier fila para abrir el **detalle del evento**: en el
@@ -286,7 +286,10 @@ espacios.
 
 - **1.5** — Campo **Referencia** en la barra de filtros: busca por la columna
   Referencia (nombre o identificación del cliente, proveedor, empleado o producto) sin
-  tener que escribir la clave `tercero:`. Se aplica también a PDF y Excel.
+  tener que escribir la clave `tercero:`. Se aplica también a PDF y Excel. Los filtros
+  Usuario, Empresa, Acción y Módulo se quitan con **Suprimir** o **Retroceso**. Al
+  cambiar un filtro mientras otra búsqueda sigue en curso, el listado muestra siempre
+  el resultado de la última combinación de filtros.
 - **1.4** — Los documentos que entran por XML o por la descarga automática del SRI
   (compras, liquidaciones, notas de crédito y débito, facturas de venta) ahora
   registran su evento **Crear**, con el origen y la clave de acceso; antes no

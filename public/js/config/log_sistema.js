@@ -8,6 +8,8 @@
     let sortCol = 'created_at';
     let sortDir = 'DESC';
     let timerBusqueda = null;
+    let turnoListado = 0;      // n.º de la última consulta del listado lanzada
+    let abortListado = null;   // para cancelar la consulta anterior aún en curso
     let modalDetalle = null;
     let detalleId = null; // id del evento cargado en el modal (para el PDF)
 
@@ -47,9 +49,20 @@
             dir: sortDir,
         });
 
+        // Solo vale la respuesta de la ÚLTIMA consulta: si el usuario cambia otro filtro
+        // mientras una búsqueda lenta (Referencia / Contenido) sigue en curso, esa respuesta
+        // vieja llegaría después y pisaría el listado con filtros que ya no están puestos.
+        const turno = ++turnoListado;
+        if (abortListado) abortListado.abort();
+        abortListado = typeof AbortController === 'function' ? new AbortController() : null;
+
         try {
-            const resp = await fetch(`${API}?${params.toString()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+            const resp = await fetch(`${API}?${params.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                signal: abortListado ? abortListado.signal : undefined,
+            });
             const res = await resp.json();
+            if (turno !== turnoListado) return;
             if (res.ok) {
                 if (tbody) tbody.innerHTML = res.rows;
                 const info = document.getElementById('logPaginationInfo');
@@ -60,6 +73,7 @@
                 if (tbody) tbody.innerHTML = `<tr><td colspan="9" class="text-center py-4 text-danger">${res.error || 'Error al cargar'}</td></tr>`;
             }
         } catch (e) {
+            if (turno !== turnoListado || (e && e.name === 'AbortError')) return; // la reemplazó otra consulta
             console.error(e);
             if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center py-4 text-danger">Error de conexión con el servidor.</td></tr>';
         }
@@ -246,6 +260,17 @@
                     },
                     onItemAdd: function () { this.blur(); },
                 });
+                // Suprimir (Delete) o Retroceso con una opción elegida y sin texto escrito:
+                // quita el filtro de una vez. TomSelect solo lo hace con Retroceso.
+                const ts = filtrosBuscables[id];
+                ts.control_input.addEventListener('keydown', function (ev) {
+                    if (ev.key !== 'Delete' && ev.key !== 'Backspace') return;
+                    if (ts.control_input.value !== '' || ts.getValue() === '') return;
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    ts.clear(); // dispara 'change' → recarga el listado
+                    ts.close();
+                }, true);
             } catch (e) {
                 // Se queda como <select> normal.
             }
