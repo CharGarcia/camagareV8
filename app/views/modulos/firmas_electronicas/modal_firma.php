@@ -783,6 +783,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                         <?php endif; ?>
                     </div>
                     <div class="d-flex gap-2">
+                        <?php if ($perm['crear'] ?? false): ?>
+                            <button type="button" class="btn btn-outline-success btn-sm px-3 d-none" id="btnRenovarFirmaModal"
+                                title="Crear la solicitud de renovación con los datos y documentos de este cliente"
+                                onclick="renovarFirmaModal()">
+                                <i class="bi bi-arrow-repeat"></i> Renovar
+                            </button>
+                        <?php endif; ?>
                         <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancelar</button>
                         <button type="button" class="btn btn-primary btn-sm px-4 shadow-sm" id="btnGuardarFirmaModal"
                             onclick="guardarFirmaModal()">

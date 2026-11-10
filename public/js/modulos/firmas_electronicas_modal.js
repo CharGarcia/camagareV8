@@ -11,6 +11,7 @@
     let _facturaEstado  = null;
     let _facturaElim    = false;
     let _firmaEstado    = null;   // estado del trámite tal como está guardado
+    let _firmaCaducidad = null;   // vencimiento guardado (Y-m-d), para el aviso de Renovar
 
     function getModal() {
         if (!modalInst && typeof bootstrap !== 'undefined' && modalEl) {
@@ -790,6 +791,8 @@
         document.getElementById('tituloModalFirma').textContent = 'Nueva Firma Electrónica';
         ocultarAlerta();
         document.getElementById('btnEliminarFirmaModal')?.classList.add('d-none');
+        document.getElementById('btnRenovarFirmaModal')?.classList.add('d-none');
+        _firmaCaducidad = null;
 
         const tabInfoBtn = document.getElementById('tab-firma-info-btn');
         if (tabInfoBtn) tabInfoBtn.classList.add('disabled');
@@ -948,6 +951,9 @@
         actualizarFactItem(opt?.dataset.nombre || data.nombre_producto || '', parseFloat(opt?.dataset.pvp || '0'));
 
         document.getElementById('btnEliminarFirmaModal')?.classList.remove('d-none');
+        // Renovar: igual que «Nueva solicitud con estos datos», no aplica a un borrador.
+        _firmaCaducidad = data.fecha_caducidad ? String(data.fecha_caducidad).substring(0, 10) : null;
+        document.getElementById('btnRenovarFirmaModal')?.classList.toggle('d-none', (data.estado || '') === 'borrador');
 
         const tabInfoBtn = document.getElementById('tab-firma-info-btn');
         if (tabInfoBtn) tabInfoBtn.classList.remove('disabled');
@@ -1620,6 +1626,61 @@
         return v && v.trim() ? v.trim() : null;
     }
 
+    /** Solicitud nueva con los datos y documentos de la firma abierta; luego abre «Enviar enlace». */
+    async function crearNuevaSolicitud() {
+        const fd = new FormData();
+        fd.append('id', _idFirmaActual);
+        mostrarCargando('Creando la nueva solicitud…', 'Se reutilizan los datos y documentos del cliente.');
+        let json;
+        try {
+            json = await (await fetch(`${urlBase}/nuevaSolicitudAjax`, { method: 'POST', body: fd })).json();
+        } catch {
+            json = { ok: false, error: 'Error de conexión.' };
+        } finally {
+            cerrarCargando();
+        }
+        mostrarAlerta(json.ok ? json.msg : json.error, json.ok ? 'success' : 'danger');
+        if (json.ok) {
+            cargarTramite(_idFirmaActual);
+            if (window.fetchSearchFirmas) window.fetchSearchFirmas();
+            if (window.abrirModalEnviarFormulario) {
+                window.abrirModalEnviarFormulario({ id: json.id_firma, nombres: json.nombres, apellidos: json.apellidos, correo: json.correo, telefono: json.telefono });
+            }
+        }
+    }
+
+    // ── Renovar (footer): misma solicitud nueva, con aviso si la firma aún no vence ──
+    let _renovando = false;
+    window.renovarFirmaModal = async function () {
+        if (_renovando || _tramiteEnCurso || !_idFirmaActual) return;
+        _renovando = true;
+        const btn = document.getElementById('btnRenovarFirmaModal');
+        if (btn) btn.disabled = true;
+        try {
+            const base = 'Se creará la solicitud de renovación con los datos y documentos de este cliente (el pago empieza de cero). Luego podrá enviarle el enlace.';
+            let ok;
+            const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+            const p = (_firmaCaducidad || '').split('-').map(Number);
+            const vence = p.length === 3 ? new Date(p[0], p[1] - 1, p[2]) : null;
+            if (vence && vence >= hoy && window.Swal) {
+                const dias = Math.round((vence - hoy) / 86400000);
+                const cuando = dias === 0 ? 'vence hoy' : `vence el ${String(p[2]).padStart(2, '0')}-${String(p[1]).padStart(2, '0')}-${p[0]} (faltan ${dias} día${dias === 1 ? '' : 's'})`;
+                const r = await Swal.fire({
+                    icon: 'warning', title: 'La firma aún no está vencida',
+                    text: `Esta firma ${cuando}. ${base}`, target: destinoSwal(),
+                    showCancelButton: true, confirmButtonText: 'Renovar de todos modos', cancelButtonText: 'Cancelar', reverseButtons: true,
+                });
+                ok = r.isConfirmed;
+            } else {
+                ok = await confirmar(base, 'Sí, renovar');
+            }
+            if (ok) await crearNuevaSolicitud();
+        } finally {
+            _renovando = false;
+            if (btn) btn.disabled = false;
+        }
+    };
+
     let _tramiteEnCurso = false;
     document.getElementById('tramiteContenido')?.addEventListener('click', async (ev) => {
         const btn = ev.target.closest('[data-tr]');
@@ -1655,23 +1716,7 @@
                 }
             } else if (accion === 'nueva_solicitud') {
                 if (await confirmar('Se creará una nueva solicitud de firma con los datos y documentos de este cliente (el pago no se copia). Luego podrá enviarle el enlace.', 'Sí, crear')) {
-                    const fd = new FormData();
-                    fd.append('id', _idFirmaActual);
-                    mostrarCargando('Creando la nueva solicitud…', 'Se reutilizan los datos y documentos del cliente.');
-                    let json;
-                    try {
-                        json = await (await fetch(`${urlBase}/nuevaSolicitudAjax`, { method: 'POST', body: fd })).json();
-                    } finally {
-                        cerrarCargando();
-                    }
-                    mostrarAlerta(json.ok ? json.msg : json.error, json.ok ? 'success' : 'danger');
-                    if (json.ok) {
-                        cargarTramite(_idFirmaActual);
-                        if (window.fetchSearchFirmas) window.fetchSearchFirmas();
-                        if (window.abrirModalEnviarFormulario) {
-                            window.abrirModalEnviarFormulario({ id: json.id_firma, nombres: json.nombres, apellidos: json.apellidos, correo: json.correo, telefono: json.telefono });
-                        }
-                    }
+                    await crearNuevaSolicitud();
                 }
             } else if (accion === 'sincronizar_uanataca') {
                 await postTramite('sincronizarUanatacaAjax', null, ['Consultando a Uanataca…', '']);

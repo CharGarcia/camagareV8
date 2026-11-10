@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.15
+etiquetas: firma electronica, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.16
 orden: 20
 estado: activo
 ---
@@ -247,6 +247,14 @@ validez, la anterior se canceló…), no hace falta que llene todo de nuevo.
 3. Se abre el cuadro **Enviar enlace** para mandarle al cliente su enlace por
    correo o WhatsApp. En el portal ve sus datos y documentos listos, con el aviso de
    revisar que sigan vigentes; si alguno cambió, sube el nuevo y luego paga.
+
+**Botón Renovar.** Al pie de la ficha, a la izquierda de **Cancelar**, el botón
+**Renovar** hace lo mismo sin entrar a la pestaña Trámite: crea la solicitud de
+renovación con los datos y documentos del cliente y abre **Enviar enlace**. Se
+puede renovar aunque la firma **todavía no haya vencido**: en ese caso aparece
+el aviso *La firma aún no está vencida* con la fecha y los días que faltan, y
+usted decide con **Renovar de todos modos**. Requiere permiso de crear y no
+aparece en una firma en *Borrador*.
 
 Qué **no** se copia: el **pago** (ni el comprobante de transferencia), la factura,
 el cobro y el trámite en Uanataca; todo eso empieza de cero.
@@ -525,6 +533,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.16** — Botón **Renovar** al pie de la ficha (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.
 - **3.15** — El cliente puede corregir sus datos y reemplazar sus documentos **después de pagar**, mientras la firma esté *Por registrar* (antes de enviarse a Uanataca); la validez y la factura no cambian. La empresa recibe un correo de aviso y, si el cliente cambia su correo, debe confirmarlo de nuevo.
 - **3.14** — Botón **Imprimir QR** junto al enlace público fijo (engranaje, pestaña General): cartel con título editable, QR y enlace. Nueva sección *Cómo corrige el cliente su solicitud*.
 - **3.13** — El PDF de la factura que se genera por la venta de una firma usa la configuración del **establecimiento de la serie** de la factura (decimales, dirección, leyendas), no la del primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.
