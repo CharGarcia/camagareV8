@@ -70,8 +70,8 @@
     };
     const FORMATOS = {
         instagram: [['imagen', 'Imagen'], ['carrusel', 'Carrusel'], ['reel', 'Reel']],
-        linkedin_perfil: [['texto', 'Solo texto'], ['imagen', 'Con imágenes']],
-        linkedin_pagina: [['texto', 'Solo texto'], ['imagen', 'Con imágenes']],
+        linkedin_perfil: [['texto', 'Solo texto'], ['imagen', 'Con imágenes'], ['enlace', 'Enlace (tarjeta con link)']],
+        linkedin_pagina: [['texto', 'Solo texto'], ['imagen', 'Con imágenes'], ['enlace', 'Enlace (tarjeta con link)']],
     };
     const EDITABLES = ['borrador', 'en_revision', 'aprobada'];
     const badge = (estado) => `<span class="badge ${ESTADO_CLASE[estado] || 'bg-secondary'}">${esc((cfg.estados || {})[estado] || estado)}</span>`;
@@ -435,14 +435,27 @@
                         <label class="form-check-label fw-bold small" for="pub-d-${c.id}">${iconoRed(c.tipo)} ${esc(nombreCanal(c))}
                             <span class="text-muted fw-normal">${c.tipo === 'linkedin_pagina' ? '· página' : (c.tipo === 'linkedin_perfil' ? '· perfil' : '')}</span></label>
                     </div>
-                    <select class="form-select form-select-sm" style="width:160px;" data-campo="formato" ${ed ? '' : 'disabled'}>
-                        ${(FORMATOS[c.tipo] || []).map(([v, t]) => `<option value="${v}" ${fmt === v ? 'selected' : ''}>${t}</option>`).join('')}
+                    <select class="form-select form-select-sm" style="width:190px;" data-campo="formato" ${ed ? '' : 'disabled'} onchange="PUB.cambioFormato(this)">
+                        ${formatosDe(c.tipo, fmt).map(([v, t]) => `<option value="${v}" ${fmt === v ? 'selected' : ''}>${t}</option>`).join('')}
                     </select>
                     <button type="button" class="btn btn-link btn-sm" onclick="this.closest('[data-destino]').querySelector('[data-campo=texto-wrap]').classList.toggle('d-none')">
                         <i class="bi bi-pencil me-1"></i>Texto propio${d && d.texto ? ' ✓' : ''}</button>
                     ${d && d.estado !== 'pendiente' ? `<span class="badge ${(DESTINO_ESTADO[d.estado] || [])[1] || 'bg-secondary'} ms-auto">${(DESTINO_ESTADO[d.estado] || [d.estado])[0]}</span>` : ''}
                 </div>
                 ${alerta ? `<div class="small text-warning-emphasis mt-1"><i class="bi bi-exclamation-triangle me-1"></i>${esc(alerta)}</div>` : ''}
+                ${c.tipo === 'instagram' ? '' : `<div class="row g-2 mt-1 ${fmt === 'enlace' ? '' : 'd-none'}" data-campo="link-wrap">
+                    <div class="col-md-7">
+                        <label class="form-label small fw-bold mb-1 d-block">Dirección del enlace <span class="text-danger">*</span></label>
+                        <input type="url" class="form-control form-control-sm" data-campo="link-url" maxlength="2000" ${ed ? '' : 'disabled'}
+                               placeholder="https://www.miempresa.com/oferta" value="${esc(d ? d.link_url || '' : '')}" oninput="PUB.contar()">
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label small fw-bold mb-1 d-block">Título de la tarjeta <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control form-control-sm" data-campo="link-titulo" maxlength="200" ${ed ? '' : 'disabled'}
+                               placeholder="Lo que se lee bajo la imagen" value="${esc(d ? d.link_titulo || '' : '')}">
+                    </div>
+                    <div class="col-12 small text-muted">Sale como una tarjeta: la primera imagen de «Contenido» y el título llevan a esa dirección. LinkedIn usa una sola imagen en este formato.</div>
+                </div>`}
                 <div class="mt-2 ${d && d.texto ? '' : 'd-none'}" data-campo="texto-wrap">
                     <textarea class="form-control form-control-sm" rows="3" data-campo="texto" maxlength="3000" ${ed ? '' : 'disabled'} oninput="PUB.contar()"
                               placeholder="Vacío = el texto de «Contenido»">${esc(d ? d.texto || '' : '')}</textarea>
@@ -451,13 +464,32 @@
         }).join('') : '<div class="small text-muted">No hay cuentas conectadas. Conecte Instagram o LinkedIn en Configuración del CRM → Canales.</div>';
     }
 
+    /** Formatos de la red; «Enlace» solo si el servidor ya lo admite (o si el destino ya lo tiene). */
+    function formatosDe(tipo, actual) {
+        const admite = !!(st.datos.config && st.datos.config.admite_enlace);
+        return (FORMATOS[tipo] || []).filter(([v]) => v !== 'enlace' || admite || actual === 'enlace');
+    }
+    function cambioFormato(sel) {
+        const wrap = sel.closest('[data-destino]').querySelector('[data-campo="link-wrap"]');
+        if (wrap) {
+            wrap.classList.toggle('d-none', sel.value !== 'enlace');
+            if (sel.value === 'enlace') wrap.querySelector('[data-campo="link-url"]').focus();
+        }
+    }
+
     function leerDestinos() {
-        return [...document.querySelectorAll('#pub-m-destinos [data-destino]')].filter((el) => el.querySelector('.form-check-input').checked).map((el) => ({
-            id_canal: +el.dataset.destino,
-            formato: el.querySelector('[data-campo="formato"]').value,
-            texto: el.querySelector('[data-campo="texto"]').value.trim(),
-            tipo: el.dataset.tipo,
-        }));
+        return [...document.querySelectorAll('#pub-m-destinos [data-destino]')].filter((el) => el.querySelector('.form-check-input').checked).map((el) => {
+            const formato = el.querySelector('[data-campo="formato"]').value;
+            const campo = (c) => { const x = el.querySelector(`[data-campo="${c}"]`); return x ? x.value.trim() : ''; };
+            return {
+                id_canal: +el.dataset.destino,
+                formato,
+                texto: el.querySelector('[data-campo="texto"]').value.trim(),
+                link_url: formato === 'enlace' ? campo('link-url') : '',
+                link_titulo: formato === 'enlace' ? campo('link-titulo') : '',
+                tipo: el.dataset.tipo,
+            };
+        });
     }
 
     function contar() {
@@ -571,7 +603,7 @@
             const r = await api('guardarAjax', { post: {
                 id: $('pub-m-id').value, titulo: $('pub-m-nombre').value, texto: $('pub-m-texto').value,
                 es_contenido_ia: $('pub-m-ia').checked ? '1' : '0', medios: st.medios.map((m) => m.id),
-                destinos: JSON.stringify(leerDestinos().map(({ id_canal, formato, texto }) => ({ id_canal, formato, texto }))),
+                destinos: JSON.stringify(leerDestinos().map(({ id_canal, formato, texto, link_url, link_titulo }) => ({ id_canal, formato, texto, link_url, link_titulo }))),
                 token_guardado: $('pub-m-token').value,
             } });
             $('pub-m-id').value = r.id;   // el siguiente clic actualiza, no crea otra
@@ -670,11 +702,15 @@
     function pintarPropuesta() {
         const p = st.propuesta;
         if (!p) return;
-        const bloque = (clave, titulo, icono) => !p[clave] ? '' : `
+        // Cada propuesta es editable: lo que se corrige aquí es lo que lleva «Usar».
+        const bloque = (clave, titulo, icono) => (p[clave] === undefined || p[clave] === null || (p[clave] === '' && !p['_editada_' + clave])) ? '' : `
             <div class="border rounded bg-white p-2 mb-2">
                 <div class="d-flex align-items-center mb-1"><span class="small fw-bold">${icono} ${titulo}</span>
+                    <span class="small text-muted ms-2" data-ia-cuenta="${clave}"></span>
                     <button type="button" class="btn btn-outline-primary btn-sm ms-auto py-0" onclick="PUB.usarIa('${clave}')">Usar</button></div>
-                <div class="pub-prev-texto">${esc(p[clave])}</div>
+                <textarea class="form-control form-control-sm pub-prev-texto" data-ia-texto="${clave}" maxlength="${clave === 'instagram' ? 2200 : 3000}"
+                          rows="${Math.min(12, Math.max(3, Math.ceil(String(p[clave]).length / 90) + (String(p[clave]).match(/\n/g) || []).length))}"
+                          oninput="PUB.editarIa('${clave}', this.value)" title="Puede corregir el texto antes de usarlo">${esc(p[clave])}</textarea>
             </div>`;
         const alts = (p.alt_textos || []).map((a) => `<li><b>#${st.medios.findIndex((m) => +m.id === +a.id_medio) + 1}</b> ${esc(a.texto)}</li>`).join('');
         $('pub-ia-resultado').innerHTML = (p.aviso ? `<div class="small text-warning-emphasis mb-1"><i class="bi bi-exclamation-triangle me-1"></i>${esc(p.aviso)}</div>` : '')
@@ -684,12 +720,37 @@
             + (alts ? `<div class="border rounded bg-white p-2"><div class="d-flex align-items-center mb-1"><span class="small fw-bold"><i class="bi bi-universal-access"></i> Textos alternativos</span>
                 ${cfg.perm.actualizar ? '<button type="button" class="btn btn-outline-primary btn-sm ms-auto py-0" onclick="PUB.usarIa(\'alt\')">Aplicar a las imágenes</button>' : ''}</div>
                 <ol class="small mb-0 ps-3">${alts}</ol></div>` : '');
+        ['texto_base', 'instagram', 'linkedin'].forEach(contarIa);
+    }
+
+    /** El texto propuesto se corrige en su propio cuadro; «Usar» lleva lo corregido. */
+    function editarIa(clave, valor) {
+        if (!st.propuesta) return;
+        st.propuesta[clave] = valor;
+        st.propuesta['_editada_' + clave] = true;
+        contarIa(clave);
+    }
+    function contarIa(clave) {
+        const el = document.querySelector(`[data-ia-cuenta="${clave}"]`);
+        if (!el || !st.propuesta) return;
+        const t = String(st.propuesta[clave] ?? '');
+        if (clave === 'instagram') {
+            const tags = (t.match(/#[\p{L}\p{N}_]+/gu) || []).length;
+            el.textContent = `${t.length}/2200 · ${tags}/30 #`;
+            el.classList.toggle('text-danger', tags > 30);
+        } else {
+            el.textContent = `${t.length}/3000`;
+        }
     }
 
     /** Lleva la propuesta al formulario (no guarda: hay que pulsar Guardar). */
     async function usarIa(clave) {
         const p = st.propuesta;
         if (!p) return;
+        if (['texto_base', 'instagram', 'linkedin'].includes(clave) && !String(p[clave] ?? '').trim()) {
+            aviso('info', 'El texto está vacío', 'Escriba algo en el cuadro o pida otra propuesta.');
+            return;
+        }
         if (clave === 'texto_base') {
             $('pub-m-texto').value = p.texto_base;
         } else if (clave === 'instagram' || clave === 'linkedin') {
@@ -741,9 +802,22 @@
                 </div>`;
             }
             const imgs = d.formato === 'imagen' ? st.medios.filter((m) => m.tipo === 'imagen').slice(0, 4) : [];
+            const cab = `<div class="p-2 small fw-bold"><i class="bi bi-linkedin text-primary me-1"></i>${esc(c.nombre || c.usuario || '')}</div>
+                <div class="px-2 pb-2 pub-prev-texto">${esc(texto.length > 210 ? texto.slice(0, 210) + '… ver más' : texto)}</div>`;
+            if (d.formato === 'enlace') {
+                const img = st.medios.find((m) => m.tipo === 'imagen');
+                let host = '';
+                try { host = new URL(d.link_url).hostname.replace(/^www\./, ''); } catch (e) { /* dirección incompleta */ }
+                return `<div class="pub-prev-li">${cab}
+                    <div class="border-top bg-light">
+                        ${img ? `<img src="${urlMedio(img.id)}" alt="" style="width:100%;aspect-ratio:1.91/1;object-fit:cover">` : ''}
+                        <div class="p-2"><div class="small fw-bold">${esc(d.link_titulo || '(falta el título de la tarjeta)')}</div>
+                            <div class="small text-muted"><i class="bi bi-link-45deg"></i> ${esc(host || '(falta la dirección del enlace)')}</div></div>
+                    </div>
+                </div>`;
+            }
             return `<div class="pub-prev-li">
-                <div class="p-2 small fw-bold"><i class="bi bi-linkedin text-primary me-1"></i>${esc(c.nombre || c.usuario || '')}</div>
-                <div class="px-2 pb-2 pub-prev-texto">${esc(texto.length > 210 ? texto.slice(0, 210) + '… ver más' : texto)}</div>
+                ${cab}
                 ${imgs.length ? `<div class="rejilla" style="grid-template-columns:repeat(${Math.min(2, imgs.length)}, 1fr)">${imgs.map((m) => `<img src="${urlMedio(m.id)}" alt="">`).join('')}</div>` : ''}
             </div>`;
         }).join('') || '<div class="small text-muted">Elija dónde publicar en la pestaña «Dónde».</div>';
@@ -793,6 +867,6 @@
         elegirMedios, alternarElegido, confirmarElegidos, masElegir: () => cargarElegir(st.elegir.pagina + 1),
         nueva, abrir, guardar: () => guardar(false), accion, reintentar, eliminar,
         moverMedio, quitarMedio, contar, vistaPrevia, abrirConfig, guardarConfig,
-        panelIa, proponerIa, usarIa,
+        panelIa, proponerIa, usarIa, editarIa, cambioFormato,
     };
 })();

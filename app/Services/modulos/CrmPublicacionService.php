@@ -70,7 +70,7 @@ class CrmPublicacionService
 
     public function config(int $idEmpresa): array
     {
-        return $this->repo->config($idEmpresa);
+        return $this->repo->config($idEmpresa) + ['admite_enlace' => $this->repo->admiteEnlace()];
     }
 
     public function guardarConfig(int $idEmpresa, bool $aprobacion, int $maxDia, int $idUsuario): void
@@ -208,7 +208,16 @@ class CrmPublicacionService
                 throw new \InvalidArgumentException('Formato no válido para la cuenta @' . ($canal['usuario'] ?: $canal['nombre']) . '.');
             }
             $texto = trim(str_replace("\r\n", "\n", (string) ($x['texto'] ?? '')));
-            $destinos[$idCanal] = ['id_canal' => $idCanal, 'formato' => $formato, 'texto' => $texto !== '' ? $texto : null];
+            $linkUrl = $linkTitulo = null;
+            if ($formato === 'enlace') {
+                if (!$this->repo->admiteEnlace()) {
+                    throw new \InvalidArgumentException('El formato Enlace aún no está habilitado en este servidor. Avise al administrador del sistema.');
+                }
+                // En borrador pueden faltar; se exigen completos al enviar a revisión o programar.
+                [$linkUrl, $linkTitulo] = $this->rules->validarEnlace($x['link_url'] ?? null, $x['link_titulo'] ?? null, false);
+            }
+            $destinos[$idCanal] = ['id_canal' => $idCanal, 'formato' => $formato, 'texto' => $texto !== '' ? $texto : null,
+                                   'link_url' => $linkUrl, 'link_titulo' => $linkTitulo];
         }
         $d['destinos'] = array_values($destinos);
         return $d;
@@ -350,7 +359,8 @@ class CrmPublicacionService
         foreach ($destinos as $d) {
             $texto = (string) ($d['texto'] ?? $pub['texto'] ?? '');
             try {
-                $this->rules->validarDestino(['tipo' => $d['canal_tipo']], (string) $d['formato'], $medios, $texto);
+                $this->rules->validarDestino(['tipo' => $d['canal_tipo']], (string) $d['formato'], $medios, $texto,
+                    $d['link_url'] ?? null, $d['link_titulo'] ?? null);
             } catch (\InvalidArgumentException $e) {
                 throw new \InvalidArgumentException('@' . ($d['canal_usuario'] ?: $d['canal_nombre']) . ': ' . $e->getMessage());
             }
@@ -393,7 +403,8 @@ class CrmPublicacionService
     private function paraLog(array $d): array
     {
         return ['titulo' => $d['titulo'], 'es_contenido_ia' => $d['es_contenido_ia'], 'medios' => $d['medios'],
-                'destinos' => array_map(fn($x) => $x['id_canal'] . ':' . $x['formato'], $d['destinos'])];
+                'destinos' => array_map(fn($x) => $x['id_canal'] . ':' . $x['formato']
+                    . (!empty($x['link_url']) ? ' → ' . $x['link_url'] : ''), $d['destinos'])];
     }
 
     private function enTransaccion(callable $fn)

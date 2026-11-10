@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/crm_publicaciones
 tipo: modulo
 visibilidad: todos
-etiquetas: publicaciones, publicar, redes sociales, instagram, linkedin, programar publicacion, calendario de contenidos, calendario editorial, post, posteo, reel, carrusel, historia, biblioteca de medios, imagenes, videos, subir fotos, aprobar publicacion, aprobacion, redactar con ia, inteligencia artificial, hashtags, texto alternativo, estadisticas, metricas, alcance, me gusta, seguidores, resultados, marketing, community manager, crm
-version: 1.0
+etiquetas: publicaciones, publicar, enlace, link, url, pagina web, tarjeta con link, redes sociales, instagram, linkedin, programar publicacion, calendario de contenidos, calendario editorial, post, posteo, reel, carrusel, historia, biblioteca de medios, imagenes, videos, subir fotos, aprobar publicacion, aprobacion, redactar con ia, inteligencia artificial, hashtags, texto alternativo, estadisticas, metricas, alcance, me gusta, seguidores, resultados, marketing, community manager, crm
+version: 1.2
 orden: 17
 estado: activo
 ---
@@ -84,6 +84,23 @@ Límites de texto: Instagram hasta 2200 caracteres y 30 hashtags; LinkedIn hasta
 - Lo que no se usa en **90 días** se borra solo. No se puede eliminar un archivo
   que usa una publicación que todavía no sale.
 
+## Poner un enlace (link)
+
+- **En el texto**: escriba la dirección completa (`https://…`). **LinkedIn** la
+  vuelve clicable. **Instagram** nunca hace clicables los enlaces del texto: lo
+  habitual es escribir «enlace en la bio».
+- **Sobre la imagen (solo LinkedIn)**: en **Dónde**, elija el formato **Enlace
+  (tarjeta con link)** y llene la **Dirección del enlace** y el **Título de la
+  tarjeta**. La publicación sale como una tarjeta: la primera imagen de
+  «Contenido» y el título llevan a esa dirección.
+  - LinkedIn usa **una sola imagen** en este formato (o ninguna); no se combina
+    con varias imágenes.
+  - El título lo escribe usted: LinkedIn no lo toma de la página.
+  - En borrador pueden quedar vacíos; al **programar** o **enviar a revisión**
+    se exigen los dos.
+- **Instagram no permite** poner un enlace sobre la imagen de una publicación ni
+  de un reel.
+
 ## Redactar con IA
 
 En **Contenido → Proponer con IA**, escriba de qué trata (producto, oferta, a quién
@@ -91,7 +108,10 @@ va, tono). La IA propone un **texto general**, una versión para **Instagram**
 (con 3 a 10 hashtags), otra para **LinkedIn** (más profesional) y, si lo marca,
 el **texto alternativo** de cada imagen (la IA mira las imágenes).
 
-- **Usar** lleva el texto al campo general o al texto propio de esa red;
+- Cada propuesta (texto general, Instagram y LinkedIn) aparece en un **cuadro
+  editable**: corríjala ahí mismo antes de usarla. El contador de al lado muestra
+  los caracteres (y los hashtags, en Instagram).
+- **Usar** lleva el texto —con sus correcciones— al campo general o al texto propio de esa red;
   **Aplicar a las imágenes** guarda los textos alternativos en la biblioteca.
 - **No guarda nada en la publicación**: revise, corrija y pulse Guardar.
 - No inventa precios, fechas ni descuentos: lo que falte lo deja entre
@@ -187,9 +207,19 @@ En la misma ventana se fija el **tope de publicaciones por día** de la empresa
 - **«El video debe durar entre 3 y 90 segundos»** / **«…H.264 o H.265»**:
   expórtelo de nuevo como MP4 en 1080p.
 - **«Llegó al máximo de 20 propuestas por hora»**: espere un rato.
+- **«El formato Enlace necesita la dirección web»** / **«…un título para la
+  tarjeta»**: complételos en «Dónde», en la cuenta de LinkedIn.
+- **«La dirección del enlace no es válida»**: escríbala completa, empezando por
+  `https://`.
+- **«Una publicación de enlace en LinkedIn lleva una sola imagen»**: deje una
+  imagen en «Contenido» o cambie el formato a «Con imágenes».
 
 ## Historial de cambios
 
 - **1.0** — Versión inicial: calendario, lista y biblioteca; Instagram (imagen,
   carrusel, reel) y LinkedIn (perfil y página); aprobación previa; redacción con
   IA; estadísticas y atribución al CRM.
+- **1.1** — Las propuestas de la IA (texto general, Instagram y LinkedIn) se
+  pueden editar en su propio cuadro antes de pulsar **Usar**.
+- **1.2** — LinkedIn: formato **Enlace** (tarjeta con imagen que lleva a una
+  dirección web). Un enlace con `#` escrito en el texto ya no se rompe.

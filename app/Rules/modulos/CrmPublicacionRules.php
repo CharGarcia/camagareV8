@@ -22,9 +22,42 @@ class CrmPublicacionRules
     /** Formatos por tipo de canal. */
     public const FORMATOS = [
         'instagram'       => ['imagen', 'carrusel', 'reel'],
-        'linkedin_perfil' => ['texto', 'imagen'],
-        'linkedin_pagina' => ['texto', 'imagen'],
+        'linkedin_perfil' => ['texto', 'imagen', 'enlace'],
+        'linkedin_pagina' => ['texto', 'imagen', 'enlace'],
     ];
+
+    public const MAX_LINK_URL = 2000;
+    public const MAX_LINK_TITULO = 200;
+
+    /**
+     * Formato «Enlace» (LinkedIn): dirección http(s) completa y título de la tarjeta.
+     * Devuelve [url, título] limpios. Con $exigir = false (guardar un borrador) admite
+     * que falten, pero lo que venga debe ser válido.
+     * @return array{0:?string,1:?string}
+     */
+    public function validarEnlace(?string $url, ?string $titulo, bool $exigir = true): array
+    {
+        $url = trim((string) $url);
+        $titulo = trim(preg_replace('/\s+/u', ' ', (string) $titulo) ?? '');
+        if ($url === '' && $exigir) {
+            throw new \InvalidArgumentException('El formato Enlace necesita la dirección web (https://…).');
+        }
+        if ($url !== '') {
+            $partes = parse_url($url);
+            if (mb_strlen($url) > self::MAX_LINK_URL || preg_match('/\s/u', $url) || !$partes
+                || !in_array(strtolower((string) ($partes['scheme'] ?? '')), ['http', 'https'], true)
+                || !str_contains((string) ($partes['host'] ?? ''), '.')) {
+                throw new \InvalidArgumentException('La dirección del enlace no es válida. Escríbala completa, por ejemplo https://www.miempresa.com/oferta.');
+            }
+        }
+        if ($titulo === '' && $exigir) {
+            throw new \InvalidArgumentException('El formato Enlace necesita un título para la tarjeta.');
+        }
+        if (mb_strlen($titulo) > self::MAX_LINK_TITULO) {
+            throw new \InvalidArgumentException('El título del enlace admite hasta ' . self::MAX_LINK_TITULO . ' caracteres.');
+        }
+        return [$url !== '' ? $url : null, $titulo !== '' ? $titulo : null];
+    }
 
     public function validarCabecera(array $d): void
     {
@@ -52,7 +85,7 @@ class CrmPublicacionRules
      * y texto dentro de los límites de esa red.
      * $medios: filas de crm_medios en orden; $texto: el que saldrá en esa red.
      */
-    public function validarDestino(array $canal, string $formato, array $medios, string $texto): void
+    public function validarDestino(array $canal, string $formato, array $medios, string $texto, ?string $linkUrl = null, ?string $linkTitulo = null): void
     {
         $tipoCanal = (string) $canal['tipo'];
         $red = $tipoCanal === 'instagram' ? 'Instagram' : 'LinkedIn';
@@ -90,6 +123,12 @@ class CrmPublicacionRules
         }
         if ($formato === 'imagen' && ($imgs < 1 || $imgs > 20)) {
             throw new \InvalidArgumentException('LinkedIn admite de 1 a 20 imágenes por publicación.');
+        }
+        if ($formato === 'enlace') {
+            if ($imgs > 1) {
+                throw new \InvalidArgumentException('Una publicación de enlace en LinkedIn lleva una sola imagen (la de la tarjeta) o ninguna.');
+            }
+            $this->validarEnlace($linkUrl, $linkTitulo);
         }
     }
 

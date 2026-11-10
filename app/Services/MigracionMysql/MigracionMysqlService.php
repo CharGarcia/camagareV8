@@ -6790,6 +6790,158 @@ class MigracionMysqlService
         $upd->execute([$xml, $idCompra]);
     }
 
+    /**
+     * Corrige las compras migradas ANTES del 17-08-2026 (commit «fix compras descuentos»), en las
+     * que el descuento se restó dos veces: `cuerpo_compra.subtotal` del sistema anterior ya venía
+     * neto y la corrida vieja le volvió a restar el descuento. Quedaron con la base de cada línea,
+     * el IVA de la línea y `total_sin_impuestos` por debajo de lo real; el `importe_total` está bien.
+     *
+     * A diferencia de re-migrar, NO lee el sistema anterior ni toca sustento, deducible, ambiente,
+     * pagos ni información adicional: solo devuelve el descuento a la base de cada línea, recalcula
+     * el IVA de la línea con su tarifa, actualiza el subtotal de la cabecera y reconstruye el
+     * detalle_xml (del que sale el PDF).
+     *
+     * Una compra se corrige solo si es migrada, tiene descuento, HOY no cuadra y, al devolver el
+     * descuento, subtotal + IVA + propina + ICE + otros rubros da el importe total (tolerancia 0,05).
+     * Por eso es idempotente: una compra ya corregida deja de cumplir la condición.
+     *
+     * @param bool $aplicar false = solo informa (modo prueba), true = escribe.
+     * @return array{revisadas:int, corregibles:int, corregidas:int, ya_correctas:int, no_cuadran:int,
+     *               errores:int, subtotal_antes:float, subtotal_despues:float, iva_antes:float,
+     *               iva_despues:float, detalle:array<int,array<string,mixed>>}
+     */
+    public function corregirDobleDescuentoCompras(int $idEmpresa, string $desde, string $hasta, bool $aplicar, int $idUsuario): array
+    {
+        $pg  = Database::getConnection();
+        $res = [
+            'revisadas' => 0, 'corregibles' => 0, 'corregidas' => 0, 'ya_correctas' => 0, 'no_cuadran' => 0,
+            'errores' => 0, 'subtotal_antes' => 0.0, 'subtotal_despues' => 0.0, 'iva_antes' => 0.0,
+            'iva_despues' => 0.0, 'detalle' => [],
+        ];
+        $tolerancia = 0.05;
+
+        $qCab = $pg->prepare(
+            "SELECT c.id, c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov AS numero,
+                    c.fecha_emision, c.importe_total, c.total_sin_impuestos, c.total_descuento,
+                    COALESCE(c.propina, 0) AS propina, COALESCE(c.total_ice, 0) AS total_ice,
+                    COALESCE(c.otros_rubros_terceros, 0) AS otros_rubros_terceros
+               FROM compras_cabecera c
+              WHERE c.id_empresa = :e
+                AND c.eliminado = false
+                AND c.total_descuento > 0
+                AND c.fecha_emision BETWEEN :desde AND :hasta
+                AND EXISTS (SELECT 1 FROM migracion_mysql_map m
+                             WHERE m.id_empresa = c.id_empresa AND m.entidad = 'compras' AND m.id_destino = c.id)
+              ORDER BY c.fecha_emision, c.id"
+        );
+        $qCab->execute([':e' => $idEmpresa, ':desde' => $desde, ':hasta' => $hasta]);
+        $compras = $qCab->fetchAll(PDO::FETCH_ASSOC);
+
+        $qDet = $pg->prepare("SELECT id, descuento, precio_total_sin_impuesto FROM compras_detalle WHERE id_compra = ? ORDER BY id");
+        $qImp = $pg->prepare("SELECT id, tarifa, base_imponible, valor FROM compras_detalle_impuestos WHERE id_compra_detalle = ? ORDER BY id");
+        $updDet = $pg->prepare("UPDATE compras_detalle SET precio_total_sin_impuesto = ? WHERE id = ?");
+        $updImp = $pg->prepare("UPDATE compras_detalle_impuestos SET base_imponible = ?, valor = ? WHERE id = ?");
+        $updCab = $pg->prepare("UPDATE compras_cabecera SET total_sin_impuestos = ?, updated_at = now(), updated_by = ? WHERE id = ? AND id_empresa = ?");
+        $qCas   = $pg->prepare("SELECT 1 FROM casilleros_declaracion_sri WHERE id_empresa = ? AND origen = 'compras' AND id_origen = ? LIMIT 1");
+        $log    = new \App\Services\LogSistemaService();
+
+        foreach ($compras as $c) {
+            $res['revisadas']++;
+            $idCompra = (int) $c['id'];
+            $resto    = (float) $c['importe_total'] - (float) $c['propina'] - (float) $c['total_ice'] - (float) $c['otros_rubros_terceros'];
+
+            // Estado actual y estado propuesto, línea por línea.
+            $qDet->execute([$idCompra]);
+            $lineas = $qDet->fetchAll(PDO::FETCH_ASSOC);
+            $subAntes = 0.0; $subDespues = 0.0; $ivaAntes = 0.0; $ivaDespues = 0.0; $descLineas = 0.0;
+            $cambios = [];
+            foreach ($lineas as $l) {
+                $desc      = round((float) $l['descuento'], 2);
+                $baseAntes = round((float) $l['precio_total_sin_impuesto'], 2);
+                $baseNueva = round($baseAntes + $desc, 2);
+                $subAntes += $baseAntes; $subDespues += $baseNueva; $descLineas += $desc;
+                $qImp->execute([(int) $l['id']]);
+                $imps = [];
+                foreach ($qImp->fetchAll(PDO::FETCH_ASSOC) as $i) {
+                    $valorNuevo = round($baseNueva * (float) $i['tarifa'] / 100, 2);
+                    $ivaAntes += (float) $i['valor']; $ivaDespues += $valorNuevo;
+                    $imps[] = ['id' => (int) $i['id'], 'base' => $baseNueva, 'valor' => $valorNuevo];
+                }
+                $cambios[] = ['id' => (int) $l['id'], 'base' => $baseNueva, 'imps' => $imps];
+            }
+            $subAntes = round($subAntes, 2); $subDespues = round($subDespues, 2);
+            $ivaAntes = round($ivaAntes, 2); $ivaDespues = round($ivaDespues, 2);
+
+            $fila = [
+                'id' => $idCompra, 'numero' => (string) $c['numero'], 'fecha' => (string) $c['fecha_emision'],
+                'total' => (float) $c['importe_total'], 'subtotal_antes' => (float) $c['total_sin_impuestos'],
+                'subtotal_despues' => $subDespues, 'iva_antes' => $ivaAntes, 'iva_despues' => $ivaDespues,
+            ];
+
+            // Ya cuadra tal como está: no es una compra con el doble descuento (o ya se corrigió).
+            if (abs($resto - (float) $c['total_sin_impuestos'] - $ivaAntes) <= $tolerancia) {
+                $res['ya_correctas']++;
+                continue;
+            }
+            // Debe cuadrar al devolver el descuento, y el detalle debe ser coherente con la cabecera.
+            $cuadra = abs($resto - $subDespues - $ivaDespues) <= $tolerancia
+                && abs($subAntes - (float) $c['total_sin_impuestos']) <= 0.01
+                && abs(round($descLineas, 2) - (float) $c['total_descuento']) <= 0.01;
+            if (!$cuadra) {
+                $res['no_cuadran']++;
+                $res['detalle'][] = $fila + ['estado' => 'no_cuadra'];
+                continue;
+            }
+
+            $res['corregibles']++;
+            $res['subtotal_antes'] += (float) $c['total_sin_impuestos']; $res['subtotal_despues'] += $subDespues;
+            $res['iva_antes'] += $ivaAntes; $res['iva_despues'] += $ivaDespues;
+            if (!$aplicar) {
+                $res['detalle'][] = $fila + ['estado' => 'por_corregir'];
+                continue;
+            }
+
+            try {
+                $pg->beginTransaction();
+                foreach ($cambios as $cm) {
+                    $updDet->execute([$cm['base'], $cm['id']]);
+                    foreach ($cm['imps'] as $im) {
+                        $updImp->execute([$im['base'], $im['valor'], $im['id']]);
+                    }
+                }
+                $updCab->execute([$subDespues, $idUsuario, $idCompra, $idEmpresa]);
+                $this->generarXmlCompraGuardada($idCompra, $pg); // el PDF se arma desde detalle_xml
+                $log->registrar(
+                    $idUsuario, $idEmpresa, 'CORREGIR_DOBLE_DESCUENTO', 'compras_cabecera', $idCompra,
+                    ['total_sin_impuestos' => (float) $c['total_sin_impuestos'], 'iva' => $ivaAntes],
+                    ['total_sin_impuestos' => $subDespues, 'iva' => $ivaDespues]
+                );
+                $pg->commit();
+                $res['corregidas']++;
+                $res['detalle'][] = $fila + ['estado' => 'corregida'];
+            } catch (Throwable $ex) {
+                if ($pg->inTransaction()) { $pg->rollBack(); }
+                $res['errores']++;
+                $res['detalle'][] = $fila + ['estado' => 'error', 'error' => substr($ex->getMessage(), 0, 200)];
+                continue;
+            }
+
+            // Casilleros de la Declaración de IVA: solo si la compra ya los tenía (las migradas no los
+            // generan). Fuera de la transacción: un fallo aquí no revierte la corrección ya guardada.
+            try {
+                $qCas->execute([$idEmpresa, $idCompra]);
+                if ($qCas->fetchColumn()) {
+                    (new \App\Services\modulos\ComprasService())->sincronizarCasilleros($idCompra);
+                }
+            } catch (Throwable $ex) { /* la compra ya quedó corregida; los casilleros se resincronizan al guardarla */ }
+        }
+
+        foreach (['subtotal_antes', 'subtotal_despues', 'iva_antes', 'iva_despues'] as $k) {
+            $res[$k] = round($res[$k], 2);
+        }
+        return $res;
+    }
+
     /** Arma el string del detalle_xml (sobre + comprobante factura) a partir de los datos ya migrados. */
     private function construirDetalleXmlCompra(array $c, array $dets, array $pagos): string
     {

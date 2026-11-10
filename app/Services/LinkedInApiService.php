@@ -181,8 +181,12 @@ class LinkedInApiService
     /**
      * Publica en el perfil o la página ($autorUrn). $imagenes: [[urn, alt], …]
      * (0 = solo texto, 1 = imagen, 2-20 = varias). Devuelve el URN de la publicación.
+     *
+     * $articulo (formato «Enlace»): ['url' => …, 'titulo' => …, 'miniatura' => URN de imagen o null].
+     * Sale como tarjeta que lleva a la dirección; LinkedIn no lee la página, así que
+     * el título y la imagen son los que se envían aquí. No se combina con $imagenes.
      */
-    public function publicar(string $token, string $autorUrn, string $texto, array $imagenes = []): string
+    public function publicar(string $token, string $autorUrn, string $texto, array $imagenes = [], ?array $articulo = null): string
     {
         $cuerpo = [
             'author'       => $autorUrn,
@@ -193,7 +197,18 @@ class LinkedInApiService
             'isReshareDisabledByAuthor' => false,
         ];
         $imgs = array_map(fn($i) => array_filter(['id' => (string) $i[0], 'altText' => mb_substr(trim((string) ($i[1] ?? '')), 0, 4086)], fn($v) => $v !== ''), $imagenes);
-        if (count($imgs) === 1) {
+        if ($articulo !== null) {
+            $url = trim((string) ($articulo['url'] ?? ''));
+            $titulo = trim((string) ($articulo['titulo'] ?? ''));
+            if (!preg_match('#^https?://\S+$#i', $url) || $titulo === '') {
+                throw new \InvalidArgumentException('La publicación de enlace necesita la dirección web y un título.');
+            }
+            $cuerpo['content'] = ['article' => array_filter([
+                'source'    => $url,
+                'title'     => mb_substr($titulo, 0, 200),
+                'thumbnail' => (string) ($articulo['miniatura'] ?? ''),
+            ], fn($v) => $v !== '')];
+        } elseif (count($imgs) === 1) {
             $cuerpo['content'] = ['media' => $imgs[0]];
         } elseif (count($imgs) > 1) {
             if (count($imgs) > 20) {
@@ -243,12 +258,13 @@ class LinkedInApiService
     /**
      * Texto en el formato de LinkedIn («little text»): los caracteres reservados
      * se escapan con \ y los #hashtags se convierten a su plantilla para que
-     * sigan siendo hashtags.
+     * sigan siendo hashtags. Las direcciones web van aparte: un «#seccion» dentro
+     * de un enlace no es un hashtag (convertirlo rompía el enlace).
      */
     public static function textoLinkedIn(string $texto): string
     {
         $texto = mb_substr(str_replace("\r\n", "\n", trim($texto)), 0, self::MAX_TEXTO);
-        $partes = preg_split('/(#[\p{L}\p{N}_]+)/u', $texto, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$texto];
+        $partes = preg_split('/(https?:\/\/\S+|#[\p{L}\p{N}_]+)/iu', $texto, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$texto];
         $out = '';
         foreach ($partes as $p) {
             if (preg_match('/^#([\p{L}\p{N}_]+)$/u', $p, $m)) {

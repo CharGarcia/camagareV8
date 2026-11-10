@@ -75,6 +75,7 @@ $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     .pub-prev-li .rejilla { display:grid; gap:2px; }
     .pub-prev-li .rejilla img { width:100%; height:100%; object-fit:cover; aspect-ratio:1/1; }
     .pub-prev-texto { white-space:pre-wrap; font-size:.8rem; }
+    textarea.pub-prev-texto { resize:vertical; }
 </style>
 
 <?= PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>

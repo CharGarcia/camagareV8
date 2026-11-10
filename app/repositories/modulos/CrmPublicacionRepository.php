@@ -174,15 +174,27 @@ class CrmPublicacionRepository extends BaseRepository
         }
     }
 
+    /**
+     * ¿Está aplicado database/2026-11-10_crm_publicaciones_enlace.sql? Sin él, el
+     * módulo sigue funcionando sin el formato «Enlace» de LinkedIn.
+     */
+    public function admiteEnlace(): bool
+    {
+        return $this->admiteEnlace ??= $this->columnaExiste('crm_publicaciones_destinos', 'link_url');
+    }
+
+    private ?bool $admiteEnlace = null;
+
     /** Destinos con los datos de su cuenta (sin token). */
     public function destinos(int $idPub): array
     {
+        $link = $this->admiteEnlace() ? 'd.link_url, d.link_titulo' : 'NULL AS link_url, NULL AS link_titulo';
         $st = $this->db->prepare(
-            'SELECT d.id, d.id_canal, d.formato, d.texto, d.estado, d.intentos, d.siguiente_intento_at, d.id_externo, d.enlace,
+            "SELECT d.id, d.id_canal, d.formato, d.texto, {$link}, d.estado, d.intentos, d.siguiente_intento_at, d.id_externo, d.enlace,
                     d.error, d.publicada_at, c.tipo AS canal_tipo, c.usuario AS canal_usuario, c.nombre AS canal_nombre, c.estado AS canal_estado,
                     c.permisos AS canal_permisos
                FROM crm_publicaciones_destinos d JOIN crm_canales c ON c.id = d.id_canal
-              WHERE d.id_publicacion = :p AND d.eliminado = false ORDER BY d.id'
+              WHERE d.id_publicacion = :p AND d.eliminado = false ORDER BY d.id"
         );
         $st->execute([':p' => $idPub]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -193,11 +205,18 @@ class CrmPublicacionRepository extends BaseRepository
         $st = $this->db->prepare('UPDATE crm_publicaciones_destinos SET eliminado = true, deleted_at = NOW(), deleted_by = :u
                                    WHERE id_publicacion = :p AND id_empresa = :e AND eliminado = false');
         $st->execute([':u' => $idUsuario, ':p' => $idPub, ':e' => $idEmpresa]);
-        $ins = $this->db->prepare('INSERT INTO crm_publicaciones_destinos (id_empresa, id_publicacion, id_canal, formato, texto, created_by, updated_by)
-                                    VALUES (:e, :p, :c, :f, :t, :u, :u2)');
+        $conLink = $this->admiteEnlace();
+        $ins = $this->db->prepare('INSERT INTO crm_publicaciones_destinos (id_empresa, id_publicacion, id_canal, formato, texto'
+            . ($conLink ? ', link_url, link_titulo' : '') . ', created_by, updated_by)
+                                    VALUES (:e, :p, :c, :f, :t' . ($conLink ? ', :lu, :lt' : '') . ', :u, :u2)');
         foreach ($destinos as $d) {
-            $ins->execute([':e' => $idEmpresa, ':p' => $idPub, ':c' => (int) $d['id_canal'], ':f' => $d['formato'],
-                           ':t' => $d['texto'] ?? null, ':u' => $idUsuario, ':u2' => $idUsuario]);
+            $p = [':e' => $idEmpresa, ':p' => $idPub, ':c' => (int) $d['id_canal'], ':f' => $d['formato'],
+                  ':t' => $d['texto'] ?? null, ':u' => $idUsuario, ':u2' => $idUsuario];
+            if ($conLink) {
+                $p[':lu'] = $d['link_url'] ?? null;
+                $p[':lt'] = $d['link_titulo'] ?? null;
+            }
+            $ins->execute($p);
         }
     }
 

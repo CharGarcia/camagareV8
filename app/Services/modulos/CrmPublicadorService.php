@@ -258,6 +258,22 @@ class CrmPublicadorService
         $autor = (string) $d['canal_externo'];
         $extra = $d['contenedores'];
         $imagenes = [];
+        $articulo = null;
+        if ($d['formato'] === 'enlace') {
+            // Tarjeta de enlace: la primera imagen (si hay) es la miniatura que lleva a la dirección.
+            if (trim((string) ($d['link_url'] ?? '')) === '' || trim((string) ($d['link_titulo'] ?? '')) === '') {
+                throw new \InvalidArgumentException('La publicación de enlace no tiene la dirección web o el título.');
+            }
+            $miniatura = (string) ($extra['miniatura'] ?? '');
+            $img = array_values(array_filter($this->repo->medios((int) $d['id_publicacion']), fn($m) => $m['tipo'] === 'imagen'))[0] ?? null;
+            if ($miniatura === '' && $img) {
+                $ruta = $this->medios->rutaAbsoluta($img) ?? throw new \InvalidArgumentException('Un archivo de la publicación ya no está en el servidor.');
+                $miniatura = $api->subirImagen($token, $autor, $ruta);
+                $extra['miniatura'] = $miniatura;
+                $this->repo->actualizarDestino((int) $d['id'], ['estado' => 'preparando', 'contenedores' => $extra]);
+            }
+            $articulo = ['url' => (string) $d['link_url'], 'titulo' => (string) $d['link_titulo'], 'miniatura' => $miniatura !== '' ? $miniatura : null];
+        }
         if ($d['formato'] === 'imagen') {
             $subidas = (array) ($extra['imagenes'] ?? []);
             foreach ($this->repo->medios((int) $d['id_publicacion']) as $i => $m) {
@@ -272,7 +288,7 @@ class CrmPublicadorService
         }
         $this->repo->actualizarDestino((int) $d['id'], ['estado' => 'publicando']);
         try {
-            $urn = $api->publicar($token, $autor, (string) ($d['texto'] ?? $d['texto_publicacion'] ?? ''), $imagenes);
+            $urn = $api->publicar($token, $autor, (string) ($d['texto'] ?? $d['texto_publicacion'] ?? ''), $imagenes, $articulo);
         } catch (\RuntimeException $e) {
             // LinkedIn respondió con error: no salió, se puede reintentar.
             $this->repo->actualizarDestino((int) $d['id'], ['estado' => 'preparando']);
