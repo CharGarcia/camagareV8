@@ -1,6 +1,6 @@
 ---
 titulo: Auditoría del sistema
-etiquetas: [auditoría, bitácora, log, historial, quién hizo qué, rastreo, trazabilidad, cambios, log_sistema, intentos de login, quién creó el cliente, cuándo se creó, referencia, nombre del cliente, PDF del detalle, imprimir evento, buscar por contenido, buscar dentro del mensaje, concepto, proveedor, comprobante, número de documento, número de comprobante, buscar por número de documento, tercero, cliente, detalle del evento, información en detalle, datos del documento]
+etiquetas: [auditoría, bitácora, log, historial, quién hizo qué, rastreo, trazabilidad, cambios, log_sistema, intentos de login, quién creó el cliente, cuándo se creó, referencia, buscar por referencia, filtrar por cliente, nombre del cliente, PDF del detalle, imprimir evento, buscar por contenido, buscar dentro del mensaje, concepto, proveedor, comprobante, número de documento, número de comprobante, buscar por número de documento, tercero, cliente, detalle del evento, información en detalle, datos del documento]
 visibilidad: superadmin
 ---
 
@@ -66,8 +66,27 @@ nombre actual) y aparece aunque el registro se haya eliminado después.
 **Ejemplo — ¿quién creó un cliente y cuándo?** Filtre **Módulo = Clientes** y
 **Acción = Crear**, amplíe **Desde** y busque al cliente en la columna
 **Referencia**: la fila muestra la **Fecha** y el **Usuario** que lo creó. Para ir
-directo a él escriba en el buscador `tercero:"ARMIJOS SOLANO"` o
-`tercero:0705210052001`.
+directo a él escriba su nombre o su identificación en el campo **Referencia** de la
+barra de filtros.
+
+### Buscar por la columna Referencia
+
+El campo **Referencia** de la barra de filtros busca por lo que muestra esa columna:
+el **nombre** o la **identificación** del cliente, proveedor o empleado (o el nombre o
+código del producto). Trae tanto los eventos del propio registro (su creación, sus
+cambios) como los de los **documentos** de ese tercero (facturas, compras, egresos…).
+
+- Escriba parte del nombre (`ARMIJOS SOLANO`) o la identificación (`0705210052001`).
+- **Todas las palabras deben aparecer**, en cualquier orden, sin importar mayúsculas
+  ni tildes.
+- Necesita **al menos 3 caracteres** para buscar mientras escribe; con **Enter** se
+  ejecuta de inmediato.
+- Se combina con los demás filtros (usuario, acción, módulo, fechas) y se respeta en
+  las exportaciones a PDF y Excel.
+- Equivale a las claves `tercero:` / `referencia:` del buscador general.
+
+> Para cada evento hay que leer el registro al que pertenece, así que con rangos de
+> fechas largos puede tardar. Acote **Desde/Hasta** o el **Módulo**.
 
 ### Número de documento en el listado y en el detalle
 
@@ -181,6 +200,7 @@ Cómo se comporta:
 |-------|---------------|
 | Buscar | Texto libre sobre acción, módulo, usuario, empresa e IP y, si lleva dígitos, sobre el número del documento. Admite claves `clave:valor` |
 | Contenido del mensaje | Busca dentro de los datos guardados del evento (concepto, proveedor, comprobante, importes, estado) |
+| Referencia | Busca por la columna Referencia: nombre o identificación del cliente, proveedor, empleado o producto (del registro o del documento) |
 | Usuario | Solo los eventos generados por esa persona |
 | Empresa | Solo nivel 3. Acota a una empresa concreta |
 | Acción | Crear, modificar, eliminar, anular, login, etc. |
@@ -264,6 +284,9 @@ espacios.
 
 ## Historial de cambios
 
+- **1.5** — Campo **Referencia** en la barra de filtros: busca por la columna
+  Referencia (nombre o identificación del cliente, proveedor, empleado o producto) sin
+  tener que escribir la clave `tercero:`. Se aplica también a PDF y Excel.
 - **1.4** — Los documentos que entran por XML o por la descarga automática del SRI
   (compras, liquidaciones, notas de crédito y débito, facturas de venta) ahora
   registran su evento **Crear**, con el origen y la clave de acceso; antes no

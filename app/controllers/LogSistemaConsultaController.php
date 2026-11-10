@@ -196,6 +196,7 @@ class LogSistemaConsultaController extends Controller
         $desc = [];
         if ($buscar !== '')                $desc[] = 'Texto: ' . $buscar;
         if (!empty($filtros['contenido'])) $desc[] = 'Contenido: ' . $filtros['contenido'];
+        if (!empty($filtros['referencia'])) $desc[] = 'Referencia: ' . $filtros['referencia'];
         if (!empty($filtros['accion']))    $desc[] = 'Acción: ' . AuditoriaEtiquetas::accion((string) $filtros['accion']);
         if (!empty($filtros['tabla'])) {
             $etMod = $this->service->etiquetaModulo($this->getScope(), (string) $filtros['tabla']);
@@ -282,7 +283,7 @@ class LogSistemaConsultaController extends Controller
 
     /**
      * Lee y sanea los filtros explícitos de la barra de filtros.
-     * @return array{usuario:?int,empresa:?int,accion:?string,tabla:?string,contenido:?string,desde:?string,hasta:?string}
+     * @return array{usuario:?int,empresa:?int,accion:?string,tabla:?string,contenido:?string,referencia:?string,desde:?string,hasta:?string}
      */
     private function leerFiltros(): array
     {
@@ -293,6 +294,8 @@ class LogSistemaConsultaController extends Controller
         // Contenido del mensaje (JSON del evento): se acota a 200 caracteres para
         // no armar una condición desmedida; la búsqueda es secuencial (sin índice).
         $contenido = mb_substr(trim($_GET['fc'] ?? $_POST['fc'] ?? ''), 0, 200);
+        // Referencia: nombre o identificación del cliente/proveedor/empleado/producto.
+        $referencia = mb_substr(trim($_GET['fr'] ?? $_POST['fr'] ?? ''), 0, 200);
 
         return [
             'usuario'   => ((int) ($_GET['fu'] ?? $_POST['fu'] ?? 0)) ?: null,
@@ -300,7 +303,8 @@ class LogSistemaConsultaController extends Controller
             'accion'    => (trim($_GET['fa'] ?? $_POST['fa'] ?? '')) ?: null,
             'tabla'     => (trim($_GET['ft'] ?? $_POST['ft'] ?? '')) ?: null,
             'contenido' => $contenido !== '' ? $contenido : null,
-            'desde'     => preg_match($rgxFecha, $desde) ? $desde : null,
+            'referencia' => $referencia !== '' ? $referencia : null,
+            'desde'    => preg_match($rgxFecha, $desde) ? $desde : null,
             'hasta'     => preg_match($rgxFecha, $hasta) ? $hasta : null,
         ];
     }

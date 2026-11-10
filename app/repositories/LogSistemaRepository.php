@@ -484,7 +484,7 @@ class LogSistemaRepository extends BaseRepository
      * fechas) + búsqueda por texto libre y tokens.
      *
      * @param array{nivel:int,id_empresa:int} $scope
-     * @param array $filtros ['usuario','empresa','accion','tabla','contenido','desde','hasta']
+     * @param array $filtros ['usuario','empresa','accion','tabla','contenido','referencia','desde','hasta']
      * @return array{0:string,1:array}
      */
     private function construirWhere(array $scope, string $buscar, array $filtros = []): array
@@ -526,6 +526,20 @@ class LogSistemaRepository extends BaseRepository
             );
             if ($condContenido !== '') {
                 $where .= " AND {$condContenido}";
+            }
+        }
+        // Referencia (columna del listado): cliente, proveedor, empleado o producto del
+        // registro, o el tercero del documento, por nombre o identificación. Misma
+        // expresión que la clave `tercero:` / `referencia:` del buscador.
+        if (!empty($filtros['referencia'])) {
+            $condReferencia = FiltrosBusqueda::condicionTexto(
+                [$this->exprReferencia(' ')],
+                (string) $filtros['referencia'],
+                $params,
+                'fref'
+            );
+            if ($condReferencia !== '') {
+                $where .= " AND {$condReferencia}";
             }
         }
         if (!empty($filtros['desde'])) {

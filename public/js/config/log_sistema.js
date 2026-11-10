@@ -18,7 +18,7 @@
 
     // Lee la barra de filtros y devuelve solo los que tienen valor.
     function getFiltros() {
-        const map = { fu: 'fltUsuario', fe: 'fltEmpresa', fa: 'fltAccion', ft: 'fltTabla', fc: 'fltContenido', fd: 'fltDesde', fh: 'fltHasta' };
+        const map = { fu: 'fltUsuario', fe: 'fltEmpresa', fa: 'fltAccion', ft: 'fltTabla', fc: 'fltContenido', fr: 'fltReferencia', fd: 'fltDesde', fh: 'fltHasta' };
         const out = {};
         Object.keys(map).forEach(function (param) {
             const el = document.getElementById(map[param]);
@@ -274,8 +274,11 @@
         // Contenido del mensaje: busca dentro del JSON del evento. Es una consulta
         // pesada (sin índice), así que se espera un poco más que en el buscador
         // normal y no se dispara con 1-2 letras; con Enter se fuerza igual.
-        const inputContenido = document.getElementById('fltContenido');
-        if (inputContenido) {
+        // Referencia (cliente/proveedor/empleado/producto): mismo comportamiento, porque
+        // resuelve el nombre con una lectura por fila.
+        ['fltContenido', 'fltReferencia'].forEach(function (idCampo) {
+            const inputContenido = document.getElementById(idCampo);
+            if (!inputContenido) return;
             let timerContenido = null;
             inputContenido.addEventListener('input', function () {
                 clearTimeout(timerContenido);
@@ -290,7 +293,7 @@
                     LOGSIS_cargarListado(1);
                 }
             });
-        }
+        });
 
         document.querySelectorAll('.log-sort').forEach(function (th) {
             th.addEventListener('click', function () {
@@ -316,8 +319,10 @@
         if (btnLimpiar) {
             btnLimpiar.addEventListener('click', function () {
                 ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla'].forEach(limpiarFiltroSelect);
-                const inputCont = document.getElementById('fltContenido');
-                if (inputCont) inputCont.value = '';
+                ['fltContenido', 'fltReferencia'].forEach(function (id) {
+                    const inputTxt = document.getElementById(id);
+                    if (inputTxt) inputTxt.value = '';
+                });
                 ['fltDesde', 'fltHasta'].forEach(function (id) {
                     const el = document.getElementById(id);
                     if (el) el.value = el.defaultValue;

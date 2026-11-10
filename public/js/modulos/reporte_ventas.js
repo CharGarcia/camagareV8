@@ -667,6 +667,12 @@ function RV_columnasDe(modo, meses) {
         const colsCat = (Array.isArray(meses) ? meses : []).map(([clave, nombre]) => ['cat:' + clave, esc(nombre), 'text-end']);
         return [base[0], ...colsCat, base[1], base[2]];
     }
+    if (modo === 'NINGUNO') {
+        // Notas de crédito: columna "Motivo" tras el cliente (el servidor pinta la celda con
+        // la misma regla: ReporteVentasController::conMotivo()).
+        const esNc = document.getElementById('rv_tipo_documento')?.value === 'NOTA_CREDITO';
+        return esNc ? [...base.slice(0, 3), ['motivo', 'Motivo', ''], ...base.slice(3)] : base;
+    }
     if (modo !== 'PRODUCTO_MES') return base;
     const colsMes = Object.keys(meses || {}).map(m => ['mes:' + m, meses[m], 'text-end']);
     return [base[0], base[1], ...colsMes, base[2]];

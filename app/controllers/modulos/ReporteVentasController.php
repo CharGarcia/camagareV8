@@ -280,11 +280,21 @@ class ReporteVentasController extends BaseModuloController
         }
     }
 
+    /**
+     * La columna "Motivo" sale solo en el detallado de notas de crédito (pantalla, Excel y
+     * PDF). El JS decide lo mismo al dibujar la cabecera (RV_columnasDe).
+     */
+    private static function conMotivo(array $filtros): bool
+    {
+        return ($filtros['tipo_documento'] ?? '') === 'NOTA_CREDITO'
+            && ($filtros['agrupar_por'] ?? 'NINGUNO') === 'NINGUNO';
+    }
+
     /** Número de columnas de la tabla de la pantalla en cada agrupación (para el colspan). */
-    private static function numColumnas(string $agrupar, array $meses): int
+    private static function numColumnas(string $agrupar, array $meses, bool $conMotivo = false): int
     {
         return match ($agrupar) {
-            'NINGUNO'      => 12,
+            'NINGUNO'      => $conMotivo ? 13 : 12,
             'PRODUCTO'     => 7,
             'VARIANTE'     => 8,
             'PRODUCTO_MES' => 3 + count($meses),
@@ -378,8 +388,9 @@ class ReporteVentasController extends BaseModuloController
      * tarjetas de arriba y con la fila "TOTALES GENERALES" del PDF. En "Facturas − NC" las
      * notas de crédito ya vienen en negativo y restan.
      */
-    private function renderFilaTotalesMontosHtml(array $rows, string $agrupar): string
+    private function renderFilaTotalesMontosHtml(array $rows, string $agrupar, bool $conMotivo = false): string
     {
+        $spanDet = $conMotivo ? 8 : 7;   // columnas del detallado antes de los importes
         $n      = count($rows);
         $etq    = "TOTAL ({$n} " . $this->sustantivoFilas($agrupar, $n) . ")";
         $num    = static fn (string $c): string => number_format(self::sumarCampo($rows, $c), 2);
@@ -395,7 +406,7 @@ class ReporteVentasController extends BaseModuloController
                         . "<td class='text-center'>" . self::fmtCantidad(self::sumarCampo($rows, 'cantidad_vendida')) . "</td><td></td>" . $montos,
             'FECHA', 'CAJERO', 'MES' => "<td class='ps-4'>{$etq}</td>"
                         . "<td class='text-center'>" . (int) self::sumarCampo($rows, 'cantidad_facturas') . "</td>" . $montos,
-            default    => "<td class='ps-4' colspan='7'>{$etq}</td>" . $montos
+            default    => "<td class='ps-4' colspan='{$spanDet}'>{$etq}</td>" . $montos
                         . "<td class='text-end text-danger'>{$num('retenciones')}</td>",
         };
         return $html . '</tr>';
@@ -435,7 +446,7 @@ class ReporteVentasController extends BaseModuloController
             // Generar HTML de las filas según la agrupación
             ob_start();
             if (empty($rows)) {
-                $colSpan = self::numColumnas((string) $filtros['agrupar_por'], $meses);
+                $colSpan = self::numColumnas((string) $filtros['agrupar_por'], $meses, self::conMotivo($filtros));
                 $mensajeVacio = 'No se encontraron resultados.';
                 if (!empty($filtros['fecha_desde']) && !empty($filtros['fecha_hasta'])) {
                     $desde = date('d-m-Y', strtotime($filtros['fecha_desde']));
@@ -445,7 +456,7 @@ class ReporteVentasController extends BaseModuloController
                 echo '<tr><td colspan="'.$colSpan.'" class="text-center py-5 text-muted"><i class="bi bi-file-earmark-bar-graph fs-3 d-block mb-2"></i>'.htmlspecialchars($mensajeVacio).'</td></tr>';
             } else {
                 foreach ($rows as $r) {
-                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado, $meses);
+                    echo $this->renderFilaAgrupadaHtml($r, $filtros['agrupar_por'], $filtros['tipo_documento'] ?? 'FACTURA', $consolidado, $meses, self::conMotivo($filtros));
                 }
                 if ($filtros['agrupar_por'] === 'PRODUCTO_MES') {
                     echo $this->renderFilaTotalesUnidadesHtml($rows, $meses);
@@ -454,7 +465,7 @@ class ReporteVentasController extends BaseModuloController
                 } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
                     echo $this->renderFilaTotalesProductoHtml($rows);
                 } else {
-                    echo $this->renderFilaTotalesMontosHtml($rows, (string) $filtros['agrupar_por']);
+                    echo $this->renderFilaTotalesMontosHtml($rows, (string) $filtros['agrupar_por'], self::conMotivo($filtros));
                 }
             }
             $rowsHtml = ob_get_clean();
@@ -494,7 +505,7 @@ class ReporteVentasController extends BaseModuloController
         exit;
     }
 
-    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false, array $meses = []): string
+    private function renderFilaAgrupadaHtml(array $r, string $agruparPor, string $tipoDocumento = 'FACTURA', bool $consolidado = false, array $meses = [], bool $conMotivo = false): string
     {
         // Consolidado por RUC: badge con el establecimiento dueño del documento (solo en el
         // detallado; las agrupaciones suman todos los establecimientos en una fila).
@@ -620,6 +631,11 @@ class ReporteVentasController extends BaseModuloController
             $html .= "<td class='text-center'>".date('d/m/Y', strtotime($r['fecha_emision'] ?? ''))."</td>";
             $html .= "<td>{$badgeEst}<span class='fw-bold'>".htmlspecialchars($r['numero_factura'] ?? '')."</span></td>";
             $html .= "<td><span class='fw-bold'>".htmlspecialchars($r['cliente_nombre'] ?? '')."</span><br><small class='text-muted'>".htmlspecialchars($r['cliente_ruc'] ?? '')."</small></td>";
+            if ($conMotivo) {
+                // Motivo de la nota de crédito: una línea con puntos suspensivos; completo al pasar el mouse.
+                $motivo = htmlspecialchars((string) ($r['motivo'] ?? ''), ENT_QUOTES);
+                $html .= "<td title='{$motivo}' style='max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;'>{$motivo}</td>";
+            }
             $html .= "<td class='text-center'><span class='badge border {$badgeColor}'>".strtoupper($estado)."</span></td>";
             $html .= "<td>".htmlspecialchars($r['vendedor_nombre'] ?? '')."</td>";
             $html .= "<td>".htmlspecialchars($r['cajero_nombre']   ?? '')."</td>";
@@ -857,7 +873,9 @@ class ReporteVentasController extends BaseModuloController
                 // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento.
                 // Con borradores: columna "Estado" para distinguirlos de los documentos válidos.
                 $conEstado = $filtros['borradores'] !== 'EXCLUIR';
-                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula'], $conEstado ? ['Estado'] : [], ['Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
+                // Notas de crédito: columna "Motivo" tras el cliente, como en la pantalla.
+                $conMotivo = self::conMotivo($filtros);
+                $headers = array_merge($consolidado ? ['Estab.'] : [], ['Fecha', 'Factura', 'Cliente', 'RUC/Cédula'], $conMotivo ? ['Motivo'] : [], $conEstado ? ['Estado'] : [], ['Vendedor', 'Cajero', 'Usuario', 'Clave Acceso', 'Base 0%', 'Base IVA', 'IVA', 'Total', 'Retenciones']);
                 $exportData = [];
                 foreach ($rows as $r) {
                     $exportData[] = array_merge($consolidado ? [(string) ($r['establecimiento'] ?? '')] : [], [
@@ -865,7 +883,7 @@ class ReporteVentasController extends BaseModuloController
                         $r['numero_factura'],
                         $r['cliente_nombre'],
                         $r['cliente_ruc'],
-                    ], $conEstado ? [strtoupper((string) ($r['estado'] ?? ''))] : [], [
+                    ], $conMotivo ? [(string) ($r['motivo'] ?? '')] : [], $conEstado ? [strtoupper((string) ($r['estado'] ?? ''))] : [], [
                         $r['vendedor_nombre'] ?? '',
                         $r['cajero_nombre']   ?? '',
                         $r['usuario_nombre']  ?? '',
@@ -921,8 +939,8 @@ class ReporteVentasController extends BaseModuloController
             $autoload = MVC_ROOT . '/vendor/autoload.php';
             if (file_exists($autoload)) require_once $autoload;
 
-            $html      = $this->htmlPdf($agrupar, $consolidado, $rows, $totales, $filtrosTxt, $idEmpresaActiva, $nombreEmpresa, $meses);
-            $html2pdf  = new \Spipu\Html2Pdf\Html2Pdf(self::pdfHorizontal($agrupar, $meses) ? 'L' : 'P', 'A4', 'es');
+            $html      = $this->htmlPdf($agrupar, $consolidado, $rows, $totales, $filtrosTxt, $idEmpresaActiva, $nombreEmpresa, $meses, self::conMotivo($filtros));
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf(self::pdfHorizontal($agrupar, $meses) ? 'L' : 'P', 'A4', 'es');
             $html2pdf->writeHTML($html);
             $html2pdf->output('ReporteVentas_' . ucfirst(strtolower($agrupar)) . '_' . date('Ymd_His') . '.pdf', 'D');
             exit;
@@ -936,9 +954,10 @@ class ReporteVentasController extends BaseModuloController
      * exportPdf() para poder generarlo —y medirlo— con cualquier juego de filas.
      */
     private function htmlPdf(string $agrupar, bool $consolidado, array $rows, array $totales,
-                             array $filtrosTxt, int $idEmpresaActiva, string $nombreEmpresa, array $meses = []): string
+                             array $filtrosTxt, int $idEmpresaActiva, string $nombreEmpresa, array $meses = [],
+                             bool $conMotivo = false): string
     {
-        $cols      = $this->columnasPdf($agrupar, $consolidado, $meses);
+        $cols      = $this->columnasPdf($agrupar, $consolidado, $meses, $conMotivo);
         $nCols     = count($cols);
         $fs        = self::pdfFuentePt($agrupar, $meses) . 'pt';
 
@@ -1113,7 +1132,7 @@ class ReporteVentasController extends BaseModuloController
      * descriptiva (producto, cliente) se lleva todo lo que sobra tras dar a cada importe lo
      * justo para su cifra más larga.
      */
-    private function columnasPdf(string $agrupar, bool $consolidado, array $meses = []): array
+    private function columnasPdf(string $agrupar, bool $consolidado, array $meses = [], bool $conMotivo = false): array
     {
         $e    = static fn ($v): string => htmlspecialchars((string) $v);
         $num  = static fn ($v): string => number_format((float) $v, 2);
@@ -1306,21 +1325,31 @@ class ReporteVentasController extends BaseModuloController
             $cols[] = ['lbl' => 'Estab.', 'w' => 5, 'cls' => 'text-center',
                        'val' => static fn (array $r): string => $wrap((string) ($r['establecimiento'] ?? ''), $pt(5), $ptFila)];
         }
+        // Notas de crédito: entra la columna "Motivo" tras el cliente. Su ancho (12 %; 10 % en
+        // consolidado) sale de recortar un poco las demás columnas de texto; la suma sigue en 100.
+        [$wFec, $wDoc, $wCli, $wMot, $wEst, $wVen, $wCaj, $wUsu, $wRet] = $conMotivo
+            ? ($consolidado ? [6, 9, 11, 10, 7, 7, 6, 6, 5] : [6, 9, 14, 12, 7, 7, 6, 6, 5])
+            : ($consolidado ? [7, 10, 12, 0, 8, 9, 8, 7, 6] : [7, 10, 16, 0, 8, 9, 8, 8, 6]);
+        $colMotivo = $conMotivo ? [
+            ['lbl' => 'Motivo', 'w' => $wMot, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['motivo'] ?? ''), $pt($wMot), $ptFila)],
+        ] : [];
         return array_merge($cols, [
-            ['lbl' => 'Fecha', 'w' => 7, 'cls' => 'text-center',
+            ['lbl' => 'Fecha', 'w' => $wFec, 'cls' => 'text-center',
              'val' => static fn (array $r): string => $e(date('d-m-Y', strtotime((string) ($r['fecha_emision'] ?? ''))))],
-            ['lbl' => 'Documento', 'w' => 10, 'cls' => '',
-             'val' => static fn (array $r): string => $wrap((string) ($r['numero_factura'] ?? ''), $pt(10), $ptFila)],
-            ['lbl' => 'Cliente', 'w' => $consolidado ? 12 : 16, 'cls' => '',
-             'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt($consolidado ? 12 : 16))],
-            ['lbl' => 'Estado', 'w' => 8, 'cls' => 'text-center',
-             'val' => static fn (array $r): string => $wrap(strtoupper((string) ($r['estado'] ?? '')), $pt(8), $ptFila)],
-            ['lbl' => 'Vendedor', 'w' => 9, 'cls' => '',
-             'val' => static fn (array $r): string => $wrap((string) ($r['vendedor_nombre'] ?? ''), $pt(9), $ptFila)],
-            ['lbl' => 'Cajero', 'w' => 8, 'cls' => '',
-             'val' => static fn (array $r): string => $wrap((string) ($r['cajero_nombre'] ?? ''), $pt(8), $ptFila)],
-            ['lbl' => 'Usuario', 'w' => $consolidado ? 7 : 8, 'cls' => '',
-             'val' => static fn (array $r): string => $wrap((string) ($r['usuario_nombre'] ?? ''), $pt($consolidado ? 7 : 8), $ptFila)],
+            ['lbl' => 'Documento', 'w' => $wDoc, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['numero_factura'] ?? ''), $pt($wDoc), $ptFila)],
+            ['lbl' => 'Cliente', 'w' => $wCli, 'cls' => '',
+             'val' => static fn (array $r): string => $desc((string) ($r['cliente_nombre'] ?? ''), (string) ($r['cliente_ruc'] ?? ''), $pt($wCli))],
+        ], $colMotivo, [
+            ['lbl' => 'Estado', 'w' => $wEst, 'cls' => 'text-center',
+             'val' => static fn (array $r): string => $wrap(strtoupper((string) ($r['estado'] ?? '')), $pt($wEst), $ptFila)],
+            ['lbl' => 'Vendedor', 'w' => $wVen, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['vendedor_nombre'] ?? ''), $pt($wVen), $ptFila)],
+            ['lbl' => 'Cajero', 'w' => $wCaj, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['cajero_nombre'] ?? ''), $pt($wCaj), $ptFila)],
+            ['lbl' => 'Usuario', 'w' => $wUsu, 'cls' => '',
+             'val' => static fn (array $r): string => $wrap((string) ($r['usuario_nombre'] ?? ''), $pt($wUsu), $ptFila)],
             ['lbl' => 'Base 0%', 'w' => 7, 'cls' => 'text-end', 'tot' => 'total_base_0',
              'val' => static fn (array $r): string => $num($r['base_0'] ?? 0)],
             ['lbl' => 'Base IVA', 'w' => 7, 'cls' => 'text-end', 'tot' => 'total_base_iva',
@@ -1329,7 +1358,7 @@ class ReporteVentasController extends BaseModuloController
              'val' => static fn (array $r): string => $num($r['valor_iva'] ?? 0)],
             ['lbl' => 'Total', 'w' => 8, 'cls' => 'text-end', 'tot' => 'gran_total',
              'val' => static fn (array $r): string => "<span style='font-weight:bold;'>" . $num($r['total'] ?? 0) . '</span>'],
-            ['lbl' => 'Retenc.', 'w' => 6, 'cls' => 'text-end', 'tot' => $sumar('retenciones'),
+            ['lbl' => 'Retenc.', 'w' => $wRet, 'cls' => 'text-end', 'tot' => $sumar('retenciones'),
              'val' => static fn (array $r): string => $num($r['retenciones'] ?? 0)],
         ]);
     }

@@ -124,6 +124,18 @@ $verIntentos = $nivel >= 3;
             </div>
 
             <div>
+                <label class="form-label small mb-0 text-muted" for="fltReferencia">
+                    Referencia
+                    <i class="bi bi-info-circle" title="Busca por la columna Referencia: nombre o identificación del cliente, proveedor, empleado o producto del registro (o del tercero del documento). Mínimo 3 caracteres."></i>
+                </label>
+                <div class="input-group input-group-sm" style="width:220px;max-width:100%">
+                    <span class="input-group-text bg-white text-muted" style="height:30px;"><i class="bi bi-person-vcard"></i></span>
+                    <input type="text" id="fltReferencia" class="form-control form-control-sm" style="height:30px;"
+                           placeholder="Nombre o identificación" autocomplete="off" maxlength="200">
+                </div>
+            </div>
+
+            <div>
                 <label class="form-label small mb-0 text-muted">Usuario</label>
                 <select id="fltUsuario" class="form-select form-select-sm log-flt-buscable" style="min-width:150px;height:30px;" autocomplete="off">
                     <option value="">Todos</option>
@@ -203,7 +215,8 @@ $verIntentos = $nivel >= 3;
                 <code>contenido:"DELIVERY HERO"</code> ·
                 <code>fecha:2026-07-01..2026-07-08</code> · <code>fecha:&gt;=2026-07-01</code>.
                 Use <code>-clave:valor</code> para negar y comillas para valores con espacios.
-                <code>tercero:</code> es el cliente, proveedor o empleado del documento (nombre o identificación).
+                <code>tercero:</code> (alias <code>referencia:</code>) busca por la columna <strong>Referencia</strong>:
+                cliente, proveedor, empleado o producto (nombre o identificación). Es lo mismo que el campo <em>Referencia</em> de la barra.
                 <div class="mt-1">
                     <strong>Contenido del mensaje:</strong> el campo <em>Contenido del mensaje</em> (y la clave
                     <code>contenido:</code>) busca dentro de los datos guardados del evento — concepto, proveedor

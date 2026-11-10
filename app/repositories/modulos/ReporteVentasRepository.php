@@ -248,6 +248,7 @@ class ReporteVentasRepository extends BaseRepository
             'fecha_emision'   => 'v.fecha_emision {dir}, v.secuencial {dir}',
             'numero_factura'  => 'numero_factura {dir}',
             'cliente_nombre'  => 'cliente_nombre {dir}',
+            'motivo'          => 'motivo {dir}',   // solo se muestra en notas de crédito
             'estado'          => 'estado {dir}',
             'vendedor_nombre' => 'vendedor_nombre {dir}',
             'cajero_nombre'   => 'cajero_nombre {dir}',
@@ -889,6 +890,8 @@ class ReporteVentasRepository extends BaseRepository
             $vendedorJoin = "LEFT JOIN ventas_cabecera fvnc ON " . $this->condicionFacturaDeNc('v', 'fvnc') . "
             LEFT JOIN vendedores vend ON vend.id = fvnc.id_vendedor";
         }
+        // Motivo de la nota de crédito (facturas y recibos no tienen: sale vacío).
+        $motivoSel = $f['cab'] === 'notas_credito_cabecera' ? "COALESCE(v.motivo, '')" : "''";
         $orden = $this->ordenSql($filtros, 'NINGUNO');
 
         $sql = "
@@ -901,6 +904,7 @@ class ReporteVentasRepository extends BaseRepository
                 CONCAT(v.establecimiento, '-', v.punto_emision, '-', v.secuencial) as numero_factura,
                 c.identificacion as cliente_ruc,
                 c.nombre as cliente_nombre,
+                {$motivoSel} as motivo,
                 v.estado,
                 COALESCE(b.base_0, 0)   as base_0,
                 COALESCE(b.base_iva, 0) as base_iva,

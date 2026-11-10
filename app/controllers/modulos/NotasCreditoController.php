@@ -334,6 +334,13 @@ class NotasCreditoController extends BaseModuloController
                 require_once $autoload;
             }
 
+            // Mismo diseño que el listado de Ingresos. Html2Pdf solo respeta el ancho si va en
+            // cada celda (th y td): con el ancho solo en el <th> la tabla no ocupa la hoja.
+            // A4 vertical, como Ingresos. Los números (documento, RUC, fecha, total) llevan el
+            // ancho justo para no partirse; cliente, motivo y vendedor bajan a varias líneas.
+            $w = ['num' => 14, 'fecha' => 9, 'cliente' => 14, 'ruc' => 12, 'doc' => 14,
+                  'total' => 8, 'motivo' => 11, 'vend' => 9, 'estado' => 9];
+
             ob_start();
 ?>
             <style>
@@ -353,30 +360,30 @@ class NotasCreditoController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 10%">Número</th>
-                            <th style="width: 8%">Fecha</th>
-                            <th style="width: 19%">Cliente</th>
-                            <th style="width: 10%">Identificación</th>
-                            <th style="width: 11%">Doc. Modificado</th>
-                            <th style="width: 9%" class="text-end">Total</th>
-                            <th style="width: 15%">Motivo</th>
-                            <th style="width: 10%">Vendedor</th>
-                            <th style="width: 8%">Estado</th>
+                            <th style="width: <?= $w['num'] ?>%">Número</th>
+                            <th style="width: <?= $w['fecha'] ?>%">Fecha</th>
+                            <th style="width: <?= $w['cliente'] ?>%">Cliente</th>
+                            <th style="width: <?= $w['ruc'] ?>%">Identificación</th>
+                            <th style="width: <?= $w['doc'] ?>%">Doc. Modificado</th>
+                            <th style="width: <?= $w['total'] ?>%" class="text-end">Total</th>
+                            <th style="width: <?= $w['motivo'] ?>%">Motivo</th>
+                            <th style="width: <?= $w['vend'] ?>%">Vendedor</th>
+                            <th style="width: <?= $w['estado'] ?>%">Estado</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($rows as $r): ?>
                             <?php $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? ''); ?>
                             <tr>
-                                <td><?= htmlspecialchars((string)$numero) ?></td>
-                                <td><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
-                                <td><?= htmlspecialchars((string)($r['cliente_nombre'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['cliente_ruc'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['num_doc_modificado'] ?? '')) ?></td>
-                                <td class="text-end"><?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
-                                <td><?= htmlspecialchars((string)($r['motivo'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars((string)($r['vendedor_nombre'] ?? '')) ?></td>
-                                <td><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
+                                <td style="width: <?= $w['num'] ?>%"><?= htmlspecialchars((string)$numero) ?></td>
+                                <td style="width: <?= $w['fecha'] ?>%"><?= !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '-' ?></td>
+                                <td style="width: <?= $w['cliente'] ?>%"><?= htmlspecialchars((string)($r['cliente_nombre'] ?? '')) ?></td>
+                                <td style="width: <?= $w['ruc'] ?>%"><?= htmlspecialchars((string)($r['cliente_ruc'] ?? '')) ?></td>
+                                <td style="width: <?= $w['doc'] ?>%"><?= htmlspecialchars((string)($r['num_doc_modificado'] ?? '')) ?></td>
+                                <td style="width: <?= $w['total'] ?>%" class="text-end"><?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
+                                <td style="width: <?= $w['motivo'] ?>%"><?= htmlspecialchars((string)($r['motivo'] ?? '')) ?></td>
+                                <td style="width: <?= $w['vend'] ?>%"><?= htmlspecialchars((string)($r['vendedor_nombre'] ?? '')) ?></td>
+                                <td style="width: <?= $w['estado'] ?>%"><?= ucfirst((string)($r['estado'] ?? '')) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -385,7 +392,7 @@ class NotasCreditoController extends BaseModuloController
 <?php
             $content = ob_get_clean();
 
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
             $html2pdf->writeHTML($content);
             $html2pdf->output('NotasCredito_' . date('Ymd_His') . '.pdf', 'D');
             exit;
