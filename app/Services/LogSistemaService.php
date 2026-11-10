@@ -431,12 +431,26 @@ class LogSistemaService
             'id_cuenta_gasto'   => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
             'id_cuenta_inventario'=> ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
             'id_banco'          => ['table' => 'bancos_ecuador', 'field' => 'nombre_banco'],
-            'tipo_id'           => ['table' => 'identificadores_comprador_vendedor', 'field' => 'nombre', 'key' => 'codigo'],
-            'tipo_id_proveedor' => ['table' => 'identificadores_comprador_vendedor', 'field' => 'nombre', 'key' => 'codigo'],
+            // Las tablas son en singular (identificador_…, provincia, ciudad): con el nombre en
+            // plural la consulta fallaba en silencio y el historial mostraba el código.
+            'tipo_id'           => ['table' => 'identificador_comprador_vendedor', 'field' => 'nombre', 'key' => 'codigo'],
+            'tipo_id_proveedor' => ['table' => 'identificador_comprador_vendedor', 'field' => 'nombre', 'key' => 'codigo'],
             'tipo_empresa'      => ['table' => 'tipo_empresa', 'field' => 'nombre'],
-            'provincia'         => ['table' => 'provincias', 'field' => 'nombre', 'key' => 'codigo'],
-            'ciudad'            => ['table' => 'ciudades', 'field' => 'nombre', 'key' => 'codigo'],
-            'id_forma_cobro_predeterminada' => ['table' => 'formas_cobro', 'field' => 'nombre'],
+            'provincia'         => ['table' => 'provincia', 'field' => 'nombre', 'key' => 'codigo'],
+            'ciudad'            => ['table' => 'ciudad', 'field' => 'nombre', 'key' => 'codigo'],
+            // Fichas de cliente / proveedor / empleado / producto: sin esto el historial decía
+            // "Forma pago predeterminada: → 10".
+            'id_forma_cobro_predeterminada'      => ['table' => 'empresa_formas_pago', 'field' => 'nombre'],
+            'id_forma_pago_predeterminada'       => ['table' => 'empresa_formas_pago', 'field' => 'nombre'],
+            'id_egreso_concepto_predeterminado'  => ['table' => 'empresa_opciones_ingreso_egreso', 'field' => 'nombre'],
+            'id_ingreso_concepto_predeterminado' => ['table' => 'empresa_opciones_ingreso_egreso', 'field' => 'nombre'],
+            'id_retencion_renta'     => ['table' => 'retenciones_sri', 'field' => "codigo_ret || ' - ' || concepto_ret"],
+            'id_retencion_iva'       => ['table' => 'retenciones_sri', 'field' => "codigo_ret || ' - ' || concepto_ret"],
+            'id_sustento_tributario' => ['table' => 'sustento_tributario', 'field' => "codigo || ' - ' || nombre"],
+            'id_banco_ecuador'       => ['table' => 'bancos_ecuador', 'field' => 'nombre_banco'],
+            'id_cuenta_costo_gasto'  => ['table' => 'plan_cuentas', 'field' => "codigo || ' - ' || nombre"],
+            'id_usuario_sistema'     => ['table' => 'usuarios', 'field' => 'nombre'],
+            'id_usuario_vinculado'   => ['table' => 'usuarios', 'field' => 'nombre'],
             // Quién y en qué empresa: solo se ven en el detalle completo de la consulta de
             // auditoría (formatearDatosCompletos); el diff de cambios omite estas claves.
             'created_by'        => ['table' => 'usuarios', 'field' => 'nombre'],
