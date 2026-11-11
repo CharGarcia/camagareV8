@@ -15,6 +15,30 @@ function RC_endpointEntidad() {
     return document.getElementById('rc_tipo').value === 'PROVEEDOR' ? 'getProveedoresAjax' : 'getClientesAjax';
 }
 
+// Agrega el chip de un cliente/proveedor a la selección. Devuelve false si ya estaba.
+// Quitar el chip limpia el filtro de documento (era de ese tercero) y lo que hay en pantalla.
+function RC_agregarChipEntidad(id, nombre) {
+    const chips = document.getElementById('rc-chips-entidad');
+    if (!chips || chips.querySelector(`input[value="${id}"]`)) return false;
+
+    const chip = document.createElement('span');
+    chip.className = 'badge bg-primary bg-opacity-10 text-primary border border-primary d-flex align-items-center justify-content-between mb-1 text-start';
+    chip.style.cssText = 'font-size:0.75rem;width:100%;white-space:normal;';
+    chip.innerHTML = `
+        <span class="text-truncate me-2"></span>
+        <input type="hidden" name="id_entidad[]" value="${parseInt(id, 10)}">
+        <button type="button" class="btn-close btn-close-sm flex-shrink-0" style="font-size:0.5rem;"></button>
+    `;
+    chip.querySelector('span').textContent = nombre;
+    chip.querySelector('button').addEventListener('click', function () {
+        chip.remove();
+        window.RC_limpiarDocumento(false);
+        RC_filtrosCambiaron();
+    });
+    chips.appendChild(chip);
+    return true;
+}
+
 // Buscador predictivo con selección múltiple (chips) de clientes/proveedores.
 function RC_setupBuscadorEntidad() {
     const input = document.getElementById('rc-search-entidad');
@@ -46,21 +70,7 @@ function RC_setupBuscadorEntidad() {
                                 input.value = '';
                                 dropdown.classList.add('d-none');
 
-                                if (!chips.querySelector(`input[value="${item.id}"]`)) {
-                                    const chip = document.createElement('span');
-                                    chip.className = 'badge bg-primary bg-opacity-10 text-primary border border-primary d-flex align-items-center justify-content-between mb-1 text-start';
-                                    chip.style.cssText = 'font-size:0.75rem;width:100%;white-space:normal;';
-                                    chip.innerHTML = `
-                                        <span class="text-truncate me-2">${item.nombre}</span>
-                                        <input type="hidden" name="id_entidad[]" value="${item.id}">
-                                        <button type="button" class="btn-close btn-close-sm flex-shrink-0" style="font-size:0.5rem;"></button>
-                                    `;
-                                    chip.querySelector('button').addEventListener('click', function () {
-                                        chip.remove();
-                                        window.RC_limpiarDocumento(false);
-                                        RC_filtrosCambiaron();
-                                    });
-                                    chips.appendChild(chip);
+                                if (RC_agregarChipEntidad(item.id, item.nombre)) {
                                     window.RC_limpiarDocumento(false);
                                     RC_filtrosCambiaron();
                                 }
@@ -86,7 +96,8 @@ function RC_setupBuscadorEntidad() {
 }
 
 // ── Filtro "Documento": typeahead sobre los documentos (facturas, recibos,
-// compras, saldos iniciales...) de los clientes/proveedores seleccionados.
+// compras, saldos iniciales...) de los clientes/proveedores seleccionados o, si no
+// hay ninguno elegido, de toda la empresa (escribiendo al menos 3 caracteres).
 // Al elegir uno queda fijado (input visible = etiqueta, hidden = número);
 // Backspace/Delete con una selección fija limpia todo el filtro de una vez.
 function RC_setupBuscadorDocumento() {
@@ -121,7 +132,19 @@ function RC_setupBuscadorDocumento() {
                     btn.innerHTML = `<strong>${item.numero}</strong> <span class="text-muted">· ${item.origen} · ${item.fecha} · $${item.total}</span>`
                         + (item.entidad ? `<br><small class="text-muted">${item.entidad}</small>` : '');
                     btn.addEventListener('click', function () {
+                        // Documento buscado sin cliente/proveedor elegido (o con "Todos"):
+                        // su dueño queda seleccionado, para ver el historial de ESE documento.
+                        const todos = document.getElementById('rc-todos');
+                        const chips = document.getElementById('rc-chips-entidad');
+                        if (item.id_entidad && (todos.checked || !chips.querySelector('input[name="id_entidad[]"]'))) {
+                            todos.checked = false;
+                            document.getElementById('rc-search-entidad').disabled = false;
+                            chips.classList.remove('d-none');
+                            chips.innerHTML = '';
+                            RC_agregarChipEntidad(item.id_entidad, item.entidad || ('#' + item.id_entidad));
+                        }
                         hidden.value = item.numero;
+                        RC_bloquearFechas(true);
                         input.value = item.numero + ' · ' + item.origen;
                         input.classList.add('bg-light', 'fw-bold');
                         dropdown.classList.add('d-none');
@@ -160,6 +183,18 @@ function RC_setupBuscadorDocumento() {
     });
 }
 
+// Con un documento elegido se muestra su historial completo (el documento y todos sus
+// cobros/pagos, retenciones y notas de crédito, de cualquier fecha): el servidor ignora el
+// rango de fechas, así que Año, Mes y Fecha Desde/Hasta se bloquean para que se note.
+function RC_bloquearFechas(bloquear) {
+    ['rc-anio', 'rc-mes', 'rc-fecha-desde', 'rc-fecha-hasta'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.disabled = bloquear;
+        el.title = bloquear ? 'Con un documento elegido se muestra todo su historial, sin importar las fechas' : '';
+    });
+}
+
 // Limpia el filtro de documento (input visible + hidden + dropdown).
 // regenerar: avisar que los filtros cambiaron (retira lo que había en pantalla).
 window.RC_limpiarDocumento = function (regenerar) {
@@ -169,6 +204,7 @@ window.RC_limpiarDocumento = function (regenerar) {
     if (!input || !hidden) return;
     const habia = hidden.value !== '' || input.value !== '';
     hidden.value = '';
+    RC_bloquearFechas(false);
     input.value = '';
     input.classList.remove('bg-light', 'fw-bold');
     if (dropdown) dropdown.classList.add('d-none');

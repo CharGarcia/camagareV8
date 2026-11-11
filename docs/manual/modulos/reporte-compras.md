@@ -89,13 +89,21 @@ total de cada comprobante e incluye valores que no son de ningún producto.
 ## Otros rubros y valores de terceros
 
 Algunas compras traen valores que no son base, IVA ni ICE. El reporte los muestra en
-dos columnas propias (en todas las vistas menos *Por producto*, porque no pertenecen a
-ningún producto):
+dos columnas propias, justo antes del **Gran Total** (en todas las vistas menos
+*Por producto*, porque no pertenecen a ningún producto):
 
-| Columna | Qué trae | ¿Está dentro del Total? |
-|---|---|---|
-| **Otros rubros** | La **propina** (10 % de servicio de restaurantes y hoteles) y los **otros rubros de terceros** del comprobante electrónico (p. ej. la tasa de pernoctación de los hoteles) | **Sí**, va antes del Total: Base 0% + Base IVA + IVA + ICE + Otros rubros = Total |
-| **Val. terceros** | Lo que el proveedor recauda para terceros en las planillas de luz o agua (bomberos, tasa de basura) | **No**, va después del Total: no forma parte del valor declarado al SRI, pero sí se paga con la planilla y suma en Cuentas por Pagar |
+| Columna | Qué trae |
+|---|---|
+| **Otros rubros** | La **propina** (10 % de servicio de restaurantes y hoteles) y los **otros rubros de terceros** del comprobante electrónico (p. ej. la tasa de pernoctación de los hoteles) |
+| **Val. terceros** | Lo que el proveedor recauda para terceros en las planillas de luz o agua (bomberos, tasa de basura). No forma parte del valor declarado al SRI, pero sí se paga con la planilla |
+
+El **Gran Total** es la suma de todo lo que se paga al proveedor:
+
+> Base 0% + Base IVA + IVA + ICE + Otros rubros + Val. terceros = Gran Total
+
+Por eso, en una planilla con valores de terceros el Gran Total del reporte es mayor que
+el total del comprobante (el declarado al SRI) y coincide con lo que se debe en
+Cuentas por Pagar. La tarjeta *Gran Total* de arriba usa el mismo criterio.
 
 Ambas columnas tienen su suma en la fila TOTAL, salen en el Excel y en el PDF, y un
 administrador puede ocultarlas con **Personalizar**.
@@ -137,7 +145,7 @@ El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
 
 ## Historial de cambios
 
-- **1.9** (11-11-2026) — Nuevas columnas **Otros rubros** (propina y otros rubros de terceros, dentro del total) y **Val. terceros** (valores de terceros de planillas, fuera del total) en las vistas detallado, por proveedor, por fecha y por mes, en pantalla, Excel y PDF. Antes esos valores solo se notaban en el Total, que no coincidía con la suma de bases e impuestos.
+- **1.9** (11-11-2026) — Nuevas columnas **Otros rubros** (propina y otros rubros de terceros) y **Val. terceros** (valores de terceros de planillas) antes del Gran Total, en las vistas detallado, por proveedor, por fecha y por mes, en pantalla, Excel y PDF. El **Gran Total** (columna y tarjeta) ahora suma también los valores de terceros: es todo lo que se paga al proveedor. Antes esos valores no tenían columna y el total no coincidía con la suma de bases e impuestos.
 - **1.8** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas visibles por vista en pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Además, el **PDF** ahora reparte el ancho de la hoja entre sus columnas: ocupa de margen a margen y el detallado ya no se sale por la derecha.
 - **1.7** — Nueva **fila TOTAL** al pie de la tabla en pantalla y al final del **Excel**, en todas las vistas (detallado, por proveedor, por producto, por fecha y por mes). Antes los totales solo se veían en las tarjetas de arriba y en el PDF.
 - **1.6** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).

@@ -70,8 +70,9 @@ final class ColumnasReporte
     /**
      * Importes de las vistas por DOCUMENTO del Reporte de Compras (detallado, proveedor,
      * fecha, mes): los de COMPRAS_MONTOS más los rubros de la cabecera. «Otros rubros»
-     * (propina + otros rubros de terceros del XML) va DENTRO del total, antes de él;
-     * «Valores de terceros» (planillas de luz/agua) va FUERA, después. La vista por
+     * (propina + otros rubros de terceros del XML) y «Valores de terceros» (planillas de
+     * luz/agua, fuera del importe declarado al SRI) van antes del Gran Total, que en estas
+     * vistas los suma a ambos (ReporteComprasRepository::SQL_TOTAL_DOC). La vista por
      * producto no los lleva: no pertenecen a ninguna línea.
      */
     private const COMPRAS_MONTOS_DOC = [
@@ -80,8 +81,8 @@ final class ColumnasReporte
         'valor_iva'    => self::COMPRAS_MONTOS['valor_iva'],
         'valor_ice'    => self::COMPRAS_MONTOS['valor_ice'],
         'otros_rubros' => ['titulo' => 'Otros rubros', 'nombre' => 'Otros rubros (propina y rubros de terceros dentro del total)', 'corto' => 'Otros', 'alinear' => 'der', 'ancho' => 7, 'suma' => 'otros_rubros', 'stat' => 'total_otros_rubros'],
+        'terceros'     => ['titulo' => 'Val. terceros', 'nombre' => 'Valores de terceros (planillas de luz/agua)', 'corto' => 'Terceros', 'excel' => 'Valores de terceros', 'alinear' => 'der', 'ancho' => 7, 'suma' => 'valores_terceros', 'stat' => 'total_terceros'],
         'total'        => self::COMPRAS_MONTOS['total'],
-        'terceros'     => ['titulo' => 'Val. terceros', 'nombre' => 'Valores de terceros (planillas, fuera del total)', 'corto' => 'Terceros', 'excel' => 'Valores de terceros', 'alinear' => 'der', 'ancho' => 7, 'suma' => 'valores_terceros', 'stat' => 'total_terceros'],
     ];
 
     /** Importes comunes a las vistas con montos del Reporte de Ventas. */

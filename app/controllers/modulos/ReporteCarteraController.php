@@ -52,16 +52,23 @@ class ReporteCarteraController extends BaseModuloController
         }
         $ids = array_values(array_unique(array_filter(array_map('intval', $idsRaw))));
 
+        // Número de documento (factura, recibo, compra, saldo inicial...) elegido
+        // en el buscador "Documento": limita el estado de cuenta a ese documento
+        // y a los abonos que lo cancelan.
+        $documento = mb_substr(trim((string) ($_REQUEST['documento'] ?? '')), 0, 60);
+        // Con un documento elegido se muestra su HISTORIAL COMPLETO —el documento y todos
+        // sus cobros/pagos, retenciones y notas de crédito/débito, sean de la fecha que
+        // sean—, así que el rango de fechas no aplica. Aquí, y no solo en la pantalla,
+        // para que valga igual en el PDF, el Excel y el correo.
+        $conDocumento = $documento !== '';
+
         return [
             'tipo'        => $tipo === 'PROVEEDOR' ? 'PROVEEDOR' : 'CLIENTE',
             'ids'         => $ids,
             'todos'       => !empty($_REQUEST['todos']),
-            'fecha_desde' => trim((string) ($_REQUEST['fecha_desde'] ?? '')),
-            'fecha_hasta' => trim((string) ($_REQUEST['fecha_hasta'] ?? '')),
-            // Número de documento (factura, recibo, compra, saldo inicial...) elegido
-            // en el buscador "Documento": limita el estado de cuenta a ese documento
-            // y a los abonos que lo cancelan.
-            'documento'   => mb_substr(trim((string) ($_REQUEST['documento'] ?? '')), 0, 60),
+            'fecha_desde' => $conDocumento ? '' : trim((string) ($_REQUEST['fecha_desde'] ?? '')),
+            'fecha_hasta' => $conDocumento ? '' : trim((string) ($_REQUEST['fecha_hasta'] ?? '')),
+            'documento'   => $documento,
         ];
     }
 
@@ -350,6 +357,9 @@ class ReporteCarteraController extends BaseModuloController
 
     private function formatearRango(array $filtros): string
     {
+        if (($filtros['documento'] ?? '') !== '') {
+            return 'Historial completo del documento';
+        }
         $d = $filtros['fecha_desde'];
         $h = $filtros['fecha_hasta'];
         if ($d !== '' && $h !== '') return date('d-m-Y', strtotime($d)) . ' al ' . date('d-m-Y', strtotime($h));
@@ -373,23 +383,40 @@ class ReporteCarteraController extends BaseModuloController
             $filtros   = $this->getFiltrosDesdeRequest();
             $q         = mb_substr(trim((string) ($_REQUEST['q'] ?? '')), 0, 60);
 
-            if (empty($filtros['ids']) && !$filtros['todos']) {
-                echo json_encode(['ok' => true, 'data' => [], 'mensaje' => 'Seleccione primero un ' . $this->etiquetaEntidad($filtros['tipo']) . '.']);
+            // Sin cliente/proveedor elegido (o con "Todos") se busca entre los documentos de
+            // TODA la empresa: al elegir uno, la pantalla fija a su dueño. Ahí se pide
+            // escribir parte del número, para no listar y ordenar todos los documentos de la
+            // empresa en cada foco del campo.
+            $sinEntidad = empty($filtros['ids']) || $filtros['todos'];
+            if ($sinEntidad && mb_strlen(preg_replace('/[\s-]/', '', $q) ?? '') < 3) {
+                echo json_encode(['ok' => true, 'data' => [], 'mensaje' => 'Escriba al menos 3 caracteres del número del documento.']);
                 exit;
             }
 
             // Sobre todas las fichas del tercero: el documento buscado puede estar
             // registrado bajo la cédula aunque el usuario haya elegido el RUC.
-            $idsDoc = $filtros['todos']
+            $idsDoc = $sinEntidad
                 ? []
                 : $this->repository->expandirEntidades($idEmpresa, $filtros['tipo'], $filtros['ids']);
-            $rows = $this->repository->getDocumentosEntidad($idEmpresa, $filtros['tipo'], $idsDoc, $q, 20);
+            // Registros propios (§6): quien no tiene acceso total solo encuentra documentos de
+            // los clientes/proveedores con los que trabajó. Se pide holgado y se recorta.
+            $propios = $sinEntidad && empty($this->getPermisos()['todo']);
+            $rows = $this->repository->getDocumentosEntidad($idEmpresa, $filtros['tipo'], $idsDoc, $q, $propios ? 100 : 20);
+            if ($propios && $rows) {
+                $permitidos = array_flip($this->soloEntidadesPropias(
+                    $idEmpresa,
+                    $filtros['tipo'],
+                    array_values(array_unique(array_map(static fn ($r) => (int) $r['id_entidad'], $rows)))
+                ));
+                $rows = array_slice(array_values(array_filter($rows, static fn ($r) => isset($permitidos[(int) $r['id_entidad']]))), 0, 20);
+            }
             $data = array_map(fn($r) => [
-                'numero'  => (string) $r['numero'],
-                'origen'  => ucfirst(strtolower(str_replace('_', ' ', (string) $r['origen']))),
-                'fecha'   => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '',
-                'total'   => number_format((float) $r['total'], 2),
-                'entidad' => (string) ($r['nombre_entidad'] ?? ''),
+                'numero'     => (string) $r['numero'],
+                'origen'     => ucfirst(strtolower(str_replace('_', ' ', (string) $r['origen']))),
+                'fecha'      => !empty($r['fecha']) ? date('d-m-Y', strtotime((string) $r['fecha'])) : '',
+                'total'      => number_format((float) $r['total'], 2),
+                'entidad'    => (string) ($r['nombre_entidad'] ?? ''),
+                'id_entidad' => (int) ($r['id_entidad'] ?? 0),
             ], $rows);
 
             echo json_encode(['ok' => true, 'data' => $data]);
@@ -477,7 +504,7 @@ class ReporteCarteraController extends BaseModuloController
                     <small class="text-muted d-block">
                         <?= htmlspecialchars($etiqueta) ?> · <?= htmlspecialchars($e['identificacion'] ?? '') ?>
                         <?= $emailEntidad !== '' ? ' · ' . htmlspecialchars($emailEntidad) : '' ?>
-                        <?= $documento !== '' ? ' · <span class="badge bg-info bg-opacity-10 text-info border border-info">Documento: ' . htmlspecialchars($documento) . '</span>' : '' ?>
+                        <?= $documento !== '' ? ' · <span class="badge bg-info bg-opacity-10 text-info border border-info">Historial completo del documento ' . htmlspecialchars($documento) . '</span>' : '' ?>
                     </small>
                 </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">

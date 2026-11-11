@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen, reporte lento, se demora, tarda mucho, todos los clientes tarda, personalizar reporte, ocultar columnas, columnas del estado de cuenta, pdf horizontal, logo en el pdf, pdf con logo, estado de cuenta con logo
-version: 1.15
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen, historial de una factura, buscar factura sin cliente, buscar por numero de factura, no se de que cliente es la factura, historial del documento, cobros de una factura, pagos de una compra, notas de credito de una factura, ver todo lo de una factura, seguimiento de factura, reporte lento, se demora, tarda mucho, todos los clientes tarda, personalizar reporte, ocultar columnas, columnas del estado de cuenta, pdf horizontal, logo en el pdf, pdf con logo, estado de cuenta con logo
+version: 1.17
 orden: 0
 estado: activo
 ---
@@ -57,6 +57,29 @@ qué quedó su saldo.
    su ficha (se puede cambiar o agregar varios separados por coma).
    Van junto al saldo, con el mismo diseño que en los demás reportes.
 
+## Ver el historial completo de un documento
+
+Para saber qué pasó con una factura, un recibo, una compra o un saldo inicial
+—cuándo se emitió, todos sus cobros o pagos, sus retenciones y sus notas de
+crédito o débito— busque el número en **Documento** y pulse **Generar**.
+
+**No hace falta elegir antes el cliente o proveedor.** Con el buscador de
+clientes vacío, escriba al menos 3 caracteres del número y el sistema busca en
+todos los documentos de la empresa (del tipo elegido: Cliente o Proveedor); cada
+resultado muestra a quién pertenece. Al elegir el documento, su cliente o
+proveedor queda seleccionado automáticamente. Si ya hay clientes elegidos, la
+búsqueda se limita a los documentos de ellos.
+
+- Con un documento elegido **las fechas no cuentan**: se muestra todo su
+  historial, aunque la factura sea de un año y los cobros de otro. Por eso
+  **Año**, **Mes**, **Fecha Desde** y **Fecha Hasta** quedan bloqueados mientras
+  haya un documento fijado.
+- El saldo que queda al final es lo que todavía se debe de ese documento
+  (cero si ya está cancelado).
+- El PDF, el Excel y el correo salen igual: historial completo del documento.
+- Para volver al estado de cuenta por fechas, borre el documento con
+  **Backspace** o **Delete**; los filtros de fecha se desbloquean.
+
 ## Campos del formulario
 
 | Campo | Obligatorio | Qué significa |
@@ -66,7 +89,7 @@ qué quedó su saldo.
 | Todos | No | Reemplaza a la selección manual: incluye a todo cliente/proveedor con saldo pendiente (mayor a cero) a la fecha de corte (Fecha Hasta, o la fecha actual si no se indica). Mientras está activo, el buscador se deshabilita. |
 | Mes / Año | No | Atajo que llena Fecha Desde/Hasta con el mes o año elegido. |
 | Fecha Desde / Fecha Hasta | No | Rango del estado de cuenta. Vacío en ambos = todo el historial. Si se llena Fecha Desde, el saldo antes de esa fecha se muestra como "Saldo Anterior". |
-| Documento | No | Número de un documento del cliente/proveedor seleccionado (o de cualquiera, si está marcado "Todos"). Limita el estado de cuenta a ese documento y a los abonos que lo cancelan. El número se compara normalizado: `001-001-13`, `001001000000013` y `001-001-000000013` son el mismo documento. |
+| Documento | No | Número de un documento del cliente/proveedor seleccionado; sin ninguno elegido (o con "Todos") busca en toda la empresa y, al elegirlo, selecciona a su dueño. Limita el estado de cuenta a ese documento y a los abonos que lo cancelan, **sin importar las fechas** (historial completo). El número se compara normalizado: `001-001-13`, `001001000000013` y `001-001-000000013` son el mismo documento. |
 
 ## Personalizar las columnas del estado de cuenta
 
@@ -231,6 +254,8 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.17** — El **Documento** se puede buscar **sin elegir antes el cliente o proveedor**: con al menos 3 caracteres del número busca en toda la empresa y, al elegirlo, deja seleccionado a su dueño (si estaba marcado *Todos*, se desmarca). Quien no tiene acceso total solo encuentra documentos de los clientes o proveedores con los que trabajó.
+- **1.16** — Con un **Documento** elegido se muestra su **historial completo**: el documento y todos sus cobros o pagos, retenciones y notas de crédito/débito, sin importar el rango de fechas (antes las fechas recortaban el historial). Los filtros de fecha se bloquean mientras hay un documento fijado. Aplica también al PDF, el Excel y el correo. Nueva sección *Ver el historial completo de un documento*.
 - **1.15** — **El reporte es mucho más rápido**, sobre todo con varios clientes o proveedores y con la opción *Todos*. Antes se hacían dos consultas completas por cada cliente o proveedor (movimientos y saldo anterior); ahora una sola consulta trae los movimientos y el saldo anterior de todos los seleccionados. Los resultados no cambian. También se generan más rápido el PDF, el Excel y el correo.
 - **1.14** — El estado de cuenta ya no se genera solo al elegir un cliente o cambiar un filtro: se muestra únicamente al presionar **Generar**. Al cambiar un filtro se retira lo que había en pantalla. El PDF y el Excel responden sus errores con un aviso claro (por ejemplo, cuando no hay cliente seleccionado).
 - **1.13** — Botón **Personalizar** (administradores): la empresa elige qué columnas del estado de cuenta se ven en pantalla, Excel y PDF y la orientación del PDF; aplica también a lo que se envía por correo. El **PDF** adopta el formato común de los reportes: logo de la empresa, recuadro de datos, banda de indicadores y totales. Los botones **PDF / Excel / Correo** de cada estado de cuenta pasan a la derecha del encabezado, con texto e ícono como en los demás reportes. Sin personalizar, las columnas son las de siempre.

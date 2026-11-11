@@ -91,6 +91,14 @@ class ReporteComprasRepository extends BaseRepository
     private const SQL_VALORES_TERCEROS = 'COALESCE(c.total_terceros, 0)';
 
     /**
+     * Gran total del documento en el reporte: importe total del comprobante MÁS los valores
+     * de terceros de planillas, es decir, todo lo que se paga al proveedor (lo mismo que suma
+     * Cuentas por Pagar). Así Base 0% + Base IVA + IVA + ICE + Otros rubros + Val. terceros =
+     * Gran Total. La vista por producto no lo usa: su total sale de las líneas.
+     */
+    private const SQL_TOTAL_DOC = '(c.importe_total + COALESCE(c.total_terceros, 0))';
+
+    /**
      * Expresión de signo por tipo de comprobante para netear las compras.
      * Solo en la vista "Todas las compras" (sin filtro de tipo) las Notas de
      * Crédito de compra (04) RESTAN; si se filtra por un tipo específico, cada
@@ -266,7 +274,7 @@ class ReporteComprasRepository extends BaseRepository
                 (COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 (" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 (" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
-                (c.importe_total          * {$sgn}) as total,
+                (" . self::SQL_TOTAL_DOC . " * {$sgn}) as total,
                 COALESCE((
                     SELECT SUM(r.total_retenido)
                     FROM retencion_compra_cabecera r
@@ -307,7 +315,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
-                SUM(c.importe_total * {$sgn}) as total
+                SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as total
             FROM compras_cabecera c
             JOIN proveedores p ON p.id = c.id_proveedor
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -386,7 +394,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
-                SUM(c.importe_total * {$sgn}) as total
+                SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
             WHERE {$where}
@@ -418,7 +426,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
-                SUM(c.importe_total * {$sgn}) as total
+                SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
             WHERE {$where}
@@ -504,7 +512,7 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as total_ice,
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as total_otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as total_terceros,
-                SUM(c.importe_total          * {$sgn}) as gran_total,
+                SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as gran_total,
                 COUNT(c.id)                    as total_documentos
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id

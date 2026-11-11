@@ -91,13 +91,14 @@
                         <div id="rc-dropdown-entidad" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
                     </div>
 
-                    <!-- Documento: se busca entre los documentos del cliente/proveedor seleccionado.
+                    <!-- Documento: se busca entre los documentos del cliente/proveedor seleccionado o,
+                         sin ninguno elegido, en toda la empresa (al elegirlo se fija su dueño).
                          Con una selección fija, Backspace/Delete limpia todo el filtro de una vez. -->
                     <div class="position-relative" style="width:260px;">
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documento</label>
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-file-earmark-text"></i></span>
-                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="rc-search-documento" placeholder="Nº de documento (opcional)" autocomplete="off">
+                            <input type="text" class="form-control border-start-0 px-1 shadow-none" id="rc-search-documento" placeholder="Nº de documento (opcional)" title="Busque por número. Sin cliente o proveedor elegido busca en toda la empresa y, al elegir el documento, selecciona a su dueño." autocomplete="off">
                         </div>
                         <input type="hidden" name="documento" id="rc-documento" value="">
                         <div id="rc-dropdown-documento" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index:1050;width:100%;max-height:250px;overflow-y:auto;margin-top:2px;"></div>
