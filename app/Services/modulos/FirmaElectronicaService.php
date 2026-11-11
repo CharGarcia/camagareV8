@@ -1422,8 +1422,14 @@ class FirmaElectronicaService
         if (!$firma) {
             throw new Exception('Firma no encontrada.');
         }
-        if (!in_array((string) $firma['estado_pago'], ['pendiente', 'en_revision', 'rechazado'], true)) {
+        // "Confirmado" sin cobro = el Estado Pago se marcó a mano en la ficha: eso no genera el
+        // ingreso (ni la factura), así que aquí todavía se puede registrar.
+        $sinCobro = $firma['estado_pago'] === 'confirmado' && empty($firma['id_ingreso']);
+        if (!$sinCobro && !in_array((string) $firma['estado_pago'], ['pendiente', 'en_revision', 'rechazado'], true)) {
             throw new Exception('El pago de esta firma ya fue registrado.');
+        }
+        if ($firma['estado'] === 'cancelada') {
+            throw new Exception('Esta solicitud fue cancelada.');
         }
         $forma = $this->repository->getFormaCobro($idFormaCobro, $idEmpresa);
         if (!$forma) {

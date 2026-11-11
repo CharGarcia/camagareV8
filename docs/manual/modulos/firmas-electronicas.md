@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.17
+version: 3.18
 orden: 20
 estado: activo
 ---
@@ -127,6 +127,62 @@ cédula, el **código dactilar**.
 Si algo está mal (una foto ilegible, un dato equivocado), use **Pedir
 corrección al cliente**: la solicitud pasa a *Observada*, el cliente recibe el
 motivo por correo, corrige desde su enlace y la reenvía.
+
+## Cómo avanza el trámite: siguiente paso y estados
+
+Al abrir una firma, debajo de la fila de pasos (verde = cumplido, rojo = falta)
+aparece el recuadro **Siguiente paso**: dice qué falta para que el trámite
+avance, **quién debe hacerlo** (cliente, usted o Uanataca) y trae el enlace
+**Ir a Trámite** (o **Ir a Uanataca**) hacia la pestaña donde se hace.
+
+| Estado | Qué hace avanzar el trámite | Pasa a |
+|--------|-----------------------------|--------|
+| Borrador | El cliente sube y confirma sus documentos desde su enlace. Si usted los cargó en la ficha, cambie **Estado Trámite** a *Pendiente de pago* y guarde | Pendiente de pago |
+| Pendiente de pago | El cliente paga desde su enlace, o usted registra el pago en **Trámite → Aprobar y facturar** (genera la factura y el cobro) | Por registrar |
+| Por registrar | **Enviar a Uanataca** (API) o **Ya la registré en Uanataca** (manual), en la pestaña Trámite | En trámite |
+| En trámite | Uanataca valida al cliente y aprueba (con la API se actualiza solo) | Aprobada |
+| Aprobada / En trámite | **Marcar emitida** con la fecha de vencimiento (con la API se actualiza solo) | Emitida |
+| Observada | El cliente corrige desde su enlace y pulsa **Enviar corrección** | Pendiente de pago o Por registrar |
+
+**El estado avanza solo al cumplir cada paso.** Cambiar el **Estado Trámite** a
+mano en la ficha solo cambia la etiqueta: **no registra el pago, no genera la
+factura ni envía nada a Uanataca**. Si adelanta el estado sin el pago, el sistema
+avisa al elegirlo y el recuadro *Siguiente paso* queda en rojo indicando que el
+pago y la factura siguen pendientes; regístrelos en la pestaña **Trámite**.
+
+### El pago dice «Confirmado» pero no se generó el cobro
+
+Poner el **Estado Pago** en *Confirmado* a mano en la ficha tampoco ejecuta nada:
+no crea el cobro en Ingresos ni la factura. En ese caso la pestaña Trámite muestra
+en rojo el recuadro **Falta registrar el cobro**: elija la forma de cobro, la
+referencia y pulse **Registrar cobro** (si la firma ya tiene factura, se cobra esa
+misma; no se crea otra) o **Aprobar y facturar** (si aún no tiene factura).
+
+Si el cobro de esa factura ya se registró directamente en el módulo **Ingresos**,
+no lo registre otra vez desde aquí: quedaría duplicado.
+
+### No aparece «Consultar estado ahora» en una firma En trámite
+
+Ese botón solo existe cuando la solicitud se **envió a Uanataca por API**. Si la
+firma llegó a *En trámite* porque se registró a mano en el portal (o porque se
+cambió el estado a mano), el sistema no tiene qué consultar y la pestaña Trámite
+muestra el recuadro *Esta firma no tiene una solicitud enviada a Uanataca por API*:
+
+- **Aún no la registró en Uanataca**: pulse **Regresar a «Por registrar»**, luego
+  **Guardar**, y en Trámite use **Enviar a Uanataca**. Desde ahí el estado se
+  actualiza solo.
+- **Ya la registró a mano en el portal**: el estado se lleva a mano; cuando
+  Uanataca la emita, indique el vencimiento y pulse **Marcar emitida**.
+
+En la lista de pasos, *Aprobada por Uanataca* con la flecha azul es el paso que
+se está **esperando**, no uno cumplido (los cumplidos llevan el visto verde).
+
+### El botón «Reenviar factura» sigue visible
+
+Se muestra mientras el cliente no confirme su correo. La nota sobre el botón
+indica a qué correo y cuándo se envió la factura: **reenviarla es opcional**, solo
+si el cliente no la recibió. Lo que falta es que el cliente pulse *«Confirmo que
+recibí mi factura»*, o que usted use **Marcar correo confirmado**.
 
 ## Configuración
 
@@ -572,6 +628,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.18** — Ficha de la firma: recuadro **Siguiente paso** bajo la fila de pasos (qué falta, quién actúa y enlace a la pestaña); aviso al adelantar el Estado Trámite a mano sin el pago registrado. Nueva sección *Cómo avanza el trámite: siguiente paso y estados*. En Trámite: recuadro que explica cómo seguir cuando una firma *En trámite* no tiene solicitud por API (con **Regresar a «Por registrar»**) y nota que aclara que la factura ya se envió junto al botón de reenviar. Un pago marcado «Confirmado» a mano, sin cobro, ahora se puede registrar desde Trámite (**Falta registrar el cobro**).
 - **3.17** — **Enlaces y QR por vendedor**: pestaña **Vendedores** en el engranaje (un enlace y un QR por vendedor), campo **Vendedor** en *Enviar link*, columna **Vendedor** en el listado, en el Excel y en *Enlaces enviados*; la factura de la firma sale con ese vendedor y las renovaciones lo conservan. Requiere `database/20261110_firmas_enlaces_vendedor.sql`.
 - **3.16** — Botón **Renovar** al pie de la ficha de una firma emitida (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.
 - **3.15** — El cliente puede corregir sus datos y reemplazar sus documentos **después de pagar**, mientras la firma esté *Por registrar* (antes de enviarse a Uanataca); la validez y la factura no cambian. La empresa recibe un correo de aviso y, si el cliente cambia su correo, debe confirmarlo de nuevo.

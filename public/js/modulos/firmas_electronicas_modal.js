@@ -1371,9 +1371,100 @@
                 <i class="bi ${ok ? 'bi-check-circle-fill' : 'bi-x-circle'}"></i><span>${esc(titulo)}</span></li>`;
         }).join('');
         document.getElementById('historialEstadoPasos').innerHTML =
-            `<nav aria-label="Historial del estado"><ol class="firma-pasos">${items}</ol></nav>`;
+            `<nav aria-label="Historial del estado"><ol class="firma-pasos">${items}</ol></nav>${renderGuiaSiguientePaso(t)}`;
         caja.classList.remove('d-none');
     }
+
+    // Guía «Siguiente paso»: qué falta para que el trámite avance y quién debe hacerlo.
+    // Se calcula con el estado real (pago, correo, Uanataca), no solo con el Estado Trámite,
+    // así avisa también cuando el estado se adelantó a mano y quedó un paso sin cumplir.
+    function siguientePasoFirma(t) {
+        const pagoOk = t.estado_pago === 'confirmado';
+        const correoPend = t.exigir_correo !== false && !t.correo_confirmado_at;
+        const TRAMITE = 'tab-firma-tramite-btn';
+        const UANATACA = 'tab-firma-uanataca-btn';
+
+        if (t.estado === 'cancelada') {
+            return { quien: '', color: 'secondary', texto: 'La solicitud está cancelada: no tiene más pasos. Si el cliente la vuelve a pedir, use «Nueva solicitud con estos datos» en la pestaña Trámite.', tab: TRAMITE };
+        }
+        if (t.estado === 'emitida') {
+            return { quien: '', color: 'success', texto: `Trámite terminado: la firma fue emitida${t.fecha_caducidad ? ' y vence el ' + t.fecha_caducidad : ''}.` };
+        }
+        if (t.estado === 'observada') {
+            return { quien: 'Cliente', color: 'warning', texto: 'Se le pidió una corrección. El cliente corrige desde su enlace y pulsa «Enviar corrección»; al hacerlo el trámite continúa solo.', tab: TRAMITE };
+        }
+        if (t.estado === 'borrador') {
+            return { quien: 'Cliente', color: 'warning', texto: 'Faltan los documentos. El cliente los sube y los confirma desde su enlace, y la solicitud pasa sola a «Pendiente de pago». Si usted ya los cargó en la ficha, cambie Estado Trámite a «Pendiente de pago» y pulse Guardar.' };
+        }
+        if (!pagoOk) {
+            const adelantado = ['por_registrar', 'en_proceso', 'aprobada'].includes(t.estado)
+                ? `El estado dice «${t.estado_label || t.estado}», pero el pago no está registrado y no hay factura. ` : '';
+            if (t.estado_pago === 'en_revision') {
+                return { quien: 'Usted', color: 'info', texto: adelantado + 'El cliente subió su comprobante. En la pestaña Trámite revíselo, elija la cuenta donde llegó el dinero y pulse «Aprobar y facturar» (o «Rechazar»).', tab: TRAMITE };
+            }
+            return { quien: 'Cliente o usted', color: adelantado ? 'danger' : 'warning', texto: adelantado
+                + (t.estado_pago === 'rechazado' ? 'El comprobante fue rechazado. ' : 'Falta el pago. ')
+                + 'El cliente paga desde su enlace (tarjeta o comprobante). Si usted ya recibió el dinero, en la pestaña Trámite elija la forma de cobro y pulse «Aprobar y facturar»: se genera la factura y el trámite pasa a «Por registrar».', tab: TRAMITE };
+        }
+        if (!t.id_ingreso) {
+            return { quien: 'Usted', color: 'danger', texto: 'El pago figura «Confirmado» porque se marcó a mano, pero no se generó el cobro en Ingresos. En la pestaña Trámite elija la forma de cobro y regístrelo (si ya lo registró en el módulo Ingresos, no lo repita).', tab: TRAMITE };
+        }
+        if (t.estado === 'pendiente') {
+            return { quien: 'Usted', color: 'warning', texto: 'El pago ya figura confirmado. Cambie Estado Trámite a «Por registrar» y pulse Guardar para continuar con el registro en Uanataca.' };
+        }
+        if (t.estado === 'por_registrar') {
+            const correo = correoPend ? 'El cliente aún no confirma su correo (botón del correo con la factura); en Trámite puede reenviarlo o marcarlo confirmado. Luego: ' : '';
+            if (t.uanataca_uuid) {
+                return { quien: 'Usted', color: 'info', texto: 'El cliente corrigió su solicitud: actualice los documentos en el portal de Uanataca y pulse «Consultar estado ahora» en Trámite.', tab: TRAMITE };
+            }
+            return t.uanataca_api
+                ? { quien: 'Usted', color: 'info', texto: correo + 'en la pestaña Trámite pulse «Enviar a Uanataca» (con el envío automático activo, sale solo). Pasa a «En trámite».', tab: TRAMITE }
+                : { quien: 'Usted', color: 'info', texto: correo + 'copie los datos de la pestaña Uanataca, ingrese la solicitud en el portal de Uanataca y pulse «Ya la registré en Uanataca» en Trámite. Pasa a «En trámite».', tab: UANATACA };
+        }
+        const emision = t.uanataca_uuid
+            ? 'El estado se actualiza solo; puede adelantarlo con «Consultar estado ahora» en Trámite.'
+            : (t.uanataca_api
+                ? 'Esta firma no se envió a Uanataca por API, así que el estado no se actualiza solo. Si aún no la registró en Uanataca, regrese el Estado Trámite a «Por registrar», guarde y use «Enviar a Uanataca»; si ya la registró a mano, cuando la emitan pulse «Marcar emitida» en Trámite.'
+                : 'Cuando Uanataca emita la firma, en la pestaña Trámite indique el vencimiento y pulse «Marcar emitida».');
+        if (t.estado === 'en_proceso') {
+            return { quien: 'Uanataca / cliente', color: 'primary', texto: 'La solicitud está en Uanataca: el cliente valida su identidad con ellos. ' + emision, tab: TRAMITE };
+        }
+        if (t.estado === 'aprobada') {
+            return { quien: 'Uanataca', color: 'primary', texto: 'Uanataca aprobó la solicitud; solo falta la emisión. ' + emision, tab: TRAMITE };
+        }
+        return null;
+    }
+
+    function renderGuiaSiguientePaso(t) {
+        const g = siguientePasoFirma(t);
+        if (!g) return '';
+        const texto = g.texto.charAt(0).toUpperCase() + g.texto.slice(1);
+        const nombreTab = g.tab === 'tab-firma-uanataca-btn' ? 'Uanataca' : 'Trámite';
+        return `<div class="d-flex align-items-start gap-2 border border-${g.color} bg-${g.color} bg-opacity-10 rounded-3 px-2 py-1 mt-1 small text-dark">
+            <i class="bi bi-signpost-2 text-${g.color}"></i>
+            <div class="flex-grow-1"><b>Siguiente paso${g.quien ? ' (' + esc(g.quien) + ')' : ''}:</b> ${esc(texto)}</div>
+            ${g.tab ? `<button type="button" class="btn btn-link btn-sm p-0 text-nowrap" data-guia-tab="${g.tab}">Ir a ${nombreTab}</button>` : ''}
+        </div>`;
+    }
+
+    document.addEventListener('click', e => {
+        const btn = e.target.closest('[data-guia-tab]');
+        if (btn && !document.getElementById(btn.dataset.guiaTab)?.classList.contains('disabled')) activarTab(btn.dataset.guiaTab);
+        // Deja el Estado Trámite en «Por registrar» para poder enviarla a Uanataca; se guarda con Guardar.
+        if (e.target.closest('[data-volver-por-registrar]')) {
+            setVal('firma_estado', 'por_registrar');
+            activarTab('tab-firma-general-btn');
+            mostrarAlerta('El Estado Trámite quedó en «Por registrar». Pulse Guardar y luego, en la pestaña Trámite, use «Enviar a Uanataca».', 'info');
+        }
+    });
+
+    // Cambiar el Estado Trámite a mano no ejecuta el paso (no registra el pago ni factura): se avisa.
+    document.addEventListener('change', e => {
+        if (e.target.id !== 'firma_estado' || !_idFirmaActual || e.target.value === _firmaEstado) return;
+        if (['por_registrar', 'en_proceso', 'aprobada', 'emitida'].includes(e.target.value) && _tramite && _tramite.estado_pago !== 'confirmado') {
+            mostrarAlerta('Esta firma aún no tiene el pago registrado. Cambiar el estado a mano no registra el pago ni genera la factura: hágalo en la pestaña Trámite con «Aprobar y facturar» y el estado avanzará solo.', 'warning');
+        }
+    });
 
     async function cargarTramite(id) {
         const cont = document.getElementById('tramiteContenido');
@@ -1442,10 +1533,14 @@
         const comprobante = (t.adjuntos || []).filter(a => a.tipo === 'comprobante_transferencia').pop();
         let acciones = '';
 
-        if (puede && ['pendiente', 'en_revision', 'rechazado'].includes(t.estado_pago) && t.estado !== 'cancelada') {
+        // Pago "Confirmado" sin cobro: el Estado Pago se marcó a mano y no existe el ingreso.
+        const sinCobro = pagoOk && !t.id_ingreso;
+        const conFacturaActiva = !!t.id_factura && !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado);
+        if (puede && (['pendiente', 'en_revision', 'rechazado'].includes(t.estado_pago) || sinCobro) && t.estado !== 'cancelada') {
             acciones += `
-            <div class="border rounded-3 p-2 mb-2 ${t.estado_pago === 'en_revision' ? 'border-info bg-info bg-opacity-10' : ''}">
-                <div class="fw-semibold mb-1"><i class="bi bi-cash-coin me-1"></i>${t.estado_pago === 'en_revision' ? 'Revisar comprobante de pago' : 'Registrar pago recibido'}</div>
+            <div class="border rounded-3 p-2 mb-2 ${t.estado_pago === 'en_revision' ? 'border-info bg-info bg-opacity-10' : (sinCobro ? 'border-danger bg-danger bg-opacity-10' : '')}">
+                <div class="fw-semibold mb-1"><i class="bi bi-cash-coin me-1"></i>${t.estado_pago === 'en_revision' ? 'Revisar comprobante de pago' : (sinCobro ? 'Falta registrar el cobro' : 'Registrar pago recibido')}</div>
+                ${sinCobro ? `<div class="small text-dark mb-1">El pago figura «Confirmado» porque se marcó a mano, pero no se generó el cobro en Ingresos${conFacturaActiva ? '' : ' ni la factura'}. Regístrelo aquí. <b>Si ya registró el cobro de esta factura en el módulo Ingresos, no lo registre otra vez.</b></div>` : ''}
                 ${comprobante ? `<div class="mb-1"><a href="${comprobante.url}" target="_blank"><i class="bi bi-receipt me-1"></i>Ver comprobante: ${esc(comprobante.nombre)}</a></div>` : ''}
                 ${t.uanataca_api ? `<div class="mb-1 d-flex align-items-center gap-1">
                     <i class="bi bi-wallet2 text-primary"></i><span class="text-muted">Saldo en Uanataca:</span>
@@ -1457,16 +1552,25 @@
                         <select class="form-select form-select-sm" id="trFormaCobro" style="width:220px;"><option value="">— Elegir —</option>${formas}</select></div>
                     <div><label class="form-label small mb-0">Referencia</label>
                         <input type="text" class="form-control form-control-sm" id="trReferencia" style="width:160px;" placeholder="N.º de transferencia"></div>
-                    <button type="button" class="btn btn-success btn-sm" data-tr="aprobar"><i class="bi bi-check2-circle me-1"></i>Aprobar y facturar</button>
+                    <button type="button" class="btn btn-success btn-sm" data-tr="aprobar"><i class="bi bi-check2-circle me-1"></i>${conFacturaActiva ? 'Registrar cobro' : 'Aprobar y facturar'}</button>
                     ${t.estado_pago === 'en_revision' ? '<button type="button" class="btn btn-outline-danger btn-sm" data-tr="rechazar"><i class="bi bi-x-circle me-1"></i>Rechazar</button>' : ''}
                 </div>
-                <div class="form-text small">Genera la factura (serie configurada), la envía al SRI y registra el cobro.</div>
+                <div class="form-text small">${conFacturaActiva ? `Registra el cobro de la factura ${esc(t.factura_numero || '')} que ya existe; no crea otra factura.` : 'Genera la factura (serie configurada), la envía al SRI y registra el cobro.'}</div>
             </div>`;
         }
         if (puede && pagoOk && !correoOk) {
-            acciones += `<div class="d-flex flex-wrap gap-2 mb-2">
+            // El botón sigue visible mientras el cliente no confirme su correo: se aclara que la
+            // factura ya salió y que reenviarla es opcional (no es un paso pendiente).
+            const notaCorreo = t.correo_enviado_at
+                ? `La factura ya se envió a ${esc(t.correo || 'su correo')} el ${esc(t.correo_enviado_at)}; reenviarla es opcional, solo si el cliente no la recibió.`
+                    + (correoRequerido ? ' Falta que el cliente pulse «Confirmo que recibí mi factura» en ese correo; si se lo confirmó por otro medio, use «Marcar correo confirmado».' : '')
+                : 'La factura aún no se ha enviado al cliente (sale sola cuando el SRI la autoriza).';
+            acciones += `<div class="border rounded-3 p-2 mb-2">
+                <div class="small text-muted mb-1"><i class="bi bi-envelope me-1"></i>${notaCorreo}</div>
+                <div class="d-flex flex-wrap gap-2">
                 <button type="button" class="btn btn-outline-primary btn-sm" data-tr="reenviar"><i class="bi bi-envelope-arrow-up me-1"></i>${t.correo_enviado_at ? 'Reenviar' : 'Enviar'} factura${correoRequerido ? ' y confirmación' : ''}</button>
                 ${correoRequerido ? '<button type="button" class="btn btn-outline-secondary btn-sm" data-tr="confirmar_manual"><i class="bi bi-envelope-check me-1"></i>Marcar correo confirmado</button>' : ''}
+                </div>
             </div>`;
         }
         // API de Uanataca: envío y estado de la solicitud.
@@ -1487,6 +1591,19 @@
                 ${t.uanataca_error ? `<div class="small text-danger mb-1">Último intento: ${esc(t.uanataca_error)}</div>` : ''}
                 <button type="button" class="btn btn-primary btn-sm" data-tr="enviar_uanataca" ${faltan.length ? 'disabled' : ''}><i class="bi bi-send me-1"></i>Enviar a Uanataca</button>
                 <span class="small text-muted ms-1">Consume Uanacréditos.</span>
+            </div>`;
+        } else if (puede && t.uanataca_api && ['en_proceso', 'aprobada'].includes(t.estado)) {
+            // Sin solicitud creada por API (se registró a mano o el estado se cambió a mano):
+            // no hay nada que consultar en Uanataca, así que se explica cómo seguir.
+            acciones += `<div class="border rounded-3 p-2 mb-2 border-warning bg-warning bg-opacity-10">
+                <div class="fw-semibold mb-1"><i class="bi bi-cloud-slash me-1"></i>Esta firma no tiene una solicitud enviada a Uanataca por API</div>
+                <div class="small text-dark">Por eso no aparece «Consultar estado ahora»: el sistema no tiene qué consultar.
+                    <ul class="mb-1 ps-3">
+                        <li><b>Si aún no la registró en Uanataca:</b> regrese el Estado Trámite a «Por registrar» y guarde; aparecerá el botón «Enviar a Uanataca» y desde ahí el estado se actualiza solo.</li>
+                        <li><b>Si ya la registró a mano en el portal de Uanataca:</b> el estado se lleva a mano; cuando Uanataca la emita, indique el vencimiento y pulse «Marcar emitida».</li>
+                    </ul>
+                </div>
+                ${t.estado === 'en_proceso' ? '<button type="button" class="btn btn-outline-primary btn-sm" data-volver-por-registrar><i class="bi bi-arrow-counterclockwise me-1"></i>Regresar a «Por registrar»</button>' : ''}
             </div>`;
         }
         if (puede && ['por_registrar', 'en_proceso', 'aprobada'].includes(t.estado)) {
@@ -1546,8 +1663,8 @@
                 ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${esc(t.tipo_pago || '')}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
                 ${!correoRequerido && !correoOk ? paso(pagoOk, false, 'Correo confirmado', 'No se exige (configuración del módulo).') : paso(correoOk, pagoOk && !correoOk, 'Correo confirmado', correoOk ? `${esc(t.correo)} · ${esc(t.correo_confirmado_at)}` : (t.correo_enviado_at ? `Factura enviada a ${esc(t.correo)} el ${esc(t.correo_enviado_at)}; esperando confirmación.` : esc(t.correo || '')))}
                 ${paso(registrada, t.estado === 'por_registrar', 'Registrada en Uanataca', registrada ? `${t.uanataca_referencia ? 'Ref. ' + esc(t.uanataca_referencia) + ' · ' : ''}${esc(t.uanataca_registrada_at || '')}` : 'Use la pestaña Uanataca para copiar los datos.')}
-                ${paso(['aprobada', 'emitida'].includes(t.estado), t.estado === 'en_proceso', 'Aprobada por Uanataca', '')}
-                ${paso(t.estado === 'emitida', t.estado === 'aprobada', 'Firma emitida', '')}
+                ${paso(['aprobada', 'emitida'].includes(t.estado), t.estado === 'en_proceso', 'Aprobada por Uanataca', t.estado === 'en_proceso' ? 'Aún no: en espera de la aprobación de Uanataca.' : '')}
+                ${paso(t.estado === 'emitida', t.estado === 'aprobada', 'Firma emitida', t.estado === 'aprobada' ? 'Aún no: falta que Uanataca la emita.' : '')}
                 ${t.estado === 'observada' ? `<div class="alert alert-warning py-1 px-2 mb-2">Corrección pedida: ${esc(t.observacion_cliente || '')}</div>` : ''}
                 <div class="mt-3"><div class="text-muted mb-1">Enlace del cliente</div>${enlace}</div>
             </div>
@@ -1696,7 +1813,10 @@
             if (accion === 'aprobar') {
                 const forma = document.getElementById('trFormaCobro')?.value;
                 if (!forma) { mostrarAlerta('Elija la cuenta o forma de cobro donde llegó el pago.', 'warning'); return; }
-                if (!(await confirmar('Se generará la factura, se enviará al SRI y se registrará el cobro.'))) return;
+                const yaFacturada = !!_tramite?.id_factura && !_tramite.factura_eliminada && ['borrador', 'autorizado'].includes(_tramite.factura_estado);
+                if (!(await confirmar(yaFacturada
+                    ? 'Se registrará el cobro de la factura que ya existe (no se crea otra). Si ya lo registró en el módulo Ingresos, cancele.'
+                    : 'Se generará la factura, se enviará al SRI y se registrará el cobro.'))) return;
                 await postTramite('aprobarPagoAjax', { id_forma_cobro: forma, referencia: document.getElementById('trReferencia')?.value || '' },
                     ['Registrando el pago…', 'Conciliando el cobro, generando la factura y enviándola al SRI. Esto puede tardar unos segundos; no cierre la ventana.']);
             } else if (accion === 'rechazar') {
