@@ -5,7 +5,7 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico, personalizar, columnas, ocultar columnas, pdf vertical, pdf horizontal, orientacion del pdf, otros rubros, propina, servicio 10%, tasa de pernoctacion, hotel, restaurante, valores de terceros, bomberos, tasa de basura, planilla de luz, el total no cuadra con las bases, base mas iva no da el total
+etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico, personalizar, columnas, ocultar columnas, pdf vertical, pdf horizontal, orientacion del pdf, detalle del documento, panel lateral, clic en la fila, otros rubros, propina, servicio 10%, tasa de pernoctacion, hotel, restaurante, valores de terceros, bomberos, tasa de basura, planilla de luz, el total no cuadra con las bases, base mas iva no da el total
 version: 1.9
 orden: 20
 estado: activo
@@ -108,6 +108,16 @@ Cuentas por Pagar. La tarjeta *Gran Total* de arriba usa el mismo criterio.
 Ambas columnas tienen su suma en la fila TOTAL, salen en el Excel y en el PDF, y un
 administrador puede ocultarlas con **Personalizar**.
 
+### Detalle del documento
+
+En la vista *Detallado*, al hacer clic en una fila se abre a la derecha el detalle de la
+compra. Al pie, debajo de *Subtotal* e *IVA*, aparece una línea por cada rubro que el
+documento tenga: **ICE**, **Propina**, los **otros rubros de terceros** (con su concepto,
+p. ej. *Tasa de pernoctación*) y los **Valores de terceros**. El **Total Documento** los
+incluye y coincide con el *Gran Total* de esa fila del reporte. Los rubros en cero no
+se muestran. El **IVA** y el **ICE** del detalle se toman de los impuestos de cada línea,
+igual que las columnas del reporte, así que muestran el mismo valor que la fila.
+
 ## Compras por producto
 
 Filtrar por producto sirve para negociar: muestra cuánto se le ha comprado de ese
@@ -145,7 +155,7 @@ El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
 
 ## Historial de cambios
 
-- **1.9** (11-11-2026) — Nuevas columnas **Otros rubros** (propina y otros rubros de terceros) y **Val. terceros** (valores de terceros de planillas) antes del Gran Total, en las vistas detallado, por proveedor, por fecha y por mes, en pantalla, Excel y PDF. El **Gran Total** (columna y tarjeta) ahora suma también los valores de terceros: es todo lo que se paga al proveedor. Antes esos valores no tenían columna y el total no coincidía con la suma de bases e impuestos.
+- **1.9** (11-11-2026) — Nuevas columnas **Otros rubros** (propina y otros rubros de terceros) y **Val. terceros** (valores de terceros de planillas) antes del Gran Total, en las vistas detallado, por proveedor, por fecha y por mes, en pantalla, Excel y PDF. El **Gran Total** (columna y tarjeta) ahora suma también los valores de terceros: es todo lo que se paga al proveedor. Antes esos valores no tenían columna y el total no coincidía con la suma de bases e impuestos. El **detalle del documento** (panel lateral) lista esos mismos rubros y su total los incluye.
 - **1.8** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas visibles por vista en pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Además, el **PDF** ahora reparte el ancho de la hoja entre sus columnas: ocupa de margen a margen y el detallado ya no se sale por la derecha.
 - **1.7** — Nueva **fila TOTAL** al pie de la tabla en pantalla y al final del **Excel**, en todas las vistas (detallado, por proveedor, por producto, por fecha y por mes). Antes los totales solo se veían en las tarjetas de arriba y en el PDF.
 - **1.6** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).

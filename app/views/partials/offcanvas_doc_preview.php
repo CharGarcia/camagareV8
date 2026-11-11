@@ -94,6 +94,9 @@
                     <span class="small text-muted" style="font-size:0.75rem;" id="p-lbl-extra">ISD</span>
                     <span id="p-txt-extra" class="small fw-medium text-dark">$0.00</span>
                 </div>
+                <!-- Rubros adicionales del documento (ICE, propina, otros rubros de terceros,
+                     valores de terceros): una línea por cada uno que tenga valor. -->
+                <div id="p-rows-rubros"></div>
                 <div class="d-flex justify-content-between pt-2 border-top border-2">
                     <span class="fw-bold text-dark" style="font-size:0.85rem;" id="p-lbl-total">Total Documento</span>
                     <span id="p-txt-total" class="fw-bold text-primary fs-6">$0.00</span>
@@ -195,7 +198,15 @@
 
     // extra/labelExtra: tercera línea opcional (p.ej. ISD en retenciones, que además
     // de Renta/IVA puede tener un tercer impuesto retenido) — oculta si no se pasa.
-    function pintarTotales({ subtotal, iva, extra, total, soloTotal, labelTotal, labelSubtotal, labelIva, labelExtra }) {
+    // rubros: líneas adicionales [{ label, valor }] entre el IVA y el total (ICE, propina,
+    // otros rubros de terceros, valores de terceros de una compra); solo las que traen valor.
+    function pintarTotales({ subtotal, iva, extra, total, soloTotal, labelTotal, labelSubtotal, labelIva, labelExtra, rubros }) {
+        $('p-rows-rubros').innerHTML = soloTotal ? '' : (rubros || [])
+            .filter(r => Math.abs(parseFloat(r.valor) || 0) >= 0.005)
+            .map(r => `<div class="d-flex justify-content-between mb-1">
+                    <span class="small text-muted" style="font-size:0.75rem;">${esc(r.label)}</span>
+                    <span class="small fw-medium text-dark">${money(r.valor)}</span>
+                </div>`).join('');
         $('p-row-subtotal').classList.toggle('d-none', !!soloTotal);
         $('p-row-iva').classList.toggle('d-none', !!soloTotal);
         $('p-row-extra').classList.toggle('d-none', !!soloTotal || extra === undefined || extra === null);
@@ -418,7 +429,7 @@
                 // en este bloque tapaba el parámetro `extra` de la función, y leer extra.numero o
                 // extra.sujeto arriba (documento sin número o sin cliente) lanzaba
                 // "Cannot access 'extra' before initialization".
-                let subtotal, total, iva, valorExtra, labelSubtotal, labelIva, labelExtra, labelTotal;
+                let subtotal, total, iva, valorExtra, labelSubtotal, labelIva, labelExtra, labelTotal, rubros;
                 if (cfg.modo === 'comprobante') {
                     // Ingreso/egreso: total del comprobante, separado en dinero y no monetario
                     // (anticipo, otros); debajo del tercero, el concepto y las observaciones.
@@ -451,6 +462,45 @@
                         subtotal:       d.costo_total_nacionalizado    || d.precio_total_fob,
                         codigo:         d.codigo_producto_raw
                     }));
+                } else if (tipo === 'COMPRA') {
+                    // Compra: además de subtotal e IVA puede traer ICE, propina y otros rubros de
+                    // terceros (dentro del importe total) y valores de terceros de planillas (fuera
+                    // del importe, pero se pagan). Se listan uno por uno y el total los suma todos,
+                    // igual que el Gran Total del Reporte de Compras y el saldo de Cuentas por Pagar:
+                    // Subtotal + IVA + ICE + Propina + Otros rubros + Valores de terceros = Total.
+                    const n = (v) => parseFloat(v || 0) || 0;
+                    // IVA e ICE salen de los impuestos de cada línea (código 2 = IVA, 3 = ICE), la
+                    // misma fuente que el Reporte de Compras, para que el panel muestre los mismos
+                    // valores que la fila. Solo si ninguna línea trae impuestos se usa la cabecera.
+                    const imps = dets.flatMap(d => Array.isArray(d.impuestos) ? d.impuestos : []);
+                    const sumaImp = (cod) => Math.round(imps
+                        .filter(i => String(i.codigo_impuesto) === cod)
+                        .reduce((s, i) => s + n(i.valor), 0) * 100 + 1e-7) / 100;
+                    const ice      = imps.length ? sumaImp('3') : n(cab.total_ice);
+                    const propina  = n(cab.propina);
+                    const otros    = n(cab.otros_rubros_terceros);
+                    const terceros = n(cab.total_terceros);
+                    subtotal = n(cab.total_sin_impuestos);
+                    // Sin impuestos por línea: el IVA guardado ya descuenta esos rubros; sin él se
+                    // calcula por diferencia. (Un IVA 0 es válido: no cae al cálculo como antes,
+                    // que le sumaba la propina.)
+                    iva = imps.length
+                        ? sumaImp('2')
+                        : ((cab.monto_iva !== undefined && cab.monto_iva !== null && cab.monto_iva !== '')
+                            ? n(cab.monto_iva)
+                            : (n(cab.importe_total) - subtotal - ice - propina - otros));
+                    total = n(cab.importe_total) + terceros;
+                    // Otros rubros: una línea por concepto si el desglose cuadra con la cabecera.
+                    const desglose = (cab.otros_rubros || []).map(r => ({ label: r.concepto || 'Otros rubros de terceros', valor: n(r.total) }));
+                    const sumaDesglose = desglose.reduce((s, r) => s + r.valor, 0);
+                    rubros = [
+                        { label: 'ICE', valor: ice },
+                        { label: 'Propina', valor: propina },
+                        ...(desglose.length && Math.abs(sumaDesglose - otros) < 0.005
+                            ? desglose
+                            : [{ label: 'Otros rubros de terceros', valor: otros }]),
+                        { label: 'Valores de terceros', valor: terceros }
+                    ];
                 } else {
                     subtotal = parseFloat(cab.total_sin_impuestos || 0);
                     total    = parseFloat(cab.importe_total || 0);
@@ -458,7 +508,7 @@
                 }
 
                 pintarItems(dets, null, cfg.modo);
-                pintarTotales({ subtotal, iva, extra: valorExtra, total, labelSubtotal, labelIva, labelExtra, labelTotal });
+                pintarTotales({ subtotal, iva, extra: valorExtra, total, labelSubtotal, labelIva, labelExtra, labelTotal, rubros });
                 mostrar('preview-doc-content');
             })
             .catch(e => {
