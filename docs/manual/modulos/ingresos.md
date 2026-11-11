@@ -622,6 +622,15 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
+- **3.28** — Corregido: lo cobrado a una factura podía salir **un centavo distinto**
+  en la columna *Abonos* de Cuentas por Cobrar respecto del valor del ingreso
+  (p. ej. 74,27 en el ingreso y 74,28 en el reporte). Ocurría cuando una línea
+  llegaba con más de dos decimales —sobre todo al cobrar **por ítems**— y cada
+  línea se redondeaba por separado al guardarse. Ahora todos los importes se
+  guardan en centavos exactos y el total del ingreso, la suma de sus líneas y la
+  suma de las formas de cobro son siempre el mismo valor. Los ingresos guardados
+  antes de la corrección conservan su diferencia hasta que se revisen.
+
 - **3.27** — La columna **Cuenta contable** de las líneas de otros conceptos ya
   se llena con la cuenta del asiento del ingreso cuando la línea no la tenía
   guardada (ingresos migrados o antiguos): también si el asiento es el de la

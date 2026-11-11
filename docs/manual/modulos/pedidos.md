@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, unidad de medida, cajas, caja, ciento, docena, pedir por caja, medida, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.22
+version: 1.24
 orden: 0
 estado: activo
 ---
@@ -82,6 +82,11 @@ En el recuadro de datos del **PDF**, la última línea lleva el **Vendedor** del
 a la izquierda y, a la derecha, **Solicitado por**: el usuario que registró el pedido
 en el sistema. Son dos cosas distintas — el asesor asignado al cliente y quien tomó el
 encargo — y pueden no coincidir.
+
+Al pie del **PDF** salen las **Observaciones Generales** y, debajo, las **Observaciones
+Internas** (cada una solo si tiene texto). Es el mismo PDF el que se descarga o imprime
+y el que se **envía por correo**: si el correo va al cliente, también verá las
+observaciones internas, así que conviene revisar lo escrito ahí antes de enviar.
 
 ### Las pestañas del pedido
 
@@ -241,7 +246,7 @@ búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
 | Hora Inicial / Hora Máxima | Sí | Ventana horaria de la entrega, en formato 00:00. La inicial no puede ser mayor que la máxima; pueden ser la misma hora si la entrega es a una hora exacta. Si la entrega es hoy, la hora máxima no puede ser anterior a la hora actual (la inicial sí puede haber pasado). |
 | Responsable de Entrega | Sí | Quién lleva el pedido. Se puede crear uno nuevo sin salir del formulario. |
 | Observaciones Generales | No | Notas que acompañan al pedido (salen en el PDF). |
-| Observaciones Internas | No | Notas para el equipo. |
+| Observaciones Internas | No | Notas para el equipo (salen en el PDF, también en el que se envía por correo). |
 | Productos: Descripción y Cantidad | Sí | Al menos un producto con cantidad mayor a cero. Sin precios. |
 | Productos: Medida | No | Unidad en que está la cantidad (CIENTO, DOCENA…). Solo aparece con **Mostrar unidad de medida** activo en Empresa → Facturación. Por defecto, la unidad del producto. |
 
@@ -377,6 +382,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.24** — El **PDF** del pedido muestra también las **Observaciones Internas**, debajo de las generales, tanto al descargarlo o imprimirlo como al enviarlo por correo.
 - **1.23** — **El estado a mano es solo de administradores** (niveles 2 y 3): para los demás usuarios el campo *Estado* queda de solo lectura. **Corregir un estado puesto a mano**: un pedido en *Procesado* o *Anulado* cuyo estado se cambió a mano (no por una consignación) deja activo el campo *Estado* para devolverlo a *Pendiente*; antes quedaba congelado sin forma de corregirlo. Un pedido procesado por una consignación ya no puede cambiar de estado a mano.
 - **1.22** — La pestaña *Detalle* del modal pasa a llamarse **Información**, igual que en el resto del sistema. Muestra lo mismo.
 - **1.21** — **Pestaña Detalle solo para administradores**: la pestaña *Detalle* del modal (quién creó y editó el pedido, y su historial) la ven únicamente los usuarios de nivel 2 y 3.

@@ -1319,7 +1319,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         let val = parseFloat(input.value);
         if (isNaN(val) || val <= 0) val = 0;
         if (val > saldo) { val = saldo; input.value = saldo.toFixed(2); }
-        _selModal[uid] = val;
+        _selModal[uid] = CMG_r2(val);
         actualizarResumenModal();
     }
 
@@ -1475,7 +1475,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (!it) return;
         const input = document.querySelector(`.sdp-item-monto2[data-iuid="${iuid}"]`);
         if (checked) {
-            const monto = Math.min(it.total_item, docSaldoRestante(it.docUid, iuid));
+            const monto = CMG_r2(Math.min(it.total_item, docSaldoRestante(it.docUid, iuid)));
             _selItems[iuid] = monto;
             if (input) { input.disabled = false; input.value = monto.toFixed(2); }
         } else {
@@ -1493,6 +1493,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         if (v > it.total_item) v = it.total_item;                 // no más que el total del ítem
         const tope = docSaldoRestante(it.docUid, iuid);           // ni más que el saldo restante del documento
         if (v > tope) v = tope;
+        v = CMG_r2(v);                                            // centavos: lo que se ve es lo que se guarda
         input.value = v > 0 ? v.toFixed(2) : '';
         _selItems[iuid] = v;
         actualizarResumenModal();
@@ -1807,7 +1808,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             el.value = v > 0 ? v.toFixed(2) : ''; // se ingresó un valor negativo
         }
 
-        docPendientes[idx].cobrado = v;
+        docPendientes[idx].cobrado = CMG_r2(v); // centavos: lo que se ve es lo que se guarda
         recalcularTotales();
         ingActualizarObservacionesAuto(); // un documento en $0 sale del texto (no se guarda)
     }
@@ -1926,7 +1927,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
     function actualizarManualIngresoMonto(idx, val) {
         if (detalleManual[idx]) {
-            detalleManual[idx].monto = Math.max(0, parseFloat(val) || 0);
+            detalleManual[idx].monto = CMG_r2(Math.max(0, parseFloat(val) || 0));
             recalcularTotales();
         }
     }
@@ -2395,8 +2396,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         });
 
-        // Sum total
-        data.monto_total = data.detalles.reduce((a, b) => a + b.monto_cobrado, 0);
+        // Cada línea viaja en 2 decimales —lo mismo que se ve en pantalla y lo que guarda la
+        // BD— y el total es la suma de esas líneas ya redondeadas. Si viajaban con más
+        // decimales, la BD redondeaba cada una por su lado y lo cobrado a la factura (que
+        // Cuentas por Cobrar suma línea a línea) quedaba un centavo distinto del total.
+        data.detalles.forEach(d => {
+            ['monto_documento', 'saldo_anterior', 'monto_cobrado', 'saldo_actual'].forEach(k => {
+                d[k] = CMG_r2(parseFloat(d[k]) || 0);
+            });
+        });
+        data.monto_total = CMG_r2(data.detalles.reduce((a, b) => a + b.monto_cobrado, 0));
 
         // Formas de cobro: la fila de captura (forma + monto) se toma sola si el usuario no
         // pulsó "+"; solo con varias formas hace falta agregarlas a la lista.

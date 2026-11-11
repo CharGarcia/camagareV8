@@ -811,7 +811,8 @@ class PedidosController extends BaseModuloController {
 
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($doc['cabecera']['id_establecimiento']) ? (int) $doc['cabecera']['id_establecimiento'] : null, $doc['cabecera']['id_punto_emision'] ?? null);
 
-            (new \App\Services\modulos\PedidoPdfService())->generar($doc['cabecera'], $doc['detalles'], $empresa, 'D');
+            // PDF de uso interno (imprimir/descargar): lleva también las observaciones internas.
+            (new \App\Services\modulos\PedidoPdfService())->generar($doc['cabecera'], $doc['detalles'], $empresa, 'D', true);
         } catch (\Throwable $e) {
             http_response_code(500);
             echo 'Error al generar PDF: ' . $e->getMessage();
@@ -926,7 +927,8 @@ class PedidosController extends BaseModuloController {
             $empresa = $this->cargarEmpresaParaPdf($idEmpresa, !empty($cabecera['id_establecimiento']) ? (int) $cabecera['id_establecimiento'] : null, $cabecera['id_punto_emision'] ?? null);
             $numero  = (string) ($cabecera['numero_pedido'] ?? '');
 
-            $pdfString = (new \App\Services\modulos\PedidoPdfService())->generar($cabecera, $doc['detalles'], $empresa, 'S');
+            // Mismo PDF que se imprime: también lleva las observaciones internas (pedido del usuario).
+            $pdfString = (new \App\Services\modulos\PedidoPdfService())->generar($cabecera, $doc['detalles'], $empresa, 'S', true);
 
             // Destinatarios: el que venga del formulario o, en su defecto, el del cliente.
             $correosDestino = trim($_POST['correos'] ?? '');

@@ -10,7 +10,7 @@ use TCPDF;
  * PDF de un PEDIDO (documento interno, no electrónico ante el SRI).
  * A4 vertical: encabezado con logo + datos de la empresa, caja con los datos
  * del pedido y la entrega, tabla de productos (código/descripción/cantidad,
- * sin precios — Pedidos no maneja valores) y observaciones.
+ * sin precios — Pedidos no maneja valores) y observaciones (generales e internas).
  */
 class PedidoPdfService
 {
@@ -20,8 +20,17 @@ class PedidoPdfService
     private float $marginR  = 12;
     private float $contentW = 186; // 210 - 12 - 12
 
-    public function generar(array $cabecera, array $detalles, array $empresa, string $outputDest = 'I')
+    /**
+     * @param bool $incluirInternas Imprime también las observaciones internas (notas del
+     *                              equipo). Hoy lo piden tanto el PDF que se descarga/imprime
+     *                              como el que se envía por correo.
+     */
+    public function generar(array $cabecera, array $detalles, array $empresa, string $outputDest = 'I', bool $incluirInternas = false)
     {
+        if (!$incluirInternas) {
+            unset($cabecera['observaciones_internas']);
+        }
+
         $numero = (string) ($cabecera['numero_pedido'] ?? '');
 
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
@@ -287,17 +296,28 @@ class PedidoPdfService
         $mL  = $this->marginL;
         $w   = $this->contentW;
 
-        $obs = trim((string) ($c['observaciones'] ?? ''));
-        if ($obs === '') {
-            return;
-        }
+        $bloques = [
+            'Observaciones:'          => trim((string) ($c['observaciones'] ?? '')),
+            'Observaciones internas:' => trim((string) ($c['observaciones_internas'] ?? '')),
+        ];
 
-        $pdf->SetXY($mL, $y);
-        $pdf->SetFont('helvetica', 'B', 8);
-        $pdf->Cell($w, 5, 'Observaciones:', 0, 1, 'L');
-        $pdf->SetX($mL);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->MultiCell($w, 4.5, $obs, 0, 'L', false, 1);
+        $pdf->SetY($y);
+        foreach ($bloques as $titulo => $texto) {
+            if ($texto === '') {
+                continue;
+            }
+            // Que el título no quede solo al pie de la hoja, separado de su texto.
+            if ($pdf->GetY() + 5 + 4.5 > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
+                $pdf->AddPage();
+            }
+            $pdf->SetX($mL);
+            $pdf->SetFont('helvetica', 'B', 8);
+            $pdf->Cell($w, 5, $titulo, 0, 1, 'L');
+            $pdf->SetX($mL);
+            $pdf->SetFont('helvetica', '', 8);
+            $pdf->MultiCell($w, 4.5, $texto, 0, 'L', false, 1);
+            $pdf->Ln(1.5);
+        }
     }
 
     /** Resuelve la ruta en disco del logo (maneja el prefijo web /sistema/public). */

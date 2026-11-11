@@ -92,6 +92,100 @@ class IngresoService
     }
 
     /**
+     * Deja todos los importes del ingreso en 2 decimales ANTES de validar y guardar, de modo
+     * que el total de cabecera, la suma de las líneas y la suma de las formas de cobro sean
+     * exactamente el mismo valor en BD.
+     *
+     * Las columnas son NUMERIC(14,2): PostgreSQL redondea cada línea por separado al
+     * insertarla. Si llegaban líneas con más de 2 decimales (cobro por ítems, repartos
+     * proporcionales de otros flujos), las Rules solo comparaban la SUMA redondeada contra el
+     * total, así que pasaba un ingreso de 74,27 cuyas líneas guardadas sumaban 74,28
+     * (37,135 + 37,135 → 37,14 + 37,14) y Cuentas por Cobrar —que suma las líneas—
+     * mostraba un abono distinto del valor del ingreso.
+     *
+     * La diferencia de redondeo (centavos) la absorbe la línea de mayor valor; si los
+     * importes no cuadraban ya antes de redondear, no se toca nada y las Rules lo rechazan.
+     */
+    private function normalizarMontos(array $data): array
+    {
+        if (empty($data['detalles']) || !is_array($data['detalles'])) {
+            return $data;
+        }
+        $total = round((float) ($data['monto_total'] ?? 0), 2);
+        $data['monto_total'] = $total;
+
+        // ── Líneas ──
+        $sumaCruda = 0.0;
+        $suma      = 0.0;
+        foreach ($data['detalles'] as $i => $d) {
+            if (!is_array($d)) {
+                return $data; // payload inesperado: que lo rechacen las Rules
+            }
+            $sumaCruda += (float) ($d['monto_cobrado'] ?? 0);
+            foreach (['monto_documento', 'saldo_anterior', 'monto_cobrado', 'saldo_actual'] as $campo) {
+                if (isset($d[$campo]) && is_numeric($d[$campo])) {
+                    $data['detalles'][$i][$campo] = round((float) $d[$campo], 2);
+                }
+            }
+            $suma += (float) ($data['detalles'][$i]['monto_cobrado'] ?? 0);
+        }
+        $dif = round($total - $suma, 2);
+        if ($dif != 0.0 && abs($dif) <= 0.05 && abs(round($sumaCruda, 2) - $total) < 0.005) {
+            $elegida = null;
+            $mayor   = null;
+            foreach ($data['detalles'] as $i => $d) {
+                $cob = (float) ($d['monto_cobrado'] ?? 0);
+                if ($cob + $dif <= 0) {
+                    continue;
+                }
+                if ($mayor === null || $cob > (float) $data['detalles'][$mayor]['monto_cobrado']) {
+                    $mayor = $i;
+                }
+                // Preferir una línea que no quede por encima de su saldo pendiente.
+                $saldoAnt = (float) ($d['saldo_anterior'] ?? 0);
+                $cabe     = ($d['tipo_documento'] ?? '') === 'OTRO' || $saldoAnt <= 0 || $cob + $dif <= $saldoAnt + 0.001;
+                if ($cabe && ($elegida === null || $cob > (float) $data['detalles'][$elegida]['monto_cobrado'])) {
+                    $elegida = $i;
+                }
+            }
+            $elegida ??= $mayor;
+            if ($elegida !== null) {
+                $linea = &$data['detalles'][$elegida];
+                $linea['monto_cobrado'] = round((float) $linea['monto_cobrado'] + $dif, 2);
+                if (isset($linea['saldo_actual']) && is_numeric($linea['saldo_actual'])) {
+                    $linea['saldo_actual'] = max(0.0, round((float) $linea['saldo_actual'] - $dif, 2));
+                }
+                unset($linea);
+            }
+        }
+
+        // ── Formas de cobro ──
+        if (!empty($data['pagos']) && is_array($data['pagos'])) {
+            $sumaCruda = 0.0;
+            $suma      = 0.0;
+            $mayor     = null;
+            foreach ($data['pagos'] as $i => $p) {
+                if (!is_array($p)) {
+                    return $data;
+                }
+                $sumaCruda += (float) ($p['monto'] ?? 0);
+                $data['pagos'][$i]['monto'] = round((float) ($p['monto'] ?? 0), 2);
+                $suma += $data['pagos'][$i]['monto'];
+                if ($mayor === null || $data['pagos'][$i]['monto'] > $data['pagos'][$mayor]['monto']) {
+                    $mayor = $i;
+                }
+            }
+            $dif = round($total - $suma, 2);
+            if ($dif != 0.0 && abs($dif) <= 0.05 && abs(round($sumaCruda, 2) - $total) < 0.005
+                && $mayor !== null && $data['pagos'][$mayor]['monto'] + $dif > 0) {
+                $data['pagos'][$mayor]['monto'] = round($data['pagos'][$mayor]['monto'] + $dif, 2);
+            }
+        }
+
+        return $data;
+    }
+
+    /**
      * Revalida, contra el saldo REAL del documento (no el "saldo_anterior" que mandó
      * el navegador), que cada documento referenciado en el payload todavía alcanza
      * para el monto cobrado. Se agrupa por documento porque el cobro "por ítems"
@@ -146,9 +240,10 @@ class IngresoService
         // 1. Validar Secuencial
         $this->validarSecuencial($data);
 
-        // 2. Aplicar Reglas de Validación
+        // 2. Aplicar Reglas de Validación (con los importes ya en 2 decimales)
+        $data = $this->normalizarMontos($data);
         $this->rules->validar($data);
-        $idProyecto = $this->repository->usaProyecto()
+        $idProyecto =$this->repository->usaProyecto()
             ? (new ProyectoDocumentoRules())->resolver($data['id_proyecto'] ?? null, (int) $data['id_empresa'])
             : null;
 
@@ -284,7 +379,8 @@ class IngresoService
         // 1. Validar Secuencial (excluyendo el ID actual)
         $this->validarSecuencial($data, $id);
 
-        // 2. Aplicar Reglas de Validación
+        // 2. Aplicar Reglas de Validación (con los importes ya en 2 decimales)
+        $data = $this->normalizarMontos($data);
         $this->rules->validar($data);
         // Proyecto del ingreso: solo cambia si el modal lo mandó; al regenerar el asiento se
         // copia a todas sus líneas.
