@@ -52,6 +52,8 @@ class DescargasSriController extends BaseModuloController
             // Pestaña «Desde PDF»: empresas cuya IA puede usar el superadministrador
             // (lista vacía para los demás niveles, así el botón no se pinta).
             'empresasIa' => $this->empresasIaPrestables(),
+            // La pestaña solo se pinta si la empresa tiene IA propia o el usuario es nivel 3.
+            'mostrarPdf' => $this->puedeUsarPdf(),
             // 'perm' => $this->getPermisos('descargas_sri')
         ]);
     }
@@ -360,6 +362,24 @@ class DescargasSriController extends BaseModuloController
     }
 
     /**
+     * La pestaña «Desde PDF» existe solo si la empresa activa tiene su propia IA o
+     * si el usuario es superadministrador (que puede usar la de otra empresa).
+     * Decide si se pinta la pestaña y lo revalidan sus dos endpoints.
+     */
+    private function puedeUsarPdf(): bool
+    {
+        if ($this->esSuperAdmin()) {
+            return true;
+        }
+        try {
+            return (new DescargaPdfService())->empresaTieneIa((int) ($_SESSION['id_empresa'] ?? 0));
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return false;
+        }
+    }
+
+    /**
      * Empresas que pueden prestar su IA, para el botón «Usar IA de otra empresa».
      * Vacío para todo usuario que no sea superadministrador.
      */
@@ -388,6 +408,11 @@ class DescargasSriController extends BaseModuloController
     {
         $this->requireCrear();
         header('Content-Type: application/json');
+
+        if (!$this->puedeUsarPdf()) {
+            echo json_encode(['ok' => false, 'error' => 'La lectura desde PDF no está disponible: la empresa no tiene IA configurada.']);
+            return;
+        }
 
         $archivo = $_FILES['archivo_pdf'] ?? null;
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$archivo || ($archivo['error'] ?? 1) !== UPLOAD_ERR_OK) {
@@ -432,6 +457,11 @@ class DescargasSriController extends BaseModuloController
     {
         $this->requireCrear();
         header('Content-Type: application/json');
+
+        if (!$this->puedeUsarPdf()) {
+            echo json_encode(['ok' => false, 'errores' => ['El registro desde PDF no está disponible: la empresa no tiene IA configurada.']]);
+            return;
+        }
 
         $doc = json_decode((string) ($_POST['documento'] ?? ''), true);
         if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !is_array($doc)) {

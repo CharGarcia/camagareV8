@@ -78,6 +78,19 @@ class ReporteComprasRepository extends BaseRepository
     }
 
     /**
+     * Rubros de la cabecera que están DENTRO del importe total pero fuera de bases, IVA e
+     * ICE: la propina y los <otrosRubrosTerceros> del XML (p. ej. tasa de pernoctación).
+     * Sin esta columna, Base 0% + Base IVA + IVA + ICE no llegaba al Total del documento.
+     */
+    private const SQL_OTROS_RUBROS = '(COALESCE(c.propina, 0) + COALESCE(c.otros_rubros_terceros, 0))';
+
+    /**
+     * Valores recaudados para terceros en planillas (bomberos, basura): van FUERA del
+     * importe total declarado al SRI, pero se pagan con el documento (suman en CxP).
+     */
+    private const SQL_VALORES_TERCEROS = 'COALESCE(c.total_terceros, 0)';
+
+    /**
      * Expresión de signo por tipo de comprobante para netear las compras.
      * Solo en la vista "Todas las compras" (sin filtro de tipo) las Notas de
      * Crédito de compra (04) RESTAN; si se filtra por un tipo específico, cada
@@ -251,6 +264,8 @@ class ReporteComprasRepository extends BaseRepository
                 (COALESCE(b.base_iva, 0)  * {$sgn}) as base_iva,
                 (COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
                 (COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
+                (" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
+                (" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 (c.importe_total          * {$sgn}) as total,
                 COALESCE((
                     SELECT SUM(r.total_retenido)
@@ -290,6 +305,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
+                SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
+                SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             JOIN proveedores p ON p.id = c.id_proveedor
@@ -367,6 +384,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
+                SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
+                SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -397,6 +416,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_iva, 0) * {$sgn}) as base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as valor_iva,
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as valor_ice,
+                SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
+                SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 SUM(c.importe_total * {$sgn}) as total
             FROM compras_cabecera c
             LEFT JOIN bases b ON b.id_compra = c.id
@@ -481,6 +502,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(COALESCE(b.base_iva, 0)  * {$sgn}) as total_base_iva,
                 SUM(COALESCE(b.valor_iva, 0) * {$sgn}) as total_iva,
                 SUM(COALESCE(b.valor_ice, 0) * {$sgn}) as total_ice,
+                SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as total_otros_rubros,
+                SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as total_terceros,
                 SUM(c.importe_total          * {$sgn}) as gran_total,
                 COUNT(c.id)                    as total_documentos
             FROM compras_cabecera c
@@ -497,6 +520,8 @@ class ReporteComprasRepository extends BaseRepository
             'total_base_iva'   => (float)($row['total_base_iva'] ?? 0),
             'total_iva'        => (float)($row['total_iva']      ?? 0),
             'total_ice'        => (float)($row['total_ice']      ?? 0),
+            'total_otros_rubros' => (float)($row['total_otros_rubros'] ?? 0),
+            'total_terceros'   => (float)($row['total_terceros'] ?? 0),
             'gran_total'       => (float)($row['gran_total']     ?? 0),
             'total_documentos' => (int)($row['total_documentos'] ?? 0),
         ];

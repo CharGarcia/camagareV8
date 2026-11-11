@@ -36,26 +36,50 @@ class EstadoCuentaTerceroService
     public function proveedor(int $idEmpresa, int $idProveedor, ?string $fechaDesde, ?string $fechaHasta): array
     {
         $this->rules->validar($fechaDesde, $fechaHasta);
-        $ids = $this->cartera->expandirEntidades($idEmpresa, 'PROVEEDOR', [$idProveedor]);
+        [$movimientos, $saldoAnterior] = $this->kardex($idEmpresa, 'PROVEEDOR', $idProveedor, $fechaDesde, $fechaHasta);
 
-        return $this->resumir(
-            $this->cartera->getMovimientosProveedor($idEmpresa, $ids, $fechaDesde, $fechaHasta),
-            $fechaDesde !== null ? $this->cartera->getSaldoAnteriorProveedor($idEmpresa, $ids, $fechaDesde) : 0.0,
-            'PAGO'
-        );
+        return $this->resumir($movimientos, $saldoAnterior, 'PAGO');
     }
 
     /** Cliente: cargos (facturas, recibos, ND, saldo inicial) y abonos (ingresos, retenciones, NC). */
     public function cliente(int $idEmpresa, int $idCliente, ?string $fechaDesde, ?string $fechaHasta): array
     {
         $this->rules->validar($fechaDesde, $fechaHasta);
-        $ids = $this->cartera->expandirEntidades($idEmpresa, 'CLIENTE', [$idCliente]);
+        [$movimientos, $saldoAnterior] = $this->kardex($idEmpresa, 'CLIENTE', $idCliente, $fechaDesde, $fechaHasta);
 
-        return $this->resumir(
-            $this->cartera->getMovimientosCliente($idEmpresa, $ids, $fechaDesde, $fechaHasta),
-            $fechaDesde !== null ? $this->cartera->getSaldoAnteriorCliente($idEmpresa, $ids, $fechaDesde) : 0.0,
-            'COBRO'
-        );
+        return $this->resumir($movimientos, $saldoAnterior, 'COBRO');
+    }
+
+    /**
+     * Movimientos del período y saldo anterior del tercero (todas sus fichas), en UNA
+     * consulta: ReporteCarteraRepository::getEstadosCuenta() saca el saldo anterior del
+     * mismo recorrido que el detalle. Antes eran dos consultas completas del kardex (una
+     * para los movimientos y otra, igual de pesada, solo para sumar lo anterior).
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: float} [movimientos, saldo anterior]
+     */
+    private function kardex(int $idEmpresa, string $tipo, int $idTercero, ?string $fechaDesde, ?string $fechaHasta): array
+    {
+        $fichas  = $this->cartera->expandirEntidades($idEmpresa, $tipo, [$idTercero]);
+        $estados = $this->cartera->getEstadosCuenta($idEmpresa, $tipo, $fichas, $fechaDesde ?: null, $fechaHasta ?: null);
+
+        $movimientos   = [];
+        $saldoAnterior = 0.0;
+        $conDatos      = 0;
+        foreach ($estados as $estado) {
+            $saldoAnterior += $estado['saldo_anterior'];
+            if ($estado['movimientos']) {
+                $movimientos = $movimientos ? array_merge($movimientos, $estado['movimientos']) : $estado['movimientos'];
+                $conDatos++;
+            }
+        }
+        // Cédula y RUC con movimientos: se intercalan con el orden del kardex
+        // (fecha, cargos antes que abonos, id del documento).
+        if ($conDatos > 1) {
+            usort($movimientos, static fn (array $a, array $b): int
+                => [$a['fecha'], -(int) $a['signo'], (int) $a['id_orden']] <=> [$b['fecha'], -(int) $b['signo'], (int) $b['id_orden']]);
+        }
+        return [$movimientos, $saldoAnterior];
     }
 
     /** ¿El cliente tiene algún movimiento? La ficha no pinta la pestaña si no hay nada. */

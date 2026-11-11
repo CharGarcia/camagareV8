@@ -274,6 +274,7 @@ class ReporteComprasController extends BaseModuloController
                 'cantidad'     => "<td class='text-center'>" . self::fmtCantidad($suma) . '</td>',
                 'total'        => "<td class='text-end text-danger'>" . number_format($suma, 2) . '</td>',
                 'retenciones'  => "<td class='text-end text-warning'>" . number_format($suma, 2) . '</td>',
+                'terceros'     => "<td class='text-end text-info'>" . number_format($suma, 2) . '</td>',
                 default        => "<td class='text-end'>" . number_format($suma, 2) . '</td>',
             };
         }
@@ -350,10 +351,13 @@ class ReporteComprasController extends BaseModuloController
                 return "<td class='text-end fw-bold text-danger'>" . $num('total') . '</td>';
             case 'retenciones':
                 return "<td class='text-end text-warning'>" . $num('retenciones') . '</td>';
+            case 'terceros':
+                return "<td class='text-end text-info'>" . $num('valores_terceros') . '</td>';
             case 'base_0':
             case 'base_iva':
             case 'valor_iva':
             case 'valor_ice':
+            case 'otros_rubros':
                 return "<td class='text-end'>" . $num($clave) . '</td>';
         }
         return '<td></td>';
@@ -463,8 +467,9 @@ class ReporteComprasController extends BaseModuloController
             'tarifa'           => [($r['tarifa_iva'] ?? 0) . '%'],
             'fecha'            => [$fecha($r['fecha'] ?? '')],
             'mes'              => [self::formatearMes((string) ($r['mes'] ?? ''))],
-            'base_0', 'base_iva', 'valor_iva', 'valor_ice', 'total', 'retenciones'
+            'base_0', 'base_iva', 'valor_iva', 'valor_ice', 'otros_rubros', 'total', 'retenciones'
                                => [(float) ($r[$clave] ?? 0)],
+            'terceros'         => [(float) ($r['valores_terceros'] ?? 0)],
             default            => [''],
         };
     }
@@ -564,8 +569,9 @@ class ReporteComprasController extends BaseModuloController
             'fecha'            => [$fecha($r['fecha'] ?? ''), 'text-center'],
             'mes'              => [self::formatearMes((string) ($r['mes'] ?? '')), 'text-center'],
             'total'            => ['<strong>' . $num('total') . '</strong>', 'text-end'],
-            'base_0', 'base_iva', 'valor_iva', 'valor_ice', 'retenciones'
+            'base_0', 'base_iva', 'valor_iva', 'valor_ice', 'otros_rubros', 'retenciones'
                                => [$num($clave), 'text-end'],
+            'terceros'         => [$num('valores_terceros'), 'text-end'],
             default            => ['', ''],
         };
     }

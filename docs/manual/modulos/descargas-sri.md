@@ -52,7 +52,10 @@ emisor; el PDF es solo su impresión.
 
 La lectura se hace con inteligencia artificial y usa la cuenta de IA de la
 propia empresa: debe estar configurado **Anthropic (Claude)** con su clave en
-*IA Soporte → Configuración*. Sin eso la pestaña avisa y no lee nada. Cada PDF
+*IA Soporte → Configuración*. **La pestaña solo aparece si la empresa actual
+tiene esa IA configurada, o si el usuario es superadministrador (nivel 3)**, que
+puede leer con la IA de otra empresa. En cualquier otro caso la pestaña no se
+muestra y el sistema rechaza la lectura. Cada PDF
 leído consume de esa cuenta (centavos por documento) y el archivo se envía a ese
 proveedor para leerlo.
 
@@ -194,9 +197,13 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 - **No descarga nada**: revise las credenciales del SRI de la empresa y el rango
   de fechas.
-- **Desde PDF: "configure Anthropic (Claude) con su API key"**: la empresa no
-  tiene configurada la IA. Hágalo en *IA Soporte → Configuración*, o pida a un
-  superadministrador que lea el PDF con la IA de otra empresa.
+- **No aparece la pestaña "Desde PDF"**: la empresa actual no tiene IA
+  configurada y usted no es superadministrador. Configure Anthropic en
+  *IA Soporte → Configuración*, o pida a un superadministrador que lea el PDF
+  con la IA de otra empresa.
+- **Desde PDF: "configure Anthropic (Claude) con su API key"**: le aparece al
+  superadministrador cuando la empresa actual no tiene IA y no eligió la de
+  otra. Use **Usar IA de otra empresa** o configure la de esta.
 - **Desde PDF: "El archivo no parece un comprobante electrónico del SRI"**: el
   PDF es otro tipo de documento (una proforma, un estado de cuenta) o está
   ilegible. Regístrelo a mano o con su XML.

@@ -822,6 +822,175 @@ class ReporteCarteraRepository extends BaseRepository
     }
 
     // ─────────────────────────────────────────────────────────────────────
+    // ESTADOS DE CUENTA POR LOTE (Reporte de Cartera)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /** Con más fichas que estas no se filtra por entidad en el SQL (ver getEstadosCuenta()). */
+    private const MAX_ENTIDADES_EN_SQL = 300;
+
+    /**
+     * Movimientos del período y saldo anterior de VARIOS terceros en UNA sola consulta.
+     *
+     * POR QUÉ: el reporte pedía getMovimientos*() y getSaldoAnterior*() una vez por cada
+     * cliente/proveedor, y cada una de esas consultas recorre los cobros/pagos y las
+     * retenciones de TODA la empresa (su tercero sale de un COALESCE sobre el documento
+     * cancelado, que no puede usar índice) y, del lado cliente, vuelve a armar el número
+     * de todas las ventas (CTE ventas_numeradas). Con "Todos" eran 2 × N consultas
+     * pesadas; aquí es una, y el saldo anterior sale del mismo recorrido.
+     *
+     * La unión se calcula sin fecha inicial y se materializa una vez: lo anterior a
+     * $fechaDesde se suma por entidad (saldo anterior) y el resto es el detalle. Las
+     * ramas, la atribución y el orden son los de getMovimientos*(), así que el resultado
+     * es el mismo.
+     *
+     * Con muchas fichas (opción "Todos") no se filtra por entidad en el SQL —serían
+     * miles de parámetros por rama— y las filas ajenas se descartan al leer.
+     *
+     * @param  int[] $ids Fichas a incluir (ya expandidas a cédula + RUC).
+     * @return array<int, array{saldo_anterior: float, movimientos: array<int, array<string, mixed>>}>
+     *         por id de ficha; las fichas sin movimientos no aparecen.
+     */
+    public function getEstadosCuenta(int $idEmpresa, string $tipo, array $ids, ?string $fechaDesde, ?string $fechaHasta, ?string $documento = null): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        $filtroSql = count($ids) <= self::MAX_ENTIDADES_EN_SQL ? $ids : null;
+
+        $params = [];
+        if (strtoupper($tipo) === 'PROVEEDOR') {
+            $ctes  = '';
+            $union = $this->unionProveedor($idEmpresa, $filtroSql, null, $fechaHasta, $params, $documento);
+        } else {
+            $ctes  = $this->ctesCliente($idEmpresa, $params) . ',';
+            $union = $this->unionCliente($idEmpresa, $filtroSql, null, $fechaHasta, $params, $documento);
+        }
+
+        $cols = 'id_entidad, fecha, tipo_movimiento, signo, origen, numero_documento, detalle, monto, id_orden';
+        if ($fechaDesde) {
+            $params[':desde_det'] = $fechaDesde;
+            $params[':desde_ant'] = $fechaDesde;
+            $sql = "WITH {$ctes} mov AS MATERIALIZED ( {$union} )
+                    SELECT 0 AS es_anterior, {$cols}
+                    FROM mov WHERE fecha >= :desde_det
+                    UNION ALL
+                    SELECT 1, id_entidad, NULL::date, NULL::text, 0, NULL::text, NULL::text, NULL::text,
+                           SUM(signo * monto), 0
+                    FROM mov WHERE fecha < :desde_ant
+                    GROUP BY id_entidad
+                    ORDER BY 1 DESC, fecha ASC, signo DESC, id_orden ASC";
+        } else {
+            $sql = "WITH {$ctes} mov AS ( {$union} )
+                    SELECT 0 AS es_anterior, {$cols}
+                    FROM mov
+                    ORDER BY fecha ASC, signo DESC, id_orden ASC";
+        }
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+
+        $solo = array_flip($ids);
+        $out  = [];
+        while ($r = $st->fetch(PDO::FETCH_ASSOC)) {
+            $id = (int) $r['id_entidad'];
+            if (!isset($solo[$id])) {
+                continue;
+            }
+            $out[$id] ??= ['saldo_anterior' => 0.0, 'movimientos' => []];
+            if ((int) $r['es_anterior'] === 1) {
+                $out[$id]['saldo_anterior'] += (float) $r['monto'];
+                continue;
+            }
+            unset($r['es_anterior'], $r['id_entidad']);
+            $out[$id]['movimientos'][] = $r;
+        }
+        return $out;
+    }
+
+    /**
+     * Datos de cabecera de varias fichas en una consulta: id => [id, nombre,
+     * identificacion, email, telefono]. Las eliminadas o de otra empresa no vienen.
+     *
+     * @param  int[] $ids
+     * @return array<int, array<string, mixed>>
+     */
+    public function getEntidadesPorIds(int $idEmpresa, string $tipo, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        [$tabla, $nombre] = strtoupper($tipo) === 'PROVEEDOR' ? ['proveedores', 'razon_social'] : ['clientes', 'nombre'];
+        $out = [];
+        foreach (array_chunk($ids, 5000) as $lote) {
+            $st = $this->db->prepare(
+                "SELECT id, {$nombre} AS nombre, identificacion, COALESCE(email,'') AS email, COALESCE(telefono,'') AS telefono
+                 FROM {$tabla}
+                 WHERE id IN {$this->sqlInTercero($lote)} AND id_empresa = :id_empresa AND eliminado = false"
+            );
+            $st->execute([':id_empresa' => $idEmpresa]);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $fila) {
+                $out[(int) $fila['id']] = $fila;
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Para cada ficha recibida, todas las que son el MISMO tercero (ella incluida): lo
+     * mismo que expandirEntidades() ficha por ficha, resuelto en dos consultas para todo
+     * el lote. Se compara la identificación tal cual está guardada (índice
+     * uk_{tabla}_empresa_identificacion) y se agrupa en PHP por su clave base.
+     *
+     * @param  int[] $ids
+     * @return array<int, int[]> id recibido => ids de su grupo
+     */
+    public function gruposDeEntidades(int $idEmpresa, string $tipo, array $ids): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        $tabla = strtoupper($tipo) === 'PROVEEDOR' ? 'proveedores' : 'clientes';
+
+        // Clave base de cada ficha pedida ('' = sin identificación: solo cruza consigo misma).
+        $base = [];
+        foreach (array_chunk($ids, 5000) as $lote) {
+            $st = $this->db->query("SELECT id, identificacion FROM {$tabla} WHERE id IN {$this->sqlInTercero($lote)}");
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                $base[(int) $f['id']] = \App\Helpers\IdentificacionTercero::claveBase($f['identificacion']);
+            }
+        }
+
+        // Fichas vigentes de la empresa con alguna de esas identificaciones (cédula o RUC).
+        $hermanas  = [];
+        $variantes = \App\Helpers\IdentificacionTercero::variantesDeVarias(array_filter($base, static fn (string $b): bool => $b !== ''));
+        foreach (array_chunk($variantes, 5000) as $lote) {
+            $params = [':id_empresa' => $idEmpresa];
+            $ph     = [];
+            foreach ($lote as $i => $v) {
+                $ph[] = ":v{$i}";
+                $params[":v{$i}"] = $v;
+            }
+            $st = $this->db->prepare("SELECT id, identificacion FROM {$tabla}
+                                      WHERE id_empresa = :id_empresa AND eliminado = false
+                                        AND identificacion IN (" . implode(',', $ph) . ")");
+            $st->execute($params);
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $f) {
+                $hermanas[\App\Helpers\IdentificacionTercero::claveBase($f['identificacion'])][] = (int) $f['id'];
+            }
+        }
+
+        $out = [];
+        foreach ($ids as $id) {
+            $b = $base[$id] ?? '';
+            $out[$id] = array_values(array_unique(array_merge([$id], $b !== '' ? ($hermanas[$b] ?? []) : [])));
+        }
+        return $out;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
     // DOCUMENTOS (CARGOS) DE LAS ENTIDADES SELECCIONADAS — para el filtro
     // "Documento" del reporte
     // ─────────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, pestaña informacion, quien creo el proveedor, quien modifico el proveedor, historial del proveedor
-version: 2.15
+version: 2.16
 orden: 10
 estado: activo
 ---
@@ -501,6 +501,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.16** — La pestaña **Estado de cuenta** del proveedor carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
 - **2.15** — Nueva pestaña **Información** en la ventana del proveedor (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **2.14** — *Generar pagos pendientes* muestra un aviso de progreso mientras revisa las compras y mientras genera los pagos, para que se sepa que el sistema está trabajando.
 - **2.13** — El **Plazo** admite como máximo **3.650 días (10 años)** o su equivalente en meses o años; un valor mayor se rechaza al guardar. Ver [Límite del plazo de crédito](../conceptos/plazo-credito.md).

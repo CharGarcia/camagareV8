@@ -123,6 +123,14 @@ class InformacionRegistro
             'tabla'  => 'liquidaciones_cabecera',
             'nombre' => 'la liquidación',
         ],
+        'modulos/ingresos' => [
+            'tabla'  => 'ingresos_cabecera',
+            'nombre' => 'el ingreso',
+        ],
+        'modulos/egresos' => [
+            'tabla'  => 'egresos_cabecera',
+            'nombre' => 'el egreso',
+        ],
     ];
 
     /** ¿El usuario en sesión ve la pestaña? */

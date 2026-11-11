@@ -117,6 +117,15 @@ class DescargaPdfService
         return (new \App\repositories\modulos\IaConfigRepository())->listarEmpresasConIa('anthropic');
     }
 
+    /** ¿La empresa tiene su propia IA (Anthropic con clave) para leer PDF? */
+    public function empresaTieneIa(int $idEmpresa): bool
+    {
+        $ia = (new \App\repositories\modulos\IaConfigRepository())->getByEmpresa($idEmpresa);
+        return $ia !== null
+            && (string) ($ia['proveedor'] ?? '') === 'anthropic'
+            && trim((string) ($ia['api_key_cifrada'] ?? '')) !== '';
+    }
+
     /**
      * Revalida los datos que el usuario tiene en pantalla (sin registrar nada):
      * la pantalla lo llama para refrescar avisos y opciones tras una corrección.

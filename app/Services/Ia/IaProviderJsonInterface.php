@@ -15,6 +15,8 @@ interface IaProviderJsonInterface
      * @param array $esquema Esquema JSON del resultado (objeto, additionalProperties false).
      * @param array{modelo:string, api_key:string, esfuerzo?:?string, max_tokens?:int, timeout?:float, documentos?:list<array{ruta:string, etiqueta?:string}>} $opciones
      *        `documentos`: archivos PDF locales que el modelo debe leer (opcional).
+     *        `json_libre` (bool): no exige el esquema al proveedor (para esquemas demasiado
+     *        grandes); la estructura debe ir en la instrucción y el llamador valida el resultado.
      * @return array{datos:array, rechazado:bool, tokens_entrada:int, tokens_salida:int, tokens_cache:int, costo_estimado:float, modelo:string}
      * @throws \RuntimeException con un mensaje en español sin datos sensibles si la llamada falla.
      */

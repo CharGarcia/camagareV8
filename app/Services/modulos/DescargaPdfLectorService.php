@@ -63,10 +63,16 @@ class DescargaPdfLectorService
         try {
             $r = $proveedor->generarJson(
                 self::prompt(),
-                $tipoTxt . ' Extraiga los datos del comprobante del PDF adjunto.',
+                $tipoTxt . " Extraiga los datos del comprobante del PDF adjunto.\n\n"
+                    . 'Responda ÚNICAMENTE con un objeto JSON válido (sin texto antes ni después y sin ```), con '
+                    . 'exactamente estas claves y tipos. Donde aparece "A|B" elija uno de esos valores; las listas '
+                    . "muestran un elemento de ejemplo y pueden ir vacías ([]):\n"
+                    . json_encode(self::plantilla(self::esquema()), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
                 [],
                 self::esquema(),
                 [
+                    // El esquema completo no compila como salida estricta (demasiado grande).
+                    'json_libre' => true,
                     'modelo'     => (string) (($ia['modelo_chat'] ?? '') ?: IaProveedores::modeloDefecto((string) ($ia['proveedor'] ?? 'anthropic'))),
                     'api_key'    => $apiKey,
                     'esfuerzo'   => ($ia['esfuerzo'] ?? null) ?: 'medium',
@@ -194,6 +200,18 @@ class DescargaPdfLectorService
             '- info_adicional: los campos de "Información adicional" (nombre y valor).',
             '- observaciones: en una o dos frases, lo que no pudo leer con seguridad o lo que se ve inconsistente. Vacío si todo se leyó bien.',
         ]);
+    }
+
+    /** Esquema → plantilla de ejemplo ("" texto, 0 número, "A|B" opciones, [elemento] lista). */
+    private static function plantilla(array $s)
+    {
+        return match ($s['type'] ?? '') {
+            'object'  => array_map(static fn(array $p) => self::plantilla($p), $s['properties'] ?? []),
+            'array'   => [self::plantilla($s['items'] ?? [])],
+            'number'  => 0,
+            'boolean' => true,
+            default   => isset($s['enum']) ? implode('|', array_filter($s['enum'], static fn($v) => $v !== '')) : '',
+        };
     }
 
     private static function esquema(): array

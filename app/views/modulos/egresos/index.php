@@ -432,6 +432,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <?php if (\App\Helpers\AsientoPestana::puedeVer()): // solo con acceso a Contabilidad → Asientos Contables ?>
                         <li class="nav-item" id="tab-egreso-cnt-li"><a class="nav-link py-2 small fw-bold" id="tab-egreso-cnt-btn" data-bs-toggle="tab" data-bs-target="#eg-tab-contable" href="#eg-tab-contable" role="tab"><i class="bi bi-calculator me-1"></i> Asiento contable</a></li>
                         <?php endif; ?>
+                        <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                        <?= \App\Helpers\InformacionRegistro::boton('eg', 'py-2 small fw-bold') ?>
                     </ul>
                     <div class="ms-2">
                         <?php
@@ -439,6 +441,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         $pestanasConfig = \App\Helpers\AsientoPestana::puedeVer()
                             ? ['eg-tab-contable' => 'Asiento contable']
                             : [];
+                        $pestanasConfig += \App\Helpers\InformacionRegistro::pestanaConfigurable('eg');
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfig, $vistaConfig ?? [], 'egresos');
                         ?>
                     </div>
@@ -738,6 +741,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             <?php $prefijo = 'eg'; require MVC_APP . '/views/partials/asiento_tab.php'; ?>
                         </div>
                         <?php endif; ?>
+
+                        <!-- PESTAÑA INFORMACIÓN (solo lectura; sin controles, por eso puede ir dentro del form) -->
+                        <?= \App\Helpers\InformacionRegistro::panel('eg', $rutaModulo, 'eg-input-id') ?>
                     </div>
                 </form>
             </div>

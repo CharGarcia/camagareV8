@@ -67,6 +67,23 @@ final class ColumnasReporte
         'total'     => ['titulo' => 'Gran Total',       'corto' => 'Total',   'excel' => 'Total',   'alinear' => 'der', 'ancho' => 9, 'suma' => 'total',     'stat' => 'gran_total'],
     ];
 
+    /**
+     * Importes de las vistas por DOCUMENTO del Reporte de Compras (detallado, proveedor,
+     * fecha, mes): los de COMPRAS_MONTOS más los rubros de la cabecera. «Otros rubros»
+     * (propina + otros rubros de terceros del XML) va DENTRO del total, antes de él;
+     * «Valores de terceros» (planillas de luz/agua) va FUERA, después. La vista por
+     * producto no los lleva: no pertenecen a ninguna línea.
+     */
+    private const COMPRAS_MONTOS_DOC = [
+        'base_0'       => self::COMPRAS_MONTOS['base_0'],
+        'base_iva'     => self::COMPRAS_MONTOS['base_iva'],
+        'valor_iva'    => self::COMPRAS_MONTOS['valor_iva'],
+        'valor_ice'    => self::COMPRAS_MONTOS['valor_ice'],
+        'otros_rubros' => ['titulo' => 'Otros rubros', 'nombre' => 'Otros rubros (propina y rubros de terceros dentro del total)', 'corto' => 'Otros', 'alinear' => 'der', 'ancho' => 7, 'suma' => 'otros_rubros', 'stat' => 'total_otros_rubros'],
+        'total'        => self::COMPRAS_MONTOS['total'],
+        'terceros'     => ['titulo' => 'Val. terceros', 'nombre' => 'Valores de terceros (planillas, fuera del total)', 'corto' => 'Terceros', 'excel' => 'Valores de terceros', 'alinear' => 'der', 'ancho' => 7, 'suma' => 'valores_terceros', 'stat' => 'total_terceros'],
+    ];
+
     /** Importes comunes a las vistas con montos del Reporte de Ventas. */
     private const VENTAS_MONTOS = [
         'base_0'    => ['titulo' => 'Base 0% / Exento'],
@@ -96,7 +113,7 @@ final class ColumnasReporte
                         'tipo'             => ['titulo' => 'Tipo', 'alinear' => 'centro', 'ancho' => 10],
                         'usuario'          => ['titulo' => 'Usuario', 'ancho' => 9],
                         'autorizacion'     => ['titulo' => 'Nro Autorización', 'ancho' => 14, 'pdf' => false],
-                    ] + self::COMPRAS_MONTOS + [
+                    ] + self::COMPRAS_MONTOS_DOC + [
                         'retenciones'      => ['titulo' => 'Retenciones', 'alinear' => 'der', 'ancho' => 8, 'suma' => 'retenciones'],
                     ],
                 ],
@@ -105,7 +122,7 @@ final class ColumnasReporte
                     'auto'     => 'L',
                     'columnas' => [
                         'proveedor' => ['titulo' => 'Proveedor', 'excel' => ['RUC/Cédula', 'Proveedor'], 'ancho' => 34, 'fija' => true],
-                    ] + self::COMPRAS_COMPROBANTES + self::COMPRAS_MONTOS,
+                    ] + self::COMPRAS_COMPROBANTES + self::COMPRAS_MONTOS_DOC,
                 ],
                 'PRODUCTO' => [
                     'titulo'   => 'Por producto',
@@ -121,14 +138,14 @@ final class ColumnasReporte
                     'auto'     => 'L',
                     'columnas' => [
                         'fecha' => ['titulo' => 'Fecha', 'alinear' => 'centro', 'ancho' => 16, 'fija' => true],
-                    ] + self::COMPRAS_COMPROBANTES + self::COMPRAS_MONTOS,
+                    ] + self::COMPRAS_COMPROBANTES + self::COMPRAS_MONTOS_DOC,
                 ],
                 'MES' => [
                     'titulo'   => 'Por mes',
                     'auto'     => 'L',
                     'columnas' => [
                         'mes' => ['titulo' => 'Mes', 'alinear' => 'centro', 'ancho' => 16, 'fija' => true],
-                    ] + self::COMPRAS_COMPROBANTES + self::COMPRAS_MONTOS,
+                    ] + self::COMPRAS_COMPROBANTES + self::COMPRAS_MONTOS_DOC,
                 ],
             ],
         ],

@@ -58,11 +58,11 @@ function RC_setupBuscadorEntidad() {
                                     chip.querySelector('button').addEventListener('click', function () {
                                         chip.remove();
                                         window.RC_limpiarDocumento(false);
-                                        window.RC_generarReporte();
+                                        RC_filtrosCambiaron();
                                     });
                                     chips.appendChild(chip);
                                     window.RC_limpiarDocumento(false);
-                                    window.RC_generarReporte();
+                                    RC_filtrosCambiaron();
                                 }
                             });
 
@@ -125,7 +125,7 @@ function RC_setupBuscadorDocumento() {
                         input.value = item.numero + ' · ' + item.origen;
                         input.classList.add('bg-light', 'fw-bold');
                         dropdown.classList.add('d-none');
-                        window.RC_generarReporte();
+                        RC_filtrosCambiaron();
                     });
                     dropdown.appendChild(btn);
                 });
@@ -161,7 +161,7 @@ function RC_setupBuscadorDocumento() {
 }
 
 // Limpia el filtro de documento (input visible + hidden + dropdown).
-// $regenerar: volver a generar el reporte tras limpiar.
+// regenerar: avisar que los filtros cambiaron (retira lo que había en pantalla).
 window.RC_limpiarDocumento = function (regenerar) {
     const input = document.getElementById('rc-search-documento');
     const hidden = document.getElementById('rc-documento');
@@ -172,7 +172,7 @@ window.RC_limpiarDocumento = function (regenerar) {
     input.value = '';
     input.classList.remove('bg-light', 'fw-bold');
     if (dropdown) dropdown.classList.add('d-none');
-    if (regenerar && habia) window.RC_generarReporte();
+    if (regenerar && habia) RC_filtrosCambiaron();
 };
 
 // Parámetros del formulario; con idEntidad, limita a ESA entidad (acciones
@@ -200,7 +200,7 @@ window.RC_cambiarTipo = function () {
     // Al cambiar de tipo, la selección previa (clientes u proveedores) ya no aplica
     document.getElementById('rc-chips-entidad').innerHTML = '';
     window.RC_limpiarDocumento(false);
-    window.RC_generarReporte();
+    RC_filtrosCambiaron();
 };
 
 // "Todos" reemplaza a la selección manual: bloquea el buscador de entidades
@@ -210,7 +210,7 @@ window.RC_toggleTodos = function () {
     document.getElementById('rc-search-entidad').disabled = activo;
     document.getElementById('rc-chips-entidad').classList.toggle('d-none', activo);
     window.RC_limpiarDocumento(false);
-    window.RC_generarReporte();
+    RC_filtrosCambiaron();
 };
 
 window.RC_cambiarMesAnio = function () {
@@ -230,8 +230,26 @@ window.RC_cambiarMesAnio = function () {
         document.getElementById('rc-fecha-hasta').value = anio + '-' + mes + '-' + fechaHasta.getDate().toString().padStart(2, '0');
     }
 
-    window.RC_generarReporte();
+    RC_filtrosCambiaron();
 };
+
+// El reporte solo se consulta al presionar «Generar» (o Enter en el formulario). Al cambiar
+// cualquier filtro se retira lo que había en pantalla —ya no corresponde a los filtros, y los
+// botones PDF / Excel / Correo de cada tarjeta exportan con los filtros actuales— y se
+// invita a generar de nuevo.
+function RC_filtrosCambiaron() {
+    const cont = document.getElementById('rc-resultados');
+    if (!cont) return;
+    const esProveedor = document.getElementById('rc_tipo').value === 'PROVEEDOR';
+    const habia = !!cont.querySelector('table');
+    cont.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>'
+        + (habia ? 'Los filtros cambiaron. Haz clic en Generar para actualizar el estado de cuenta.'
+                 : 'Selecciona uno o varios ' + (esProveedor ? 'proveedores' : 'clientes') + ' y haz clic en Generar para ver el estado de cuenta.')
+        + '</div>';
+    document.getElementById('stat-entidades').textContent = '0';
+    ['stat-cargos', 'stat-abonos', 'stat-saldo'].forEach(id => { document.getElementById(id).textContent = '0.00'; });
+}
+window.RC_filtrosCambiaron = RC_filtrosCambiaron;
 
 window.RC_generarReporte = function () {
     const form = document.getElementById('form-filtros-reporte');

@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen, personalizar reporte, ocultar columnas, columnas del estado de cuenta, pdf horizontal, logo en el pdf, pdf con logo, estado de cuenta con logo
-version: 1.13
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen, reporte lento, se demora, tarda mucho, todos los clientes tarda, personalizar reporte, ocultar columnas, columnas del estado de cuenta, pdf horizontal, logo en el pdf, pdf con logo, estado de cuenta con logo
+version: 1.15
 orden: 0
 estado: activo
 ---
@@ -46,7 +46,10 @@ qué quedó su saldo.
    crédito/débito). Con un documento fijado, **Backspace o Delete** limpia
    el filtro de una vez.
 5. Hacer clic en **Generar**. Aparece una tarjeta por cada entidad
-   incluida, con su tabla de movimientos y saldo final.
+   incluida, con su tabla de movimientos y saldo final. El reporte **solo se
+   consulta al presionar Generar**: si después se cambia cualquier filtro
+   (tipo, cliente, fechas, *Todos* o documento), lo que estaba en pantalla se
+   retira y hay que volver a presionar **Generar**.
 6. En el **encabezado de cada tarjeta**, a la derecha, están los botones
    **PDF**, **Excel** y **Correo** de ese cliente o proveedor: exportan o
    envían el estado de cuenta de **esa entidad** con el período y el
@@ -228,6 +231,8 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.15** — **El reporte es mucho más rápido**, sobre todo con varios clientes o proveedores y con la opción *Todos*. Antes se hacían dos consultas completas por cada cliente o proveedor (movimientos y saldo anterior); ahora una sola consulta trae los movimientos y el saldo anterior de todos los seleccionados. Los resultados no cambian. También se generan más rápido el PDF, el Excel y el correo.
+- **1.14** — El estado de cuenta ya no se genera solo al elegir un cliente o cambiar un filtro: se muestra únicamente al presionar **Generar**. Al cambiar un filtro se retira lo que había en pantalla. El PDF y el Excel responden sus errores con un aviso claro (por ejemplo, cuando no hay cliente seleccionado).
 - **1.13** — Botón **Personalizar** (administradores): la empresa elige qué columnas del estado de cuenta se ven en pantalla, Excel y PDF y la orientación del PDF; aplica también a lo que se envía por correo. El **PDF** adopta el formato común de los reportes: logo de la empresa, recuadro de datos, banda de indicadores y totales. Los botones **PDF / Excel / Correo** de cada estado de cuenta pasan a la derecha del encabezado, con texto e ícono como en los demás reportes. Sin personalizar, las columnas son las de siempre.
 - **1.12** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.11** — **Corrección: los Recibos de Venta no entraban como deuda generada**

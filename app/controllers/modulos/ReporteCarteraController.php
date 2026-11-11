@@ -152,10 +152,9 @@ class ReporteCarteraController extends BaseModuloController
         }
         $out = [];
         $vistos = [];
+        $entidades = $this->repository->getEntidadesPorIds($idEmpresa, $tipo, $ids); // una consulta para todas
         foreach ($ids as $id) {
-            $ent = $tipo === 'PROVEEDOR'
-                ? $this->repository->getProveedorPorId($idEmpresa, $id)
-                : $this->repository->getClientePorId($idEmpresa, $id);
+            $ent = $entidades[$id] ?? null;
             $clave = IdentificacionTercero::claveGrupo($ent['identificacion'] ?? null, 'id:' . $id);
             if (isset($vistos[$clave])) {
                 continue;
@@ -240,41 +239,70 @@ class ReporteCarteraController extends BaseModuloController
     // ────────────────────────────────────────────────────────────────
     // CONSTRUCCIÓN DE LOS ESTADOS DE CUENTA (uno por entidad seleccionada)
     // ────────────────────────────────────────────────────────────────
+    /**
+     * Un estado de cuenta por cada tercero seleccionado, todos resueltos POR LOTE: una
+     * consulta trae los movimientos y el saldo anterior de todos (antes eran dos consultas
+     * pesadas por cada cliente/proveedor, y con "Todos" el reporte tardaba minutos).
+     *
+     * El movimiento de cada tercero se arma sobre todas sus fichas —el mismo contribuyente
+     * puede estar registrado dos veces, una con la cédula y otra con el RUC (esa cédula +
+     * '001')—, así que el kardex sale completo en una sola sección en vez de partido en dos
+     * con saldos que no cuadran. La cabecera es la de la ficha elegida, que es la que el
+     * buscador mostró.
+     */
     private function construirLedgers(int $idEmpresa, array $filtros): array
     {
+        $ids = $this->resolverIds($idEmpresa, $filtros);
+        if (!$ids) {
+            return [];
+        }
+        $tipo      = $filtros['tipo'];
+        $entidades = $this->repository->getEntidadesPorIds($idEmpresa, $tipo, $ids);
+        $ids       = array_values(array_filter($ids, static fn (int $id): bool => isset($entidades[$id])));
+        if (!$ids) {
+            return [];
+        }
+        $grupos = $this->repository->gruposDeEntidades($idEmpresa, $tipo, $ids);
+        $fichas = $grupos ? array_merge(...array_values($grupos)) : [];
+
+        $estados = $this->repository->getEstadosCuenta(
+            $idEmpresa,
+            $tipo,
+            $fichas,
+            $filtros['fecha_desde'] !== '' ? $filtros['fecha_desde'] : null,
+            $filtros['fecha_hasta'] !== '' ? $filtros['fecha_hasta'] : null,
+            ($filtros['documento'] ?? '') !== '' ? $filtros['documento'] : null
+        );
+
         $ledgers = [];
-        foreach ($this->resolverIds($idEmpresa, $filtros) as $idEntidad) {
-            $ledger = $this->construirLedger($idEmpresa, $filtros['tipo'], $idEntidad, $filtros['fecha_desde'], $filtros['fecha_hasta'], $filtros['documento'] ?? '');
-            if ($ledger) {
-                $ledgers[] = $ledger;
+        foreach ($ids as $id) {
+            $saldoAnterior = 0.0;
+            $movimientos   = [];
+            $conDatos      = 0;
+            foreach ($grupos[$id] ?? [$id] as $ficha) {
+                if (!isset($estados[$ficha])) {
+                    continue;
+                }
+                $saldoAnterior += $estados[$ficha]['saldo_anterior'];
+                if ($estados[$ficha]['movimientos']) {
+                    $movimientos = $movimientos ? array_merge($movimientos, $estados[$ficha]['movimientos']) : $estados[$ficha]['movimientos'];
+                    $conDatos++;
+                }
             }
+            // Dos fichas con movimientos: se intercalan con el orden del kardex
+            // (fecha, cargos antes que abonos, id del documento).
+            if ($conDatos > 1) {
+                usort($movimientos, static fn (array $a, array $b): int
+                    => [$a['fecha'], -(int) $a['signo'], (int) $a['id_orden']] <=> [$b['fecha'], -(int) $b['signo'], (int) $b['id_orden']]);
+            }
+            $ledgers[] = $this->armarLedger($entidades[$id], $saldoAnterior, $movimientos);
         }
         return $ledgers;
     }
 
-    /**
-     * Estado de cuenta de UN tercero. El movimiento se busca sobre todas sus fichas —el
-     * mismo contribuyente puede estar registrado dos veces, una con la cédula y otra con
-     * el RUC (esa cédula + '001')—, así que el kardex sale completo en una sola sección
-     * en vez de partido en dos con saldos que no cuadran. La cabecera es la de la ficha
-     * elegida, que es la que el buscador mostró.
-     */
-    private function construirLedger(int $idEmpresa, string $tipo, int $idEntidad, string $fechaDesde, string $fechaHasta, string $documento = ''): ?array
+    /** Saldo corriente y totales del estado de cuenta de un tercero. */
+    private function armarLedger(array $entidad, float $saldoAnterior, array $movimientos): array
     {
-        $doc  = $documento !== '' ? $documento : null;
-        $idsEntidad = $this->repository->expandirEntidades($idEmpresa, $tipo, [$idEntidad]);
-        if ($tipo === 'PROVEEDOR') {
-            $entidad = $this->repository->getProveedorPorId($idEmpresa, $idEntidad);
-            if (!$entidad) return null;
-            $movimientos   = $this->repository->getMovimientosProveedor($idEmpresa, $idsEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
-            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorProveedor($idEmpresa, $idsEntidad, $fechaDesde, $doc) : 0.0;
-        } else {
-            $entidad = $this->repository->getClientePorId($idEmpresa, $idEntidad);
-            if (!$entidad) return null;
-            $movimientos   = $this->repository->getMovimientosCliente($idEmpresa, $idsEntidad, $fechaDesde !== '' ? $fechaDesde : null, $fechaHasta !== '' ? $fechaHasta : null, $doc);
-            $saldoAnterior = $fechaDesde !== '' ? $this->repository->getSaldoAnteriorCliente($idEmpresa, $idsEntidad, $fechaDesde, $doc) : 0.0;
-        }
-
         $saldo = $saldoAnterior;
         $totalCargos = 0.0;
         $totalAbonos = 0.0;
@@ -776,17 +804,20 @@ class ReporteCarteraController extends BaseModuloController
         $filtros = $this->getFiltrosDesdeRequest();
 
         if (empty($filtros['ids']) && !$filtros['todos']) {
-            echo 'Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ', o marque "Todos", para exportar.';
-            return;
+            $this->errorExport('Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ', o marque "Todos", para exportar.');
         }
 
-        $ledgers = $this->construirLedgers($idEmpresa, $filtros);
+        try {
+            $ledgers = $this->construirLedgers($idEmpresa, $filtros);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->errorExport('Error al generar Excel: ' . $e->getMessage());
+        }
 
         if (empty($ledgers)) {
-            echo $filtros['todos']
+            $this->errorExport($filtros['todos']
                 ? 'No hay ' . strtolower($this->etiquetaEntidad($filtros['tipo'])) . 's con saldo pendiente a la fecha de corte seleccionada.'
-                : 'Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ' para exportar.';
-            return;
+                : 'Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ' para exportar.');
         }
 
         try {
@@ -799,8 +830,29 @@ class ReporteCarteraController extends BaseModuloController
             $reportService->exportToExcelSeccionado('Cartera', $headers, $secciones, 'Reporte de Cartera', $nombreEmpresa);
             exit;
         } catch (\Throwable $e) {
-            echo 'Error al generar Excel: ' . $e->getMessage();
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->errorExport('Error al generar Excel: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Termina una exportación con un error. A una petición AJAX (CMG_pdfDocumento /
+     * CMG_descargar envían X-Requested-With) le responde JSON {ok, error}, que es lo que
+     * esas funciones muestran al usuario; abierta directo en el navegador, texto plano.
+     */
+    private function errorExport(string $mensaje): never
+    {
+        if (ob_get_length()) {
+            ob_clean();
+        }
+        if ($this->esAjaxRequest()) {
+            header('Content-Type: application/json; charset=utf-8');
+            echo json_encode(['ok' => false, 'error' => $mensaje], JSON_UNESCAPED_UNICODE);
+        } else {
+            header('Content-Type: text/plain; charset=utf-8');
+            echo $mensaje;
+        }
+        exit;
     }
 
     public function exportPdf(): void
@@ -810,17 +862,20 @@ class ReporteCarteraController extends BaseModuloController
         $filtros = $this->getFiltrosDesdeRequest();
 
         if (empty($filtros['ids']) && !$filtros['todos']) {
-            echo 'Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ', o marque "Todos", para exportar.';
-            return;
+            $this->errorExport('Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ', o marque "Todos", para exportar.');
         }
 
-        $ledgers = $this->construirLedgers($idEmpresa, $filtros);
+        try {
+            $ledgers = $this->construirLedgers($idEmpresa, $filtros);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->errorExport('Error al generar PDF: ' . $e->getMessage());
+        }
 
         if (empty($ledgers)) {
-            echo $filtros['todos']
+            $this->errorExport($filtros['todos']
                 ? 'No hay ' . strtolower($this->etiquetaEntidad($filtros['tipo'])) . 's con saldo pendiente a la fecha de corte seleccionada.'
-                : 'Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ' para exportar.';
-            return;
+                : 'Seleccione al menos un ' . $this->etiquetaEntidad($filtros['tipo']) . ' para exportar.');
         }
 
         try {
@@ -831,7 +886,8 @@ class ReporteCarteraController extends BaseModuloController
             $html2pdf->output('ReporteCartera_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
-            echo 'Error al generar PDF: ' . $e->getMessage();
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->errorExport('Error al generar PDF: ' . $e->getMessage());
         }
     }
 

@@ -62,11 +62,11 @@
 
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Desde</label>
-                        <input type="date" name="fecha_desde" id="rc-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;" onchange="window.RC_generarReporte()">
+                        <input type="date" name="fecha_desde" id="rc-fecha-desde" class="form-control form-control-sm shadow-none border" style="width:115px;" onchange="window.RC_filtrosCambiaron()">
                     </div>
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Fecha Hasta</label>
-                        <input type="date" name="fecha_hasta" id="rc-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" onchange="window.RC_generarReporte()">
+                        <input type="date" name="fecha_hasta" id="rc-fecha-hasta" class="form-control form-control-sm shadow-none border" style="width:115px;" onchange="window.RC_filtrosCambiaron()">
                     </div>
 
                     <div>

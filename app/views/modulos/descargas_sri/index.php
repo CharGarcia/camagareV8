@@ -35,11 +35,14 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <i class="bi bi-filetype-xml me-1"></i> Carga Masiva XML
                     </button>
                 </li>
+                <?php if (!empty($mostrarPdf)): ?>
+                <!-- Solo si la empresa tiene IA propia o el usuario es superadministrador. -->
                 <li class="nav-item" role="presentation">
                     <button class="nav-link fw-semibold text-muted" id="tab-pdf-btn" data-bs-toggle="tab" data-bs-target="#tab-pdf" type="button" role="tab" aria-controls="tab-pdf" aria-selected="false">
                         <i class="bi bi-file-earmark-pdf me-1"></i> Desde PDF
                     </button>
                 </li>
+                <?php endif; ?>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link fw-semibold text-muted" id="tab-ignorados-btn" data-bs-toggle="tab" data-bs-target="#tab-ignorados" type="button" role="tab" aria-controls="tab-ignorados" aria-selected="false" onclick="listarDocumentosIgnorados()">
                         <i class="bi bi-slash-circle me-1"></i> Documentos para no descargar
@@ -130,6 +133,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 
                 <!-- Tab: Desde PDF (RIDE). El PDF se lee con IA, el usuario revisa y aprueba,
                      y recién entonces se registra (DescargaPdfService). No consulta al SRI. -->
+                <?php if (!empty($mostrarPdf)): ?>
                 <div class="tab-pane fade" id="tab-pdf" role="tabpanel" aria-labelledby="tab-pdf-btn">
                     <div class="row">
                         <div class="col-md-6">
@@ -194,6 +198,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         </div>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <!-- Tab: Documentos Ignorados -->
                 <div class="tab-pane fade" id="tab-ignorados" role="tabpanel" aria-labelledby="tab-ignorados-btn">
@@ -593,7 +598,9 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 })();
 </script>
 
-<?php include __DIR__ . '/modal_pdf.php'; ?>
+<?php if (!empty($mostrarPdf)) { include __DIR__ . '/modal_pdf.php'; } ?>
 
 <script src="<?= BASE_URL ?>/js/modulos/descargas_sri.js?v=<?= asset_ver('/js/modulos/descargas_sri.js') ?>"></script>
+<?php if (!empty($mostrarPdf)): ?>
 <script src="<?= BASE_URL ?>/js/modulos/descargas_sri_pdf.js?v=<?= asset_ver('/js/modulos/descargas_sri_pdf.js') ?>"></script>
+<?php endif; ?>

@@ -217,12 +217,19 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
             'maxTokens' => max(512, min(16000, (int) ($opciones['max_tokens'] ?? 4000))),
             'system'    => [['type' => 'text', 'text' => $promptSistema, 'cacheControl' => ['type' => 'ephemeral']]],
             'messages'  => [['role' => 'user', 'content' => $contenido]],
-            'outputConfig' => ['format' => ['type' => 'json_schema', 'schema' => $esquema]],
             'requestOptions' => [
                 'timeout'    => max(10.0, min(180.0, (float) ($opciones['timeout'] ?? self::TIMEOUT_SEG))),
                 'maxRetries' => 2,
             ],
         ];
+        // Salida estricta por esquema, salvo que el llamador pida 'json_libre': un esquema
+        // grande (muchas listas de objetos) no compila («The compiled grammar is too
+        // large»). En ese modo la estructura va descrita en la instrucción y el JSON se
+        // extrae del texto; el llamador valida lo que recibe.
+        $jsonLibre = !empty($opciones['json_libre']);
+        if (!$jsonLibre) {
+            $p['outputConfig'] = ['format' => ['type' => 'json_schema', 'schema' => $esquema]];
+        }
         $esfuerzo = $opciones['esfuerzo'] ?? null;
         if (is_string($esfuerzo) && in_array($esfuerzo, self::ESFUERZOS, true) && self::admiteEsfuerzo($modelo)) {
             $p['outputConfig']['effort'] = $esfuerzo;
@@ -241,7 +248,16 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
             if ($resp->stopReason === 'max_tokens') {
                 throw new \RuntimeException('La respuesta de la IA quedó incompleta. Pida un texto más corto.');
             }
-            $json = json_decode(self::textoDe($resp->content), true);
+            $texto = self::textoDe($resp->content);
+            $json = json_decode($texto, true);
+            if (!is_array($json) && $jsonLibre) {
+                // Sin salida estricta el modelo puede envolver el JSON en ``` o añadir una frase.
+                $ini = strpos($texto, '{');
+                $fin = strrpos($texto, '}');
+                if ($ini !== false && $fin !== false && $fin > $ini) {
+                    $json = json_decode(substr($texto, $ini, $fin - $ini + 1), true);
+                }
+            }
             if (!is_array($json)) {
                 throw new \RuntimeException('La IA no devolvió una propuesta válida. Intente de nuevo.');
             }
