@@ -522,9 +522,8 @@ function nuevoPedido() {
     agregarFilaProducto();
     // Pedido nuevo: sin columna "Estado" (no hay nada registrado todavía).
     pedActualizarColumnaEstado();
-    // Pedido nuevo: se abre en General y la pestaña Detalle queda con su aviso.
-    PED_HISTORIAL_PENDIENTE = null;
-    pedResetPestanaDetalle(false);
+    // Pedido nuevo: se abre en General.
+    pedResetPestanaDetalle();
 
     // Configurar serie y secuencial
     const selPuntos = document.getElementById('id_punto_emision');
@@ -1351,12 +1350,8 @@ async function editarPedido(id) {
             // Pedido existente (editar / ver): la columna "Estado" sí se muestra.
             pedActualizarColumnaEstado();
 
-            // Pestaña Detalle: la ficha de registro se llena con lo que ya trae la
-            // cabecera; el historial se pide a log_sistema recién cuando el usuario
-            // abre la pestaña.
-            pedResetPestanaDetalle(true);
-            pedLlenarDetalleRegistro(p);
-            PED_HISTORIAL_PENDIENTE = p.id;
+            // Se abre en General; la pestaña Información consulta sus datos al mostrarse.
+            pedResetPestanaDetalle();
 
             const elTitulo = document.getElementById('titulo-modal');
             if (elTitulo) {
@@ -1491,265 +1486,15 @@ function formatDate(dateStr) {
 }
 
 // ==========================================
-// Pestaña "Detalle" del modal: quién registró el pedido y qué ediciones tuvo
+// Pestaña "Información" del modal: pieza común (App\Helpers\InformacionRegistro +
+// public/js/informacion-registro.js). Aquí solo se vuelve a General al abrir un pedido.
 // ==========================================
 
-/**
- * Timestamp de PostgreSQL ("2026-09-21 10:33:12.123456") en el formato del
- * sistema, d-m-Y H:i:s.
- *
- * Se parsea con expresión regular en vez de `new Date(...)` a propósito: el
- * valor ya viene en la hora del servidor, y pasarlo por Date lo reinterpreta
- * según la zona horaria del navegador (el mismo pedido se veía con una hora
- * distinta desde otra máquina).
- */
-function pedFechaHora(valor) {
-    if (!valor) return '—';
-    const m = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
-    if (m) return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${m[6] || '00'}`;
-    const soloFecha = String(valor).match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (soloFecha) return `${soloFecha[3]}-${soloFecha[2]}-${soloFecha[1]}`;
-    return String(valor);
-}
-
-/** Escapa el texto que llega del servidor antes de inyectarlo en el HTML del historial. */
-function pedEscapar(texto) {
-    const div = document.createElement('div');
-    div.textContent = texto === null || texto === undefined ? '' : String(texto);
-    return div.innerHTML;
-}
-
-/**
- * Deja el modal en la pestaña General y limpia la pestaña Detalle.
- *
- * @param {boolean} hayPedido  false en un pedido nuevo: la pestaña Detalle
- *                             muestra el aviso de "todavía no se ha guardado".
- */
-function pedResetPestanaDetalle(hayPedido) {
-    const btnGeneral = document.getElementById('ped-tab-general-btn');
-    if (btnGeneral && typeof bootstrap !== 'undefined' && bootstrap.Tab) {
+/** Deja el modal en la pestaña General (la de Información se recarga sola al abrirla). */
+function pedResetPestanaDetalle() {
+    const btnGeneral = document.getElementById("ped-tab-general-btn");
+    if (btnGeneral && typeof bootstrap !== "undefined" && bootstrap.Tab) {
         bootstrap.Tab.getOrCreateInstance(btnGeneral).show();
-    }
-
-    document.getElementById('ped-detalle-vacio')?.classList.toggle('d-none', hayPedido);
-    document.getElementById('ped-detalle-contenido')?.classList.toggle('d-none', !hayPedido);
-
-    ['ped-info-creado-por', 'ped-info-creado-en', 'ped-info-modificado-por', 'ped-info-modificado-en']
-        .forEach(id => {
-            const el = document.getElementById(id);
-            if (el) { el.textContent = '—'; el.title = ''; }
-        });
-
-    PED_ULTIMA_EDICION_AT = null;
-    const accion = document.getElementById('ped-info-ultima-accion');
-    // El "qué hizo" sale del historial, que se pide al abrir la pestaña: hasta
-    // entonces se dice que se está consultando, no un guion suelto.
-    if (accion) {
-        accion.innerHTML = hayPedido
-            ? '<span class="text-muted">Consultando el historial…</span>'
-            : '<span class="text-muted">—</span>';
-    }
-
-    const timeline = document.getElementById('ped-historial-timeline');
-    if (timeline) {
-        timeline.innerHTML = hayPedido
-            ? '<div class="text-center py-4 text-muted small"><span class="spinner-border spinner-border-sm me-2"></span> Cargando historial...</div>'
-            : '';
-    }
-}
-
-/** Fecha (cruda, del servidor) de la última edición del pedido abierto; null si nunca se editó. */
-let PED_ULTIMA_EDICION_AT = null;
-
-/**
- * Llena la ficha de registro con la cabecera del pedido.
- *
- * Aquí solo se sabe QUIÉN y CUÁNDO: `created_by`/`updated_by` de la cabecera. El
- * "qué hizo" de la última edición no vive en esas columnas, así que lo completa
- * después pedLlenarUltimaAccion() con el último evento del historial.
- */
-function pedLlenarDetalleRegistro(p) {
-    const poner = (id, texto) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.textContent = texto || '—';
-        el.title = texto || '';
-    };
-
-    poner('ped-info-creado-por', p.creado_por_nombre);
-    poner('ped-info-creado-en', p.created_at ? pedFechaHora(p.created_at) : '');
-
-    // Un pedido que nunca se editó tiene updated_by/updated_at en nulo: se dice
-    // así, en vez de repetir al creador como si lo hubiera modificado.
-    const hayEdicion = !!(p.updated_by || p.updated_at);
-    poner('ped-info-modificado-por', hayEdicion ? (p.modificado_por_nombre || 'Usuario no identificado') : 'Sin ediciones');
-    poner('ped-info-modificado-en', hayEdicion && p.updated_at ? '· ' + pedFechaHora(p.updated_at) : '');
-
-    // Se guarda para contrastarlo luego con la fecha del último evento del historial.
-    PED_ULTIMA_EDICION_AT = hayEdicion ? (p.updated_at || null) : null;
-
-    const accion = document.getElementById('ped-info-ultima-accion');
-    if (accion && !hayEdicion) {
-        accion.innerHTML = '<span class="text-muted">El pedido no se ha modificado desde que se creó.</span>';
-    }
-}
-
-/** Milisegundos de una fecha del servidor, venga como "YYYY-MM-DD HH:MM:SS" o "DD-MM-YYYY HH:MM:SS". */
-function pedTimestamp(valor) {
-    if (!valor) return null;
-    const s = String(valor);
-    let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
-    if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)).getTime();
-    m = s.match(/^(\d{2})-(\d{2})-(\d{4})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
-    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)).getTime();
-    return null;
-}
-
-/** Cómo se lee un evento del historial: "Pedido editado", "Estado actualizado al guardar…". */
-function pedEtiquetaAccion(log) {
-    const accion = String(log.accion || '');
-
-    if (accion.includes('POR_CONSIGNACION')) {
-        let numero = '';
-        try {
-            numero = (JSON.parse(log.datos_nuevos || '{}') || {}).consignacion || '';
-        } catch (e) { /* datos viejos o incompletos: se muestra sin número */ }
-        return numero
-            ? `Estado actualizado al guardar la consignación ${numero}`
-            : 'Estado actualizado por una consignación';
-    }
-    if (accion.includes('CAMBIAR_ESTADO')) return 'Estado cambiado a mano';
-    if (accion.includes('CREAR'))      return 'Pedido creado';
-    if (accion.includes('ACTUALIZAR')) return 'Pedido editado';
-    if (accion.includes('ELIMINAR'))   return 'Pedido eliminado';
-
-    return accion.replace(/_/g, ' ');
-}
-
-/**
- * Dice EN QUÉ consistió la última edición, con el evento más reciente del historial.
- *
- * `updated_by` lo pisan varios caminos (guardar el pedido, guardar o eliminar una
- * consignación que consume sus líneas, y una re-migración), así que el nombre suelto
- * no dice nada: hay que contarlo contra el historial. Si la fecha del último evento
- * no cuadra con `updated_at`, es que ese último cambio no quedó asentado —pedidos
- * anteriores a que el módulo registrara, o tocados por la migración— y se avisa en
- * vez de atribuirle al usuario algo que no hizo.
- */
-function pedLlenarUltimaAccion(eventos) {
-    const cont = document.getElementById('ped-info-ultima-accion');
-    if (!cont) return;
-
-    if (!PED_ULTIMA_EDICION_AT) return; // pedido sin ediciones: ya lo dijo la ficha
-
-    const ultimo = (eventos || []).find(e => !String(e.accion || '').includes('CREAR'));
-    const tsPedido = pedTimestamp(PED_ULTIMA_EDICION_AT);
-    const tsEvento = ultimo ? pedTimestamp(ultimo.created_at) : null;
-    // Tolerancia amplia: el UPDATE y su registro ocurren en la misma transacción,
-    // pero cada uno toma su propia marca de tiempo.
-    const cuadra = tsPedido !== null && tsEvento !== null && Math.abs(tsPedido - tsEvento) <= 60000;
-
-    if (!ultimo || !cuadra) {
-        cont.innerHTML = '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>'
-            + 'Este último cambio no quedó detallado en el historial (pedido anterior al registro de cambios, o tocado por una migración).</span>';
-        return;
-    }
-
-    cont.innerHTML = `<span class="fw-semibold">${pedEscapar(pedEtiquetaAccion(ultimo))}</span>`
-        + `<div class="mt-1">${pedRenderCambios(ultimo.detalles)}</div>`;
-}
-
-/** Línea de cambios de un evento del historial ("Cliente: A → B"). */
-function pedRenderCambios(detalles) {
-    if (!detalles || detalles.length === 0) {
-        return '<span class="text-muted">Sin cambios registrados</span>';
-    }
-    if (typeof detalles === 'string') return pedEscapar(detalles);
-    if (!Array.isArray(detalles)) return pedEscapar(JSON.stringify(detalles));
-
-    return `<ul class="list-unstyled mb-0">${detalles.map(d => {
-        if (d && typeof d === 'object') {
-            const antes = (d.antes !== null && d.antes !== undefined)
-                ? `<span class="text-decoration-line-through text-muted">${pedEscapar(d.antes)}</span> `
-                : '';
-            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${pedEscapar(d.campo)}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${pedEscapar(d.despues)}</li>`;
-        }
-        return `<li><i class="bi bi-dot"></i> ${pedEscapar(d)}</li>`;
-    }).join('')}</ul>`;
-}
-
-/**
- * Pedido cuyo historial falta traer, o null si ya se trajo (o no hay pedido).
- *
- * El historial se pide solo al abrir la pestaña Detalle, no al abrir el pedido:
- * cargar un pedido ya dispara varias peticiones, y quien nunca mire esta pestaña
- * —que son casi todas las veces— no tiene por qué pagar una más.
- */
-let PED_HISTORIAL_PENDIENTE = null;
-
-document.addEventListener('DOMContentLoaded', () => {
-    const btnDetalle = document.getElementById('ped-tab-detalle-btn');
-    if (!btnDetalle) return;
-    btnDetalle.addEventListener('shown.bs.tab', () => {
-        if (!PED_HISTORIAL_PENDIENTE) return;
-        const id = PED_HISTORIAL_PENDIENTE;
-        PED_HISTORIAL_PENDIENTE = null;
-        pedCargarHistorial(id);
-    });
-});
-
-/** Trae de log_sistema las ediciones del pedido y las pinta como línea de tiempo. */
-async function pedCargarHistorial(id) {
-    const cont = document.getElementById('ped-historial-timeline');
-    if (!cont || !id) return;
-
-    try {
-        const resp = await fetch(`${window.CMG_urlBase}/getHistorialAjax?id=${id}&tabla=pedidos_cabecera`);
-        const json = await resp.json();
-
-        if (!json.ok || !json.data || json.data.length === 0) {
-            cont.innerHTML = '<div class="text-center py-4 text-muted small">No hay ediciones registradas para este pedido.</div>';
-            pedLlenarUltimaAccion([]);
-            return;
-        }
-
-        let html = '<div class="position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-        json.data.forEach(log => {
-            const accion = String(log.accion || '');
-            const icono = accion.includes('POR_CONSIGNACION') ? 'bi-arrow-repeat text-info' :
-                          accion.includes('CREAR')            ? 'bi-plus-circle-fill text-success' :
-                          accion.includes('ACTUALIZAR')       ? 'bi-pencil-fill text-primary' :
-                          accion.includes('ELIMINAR')         ? 'bi-trash-fill text-danger' :
-                                                                'bi-clock-history text-secondary';
-            const etiqueta = pedEtiquetaAccion(log);
-
-            html += `
-                <div class="position-relative mb-3 ps-4">
-                    <div class="position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border"
-                         style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                        <i class="bi ${icono}" style="font-size: 0.7rem;"></i>
-                    </div>
-                    <div>
-                        <div class="d-flex justify-content-between align-items-center mb-0 gap-2">
-                            <span class="fw-bold" style="font-size: 0.75rem;">${pedEscapar(etiqueta)}</span>
-                            <span class="text-muted text-nowrap" style="font-size: 0.65rem;">${pedEscapar(log.created_at || '')}</span>
-                        </div>
-                        <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                            <i class="bi bi-person me-1"></i> ${pedEscapar(log.usuario_nombre || 'SISTEMA')}
-                        </div>
-                        <div class="bg-light rounded p-1 border border-light-subtle" style="font-size: 0.65rem;">
-                            ${pedRenderCambios(log.detalles)}
-                        </div>
-                    </div>
-                </div>`;
-        });
-
-        cont.innerHTML = html;
-        pedLlenarUltimaAccion(json.data);
-    } catch (e) {
-        console.error('Error al cargar el historial del pedido:', e);
-        cont.innerHTML = '<div class="text-center py-3 text-danger small">No se pudo cargar el historial.</div>';
     }
 }
 

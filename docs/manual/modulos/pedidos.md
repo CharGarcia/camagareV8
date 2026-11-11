@@ -6,7 +6,7 @@ ruta_modulo: modulos/pedidos
 tipo: modulo
 visibilidad: todos
 etiquetas: pedidos, unidad de medida, cajas, caja, ciento, docena, pedir por caja, medida, pedido desde proforma, proforma a pedido, enviar a pedidos, generar pedido desde cotizacion, pedido de cliente, vendedor del cliente, asesor, quien atiende al cliente, solicitado por, quien hizo el pedido, usuario que registro el pedido, buscar pedidos, buscador, filtros, filtrar pedidos, buscar por producto, buscar por cliente, ordenar por estado y fecha de entrega, ordenar por dos columnas, encargo, orden de pedido, reserva, entregas, despacho, agenda de entrega, hora de entrega, responsable de entrega, rango horario, pedidos pendientes, aparecen pedidos que no busque, resultados que no corresponden, buscar por producto en el listado, imprimir, impresora
-version: 1.24
+version: 1.25
 orden: 0
 estado: activo
 ---
@@ -115,10 +115,10 @@ Arriba, dos fichas:
   consignación 001-001-000000123 · Estado: Pendiente → Procesado*.
 
 Si el pedido nunca se modificó desde que se creó, la ficha lo dice. Y si el último
-cambio es anterior al registro de cambios, o lo hizo una migración, avisa que ese
-cambio **no quedó detallado** en vez de atribuirle algo al usuario.
+cambio es anterior al registro de cambios, o lo hizo una migración, la ficha
+muestra solo quién y cuándo, sin el detalle.
 
-Debajo, la lista de **ediciones del pedido**, de la más reciente a la más antigua.
+Debajo, la lista de **acciones registradas**, de la más reciente a la más antigua.
 Cada línea dice qué pasó, quién lo hizo, la fecha y hora, y **qué cambió**, campo
 por campo, con el valor anterior tachado y el nuevo al lado.
 
@@ -382,6 +382,7 @@ esas líneas primero. El detalle está en el manual de **Proformas**, sección
 
 ## Historial de cambios
 
+- **1.25** — La pestaña **Información** pasa a ser la misma de los demás módulos (mismo diseño que en Compras o Facturas); conserva sus textos propios, como *Estado actualizado al guardar la consignación…*. Si la tenía oculta con el engranaje, vuelve a aparecer y puede ocultarla de nuevo. Además se retira el aviso «Este último cambio no quedó detallado en el historial»: cuando no hay detalle, se muestra solo quién y cuándo.
 - **1.24** — El **PDF** del pedido muestra también las **Observaciones Internas**, debajo de las generales, tanto al descargarlo o imprimirlo como al enviarlo por correo.
 - **1.23** — **El estado a mano es solo de administradores** (niveles 2 y 3): para los demás usuarios el campo *Estado* queda de solo lectura. **Corregir un estado puesto a mano**: un pedido en *Procesado* o *Anulado* cuyo estado se cambió a mano (no por una consignación) deja activo el campo *Estado* para devolverlo a *Pendiente*; antes quedaba congelado sin forma de corregirlo. Un pedido procesado por una consignación ya no puede cambiar de estado a mano.
 - **1.22** — La pestaña *Detalle* del modal pasa a llamarse **Información**, igual que en el resto del sistema. Muestra lo mismo.

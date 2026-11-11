@@ -76,33 +76,13 @@ $pedVistaConfig = $vistaConfig ?? [];
                                 <i class="bi bi-info-circle me-1"></i> General
                             </a>
                         </li>
-                        <?php
-                        // La pestaña Detalle (quién creó/editó y el historial) es solo para
-                        // administradores y superadministradores (niveles 2 y 3). El servidor
-                        // aplica la misma regla en PedidosController::getHistorialAjax().
-                        $pedVerDetalle = (int) ($_SESSION['nivel'] ?? 1) >= 2;
-                        ?>
-                        <?php if ($pedVerDetalle): ?>
-                        <li class="nav-item" role="presentation">
-                            <a class="nav-link" id="ped-tab-detalle-btn" data-bs-toggle="tab"
-                               data-bs-target="#ped-pane-detalle" href="#ped-pane-detalle" role="tab" title="Información del registro">
-                                <i class="bi bi-clock-history me-1"></i> Información
-                            </a>
-                        </li>
-                        <?php endif; ?>
+                        <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver \App\Helpers\InformacionRegistro. ?>
+                        <?= \App\Helpers\InformacionRegistro::boton("ped") ?>
                     </ul>
-                    <?php if ($pedVerDetalle): ?>
+                    <?php $pedPestanasConfig = \App\Helpers\InformacionRegistro::pestanaConfigurable("ped"); ?>
+                    <?php if ($pedPestanasConfig): // "General" no se lista a propósito: es el formulario ?>
                     <div class="pb-1 flex-shrink-0">
-                        <?php
-                        // La clave debe ser el id del .tab-pane (no el del <a>): es lo que
-                        // oculta renderEstilosPestanasOcultas(). "General" no se lista a
-                        // propósito — es el formulario, no se puede esconder.
-                        echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas(
-                            ['ped-pane-detalle' => 'Información'],
-                            $pedVistaConfig,
-                            $pedRutaModulo
-                        );
-                        ?>
+                        <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pedPestanasConfig, $pedVistaConfig, $pedRutaModulo) ?>
                     </div>
                     <?php endif; ?>
                 </div>
@@ -260,70 +240,10 @@ $pedVistaConfig = $vistaConfig ?? [];
                         </form>
                 </div><!-- /ped-pane-general -->
 
-                <!-- Pestaña Detalle: quién registró el pedido y qué se le ha cambiado.
-                     Va FUERA del <form> a propósito: PED_bloquearControles() deshabilita
-                     todos los input/select/button del formulario cuando el pedido está
-                     bloqueado, y el historial se debe poder seguir consultando. -->
-                <?php if ($pedVerDetalle): ?>
-                <div class="tab-pane fade" id="ped-pane-detalle" role="tabpanel">
-                    <div id="ped-detalle-vacio" class="text-center text-muted py-5 d-none">
-                        <i class="bi bi-clock-history d-block mb-2" style="font-size: 1.6rem;"></i>
-                        <div class="small">El pedido todavía no se ha guardado: aquí aparecerán quién lo creó y los cambios que reciba.</div>
-                    </div>
-
-                    <div id="ped-detalle-contenido" class="d-none">
-                        <!-- Ficha de registro: quién lo creó y en qué consistió la última edición.
-                             "Quién" sale de created_by / updated_by de la cabecera; el "qué hizo"
-                             se completa con el último evento del historial, porque updated_by por
-                             sí solo no dice nada de lo que esa persona cambió. -->
-                        <div class="row g-2 mb-3">
-                            <div class="col-md-4">
-                                <div class="border rounded-3 p-2 bg-white h-100">
-                                    <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem;">
-                                        <i class="bi bi-person-check me-1"></i> Creado
-                                    </div>
-                                    <div class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-creado-por" title="">—</div>
-                                    <div class="text-muted" style="font-size: 0.72rem;" id="ped-info-creado-en">—</div>
-                                </div>
-                            </div>
-                            <div class="col-md-8">
-                                <div class="border rounded-3 p-2 bg-white h-100">
-                                    <div class="text-muted text-uppercase fw-bold mb-1" style="font-size: 0.65rem;">
-                                        <i class="bi bi-pencil-square me-1"></i> Última edición
-                                    </div>
-                                    <div class="d-flex flex-wrap align-items-baseline gap-2">
-                                        <span class="fw-bold text-truncate" style="font-size: 0.85rem;" id="ped-info-modificado-por" title="">—</span>
-                                        <span class="text-muted" style="font-size: 0.72rem;" id="ped-info-modificado-en"></span>
-                                    </div>
-                                    <!-- Qué hizo: etiqueta de la acción + campos que cambió. -->
-                                    <div class="mt-1" style="font-size: 0.72rem;" id="ped-info-ultima-accion">
-                                        <span class="text-muted">—</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Historial de ediciones (log_sistema / pedidos_cabecera) -->
-                        <h6 class="fw-bold small text-muted text-uppercase mb-2">
-                            <i class="bi bi-list-ul me-1"></i> Ediciones del pedido
-                        </h6>
-                        <div class="border rounded-3 bg-white p-3" style="max-height: 320px; overflow-y: auto;">
-                            <div id="ped-historial-timeline" class="position-relative">
-                                <div class="text-center py-4 text-muted small">
-                                    <span class="spinner-border spinner-border-sm me-2"></span> Cargando historial...
-                                </div>
-                            </div>
-                        </div>
-                        <div class="text-muted mt-2" style="font-size: 0.7rem;">
-                            <i class="bi bi-info-circle me-1"></i>
-                            El historial registra los cambios de la cabecera del pedido (cliente, fechas, horas,
-                            responsable, estado y observaciones) y los cambios de estado que provoca guardar o
-                            eliminar una consignación. Lo que pasó con cada línea —si ya se entregó en consignación
-                            o se facturó— se consulta con el ícono de historial de la propia línea, en General.
-                        </div>
-                    </div>
-                </div><!-- /ped-pane-detalle -->
-                <?php endif; ?>
+                <!-- Pestaña Información (pieza común, solo niveles 2 y 3): ver \App\Helpers\InformacionRegistro.
+                     Va FUERA del <form> a propósito: PED_bloquearControles() deshabilita los controles
+                     del formulario cuando el pedido está bloqueado. -->
+                <?= \App\Helpers\InformacionRegistro::panel("ped", $pedRutaModulo, "pedido_id") ?>
                 </div><!-- /tab-content -->
             </div>
 

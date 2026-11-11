@@ -53,6 +53,11 @@ class InformacionRegistro
      *            (inventario_kardex.referencia_id = id de la línea): ['tabla' => tabla de
      *            líneas, 'fk' => columna que apunta a la cabecera].
      *   global → true si la tabla NO lleva id_empresa (catálogo global).
+     *   etiquetas → opcional. Texto propio para acciones del módulo: [fragmento del nombre de la
+     *            acción => texto]. Gana el primero que aparezca en la acción; `{clave}` se
+     *            reemplaza por ese dato de `datos_nuevos` del evento (y se omite si no está).
+     *            Sin esto, la acción se nombra con los textos comunes del JS.
+     *   nota   → opcional. Aclaración que se muestra al pie de la línea de tiempo.
      */
     public const CATALOGO = [
         'modulos/consignaciones_ventas' => [
@@ -123,6 +128,18 @@ class InformacionRegistro
             'tabla'  => 'liquidaciones_cabecera',
             'nombre' => 'la liquidación',
         ],
+        'modulos/pedidos' => [
+            'tabla'  => 'pedidos_cabecera',
+            'nombre' => 'el pedido',
+            'etiquetas' => [
+                'POR_CONSIGNACION' => 'Estado actualizado al guardar la consignación {consignacion}',
+                'CAMBIAR_ESTADO'   => 'Estado cambiado a mano',
+            ],
+            'nota' => 'El historial registra los cambios de la cabecera del pedido (cliente, fechas, horas, '
+                . 'responsable, estado y observaciones) y los cambios de estado que provoca guardar o eliminar '
+                . 'una consignación. Lo que pasó con cada línea —si ya se entregó en consignación o se facturó— '
+                . 'se consulta con el ícono de historial de la propia línea, en General.',
+        ],
         'modulos/ingresos' => [
             'tabla'  => 'ingresos_cabecera',
             'nombre' => 'el ingreso',
@@ -147,7 +164,7 @@ class InformacionRegistro
         if ($cfg === null) {
             return null;
         }
-        return $cfg + ['nombre' => 'el registro', 'kardex' => [], 'kardex_detalle' => null, 'global' => false];
+        return $cfg + ['nombre' => 'el registro', 'kardex' => [], 'kardex_detalle' => null, 'global' => false, 'etiquetas' => [], 'nota' => ''];
     }
 
     /** id del .tab-pane (es la clave que usan las pestañas configurables). */
@@ -203,7 +220,8 @@ class InformacionRegistro
 
         return '<div class="tab-pane fade p-3" id="' . $e(self::idPanel($prefijo)) . '" role="tabpanel"'
             . ' data-info-registro data-url="' . $e($url) . '"' . $origenId
-            . ' data-nombre="' . $e((string) $cfg['nombre']) . '">'
+            . ' data-nombre="' . $e((string) $cfg['nombre']) . '"'
+            . ((string) $cfg['nota'] !== '' ? ' data-nota="' . $e((string) $cfg['nota']) . '"' : '') . '>'
             . '<div class="p-4 text-center text-muted small">Cargando información...</div>'
             . '</div>';
     }

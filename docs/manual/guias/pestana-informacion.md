@@ -66,9 +66,9 @@ La pestaña se irá agregando a los demás módulos; en todos se llama
   las pestañas.
 - **«Guarde el registro para ver…»**: el documento es nuevo y todavía no se ha
   guardado.
-- **«Este último cambio no quedó detallado en el historial»**: el registro viene
-  de una migración o se modificó antes de que el sistema registrara los cambios.
-  Se ve quién y cuándo, pero no el detalle.
+- **La última edición muestra quién y cuándo, pero no qué cambió**: el registro
+  viene de una migración o se modificó antes de que el sistema registrara los
+  cambios.
 - **Un cambio muestra un número en vez de un nombre** (p. ej. *Forma de pago
   predeterminada: 13*): la opción que tenía ese código ya no existe en el
   catálogo, así que no hay nombre que mostrar.
@@ -77,7 +77,7 @@ La pestaña se irá agregando a los demás módulos; en todos se llama
 
 ## Historial de cambios
 
-- **1.6** — Se agrega a Ingresos y Egresos.
+- **1.6** — Se agrega a Ingresos y Egresos. Pedidos pasa a usar esta misma pestaña (antes tenía una propia). Se retira el aviso «Este último cambio no quedó detallado en el historial»: cuando no hay detalle, la última edición muestra solo quién y cuándo.
 - **1.5** — Los cambios muestran el **nombre** en lugar del código interno en forma de pago y de cobro, concepto de ingreso y egreso, retenciones, sustento tributario, banco, provincia, ciudad, tipo de identificación y tipo de cuenta. Los campos tienen además etiquetas más claras (*Forma de pago predeterminada*, *Retención de renta*…).
 - **1.4** — Se agrega a Proveedores, Productos, Vendedores y Empleados.
 - **1.3** — Se agrega a Clientes.

@@ -51,6 +51,7 @@ class InformacionRegistroService
                 'fecha'    => $log['created_at'], // getHistorial ya la entrega en d-m-Y H:i:s
                 'usuario'  => $log['usuario_nombre'] ?? '',
                 'accion'   => $log['accion'] ?? '',
+                'etiqueta' => $this->etiquetaPropia((array) $cfg['etiquetas'], $log),
                 'detalles' => $log['detalles'] ?? [],
             ];
         }
@@ -70,5 +71,28 @@ class InformacionRegistroService
             'con_inventario' => $conInventario,
             'inventario'     => $inventario,
         ];
+    }
+
+    /**
+     * Texto propio del módulo para la acción de un evento (catálogo → 'etiquetas'); null si el
+     * módulo no definió ninguno para esa acción y se usa el texto común del JS.
+     */
+    private function etiquetaPropia(array $etiquetas, array $log): ?string
+    {
+        $accion = strtoupper((string) ($log['accion'] ?? ''));
+        foreach ($etiquetas as $fragmento => $plantilla) {
+            if (!str_contains($accion, strtoupper((string) $fragmento))) {
+                continue;
+            }
+            $datos = json_decode((string) ($log['datos_nuevos'] ?? ''), true);
+            $datos = is_array($datos) ? $datos : [];
+            $texto = preg_replace_callback(
+                '/\{(\w+)\}/',
+                static fn(array $m): string => is_scalar($datos[$m[1]] ?? null) ? (string) $datos[$m[1]] : '',
+                (string) $plantilla
+            );
+            return trim((string) preg_replace('/\s+/', ' ', (string) $texto));
+        }
+        return null;
     }
 }

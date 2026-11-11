@@ -35,7 +35,7 @@
 
     function iconoAccion(accion) {
         const a = String(accion || '').toUpperCase();
-        return a.includes('CAMBIAR_ESTADO') ? 'bi-arrow-repeat text-info' :
+        return (a.includes('CAMBIAR_ESTADO') || a.includes('POR_CONSIGNACION')) ? 'bi-arrow-repeat text-info' :
                a.includes('ENTREGA')        ? 'bi-geo-alt-fill text-success' :
                a.includes('ANULAR')         ? 'bi-x-circle-fill text-danger' :
                a.includes('CREAR')          ? 'bi-plus-circle-fill text-success' :
@@ -72,7 +72,11 @@
         // del historial, solo si su fecha cuadra con updated_at. Si no cuadra, ese cambio no
         // quedó detallado (registro migrado o anterior al registro de cambios) y se avisa.
         // Varias tablas llenan updated_at al crear: eso no es una edición.
-        const hayEdicion = !!(registro.modificado_por || (registro.updated_at && registro.updated_at !== registro.created_at));
+        // Y algunas (ingresos, egresos) llenan también updated_by al crear: si las dos fechas
+        // coinciden no hubo edición, aunque haya "modificado por".
+        const hayEdicion = (registro.created_at && registro.updated_at)
+            ? registro.updated_at !== registro.created_at
+            : !!registro.modificado_por;
         const ultimo = historial.find(h => !String(h.accion || '').toUpperCase().includes('CREAR'));
         const tsCab = ts(registro.updated_at);
         const tsEv = ultimo ? ts(ultimo.fecha) : null;
@@ -80,10 +84,11 @@
         if (!hayEdicion) {
             ultimaAccion = `<span class="text-muted">${esc(Nombre)} no se ha modificado desde que se creó.</span>`;
         } else if (ultimo && tsCab !== null && tsEv !== null && Math.abs(tsCab - tsEv) <= 60000) {
-            ultimaAccion = `<span class="fw-semibold">${esc(etiquetaAccion(ultimo.accion))}</span><div class="mt-1">${renderCambios(ultimo.detalles)}</div>`;
+            ultimaAccion = `<span class="fw-semibold">${esc(ultimo.etiqueta || etiquetaAccion(ultimo.accion))}</span><div class="mt-1">${renderCambios(ultimo.detalles)}</div>`;
         } else {
-            ultimaAccion = '<span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>'
-                + 'Este último cambio no quedó detallado en el historial (registro anterior al registro de cambios, o tocado por una migración).</span>';
+            // Edición sin evento que cuadre (registro migrado o anterior al registro de cambios):
+            // se muestra solo quién y cuándo, sin aviso.
+            ultimaAccion = '';
         }
 
         const timeline = historial.length
@@ -96,7 +101,7 @@
                     </div>
                     <div style="min-width:0;">
                         <div class="d-flex justify-content-between align-items-center mb-0 gap-2">
-                            <span class="fw-bold" style="font-size: 0.75rem;">${esc(etiquetaAccion(h.accion))}</span>
+                            <span class="fw-bold" style="font-size: 0.75rem;">${esc(h.etiqueta || etiquetaAccion(h.accion))}</span>
                             <span class="text-muted text-nowrap" style="font-size: 0.65rem;">${esc(h.fecha || '')}</span>
                         </div>
                         <div class="text-muted mb-1" style="font-size: 0.7rem;"><i class="bi bi-person me-1"></i> ${esc(h.usuario || 'SISTEMA')}</div>
@@ -166,6 +171,7 @@
             <div class="border rounded-3 bg-white p-3" style="max-height: 320px; overflow-y: auto;">
                 <div class="position-relative">${timeline}</div>
             </div>
+            ${panel.dataset.nota ? `<div class="text-muted mt-2" style="font-size: 0.7rem;"><i class="bi bi-info-circle me-1"></i>${esc(panel.dataset.nota)}</div>` : ''}
             ${bloqueInventario}`;
     }
 
