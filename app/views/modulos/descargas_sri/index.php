@@ -36,6 +36,11 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-semibold text-muted" id="tab-pdf-btn" data-bs-toggle="tab" data-bs-target="#tab-pdf" type="button" role="tab" aria-controls="tab-pdf" aria-selected="false">
+                        <i class="bi bi-file-earmark-pdf me-1"></i> Desde PDF
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link fw-semibold text-muted" id="tab-ignorados-btn" data-bs-toggle="tab" data-bs-target="#tab-ignorados" type="button" role="tab" aria-controls="tab-ignorados" aria-selected="false" onclick="listarDocumentosIgnorados()">
                         <i class="bi bi-slash-circle me-1"></i> Documentos para no descargar
                     </button>
@@ -118,6 +123,73 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                 <h6 class="fw-bold"><i class="bi bi-info-circle me-1"></i>Instrucciones</h6>
                                 <p class="mb-1">1. Si ya tiene descargados los archivos XML físicos en su computadora, utilice esta opción.</p>
                                 <p class="mb-1">2. Al seleccionar la carpeta, el sistema cargará y validará todos los comprobantes masivamente.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab: Desde PDF (RIDE). El PDF se lee con IA, el usuario revisa y aprueba,
+                     y recién entonces se registra (DescargaPdfService). No consulta al SRI. -->
+                <div class="tab-pane fade" id="tab-pdf" role="tabpanel" aria-labelledby="tab-pdf-btn">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="d-flex flex-wrap align-items-start gap-2">
+                                <div style="width:230px">
+                                    <label class="form-label fw-bold small text-muted d-block" for="pdf_tipo_documento">Tipo de documento</label>
+                                    <select id="pdf_tipo_documento" class="form-select form-select-sm shadow-none">
+                                        <option value="">Detectar automáticamente</option>
+                                        <?php foreach (\App\Helpers\ComprobantePdf::TIPOS as $codTipoPdf => $nomTipoPdf): ?>
+                                            <option value="<?= $codTipoPdf ?>"><?= htmlspecialchars($nomTipoPdf) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                                <div style="width:330px">
+                                    <label class="form-label fw-bold small text-muted d-block" for="archivos_pdf_input">Archivos PDF</label>
+                                    <input type="file" class="form-control form-control-sm shadow-none" id="archivos_pdf_input" accept="application/pdf,.pdf" multiple>
+                                </div>
+                            </div>
+                            <div class="form-text">Puede elegir varios PDF (hasta 10, de 5 MB cada uno). Cada uno se revisa y se aprueba por separado.</div>
+
+                            <button type="button" class="btn btn-primary btn-sm mt-3 shadow-sm px-4" id="btnLeerPdf" onclick="leerArchivosPdf()">
+                                <i class="bi bi-search me-1"></i> Leer PDF
+                            </button>
+                            <?php if (!empty($empresasIa)): ?>
+                                <!-- Solo superadministrador (nivel 3): leer con la cuenta de IA de otra
+                                     empresa. El endpoint revalida el nivel; aquí solo se pinta el botón. -->
+                                <button type="button" class="btn btn-outline-secondary btn-sm mt-3 ms-1" id="btnIaOtraEmpresa" onclick="elegirIaOtraEmpresa()" title="Leer con la cuenta de IA de otra empresa (solo superadministrador)">
+                                    <i class="bi bi-robot me-1"></i> Usar IA de otra empresa
+                                </button>
+                                <div class="small mt-2 d-none" id="pdf_ia_prestada">
+                                    <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">
+                                        <i class="bi bi-robot me-1"></i>Leyendo con la IA de: <strong id="pdf_ia_prestada_nombre"></strong>
+                                    </span>
+                                    <a href="#" class="ms-1 text-danger" onclick="quitarIaOtraEmpresa();return false;" title="Volver a la IA de esta empresa"><i class="bi bi-x-circle"></i></a>
+                                    <div class="text-muted mt-1">El consumo se carga a la cuenta de IA de esa empresa. El comprobante se registra en la empresa actual.</div>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="table-responsive mt-3 d-none" id="pdf_cola_wrap">
+                                <table class="table table-sm align-middle mb-0" style="font-size:0.8rem;">
+                                    <thead class="bg-light">
+                                        <tr>
+                                            <th class="ps-2">Archivo</th>
+                                            <th>Documento</th>
+                                            <th class="text-center">Estado</th>
+                                            <th class="text-end pe-2"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="pdf_cola_tbody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="col-md-6 border-start">
+                            <div class="p-3 bg-light rounded text-muted small">
+                                <h6 class="fw-bold"><i class="bi bi-info-circle me-1"></i>Instrucciones</h6>
+                                <p class="mb-1">1. Use esta opción cuando solo tiene el <strong>PDF</strong> del comprobante (RIDE) y no su XML.</p>
+                                <p class="mb-1">2. El sistema lee los datos del PDF con inteligencia artificial y se los muestra para que los <strong>revise y corrija</strong>.</p>
+                                <p class="mb-1">3. Cuando usted aprueba, el comprobante se registra igual que uno descargado del SRI. Antes se comprueba que <strong>no exista ya</strong> en el sistema.</p>
+                                <p class="mb-1">4. Sirve para facturas, liquidaciones de compra, notas de crédito, notas de débito y comprobantes de retención.</p>
+                                <p class="mb-0"><i class="bi bi-exclamation-triangle me-1"></i>Si tiene el XML, prefiera <em>Carga Masiva XML</em>: el XML es el documento firmado; el PDF es solo su impresión. Requiere tener configurada la IA de la empresa (Anthropic) en <em>IA Soporte → Configuración</em>.</p>
                             </div>
                         </div>
                     </div>
@@ -521,4 +593,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 })();
 </script>
 
+<?php include __DIR__ . '/modal_pdf.php'; ?>
+
 <script src="<?= BASE_URL ?>/js/modulos/descargas_sri.js?v=<?= asset_ver('/js/modulos/descargas_sri.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/modulos/descargas_sri_pdf.js?v=<?= asset_ver('/js/modulos/descargas_sri_pdf.js') ?>"></script>

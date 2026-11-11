@@ -1,11 +1,11 @@
 ---
 titulo: Personalizar un reporte para toda la empresa
-resumen: El administrador elige qué columnas muestra un reporte en pantalla, Excel y PDF, y si el PDF sale vertical u horizontal. Aplica a todos los usuarios de la empresa. Disponible en Reporte de Ventas, Reporte de Compras, Cuentas por Cobrar y Cuentas por Pagar.
+resumen: El administrador elige qué columnas muestra un reporte en pantalla, Excel y PDF, y si el PDF sale vertical u horizontal. Aplica a todos los usuarios de la empresa. Disponible en Reporte de Ventas, Reporte de Compras, Cuentas por Cobrar, Cuentas por Pagar y Reporte de Cartera.
 categoria: Reportes
 tipo: guia
 visibilidad: todos
-etiquetas: personalizar reporte, personalizar, columnas del reporte, ocultar columnas, mostrar columnas, quitar columna, no quiero ver una columna, columnas del pdf, columnas del excel, orientación del pdf, pdf horizontal, pdf vertical, hoja horizontal, hoja vertical, apaisado, retrato, configurar reporte, reporte por empresa, botón personalizar, no veo el botón personalizar, restablecer reporte, solo administradores, nivel 2, nivel 3, reporte de compras, reporte de ventas, cuentas por cobrar, cuentas por pagar, cartera, agregar columna, columna ruc, columna vendedor, raya, columna no disponible
-version: 1.2
+etiquetas: personalizar reporte, personalizar, columnas del reporte, ocultar columnas, mostrar columnas, quitar columna, no quiero ver una columna, columnas del pdf, columnas del excel, orientación del pdf, pdf horizontal, pdf vertical, hoja horizontal, hoja vertical, apaisado, retrato, configurar reporte, reporte por empresa, botón personalizar, no veo el botón personalizar, restablecer reporte, solo administradores, nivel 2, nivel 3, reporte de compras, reporte de ventas, cuentas por cobrar, cuentas por pagar, cartera, agregar columna, columna ruc, columna vendedor, raya, columna no disponible, reporte de cartera, estado de cuenta
+version: 1.3
 orden: 37
 estado: activo
 ---
@@ -33,6 +33,7 @@ tal como lo dejó el administrador.
 | Cuentas por Cobrar | Sí | La vista Detallado |
 | Cuentas por Pagar | Sí | La vista Detallado |
 | Reporte de Ventas | Sí | Todas sus agrupaciones; se eligen las columnas a ocultar |
+| Reporte de Cartera | Sí | El estado de cuenta de cada cliente o proveedor (también lo que se envía por correo) |
 
 En Cuentas por Cobrar y Cuentas por Pagar las vistas *Por cliente / Por
 proveedor*, *Por producto* y *Por antigüedad* tienen una estructura propia y no
@@ -48,8 +49,9 @@ se personalizan.
 3. Marque o desmarque las columnas. Hay una casilla por cada medio:
    - En el **Reporte de Compras**: **Pantalla y Excel** (la tabla y el Excel
      llevan las mismas columnas) y **PDF**.
-   - En **Cuentas por Cobrar**, **Cuentas por Pagar** y el **Reporte de
-     Ventas**: **Pantalla**, **Excel** y **PDF**, cada uno por separado.
+   - En **Cuentas por Cobrar**, **Cuentas por Pagar**, el **Reporte de
+     Ventas** y el **Reporte de Cartera**: **Pantalla**, **Excel** y **PDF**,
+     cada uno por separado.
 4. Elija la **Orientación del PDF**.
 5. Pulse **Guardar**. Si ya había generado el reporte, la tabla se actualiza
    sola con las columnas nuevas.
@@ -73,6 +75,10 @@ elige cuáles ocultar. Una **raya (—)** en lugar de la casilla significa que e
 columna no existe en ese formato (por ejemplo, la *Clave de acceso* solo va en
 el Excel). Las columnas que dependen de los datos —los meses, las categorías,
 *Motivo* y *Estab.*— no aparecen en la ventana y siempre se muestran.
+
+En el **Reporte de Cartera** las siete columnas del estado de cuenta existen en
+los tres formatos. Si se oculta *Saldo*, el saldo anterior se escribe junto a su
+etiqueta en la primera fila.
 
 Las columnas con **candado** identifican la fila (por ejemplo el número de
 documento o el nombre del proveedor) y siempre se muestran.
@@ -117,6 +123,7 @@ confirmación antes de hacerlo.
 
 ## Historial de cambios
 
+- **1.3** (11-11-2026) — Disponible en el **Reporte de Cartera** (estado de cuenta por cliente o proveedor).
 - **1.2** (10-11-2026) — Disponible en el **Reporte de Ventas** (todas sus agrupaciones).
 - **1.1** (10-11-2026) — Disponible en **Cuentas por Cobrar** y **Cuentas por Pagar** (vista Detallado), con columnas elegibles por separado para pantalla, Excel y PDF.
 - **1.0** (10-11-2026) — Versión inicial, disponible en el Reporte de Compras.

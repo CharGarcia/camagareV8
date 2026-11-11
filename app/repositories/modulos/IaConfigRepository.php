@@ -27,6 +27,34 @@ class IaConfigRepository extends BaseRepository
     }
 
     /**
+     * Empresas activas que tienen IA configurada con un proveedor dado.
+     *
+     * Listado GLOBAL a propósito (cruza empresas): solo debe usarse para el
+     * superadministrador (nivel 3), que es quien puede prestar la IA de una
+     * empresa a otra. Nunca devuelve la clave.
+     *
+     * @return list<array{id_empresa:int, nombre:string, ruc:string}>
+     */
+    public function listarEmpresasConIa(string $proveedor = 'anthropic'): array
+    {
+        $st = $this->db->prepare(
+            "SELECT e.id AS id_empresa, COALESCE(NULLIF(TRIM(e.nombre_comercial), ''), e.nombre) AS nombre, e.ruc
+               FROM {$this->table} c
+               JOIN empresas e ON e.id = c.id_empresa AND e.eliminado = false AND e.estado = '1'
+              WHERE c.eliminado = false
+                AND c.proveedor = :proveedor
+                AND COALESCE(c.api_key_cifrada, '') <> ''
+              ORDER BY 2"
+        );
+        $st->execute([':proveedor' => $proveedor]);
+        return array_map(static fn(array $f): array => [
+            'id_empresa' => (int) $f['id_empresa'],
+            'nombre'     => (string) $f['nombre'],
+            'ruc'        => (string) $f['ruc'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
      * Crea o reemplaza la configuración de la empresa (1 fila por empresa).
      */
     public function upsert(int $idEmpresa, array $data, int $idUsuario): int

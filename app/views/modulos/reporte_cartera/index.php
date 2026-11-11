@@ -14,8 +14,10 @@
 
     <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
     <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
-        <div class="card-header bg-white border-bottom py-2 px-3">
+        <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center gap-2">
             <h5 class="mb-0 fw-bold"><i class="bi bi-wallet2 me-2 text-primary"></i>Reporte de Cartera</h5>
+            <?php // Botón «Personalizar» (columnas y orientación del PDF, por empresa): solo niveles 2 y 3. ?>
+            <?= \App\Helpers\ColumnasReporte::boton($rutaModulo) ?>
         </div>
         <div class="card-body p-3">
             <form id="form-filtros-reporte" onsubmit="event.preventDefault(); window.RC_generarReporte();">
@@ -189,6 +191,9 @@
         </div>
     </div>
 </div>
+
+<?php // Ventana «Personalizar reporte» (solo administradores; sale vacía para el resto).
+echo \App\Helpers\ColumnasReporte::modal($rutaModulo); ?>
 
 <script>
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";

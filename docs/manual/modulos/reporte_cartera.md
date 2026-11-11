@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_cartera
 tipo: modulo
 visibilidad: todos
-etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen
-version: 1.12
+etiquetas: cartera, estado de cuenta, filtro por documento, numero de factura, kardex de cliente, kardex de proveedor, saldo, cuentas por cobrar, cuentas por pagar, historial de pagos, historial de cobros, deuda, adeudado, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, acceso total, permiso de ver todos, registros propios, solo mis clientes, solo mis documentos, no veo un cliente, no aparece el proveedor en el buscador, imprimir, impresora, pdf cortado, columnas cortadas en el pdf, no sale el saldo en el pdf, falta el abono en el pdf, pdf se sale de la hoja, numero de documento montado, documento se pasa a la otra columna, recibos en borrador, no salen los recibos, recibos no aparecen, personalizar reporte, ocultar columnas, columnas del estado de cuenta, pdf horizontal, logo en el pdf, pdf con logo, estado de cuenta con logo
+version: 1.13
 orden: 0
 estado: activo
 ---
@@ -47,11 +47,12 @@ qué quedó su saldo.
    el filtro de una vez.
 5. Hacer clic en **Generar**. Aparece una tarjeta por cada entidad
    incluida, con su tabla de movimientos y saldo final.
-6. En el **encabezado de cada tarjeta**, antes del nombre, están los botones
+6. En el **encabezado de cada tarjeta**, a la derecha, están los botones
    **PDF**, **Excel** y **Correo** de ese cliente o proveedor: exportan o
    envían el estado de cuenta de **esa entidad** con el período y el
    documento filtrados. El modal de correo precarga el email registrado en
    su ficha (se puede cambiar o agregar varios separados por coma).
+   Van junto al saldo, con el mismo diseño que en los demás reportes.
 
 ## Campos del formulario
 
@@ -63,6 +64,43 @@ qué quedó su saldo.
 | Mes / Año | No | Atajo que llena Fecha Desde/Hasta con el mes o año elegido. |
 | Fecha Desde / Fecha Hasta | No | Rango del estado de cuenta. Vacío en ambos = todo el historial. Si se llena Fecha Desde, el saldo antes de esa fecha se muestra como "Saldo Anterior". |
 | Documento | No | Número de un documento del cliente/proveedor seleccionado (o de cualquiera, si está marcado "Todos"). Limita el estado de cuenta a ese documento y a los abonos que lo cancelan. El número se compara normalizado: `001-001-13`, `001001000000013` y `001-001-000000013` son el mismo documento. |
+
+## Personalizar las columnas del estado de cuenta
+
+Un administrador (niveles 2 y 3) puede decidir, para **toda la empresa**, qué
+columnas lleva el estado de cuenta en **pantalla**, en el **Excel** y en el
+**PDF**, y si el PDF sale vertical u horizontal. Se hace con el botón
+**Personalizar**, arriba a la derecha de la tarjeta de filtros; los usuarios de
+nivel 1 no ven el botón y reciben el reporte tal como lo dejó el administrador.
+
+- Columnas disponibles: **Fecha**, **Tipo**, **Documento**, **Detalle**,
+  **Deuda Generada**, **Abono** y **Saldo**. *Documento* identifica la fila y
+  no se puede ocultar.
+- Cada medio se elige por separado: por ejemplo, todo en pantalla y el PDF sin
+  la columna *Tipo*.
+- Al ocultar un importe, su total deja de salir en la fila **TOTALES**. Si se
+  oculta **Saldo**, el saldo anterior se muestra junto a su etiqueta
+  (*Saldo Anterior: 150.00*). El saldo final sigue visible en el encabezado de
+  la tarjeta y en los indicadores del PDF.
+- Lo que se envía **por correo** (PDF y Excel adjuntos) usa la misma
+  configuración.
+- Sin personalizar, el reporte muestra las siete columnas y el PDF sale
+  vertical, como siempre.
+
+Detalle del botón en la guía [Personalizar un reporte para toda la
+empresa](../guias/personalizar-reportes.md).
+
+## Cómo sale el PDF
+
+El PDF del estado de cuenta tiene el mismo formato que los demás reportes del
+sistema: encabezado con el **logo** de la empresa, su nombre, el título
+*Estado de Cuenta* y el nombre del cliente o proveedor; un recuadro con la
+identificación, el período y el documento filtrado; una banda con **Saldo
+Anterior**, **Deuda Generada**, **Abonos** y **Saldo**; el listado de
+movimientos y la fila de totales. Cada cliente o proveedor empieza en hoja
+nueva y las hojas van numeradas al pie. El logo es el del establecimiento (o,
+si no tiene, el del primer punto de emisión que tenga uno); sin logo cargado el
+encabezado sale centrado.
 
 ## Permisos
 
@@ -190,6 +228,7 @@ que los tres deben coincidir.
 
 ## Historial de cambios
 
+- **1.13** — Botón **Personalizar** (administradores): la empresa elige qué columnas del estado de cuenta se ven en pantalla, Excel y PDF y la orientación del PDF; aplica también a lo que se envía por correo. El **PDF** adopta el formato común de los reportes: logo de la empresa, recuadro de datos, banda de indicadores y totales. Los botones **PDF / Excel / Correo** de cada estado de cuenta pasan a la derecha del encabezado, con texto e ícono como en los demás reportes. Sin personalizar, las columnas son las de siempre.
 - **1.12** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.11** — **Corrección: los Recibos de Venta no entraban como deuda generada**
   (se descartaban los recibos en *borrador*, que es el estado normal de un recibo

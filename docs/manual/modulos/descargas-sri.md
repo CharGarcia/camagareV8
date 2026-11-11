@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
-etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional
-version: 1.15
+etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional, pdf, ride, leer pdf, cargar pdf, registrar desde pdf, comprobante sin xml, inteligencia artificial
+version: 1.16
 orden: 50
 estado: activo
 ---
@@ -38,6 +38,97 @@ puede generar entrada de inventario.
 
 Recuerde que las líneas traen los **códigos del proveedor**: para que la
 mercadería entre al inventario hay que vincularlas con productos de su catálogo.
+
+## Registrar un comprobante desde su PDF
+
+La pestaña **Desde PDF** sirve cuando solo tiene el **PDF** del comprobante (el
+RIDE) y no su archivo XML. El sistema lee los datos del PDF, usted los revisa y
+recién entonces se registra. **No se consulta al SRI**: la fuente es el PDF.
+
+Si tiene el XML, use *Carga Masiva XML*: el XML es el documento firmado por el
+emisor; el PDF es solo su impresión.
+
+### Requisito
+
+La lectura se hace con inteligencia artificial y usa la cuenta de IA de la
+propia empresa: debe estar configurado **Anthropic (Claude)** con su clave en
+*IA Soporte → Configuración*. Sin eso la pestaña avisa y no lee nada. Cada PDF
+leído consume de esa cuenta (centavos por documento) y el archivo se envía a ese
+proveedor para leerlo.
+
+### Usar la IA de otra empresa (solo superadministrador)
+
+No todas las empresas tienen IA configurada. Un usuario de **nivel 3** ve, junto
+a *Leer PDF*, el botón **Usar IA de otra empresa**: abre la lista de empresas
+que sí tienen Anthropic configurado y, al elegir una, los PDF se leen con la
+cuenta de esa empresa.
+
+- Solo cambia **con qué cuenta se lee** el PDF. El comprobante se registra
+  siempre en la empresa en la que está trabajando.
+- El **consumo se carga a la empresa que presta** su IA. Cada lectura queda en
+  el log del sistema de las dos empresas: en la que leyó (*Leer PDF IA*, con la
+  empresa que prestó) y en la que prestó (*Prestar IA lectura PDF*, con la
+  empresa que la usó), con tokens y costo estimado.
+- La elección vale mientras la pantalla esté abierta; al recargar vuelve a la IA
+  de la empresa actual. La **x** junto al aviso la quita.
+- Los niveles 1 y 2 no ven el botón y el sistema ignora la opción si no es un
+  superadministrador quien la pide.
+- El botón no aparece si ninguna otra empresa tiene IA configurada.
+
+### Cómo se usa
+
+1. Elija el **Tipo de documento** (o *Detectar automáticamente*): factura,
+   liquidación de compra, nota de crédito, nota de débito o comprobante de
+   retención.
+2. Elija uno o varios PDF (hasta 10, de 5 MB cada uno) y pulse **Leer PDF**.
+   Sirven también los PDF escaneados.
+3. Cada archivo queda *Por revisar*. Pulse **Revisar**: se abre una ventana con
+   todo lo leído. El botón rojo de arriba abre el PDF para compararlo.
+4. Corrija lo que haga falta. Puede cambiar cualquier dato, y agregar o quitar
+   líneas del detalle, tarifas de IVA, formas de pago y retenciones.
+   **Verificar datos** vuelve a comprobar todo sin registrar.
+5. Pulse **Aprobar y registrar**. El comprobante aparece en *Resultados del
+   Procesamiento*, igual que los demás.
+
+### Qué comprueba el sistema
+
+- **Que no exista ya**: antes de registrar busca el comprobante por su clave de
+  acceso y por su número (emisor + serie + secuencial), así que también detecta
+  los que se digitaron a mano. Si existe, lo avisa al abrir la revisión y no lo
+  registra otra vez.
+- **La clave de acceso**: debe tener 49 dígitos y superar su dígito verificador.
+  Como la clave lleva dentro el tipo, la fecha, el RUC del emisor y el número,
+  esos datos se toman de ella y deben coincidir con el formulario.
+- **Que el comprobante sea de la empresa**: su RUC debe ser el del emisor o el
+  del comprador / proveedor / sujeto retenido.
+- **Las sumas**: líneas contra subtotal, IVA de cada tarifa, total y formas de
+  pago. Si algo no cuadra aparece como *diferencia*: puede corregirlo o
+  registrar igual después de confirmarlo.
+
+### Cómo queda registrado
+
+Igual que un comprobante descargado del SRI, con las mismas reglas: documentos
+ignorados, periodo contable cerrado, retención y egreso automáticos y aprobación
+de compras. Queda en el estado que el sistema usa para cada documento: las
+compras como *registradas* (o *pendientes de aprobación* si la empresa lo
+exige) y las ventas, liquidaciones, notas y retenciones emitidas como
+*autorizadas*, con el número y la fecha de autorización que trae el PDF.
+
+El XML que se guarda con el documento **lo arma el sistema** con los datos que
+usted aprobó; no es el XML firmado del emisor y lleva una nota que lo indica.
+El PDF original se conserva como respaldo y el registro queda en el log del
+sistema (*Registrar desde PDF*), con las diferencias que se hayan aceptado.
+
+### Límites
+
+- **Código de retención**: el PDF casi nunca lo imprime. El sistema propone los
+  códigos del catálogo con ese impuesto y porcentaje; si hay uno solo lo pone, y
+  si hay varios debe elegirlo usted (es obligatorio).
+- **ICE e IRBPNR**: un comprobante con esos impuestos no se puede registrar
+  desde el PDF, porque el impreso no trae su código. Cárguelo con su XML.
+- **Reembolsos y rubros de terceros** (facturas de reembolso, planillas con
+  tasas incluidas): no se leen desde el PDF; use el XML.
+- **Guías de remisión**: no se registran, igual que en el resto del módulo.
 
 ## Documentos que le emiten otras empresas del sistema
 
@@ -80,7 +171,7 @@ comprobantes se siguen pudiendo bajar del SRI como cualquier otro.
 | Permiso | Qué habilita |
 |---|---|
 | Ver | Abrir el módulo, ver la configuración, el historial y los documentos ignorados |
-| Crear | Descargar y registrar comprobantes, procesar claves, TXT y XML, e ignorar documentos |
+| Crear | Descargar y registrar comprobantes, procesar claves, TXT, XML y PDF, e ignorar documentos |
 | Modificar | Guardar la configuración de descarga |
 | Eliminar | Quitar documentos de la lista de ignorados |
 
@@ -103,6 +194,18 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 - **No descarga nada**: revise las credenciales del SRI de la empresa y el rango
   de fechas.
+- **Desde PDF: "configure Anthropic (Claude) con su API key"**: la empresa no
+  tiene configurada la IA. Hágalo en *IA Soporte → Configuración*, o pida a un
+  superadministrador que lea el PDF con la IA de otra empresa.
+- **Desde PDF: "El archivo no parece un comprobante electrónico del SRI"**: el
+  PDF es otro tipo de documento (una proforma, un estado de cuenta) o está
+  ilegible. Regístrelo a mano o con su XML.
+- **Desde PDF: "La clave de acceso no supera el dígito verificador"**: la clave
+  se leyó con algún dígito cambiado. Corríjala en la ventana comparándola con la
+  que está bajo el código de barras del PDF.
+- **Desde PDF: "El comprobante no pertenece a la empresa"**: el RUC de la
+  empresa activa no es el del emisor ni el del receptor del PDF. Revise que
+  esté en la empresa correcta.
 - **La extensión avisa "el RUC o la clave del SRI son incorrectos" aunque en el
   sistema están bien**: pasaba cuando el navegador tenía **guardados el RUC y la
   clave de otra empresa** y los dejaba puestos en la pantalla de ingreso del SRI;
@@ -218,6 +321,14 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.16** — Nueva pestaña **Desde PDF**: lee con inteligencia artificial el PDF
+  (RIDE) de una factura, liquidación de compra, nota de crédito, nota de débito
+  o comprobante de retención; el usuario revisa y corrige los datos y, al
+  aprobar, se registra como un comprobante descargado. Comprueba antes que no
+  exista ya en el sistema. No consulta al SRI. Requiere la IA de la empresa
+  configurada. Ver *Registrar un comprobante desde su PDF*. El
+  superadministrador (nivel 3) puede leer con la IA de otra empresa que sí la
+  tenga, con el botón **Usar IA de otra empresa**.
 - **1.15** — **Documentos de empresas del sistema** pasa a su propia **pestaña**,
   después de *Documentos para no descargar*, con la explicación de qué documentos
   entran solos, sus reglas y dónde se ven (antes era una tarjeta de Descarga Automática).

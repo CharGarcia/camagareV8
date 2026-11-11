@@ -174,6 +174,8 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
 
     /** Tope de imágenes por llamada (cada una suma tokens de entrada). */
     public const MAX_IMAGENES = 10;
+    /** Tope de documentos PDF por llamada. */
+    public const MAX_DOCUMENTOS = 3;
     private const MIME_IMAGEN = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
 
     public function generarJson(string $promptSistema, string $instruccion, array $imagenes, array $esquema, array $opciones): array
@@ -195,6 +197,19 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
             $contenido[] = ['type' => 'image', 'source' => ['type' => 'base64', 'mediaType' => $mime,
                 'data' => base64_encode((string) file_get_contents((string) $img['ruta']))]];
         }
+        // Documentos PDF (opción 'documentos': lista de {ruta, etiqueta}). Los lee el modelo
+        // tal cual, con texto e imagen de cada página (sirve también para PDF escaneados).
+        foreach (array_slice((array) ($opciones['documentos'] ?? []), 0, self::MAX_DOCUMENTOS) as $doc) {
+            $ruta = (string) ($doc['ruta'] ?? '');
+            if (!is_file($ruta)) {
+                continue;
+            }
+            if (trim((string) ($doc['etiqueta'] ?? '')) !== '') {
+                $contenido[] = ['type' => 'text', 'text' => (string) $doc['etiqueta']];
+            }
+            $contenido[] = ['type' => 'document', 'source' => ['type' => 'base64', 'mediaType' => 'application/pdf',
+                'data' => base64_encode((string) file_get_contents($ruta))]];
+        }
         $contenido[] = ['type' => 'text', 'text' => $instruccion];
 
         $p = [
@@ -203,7 +218,10 @@ class AnthropicProvider implements IaProviderInterface, IaProviderHerramientasIn
             'system'    => [['type' => 'text', 'text' => $promptSistema, 'cacheControl' => ['type' => 'ephemeral']]],
             'messages'  => [['role' => 'user', 'content' => $contenido]],
             'outputConfig' => ['format' => ['type' => 'json_schema', 'schema' => $esquema]],
-            'requestOptions' => ['timeout' => self::TIMEOUT_SEG, 'maxRetries' => 2],
+            'requestOptions' => [
+                'timeout'    => max(10.0, min(180.0, (float) ($opciones['timeout'] ?? self::TIMEOUT_SEG))),
+                'maxRetries' => 2,
+            ],
         ];
         $esfuerzo = $opciones['esfuerzo'] ?? null;
         if (is_string($esfuerzo) && in_array($esfuerzo, self::ESFUERZOS, true) && self::admiteEsfuerzo($modelo)) {

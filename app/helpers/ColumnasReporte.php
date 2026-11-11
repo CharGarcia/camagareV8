@@ -262,6 +262,27 @@ final class ColumnasReporte
                 ],
             ],
         ],
+        // Reporte de Cartera: el estado de cuenta de cada cliente/proveedor. Una sola vista;
+        // pantalla, Excel y PDF llevan las mismas siete columnas y la empresa decide cuáles
+        // ocultar en cada medio. `suma` es la clave del total en el ledger (fila TOTALES).
+        'modulos/reporte_cartera' => [
+            'titulo' => 'Reporte de Cartera',
+            'icono'  => 'bi-wallet2',
+            'vistas' => [
+                'ESTADO' => [
+                    'titulo' => 'Estado de cuenta', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'fecha'     => ['titulo' => 'Fecha', 'alinear' => 'centro', 'ancho' => 10],
+                        'tipo'      => ['titulo' => 'Tipo', 'alinear' => 'centro', 'ancho' => 9],
+                        'documento' => ['titulo' => 'Documento', 'ancho' => 17, 'fija' => true],
+                        'detalle'   => ['titulo' => 'Detalle', 'ancho' => 28],
+                        'deuda'     => ['titulo' => 'Deuda Generada', 'alinear' => 'der', 'ancho' => 12, 'suma' => 'total_cargos'],
+                        'abono'     => ['titulo' => 'Abono', 'alinear' => 'der', 'ancho' => 12, 'suma' => 'total_abonos'],
+                        'saldo'     => ['titulo' => 'Saldo', 'alinear' => 'der', 'ancho' => 12, 'suma' => 'saldo_final'],
+                    ],
+                ],
+            ],
+        ],
         'modulos/cuentas_por_pagar' => [
             'titulo' => 'Cuentas por Pagar',
             'icono'  => 'bi-credit-card',

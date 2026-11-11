@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\controllers\modulos;
 
 use App\Services\SriService;
+use App\Services\modulos\DescargaPdfService;
 use App\Services\modulos\DocumentoAutomatedRegisterService;
 use App\Services\modulos\DocumentoEntreEmpresasService;
 use App\Services\modulos\SriDescargaAutomaticaService;
@@ -48,6 +49,9 @@ class DescargasSriController extends BaseModuloController
             // La tarjeta de la contraseña del portal SRI solo se pinta para nivel 2 y 3
             // (ver puedeAdministrarCredenciales); el endpoint que la guarda lo revalida.
             'puedeCredenciales' => $this->puedeAdministrarCredenciales(),
+            // Pestaña «Desde PDF»: empresas cuya IA puede usar el superadministrador
+            // (lista vacía para los demás niveles, así el botón no se pinta).
+            'empresasIa' => $this->empresasIaPrestables(),
             // 'perm' => $this->getPermisos('descargas_sri')
         ]);
     }
@@ -347,6 +351,120 @@ class DescargasSriController extends BaseModuloController
         echo json_encode(['ok' => true, 'resultados' => $resultados, 'total' => $total]);
         exit;
     }
+    // ── Desde PDF (RIDE): leer con IA → revisar → registrar ─────────────────
+
+    /** Nivel 3: el único que puede leer un PDF con la IA de otra empresa. */
+    private function esSuperAdmin(): bool
+    {
+        return (int) ($_SESSION['nivel'] ?? 1) === 3;
+    }
+
+    /**
+     * Empresas que pueden prestar su IA, para el botón «Usar IA de otra empresa».
+     * Vacío para todo usuario que no sea superadministrador.
+     */
+    private function empresasIaPrestables(): array
+    {
+        if (!$this->esSuperAdmin()) {
+            return [];
+        }
+        try {
+            $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+            return array_values(array_filter(
+                (new DescargaPdfService())->empresasConIa(),
+                static fn(array $e): bool => $e['id_empresa'] !== $idEmpresa
+            ));
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return [];
+        }
+    }
+
+    /**
+     * Paso 1: lee un PDF y devuelve la propuesta de datos para la pantalla de
+     * revisión. No registra nada.
+     */
+    public function leerPdfSriAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $archivo = $_FILES['archivo_pdf'] ?? null;
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !$archivo || ($archivo['error'] ?? 1) !== UPLOAD_ERR_OK) {
+            echo json_encode(['ok' => false, 'error' => 'No se pudo subir el PDF (revise que pese menos de 5 MB).']);
+            return;
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        // Usar la IA de otra empresa: solo el superadministrador. De cualquier otro
+        // usuario el parámetro se ignora y se usa la IA de la empresa activa.
+        $idEmpresaIa = $this->esSuperAdmin() ? ((int) ($_POST['id_empresa_ia'] ?? 0) ?: null) : null;
+        // La lectura con IA tarda: se suelta el candado de la sesión para no frenar
+        // las demás peticiones del usuario.
+        session_write_close();
+        @set_time_limit(240);
+
+        try {
+            $r = (new DescargaPdfService())->leer(
+                (string) $archivo['tmp_name'],
+                (string) ($archivo['name'] ?? 'comprobante.pdf'),
+                (string) ($_POST['tipo'] ?? ''),
+                $idEmpresa,
+                $idUsuario,
+                $idEmpresaIa
+            );
+            echo json_encode(['ok' => true] + $r);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo leer el PDF. Intente de nuevo o cárguelo con su XML.']);
+        }
+        exit;
+    }
+
+    /**
+     * Paso 2: registra el comprobante con los datos que el usuario revisó.
+     * Con `solo_revisar=1` únicamente revalida (refresca avisos y opciones).
+     */
+    public function registrarPdfSriAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $doc = json_decode((string) ($_POST['documento'] ?? ''), true);
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !is_array($doc)) {
+            echo json_encode(['ok' => false, 'errores' => ['No se recibieron los datos del comprobante.']]);
+            return;
+        }
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+        session_write_close();
+
+        try {
+            $service = new DescargaPdfService();
+            if (!empty($_POST['solo_revisar'])) {
+                echo json_encode(['ok' => true] + $service->revisar($doc, $idEmpresa));
+            } else {
+                echo json_encode($service->registrar(
+                    $doc,
+                    (string) ($_POST['token_pdf'] ?? ''),
+                    !empty($_POST['confirmar_avisos']),
+                    $idEmpresa,
+                    $idUsuario
+                ));
+            }
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'errores' => [$e->getMessage()]]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'errores' => ['No se pudo registrar el comprobante: ' . $e->getMessage()]]);
+        }
+        exit;
+    }
+
     public function listarDocumentosIgnoradosAjax(): void
     {
         $this->requireLeer();

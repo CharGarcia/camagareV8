@@ -200,6 +200,44 @@ class ReporteCarteraController extends BaseModuloController
     }
 
     // ────────────────────────────────────────────────────────────────
+    // PERSONALIZACIÓN POR EMPRESA (botón «Personalizar»)
+    // Catálogo: App\Helpers\ColumnasReporte ('modulos/reporte_cartera', vista ESTADO).
+    // Pantalla, Excel y PDF se pintan recorriendo las columnas visibles de cada medio.
+    // ────────────────────────────────────────────────────────────────
+    private const VISTA = 'ESTADO';
+
+    /**
+     * Columnas visibles en cada medio ('pantalla', 'excel', 'pdf': clave => definición) y
+     * orientación del PDF ('horizontal'), según la personalización de la empresa.
+     */
+    private function columnasReporte(int $idEmpresa): array
+    {
+        return \App\Services\modulos\ReportePersonalizacionService::crear()
+            ->resolver($idEmpresa, self::RUTA_MODULO, self::VISTA);
+    }
+
+    /** Valor de cada columna de un movimiento, por clave del catálogo (importes: float o null). */
+    private function valoresMovimiento(array $m): array
+    {
+        $monto = (float) $m['monto'];
+        return [
+            'fecha'     => date('d-m-Y', strtotime((string) $m['fecha'])),
+            'tipo'      => ucfirst(strtolower(str_replace('_', ' ', (string) $m['origen']))),
+            'documento' => (string) ($m['numero_documento'] ?? ''),
+            'detalle'   => (string) ($m['detalle'] ?? ''),
+            'deuda'     => $m['tipo_movimiento'] === 'CARGO' ? $monto : null,
+            'abono'     => $m['tipo_movimiento'] === 'ABONO' ? $monto : null,
+            'saldo'     => (float) $m['saldo'],
+        ];
+    }
+
+    /** Claves de las columnas descriptivas (las que no son importes), en su orden. */
+    private static function clavesDescriptivas(array $columnas): array
+    {
+        return array_keys(array_filter($columnas, static fn (array $c): bool => $c['suma'] === null));
+    }
+
+    // ────────────────────────────────────────────────────────────────
     // CONSTRUCCIÓN DE LOS ESTADOS DE CUENTA (uno por entidad seleccionada)
     // ────────────────────────────────────────────────────────────────
     private function construirLedgers(int $idEmpresa, array $filtros): array
@@ -365,8 +403,9 @@ class ReporteCarteraController extends BaseModuloController
                     : 'No se encontraron datos para la selección actual.';
                 echo '<div class="text-center text-muted py-5"><i class="bi bi-inbox fs-3 d-block mb-2"></i>' . htmlspecialchars($mensaje) . '</div>';
             } else {
+                $columnas = $this->columnasReporte($idEmpresa)['pantalla'];
                 foreach ($ledgers as $ledger) {
-                    echo $this->renderSeccionScreen($ledger, $filtros['tipo'], $filtros['documento'] ?? '');
+                    echo $this->renderSeccionScreen($ledger, $filtros['tipo'], $filtros['documento'] ?? '', $columnas);
                 }
             }
             $html = (string) ob_get_clean();
@@ -379,7 +418,11 @@ class ReporteCarteraController extends BaseModuloController
         exit;
     }
 
-    private function renderSeccionScreen(array $ledger, string $tipo, string $documento = ''): string
+    /**
+     * Tarjeta del estado de cuenta de una entidad. `$columnas` son las visibles en pantalla
+     * (clave => definición del catálogo): se pinta una celda por clave.
+     */
+    private function renderSeccionScreen(array $ledger, string $tipo, string $documento, array $columnas): string
     {
         $e = $ledger['entidad'];
         $etiqueta = $this->etiquetaEntidad($tipo);
@@ -387,78 +430,87 @@ class ReporteCarteraController extends BaseModuloController
         $idEntidad = (int) ($e['id'] ?? 0);
         $emailEntidad = (string) ($e['email'] ?? '');
 
+        $nCols    = count($columnas);
+        $conSaldo = isset($columnas['saldo']);
+        // La etiqueta TOTALES ocupa las columnas descriptivas; los importes van al final.
+        $nLider   = count(self::clavesDescriptivas($columnas));
+        // Clases de las celdas de cada columna (las mismas de siempre).
+        $clases = [
+            'fecha' => 'small text-nowrap', 'tipo' => 'small', 'documento' => 'small', 'detalle' => 'small',
+            'deuda' => 'text-end small text-danger', 'abono' => 'text-end small text-success', 'saldo' => 'text-end small fw-bold',
+        ];
+
         ob_start();
         ?>
         <div class="card border-0 shadow-sm rounded-3 mb-3">
             <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <span class="fw-bold"><?= htmlspecialchars($e['nombre'] ?? '') ?></span>
+                    <small class="text-muted d-block">
+                        <?= htmlspecialchars($etiqueta) ?> · <?= htmlspecialchars($e['identificacion'] ?? '') ?>
+                        <?= $emailEntidad !== '' ? ' · ' . htmlspecialchars($emailEntidad) : '' ?>
+                        <?= $documento !== '' ? ' · <span class="badge bg-info bg-opacity-10 text-info border border-info">Documento: ' . htmlspecialchars($documento) . '</span>' : '' ?>
+                    </small>
+                </div>
                 <div class="d-flex align-items-center gap-2 flex-wrap">
-                    <!-- Acciones del estado de cuenta de ESTA entidad (PDF / Excel / Correo) -->
+                    <span class="badge <?= $deudor ? 'bg-danger' : 'bg-success' ?> bg-opacity-10 <?= $deudor ? 'text-danger' : 'text-success' ?> border <?= $deudor ? 'border-danger' : 'border-success' ?>">
+                        Saldo: $<?= number_format($ledger['saldo_final'], 2) ?>
+                    </span>
+                    <!-- Acciones del estado de cuenta de ESTA entidad, con el diseño de los demás reportes -->
                     <div class="btn-group btn-group-sm" role="group" aria-label="Acciones">
                         <button type="button" class="btn btn-outline-danger" onclick="window.RC_exportarPDF(<?= $idEntidad ?>)" title="Descargar PDF">
-                            <i class="bi bi-file-earmark-pdf"></i>
+                            <i class="bi bi-file-earmark-pdf"></i> PDF
                         </button>
                         <button type="button" class="btn btn-outline-success" onclick="window.RC_exportarExcel(<?= $idEntidad ?>)" title="Descargar Excel">
-                            <i class="bi bi-file-earmark-spreadsheet"></i>
+                            <i class="bi bi-file-earmark-spreadsheet"></i> Excel
                         </button>
                         <button type="button" class="btn btn-outline-primary" onclick="window.RC_abrirModalCorreo(<?= $idEntidad ?>, <?= htmlspecialchars(json_encode($emailEntidad), ENT_QUOTES) ?>)" title="Enviar por correo">
-                            <i class="bi bi-envelope"></i>
+                            <i class="bi bi-envelope"></i> Correo
                         </button>
                     </div>
-                    <div class="vr mx-1"></div>
-                    <div>
-                        <span class="fw-bold"><?= htmlspecialchars($e['nombre'] ?? '') ?></span>
-                        <small class="text-muted d-block">
-                            <?= htmlspecialchars($etiqueta) ?> · <?= htmlspecialchars($e['identificacion'] ?? '') ?>
-                            <?= $emailEntidad !== '' ? ' · ' . htmlspecialchars($emailEntidad) : '' ?>
-                            <?= $documento !== '' ? ' · <span class="badge bg-info bg-opacity-10 text-info border border-info">Documento: ' . htmlspecialchars($documento) . '</span>' : '' ?>
-                        </small>
-                    </div>
                 </div>
-                <span class="badge <?= $deudor ? 'bg-danger' : 'bg-success' ?> bg-opacity-10 <?= $deudor ? 'text-danger' : 'text-success' ?> border <?= $deudor ? 'border-danger' : 'border-success' ?>">
-                    Saldo: $<?= number_format($ledger['saldo_final'], 2) ?>
-                </span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0 align-middle">
                         <thead class="table-light">
                             <tr class="text-secondary small">
-                                <th>Fecha</th>
-                                <th>Tipo</th>
-                                <th>Documento</th>
-                                <th>Detalle</th>
-                                <th class="text-end">Deuda Generada</th>
-                                <th class="text-end">Abono</th>
-                                <th class="text-end">Saldo</th>
+                                <?php foreach ($columnas as $col): ?>
+                                    <th<?= $col['alinear'] === 'der' ? ' class="text-end"' : '' ?>><?= htmlspecialchars($col['titulo']) ?></th>
+                                <?php endforeach; ?>
                             </tr>
                         </thead>
                         <tbody>
                             <tr class="table-light">
-                                <td colspan="6" class="fw-bold small">Saldo Anterior</td>
-                                <td class="text-end fw-bold small"><?= number_format($ledger['saldo_anterior'], 2) ?></td>
+                                <?php if ($conSaldo): ?>
+                                    <td colspan="<?= $nCols - 1 ?>" class="fw-bold small">Saldo Anterior</td>
+                                    <td class="text-end fw-bold small"><?= number_format($ledger['saldo_anterior'], 2) ?></td>
+                                <?php else: // sin la columna Saldo, el saldo anterior va junto a su etiqueta ?>
+                                    <td colspan="<?= $nCols ?>" class="fw-bold small">Saldo Anterior: <?= number_format($ledger['saldo_anterior'], 2) ?></td>
+                                <?php endif; ?>
                             </tr>
                             <?php if (empty($ledger['movimientos'])): ?>
-                                <tr><td colspan="7" class="text-center text-muted py-3">Sin movimientos en el período seleccionado.</td></tr>
-                            <?php else: foreach ($ledger['movimientos'] as $m): ?>
+                                <tr><td colspan="<?= $nCols ?>" class="text-center text-muted py-3">Sin movimientos en el período seleccionado.</td></tr>
+                            <?php else: foreach ($ledger['movimientos'] as $m): $v = $this->valoresMovimiento($m); ?>
                                 <tr>
-                                    <td class="small text-nowrap"><?= date('d-m-Y', strtotime($m['fecha'])) ?></td>
-                                    <td class="small"><?= htmlspecialchars(ucfirst(strtolower(str_replace('_', ' ', $m['origen'])))) ?></td>
-                                    <td class="small"><?= htmlspecialchars($m['numero_documento'] ?? '') ?></td>
-                                    <td class="small"><?= htmlspecialchars($m['detalle'] ?? '') ?></td>
-                                    <td class="text-end small text-danger"><?= $m['tipo_movimiento'] === 'CARGO' ? number_format((float) $m['monto'], 2) : '' ?></td>
-                                    <td class="text-end small text-success"><?= $m['tipo_movimiento'] === 'ABONO' ? number_format((float) $m['monto'], 2) : '' ?></td>
-                                    <td class="text-end small fw-bold"><?= number_format((float) $m['saldo'], 2) ?></td>
+                                    <?php foreach ($columnas as $clave => $col): ?>
+                                        <td class="<?= $clases[$clave] ?? 'small' ?>"><?= $col['suma'] !== null
+                                            ? ($v[$clave] !== null ? number_format($v[$clave], 2) : '')
+                                            : htmlspecialchars((string) $v[$clave]) ?></td>
+                                    <?php endforeach; ?>
                                 </tr>
                             <?php endforeach; endif; ?>
                         </tbody>
+                        <?php if ($nLider < $nCols): // sin importes visibles no hay fila de totales ?>
                         <tfoot>
                             <tr class="table-secondary">
-                                <th colspan="4" class="text-end small">TOTALES:</th>
-                                <th class="text-end small text-danger"><?= number_format($ledger['total_cargos'], 2) ?></th>
-                                <th class="text-end small text-success"><?= number_format($ledger['total_abonos'], 2) ?></th>
-                                <th class="text-end small">$<?= number_format($ledger['saldo_final'], 2) ?></th>
+                                <th colspan="<?= $nLider ?>" class="text-end small">TOTALES:</th>
+                                <?php foreach ($columnas as $clave => $col): if ($col['suma'] === null) continue; ?>
+                                    <th class="<?= $clave === 'saldo' ? 'text-end small' : $clases[$clave] ?>"><?= $clave === 'saldo' ? '$' : '' ?><?= number_format((float) $ledger[$col['suma']], 2) ?></th>
+                                <?php endforeach; ?>
                             </tr>
                         </tfoot>
+                        <?php endif; ?>
                     </table>
                 </div>
             </div>
@@ -528,111 +580,190 @@ class ReporteCarteraController extends BaseModuloController
     // PDF / EXCEL / CORREO
     // ────────────────────────────────────────────────────────────────
     /**
-     * Escribe el PDF (descarga y correo): un estado de cuenta por cliente/proveedor, cada uno
-     * en hoja nueva, escrito por bloques (App\Helpers\PdfPorBloques): una fila por writeHTML,
-     * con la cabecera de columnas repetida en cada hoja. En un solo writeHTML el tiempo crece
-     * al cuadrado de los movimientos, y "Todos" con muchos clientes tardaba minutos.
+     * Arma el PDF (descarga y correo) con el formato común de los reportes
+     * (App\Helpers\ReportePdf: encabezado con el logo, caja de datos, banda de indicadores,
+     * listado y totales): un estado de cuenta por cliente/proveedor, cada uno en hoja nueva,
+     * escrito por bloques (App\Helpers\PdfPorBloques): una fila por writeHTML, con la
+     * cabecera de columnas repetida en cada hoja. En un solo writeHTML el tiempo crece al
+     * cuadrado de los movimientos, y "Todos" con muchos clientes tardaba minutos.
+     *
+     * Columnas y orientación: las que la empresa dejó para el PDF (botón «Personalizar»).
      */
-    private function escribirReportePdf(\Spipu\Html2Pdf\Html2Pdf $html2pdf, array $ledgers, string $nombreEmpresa, array $filtros): void
+    private function generarPdf(int $idEmpresa, array $ledgers, string $nombreEmpresa, array $filtros): \Spipu\Html2Pdf\Html2Pdf
     {
+        $autoload = MVC_ROOT . '/vendor/autoload.php';
+        if (file_exists($autoload)) require_once $autoload;
+
+        $cfg        = $this->columnasReporte($idEmpresa);
+        $columnas   = $cfg['pdf'];
+        $horizontal = (bool) $cfg['horizontal'];
+        $html2pdf   = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
+
         $etiqueta = $this->etiquetaEntidad($filtros['tipo']);
-        $rango = $this->formatearRango($filtros);
-        $h = static fn ($v): string => htmlspecialchars((string) $v);
+        $rango    = $this->formatearRango($filtros);
+        $h        = static fn ($v): string => htmlspecialchars((string) $v);
 
-        // Anchos por columna (table-layout: fixed, suman 100%), repetidos en el <th> y en cada
-        // <td>: sin ellos Html2Pdf ensancha la columna hasta que su texto quepa en una línea,
-        // y un detalle largo (cobro con banco, cuenta y referencia) empujaba la tabla fuera de
-        // la hoja: Deuda Generada, Abono y Saldo quedaban cortados y no se imprimían.
-        $w = ['fecha' => 10, 'tipo' => 9, 'doc' => 17, 'det' => 28, 'deuda' => 12, 'abono' => 12, 'saldo' => 12];
-        // Html2Pdf reparte en líneas por los espacios pero no parte una palabra sin espacios
-        // más ancha que su columna (un número de documento largo): esa se corta por su ancho
-        // real. 521,6 pt = ancho útil de la A4 vertical con backleft/backright de 8 mm; 6 pt
-        // = padding de la celda; 8.5 pt = tamaño de letra de la tabla.
-        $celda = static fn (?string $t, int $pct): string
-            => \App\Helpers\ReportePdf::texto((string) $t, $pct / 100 * 521.6 - 6.0, 8.5);
+        // Anchos por columna (suman 100%), repetidos en el <th> y en cada <td>: sin ellos
+        // Html2Pdf ensancha la columna hasta que su texto quepa en una línea y la tabla se
+        // sale de la hoja. El ancho de las columnas ocultas se reparte entre las visibles.
+        $w  = \App\Helpers\ColumnasReporte::anchosPdf(array_map(static fn (array $c): float => (float) $c['ancho'], $columnas));
+        $pt = \App\Helpers\ColumnasReporte::fuentePdf(count($columnas), $horizontal);
+        // Html2Pdf no parte una palabra sin espacios más ancha que su columna (un número de
+        // documento largo): esa se corta a mano por su ancho real.
+        $txt = static fn (string $t, string $clave): string
+            => \App\Helpers\ReportePdf::texto($t, \App\Helpers\ReportePdf::anchoPt($w[$clave], $horizontal), $pt);
 
-        $estilos = '<style>
-            table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8.5pt; margin: 0 0 14px 0; table-layout: fixed; }
-            table.fila { margin-bottom: 0; }
-            th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: center; }
-            td { border: 1px solid #ccc; padding: 4px; overflow: hidden; word-wrap: break-word; }
-            .text-end { text-align: right; }
-            .text-center { text-align: center; }
-            .header { text-align: center; margin-bottom: 14px; }
-            .saldo-row td { background: #f8f9fa; font-weight: bold; }
-            .total-row td { background: #e9ecef; font-weight: bold; }
-        </style>';
-        $thead = "<tr><th style='width:{$w['fecha']}%;'>Fecha</th><th style='width:{$w['tipo']}%;'>Tipo</th>"
-               . "<th style='width:{$w['doc']}%;'>Documento</th><th style='width:{$w['det']}%;'>Detalle</th>"
-               . "<th style='width:{$w['deuda']}%;'>Deuda Generada</th><th style='width:{$w['abono']}%;'>Abono</th>"
-               . "<th style='width:{$w['saldo']}%;'>Saldo</th></tr>";
+        $thead = '<tr>';
+        foreach ($columnas as $clave => $col) {
+            $thead .= "<th style='width:{$w[$clave]}%;'>" . $h($col['corto']) . '</th>';
+        }
+        $thead .= '</tr>';
+
+        $conSaldo = isset($columnas['saldo']);
+        $wLider   = 0.0;
+        foreach (self::clavesDescriptivas($columnas) as $clave) {
+            $wLider += $w[$clave];
+        }
+        $wLider = round($wLider, 2);
+
+        // El encabezado (logo incluido) es el mismo en todas las hojas: se arma una vez y
+        // solo cambia el nombre del cliente/proveedor.
+        $marca      = '@@TERCERO@@';
+        $encabezado = \App\Helpers\ReportePdf::encabezado($idEmpresa, $nombreEmpresa, 'Estado de Cuenta - ' . $etiqueta, $marca);
+        $css        = ' .saldo-row td { background: #f4f7fa; font-weight: bold; }';
 
         // Una <page> por cliente/proveedor: cada estado de cuenta empieza en hoja nueva. Los
         // estilos van solo en el primero; siguen vigentes en los writeHTML siguientes.
-        foreach ($ledgers as $i => $ledger) {
-            $e = $ledger['entidad'];
-            $inicio = ($i === 0 ? $estilos : '')
-                . '<page backtop="8mm" backbottom="12mm" backleft="8mm" backright="8mm" footer="page">'
-                . '<div class="header">'
-                . '<h2>' . $h($nombreEmpresa) . '</h2>'
-                . '<h3>Estado de Cuenta - ' . $h($etiqueta) . '</h3>'
-                . '<p><strong>' . $h($e['nombre'] ?? '') . '</strong> — ' . $h($e['identificacion'] ?? '') . '</p>'
-                . '<p>Período: ' . $h($rango) . ' &nbsp;|&nbsp; Fecha de reporte: ' . date('d-m-Y H:i:s') . '</p>'
-                . (($filtros['documento'] ?? '') !== '' ? '<p>Documento: <strong>' . $h($filtros['documento']) . '</strong></p>' : '')
-                . '</div></page>';
+        foreach (array_values($ledgers) as $i => $ledger) {
+            $e      = $ledger['entidad'];
+            $deudor = $ledger['saldo_final'] > 0.005;
 
-            $filas = ["<tr class='saldo-row'>"
-                . "<td class='text-end' style='width:" . (100 - $w['saldo']) . "%;'>Saldo Anterior</td>"
-                . "<td class='text-end' style='width:{$w['saldo']}%;'>" . number_format($ledger['saldo_anterior'], 2) . '</td></tr>'];
-            foreach ($ledger['movimientos'] as $m) {
-                $filas[] = '<tr>'
-                    . "<td class='text-center' style='width:{$w['fecha']}%;'>" . date('d-m-Y', strtotime($m['fecha'])) . '</td>'
-                    . "<td class='text-center' style='width:{$w['tipo']}%;'>" . $h(ucfirst(strtolower(str_replace('_', ' ', $m['origen'])))) . '</td>'
-                    . "<td style='width:{$w['doc']}%;'>" . $celda($m['numero_documento'] ?? '', $w['doc']) . '</td>'
-                    . "<td style='width:{$w['det']}%;'>" . $celda($m['detalle'] ?? '', $w['det']) . '</td>'
-                    . "<td class='text-end' style='width:{$w['deuda']}%;'>" . ($m['tipo_movimiento'] === 'CARGO' ? number_format((float) $m['monto'], 2) : '') . '</td>'
-                    . "<td class='text-end' style='width:{$w['abono']}%;'>" . ($m['tipo_movimiento'] === 'ABONO' ? number_format((float) $m['monto'], 2) : '') . '</td>'
-                    . "<td class='text-end' style='width:{$w['saldo']}%;'>" . number_format((float) $m['saldo'], 2) . '</td>'
-                    . '</tr>';
+            $datos = ['Identificación' => (string) ($e['identificacion'] ?? ''), 'Período' => $rango];
+            if (($filtros['documento'] ?? '') !== '') {
+                $datos['Documento'] = (string) $filtros['documento'];
             }
-            $final = "<table class='fila'><tr class='total-row'>"
-                . "<td class='text-end' style='width:" . ($w['fecha'] + $w['tipo'] + $w['doc'] + $w['det']) . "%;'>TOTALES</td>"
-                . "<td class='text-end' style='width:{$w['deuda']}%;'>" . number_format($ledger['total_cargos'], 2) . '</td>'
-                . "<td class='text-end' style='width:{$w['abono']}%;'>" . number_format($ledger['total_abonos'], 2) . '</td>'
-                . "<td class='text-end' style='width:{$w['saldo']}%;'>$" . number_format($ledger['saldo_final'], 2) . '</td>'
-                . '</tr></table>';
+            $cabecera = str_replace($marca, $h($e['nombre'] ?? ''), $encabezado)
+                . \App\Helpers\ReportePdf::filtros($datos)
+                . \App\Helpers\ReportePdf::indicadores([
+                    ['Saldo Anterior', '$' . number_format($ledger['saldo_anterior'], 2)],
+                    ['Deuda Generada', '$' . number_format($ledger['total_cargos'], 2)],
+                    ['Abonos', '$' . number_format($ledger['total_abonos'], 2)],
+                    ['Saldo', '$' . number_format($ledger['saldo_final'], 2), false, $deudor ? '#b02a37' : '#146c43'],
+                ]);
+            $inicio = \App\Helpers\ReportePdf::inicio($pt, $cabecera, $css);
+            if ($i > 0) {
+                $inicio = substr($inicio, (int) strpos($inicio, '<page'));
+            }
+
+            // Saldo anterior: en la columna Saldo; si la empresa la ocultó, junto a su etiqueta.
+            $saldoAnt = number_format($ledger['saldo_anterior'], 2);
+            $filas = [$conSaldo
+                ? "<tr class='saldo-row'><td class='text-end' style='width:" . round(100 - $w['saldo'], 2) . "%;'>Saldo Anterior</td>"
+                    . "<td class='text-end' style='width:{$w['saldo']}%;'>{$saldoAnt}</td></tr>"
+                : "<tr class='saldo-row'><td class='text-end' style='width:100%;'>Saldo Anterior: {$saldoAnt}</td></tr>"];
+
+            $n = 0;
+            foreach ($ledger['movimientos'] as $m) {
+                $v     = $this->valoresMovimiento($m);
+                $zebra = (++$n % 2 === 0) ? 'background:#f6f8fa;' : '';
+                $tds   = '';
+                foreach ($columnas as $clave => $col) {
+                    if ($col['suma'] !== null) {
+                        $valor = $v[$clave] !== null ? number_format($v[$clave], 2) : '';
+                    } elseif ($clave === 'documento' || $clave === 'detalle') {
+                        $valor = $txt((string) $v[$clave], $clave);
+                    } else {
+                        $valor = $h($v[$clave]);
+                    }
+                    $cls  = \App\Helpers\ColumnasReporte::claseAlinear($col['alinear']);
+                    $tds .= '<td' . ($cls !== '' ? " class='{$cls}'" : '') . " style='width:{$w[$clave]}%;{$zebra}'>{$valor}</td>";
+                }
+                $filas[] = "<tr>{$tds}</tr>";
+            }
+
+            // Totales en tabla aparte, al final; sin importes visibles no hay fila de totales.
+            $celdas = '';
+            foreach ($columnas as $clave => $col) {
+                if ($col['suma'] !== null) {
+                    $celdas .= "<td class='text-end' style='width:{$w[$clave]}%;'>" . ($clave === 'saldo' ? '$' : '')
+                             . number_format((float) $ledger[$col['suma']], 2) . '</td>';
+                }
+            }
+            $final = $celdas !== ''
+                ? "<table class='tot'><tr><td class='text-end' style='width:{$wLider}%;'>TOTALES:</td>{$celdas}</tr></table>"
+                : '';
 
             \App\Helpers\PdfPorBloques::escribir($html2pdf, $inicio, $thead, $filas, $final);
         }
+
+        return $html2pdf;
     }
 
-    /** @return array{0: array, 1: array} [headers, secciones] para ReportService::exportToExcelSeccionado() */
-    private function datosExportExcel(array $ledgers): array
+    /**
+     * Columnas del Excel según la personalización de la empresa.
+     *
+     * @return array{0: array, 1: array} [headers, secciones] para ReportService::exportToExcelSeccionado()
+     */
+    private function datosExportExcel(int $idEmpresa, array $ledgers): array
     {
-        $headers = ['Fecha', 'Tipo', 'Documento', 'Detalle', 'Deuda Generada', 'Abono', 'Saldo'];
-        $secciones = [];
+        $columnas = $this->columnasReporte($idEmpresa)['excel'];
+        $headers  = [];
+        foreach ($columnas as $col) {
+            foreach ($col['excel'] as $rotulo) {
+                $headers[] = $rotulo;
+            }
+        }
 
+        // "Saldo Anterior" va en la columna Tipo (o en la primera descriptiva si se ocultó) y
+        // "TOTALES" en la última descriptiva, justo antes de los importes.
+        $descriptivas = self::clavesDescriptivas($columnas);
+        $colSaldoAnt  = isset($columnas['tipo']) ? 'tipo' : $descriptivas[0];
+        $colTotales   = $descriptivas[count($descriptivas) - 1];
+        $conSaldo     = isset($columnas['saldo']);
+        $conImportes  = count($descriptivas) < count($columnas);
+
+        $secciones = [];
         foreach ($ledgers as $ledger) {
             $e = $ledger['entidad'];
-            $filas = [['', 'Saldo Anterior', '', '', '', '', round($ledger['saldo_anterior'], 2)]];
+
+            $saldoAnt = round($ledger['saldo_anterior'], 2);
+            $fila = [];
+            foreach ($columnas as $clave => $col) {
+                $fila[] = match (true) {
+                    $clave === $colSaldoAnt => $conSaldo ? 'Saldo Anterior' : 'Saldo Anterior: ' . number_format($saldoAnt, 2),
+                    $clave === 'saldo'      => $saldoAnt,
+                    default                 => '',
+                };
+            }
+            $filas = [$fila];
 
             foreach ($ledger['movimientos'] as $m) {
-                $filas[] = [
-                    date('d-m-Y', strtotime($m['fecha'])),
-                    ucfirst(strtolower(str_replace('_', ' ', $m['origen']))),
-                    $m['numero_documento'] ?? '',
-                    $m['detalle'] ?? '',
-                    $m['tipo_movimiento'] === 'CARGO' ? round((float) $m['monto'], 2) : '',
-                    $m['tipo_movimiento'] === 'ABONO' ? round((float) $m['monto'], 2) : '',
-                    round((float) $m['saldo'], 2),
-                ];
+                $v    = $this->valoresMovimiento($m);
+                $fila = [];
+                foreach ($columnas as $clave => $col) {
+                    $fila[] = $col['suma'] !== null
+                        ? ($v[$clave] !== null ? round($v[$clave], 2) : '')
+                        : $v[$clave];
+                }
+                $filas[] = $fila;
             }
 
-            $secciones[] = [
-                'titulo'  => trim(($e['nombre'] ?? '') . ' - ' . ($e['identificacion'] ?? '')),
-                'filas'   => $filas,
-                'resumen' => ['', '', '', 'TOTALES', round($ledger['total_cargos'], 2), round($ledger['total_abonos'], 2), round($ledger['saldo_final'], 2)],
+            $seccion = [
+                'titulo' => trim(($e['nombre'] ?? '') . ' - ' . ($e['identificacion'] ?? '')),
+                'filas'  => $filas,
             ];
+            if ($conImportes) {
+                $resumen = [];
+                foreach ($columnas as $clave => $col) {
+                    $resumen[] = match (true) {
+                        $col['suma'] !== null  => round((float) $ledger[$col['suma']], 2),
+                        $clave === $colTotales => 'TOTALES',
+                        default                => '',
+                    };
+                }
+                $seccion['resumen'] = $resumen;
+            }
+            $secciones[] = $seccion;
         }
 
         return [$headers, $secciones];
@@ -662,7 +793,7 @@ class ReporteCarteraController extends BaseModuloController
             $empresa = (new Empresa())->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
 
-            [$headers, $secciones] = $this->datosExportExcel($ledgers);
+            [$headers, $secciones] = $this->datosExportExcel($idEmpresa, $ledgers);
 
             $reportService = new \App\Services\ReportService();
             $reportService->exportToExcelSeccionado('Cartera', $headers, $secciones, 'Reporte de Cartera', $nombreEmpresa);
@@ -696,11 +827,7 @@ class ReporteCarteraController extends BaseModuloController
             $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
             $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE DE CARTERA';
 
-            $autoload = MVC_ROOT . '/vendor/autoload.php';
-            if (file_exists($autoload)) require_once $autoload;
-
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-            $this->escribirReportePdf($html2pdf, $ledgers, $nombreEmpresa, $filtros);
+            $html2pdf = $this->generarPdf($idEmpresa, $ledgers, $nombreEmpresa, $filtros);
             $html2pdf->output('ReporteCartera_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
@@ -759,14 +886,13 @@ class ReporteCarteraController extends BaseModuloController
 
             if ($adjuntar === 'pdf' || $adjuntar === 'ambos') {
                 $pdfPath = $tmpBase . '.pdf';
-                $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
-                $this->escribirReportePdf($html2pdf, $ledgers, $nombreEmpresa, $filtros);
+                $html2pdf = $this->generarPdf($idEmpresa, $ledgers, $nombreEmpresa, $filtros);
                 $html2pdf->output($pdfPath, 'F');
                 $adjuntosPaths[$pdfPath] = 'ReporteCartera_' . date('Ymd') . '.pdf';
             }
 
             if ($adjuntar === 'excel' || $adjuntar === 'ambos') {
-                [$headers, $secciones] = $this->datosExportExcel($ledgers);
+                [$headers, $secciones] = $this->datosExportExcel($idEmpresa, $ledgers);
                 $excelPath = $tmpBase . '.xlsx';
                 (new \App\Services\ReportService())->guardarExcelSeccionadoEnArchivo($headers, $secciones, 'Reporte de Cartera', $nombreEmpresa, $excelPath);
                 $adjuntosPaths[$excelPath] = 'ReporteCartera_' . date('Ymd') . '.xlsx';

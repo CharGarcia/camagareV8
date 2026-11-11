@@ -274,6 +274,13 @@ window.RC_generarReporte = function () {
     });
 };
 
+// Tras guardar la personalización del reporte (botón «Personalizar»), los estados de cuenta
+// que están en pantalla se vuelven a pedir para mostrar las columnas nuevas. Sin nada
+// generado todavía no hay nada que redibujar.
+document.addEventListener('reportePersonalizado', function () {
+    if (document.querySelector('#rc-resultados table')) window.RC_generarReporte();
+});
+
 window.RC_exportarExcel = function (idEntidad) {
     CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + RC_paramsExport(idEntidad).toString());
 };
