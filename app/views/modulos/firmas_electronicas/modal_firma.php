@@ -76,13 +76,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 </button>
                             </li>
                             <li class="nav-item">
-                                <button class="nav-link fw-medium py-2" id="tab-firma-pago-btn"
+                                <button class="nav-link fw-medium py-2 disabled" id="tab-firma-pago-btn"
                                     data-bs-toggle="tab" data-bs-target="#tab-firma-pago" type="button">
                                     <i class="bi bi-credit-card me-1"></i> Pago
                                 </button>
                             </li>
                             <li class="nav-item">
-                                <button class="nav-link fw-medium py-2" id="tab-firma-docs-btn"
+                                <button class="nav-link fw-medium py-2 disabled" id="tab-firma-docs-btn"
                                     data-bs-toggle="tab" data-bs-target="#tab-firma-docs" type="button">
                                     <i class="bi bi-paperclip me-1"></i> Documentos
                                 </button>
@@ -364,8 +364,10 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 <!-- Estado trámite, estado pago y caducidad -->
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1">Estado Trámite</label>
-                                    <select class="form-select form-select-sm shadow-none" name="estado" id="firma_estado">
-                                        <option value="borrador">Borrador</option>
+                                    <!-- Solo lectura: el estado avanza con las acciones de la pestaña Trámite (el servidor ignora este campo). -->
+                                    <select class="form-select form-select-sm shadow-none" name="estado" id="firma_estado" disabled
+                                        title="Avanza solo, con las acciones de la pestaña Trámite">
+                                        <option value="borrador">Borrador (faltan documentos)</option>
                                         <option value="pendiente">Pendiente de pago</option>
                                         <option value="por_registrar">Por registrar</option>
                                         <option value="en_proceso">En trámite</option>
@@ -377,7 +379,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold text-muted mb-1">Estado Pago</label>
-                                    <select class="form-select form-select-sm shadow-none" name="estado_pago" id="firma_estado_pago">
+                                    <select class="form-select form-select-sm shadow-none" name="estado_pago" id="firma_estado_pago" disabled
+                                        title="Se registra en la pestaña Trámite (pago o regalía)">
                                         <option value="pendiente">Pendiente</option>
                                         <option value="en_revision">En revisión</option>
                                         <option value="confirmado">Confirmado</option>
@@ -417,6 +420,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         <option value="transferencia">Transferencia Bancaria</option>
                                         <option value="payphone">Tarjeta (Payphone)</option>
                                         <option value="tarjeta">Tarjeta (datáfono)</option>
+                                        <!-- La deja la acción «Sin cobro (regalía)» de Trámite; no se elige a mano. -->
+                                        <option value="cortesia" disabled>Sin cobro (regalía)</option>
                                     </select>
                                 </div>
 

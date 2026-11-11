@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+etiquetas: firma electronica, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
 version: 3.18
 orden: 20
 estado: activo
@@ -133,30 +133,72 @@ motivo por correo, corrige desde su enlace y la reenvía.
 Al abrir una firma, debajo de la fila de pasos (verde = cumplido, rojo = falta)
 aparece el recuadro **Siguiente paso**: dice qué falta para que el trámite
 avance, **quién debe hacerlo** (cliente, usted o Uanataca) y trae el enlace
-**Ir a Trámite** (o **Ir a Uanataca**) hacia la pestaña donde se hace.
+hacia la pestaña donde se hace (**Ir a Documentos**, **Ir a Trámite** o **Ir a
+Uanataca**).
 
 | Estado | Qué hace avanzar el trámite | Pasa a |
 |--------|-----------------------------|--------|
-| Borrador | El cliente sube y confirma sus documentos desde su enlace. Si usted los cargó en la ficha, cambie **Estado Trámite** a *Pendiente de pago* y guarde | Pendiente de pago |
-| Pendiente de pago | El cliente paga desde su enlace, o usted registra el pago en **Trámite → Aprobar y facturar** (genera la factura y el cobro) | Por registrar |
+| Borrador | Subir los documentos obligatorios y **Confirmar documentos** (pestaña Trámite), o que el cliente los envíe desde su enlace | Pendiente de pago |
+| Pendiente de pago | El cliente paga desde su enlace; o usted, en Trámite, pulsa **Aprobar y facturar** (factura y cobro) o **Sin cobro (regalía)** | Por registrar |
 | Por registrar | **Enviar a Uanataca** (API) o **Ya la registré en Uanataca** (manual), en la pestaña Trámite | En trámite |
 | En trámite | Uanataca valida al cliente y aprueba (con la API se actualiza solo) | Aprobada |
 | Aprobada / En trámite | **Marcar emitida** con la fecha de vencimiento (con la API se actualiza solo) | Emitida |
-| Observada | El cliente corrige desde su enlace y pulsa **Enviar corrección** | Pendiente de pago o Por registrar |
+| Observada | El cliente corrige desde su enlace y pulsa **Enviar corrección**; o usted corrige en la ficha y pulsa **Confirmar documentos** | Pendiente de pago o Por registrar |
 
-**El estado avanza solo al cumplir cada paso.** Cambiar el **Estado Trámite** a
-mano en la ficha solo cambia la etiqueta: **no registra el pago, no genera la
-factura ni envía nada a Uanataca**. Si adelanta el estado sin el pago, el sistema
-avisa al elegirlo y el recuadro *Siguiente paso* queda en rojo indicando que el
-pago y la factura siguen pendientes; regístrelos en la pestaña **Trámite**.
+**El Estado Trámite y el Estado Pago son de solo lectura.** Se ven en la pestaña
+Datos, pero no se cambian a mano: avanzan únicamente con las acciones de la
+pestaña **Trámite**. Así no queda una firma «pagada» sin cobro ni factura, ni
+«en trámite» sin haberse enviado a Uanataca.
+
+### Registrar una firma a mano: las pestañas se habilitan por pasos
+
+En una firma nueva las pestañas se van habilitando conforme se cumple cada paso;
+al pasar el cursor por una pestaña apagada se ve qué falta.
+
+| Paso | Qué hace | Se habilita |
+|------|----------|-------------|
+| 1. Datos | Llene los datos del titular y pulse **Guardar**. La firma nace en *Borrador* | **Documentos** y **Trámite** |
+| 2. Documentos | Suba cédula (frente y posterior) y selfie; para representante legal, además RUC, constitución, nombramiento y aceptación. Luego, en Trámite, **Confirmar documentos** | **Pago** y **Facturación** |
+| 3. Pago | En Trámite: **Aprobar y facturar** (elija la forma de cobro) o **Sin cobro (regalía)** | **Uanataca** |
+| 4. Uanataca | **Enviar a Uanataca** o **Ya la registré en Uanataca** | — |
+| 5. Emisión | **Marcar emitida** (con la API se actualiza solo) | — |
+
+Mientras falte un documento obligatorio, Trámite muestra cuáles faltan y no
+ofrece registrar el pago.
+
+### Firma sin cobro (regalía)
+
+Cuando la firma se obsequia, en la pestaña Trámite, recuadro *Registrar pago
+recibido*, pulse **Sin cobro (regalía)** y escriba el motivo. El sistema:
+
+- emite la **factura con el 100 % de descuento** (se ve el precio de la firma y el
+  descuento total; subtotal, IVA y total en $0.00) y la envía al SRI;
+- **no registra ningún cobro** en Ingresos;
+- deja el pago como *Confirmado* (forma de pago *Sin cobro (regalía)*) y el trámite
+  pasa a *Por registrar*, igual que una firma pagada;
+- guarda el motivo en la observación de la factura y en el historial interno.
+
+No está disponible si la firma ya tiene una factura por su valor normal (anúlela
+primero) o un cobro registrado. El cliente recibe el correo con la factura para
+confirmar su correo, con el texto de que la firma no tiene costo.
+
+### Corregir un estado que no corresponde
+
+- **Reabrir solicitud** (firma *Cancelada*) y **Continuar el trámite** (pago ya
+  registrado pero el estado sigue en *Pendiente de pago*): devuelven la firma al
+  paso que corresponde a lo realmente hecho (documentos y pago). No borran
+  documentos, pagos ni facturas.
+- No aplican a una firma que ya tiene solicitud en Uanataca: ese estado se
+  actualiza desde Uanataca.
 
 ### El pago dice «Confirmado» pero no se generó el cobro
 
-Poner el **Estado Pago** en *Confirmado* a mano en la ficha tampoco ejecuta nada:
-no crea el cobro en Ingresos ni la factura. En ese caso la pestaña Trámite muestra
-en rojo el recuadro **Falta registrar el cobro**: elija la forma de cobro, la
-referencia y pulse **Registrar cobro** (si la firma ya tiene factura, se cobra esa
-misma; no se crea otra) o **Aprobar y facturar** (si aún no tiene factura).
+Pasa en firmas donde el Estado Pago se marcó a mano (cuando todavía se podía):
+no hay cobro en Ingresos ni factura. La pestaña Trámite muestra en rojo el
+recuadro **Falta registrar el cobro**: elija la forma de cobro, la referencia y
+pulse **Registrar cobro** (si la firma ya tiene factura, se cobra esa misma; no
+se crea otra) o **Aprobar y facturar** (si aún no tiene factura). Si en realidad
+fue un obsequio, use **Sin cobro (regalía)**.
 
 Si el cobro de esa factura ya se registró directamente en el módulo **Ingresos**,
 no lo registre otra vez desde aquí: quedaría duplicado.
@@ -164,13 +206,14 @@ no lo registre otra vez desde aquí: quedaría duplicado.
 ### No aparece «Consultar estado ahora» en una firma En trámite
 
 Ese botón solo existe cuando la solicitud se **envió a Uanataca por API**. Si la
-firma llegó a *En trámite* porque se registró a mano en el portal (o porque se
-cambió el estado a mano), el sistema no tiene qué consultar y la pestaña Trámite
+firma llegó a *En trámite* porque se registró a mano en el portal (o porque el
+estado se adelantó a mano), el sistema no tiene qué consultar y la pestaña Trámite
 muestra el recuadro *Esta firma no tiene una solicitud enviada a Uanataca por API*:
 
-- **Aún no la registró en Uanataca**: pulse **Regresar a «Por registrar»**, luego
-  **Guardar**, y en Trámite use **Enviar a Uanataca**. Desde ahí el estado se
-  actualiza solo.
+- **Aún no la registró en Uanataca**: pulse **Regresar al paso que corresponde**.
+  La firma vuelve a donde realmente está (documentos, pago o *Por registrar*);
+  al llegar a *Por registrar* aparece **Enviar a Uanataca** y desde ahí el estado
+  se actualiza solo. Con el envío automático activo, se envía sola.
 - **Ya la registró a mano en el portal**: el estado se lleva a mano; cuando
   Uanataca la emita, indique el vencimiento y pulse **Marcar emitida**.
 
@@ -628,7 +671,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
-- **3.18** — Ficha de la firma: recuadro **Siguiente paso** bajo la fila de pasos (qué falta, quién actúa y enlace a la pestaña); aviso al adelantar el Estado Trámite a mano sin el pago registrado. Nueva sección *Cómo avanza el trámite: siguiente paso y estados*. En Trámite: recuadro que explica cómo seguir cuando una firma *En trámite* no tiene solicitud por API (con **Regresar a «Por registrar»**) y nota que aclara que la factura ya se envió junto al botón de reenviar. Un pago marcado «Confirmado» a mano, sin cobro, ahora se puede registrar desde Trámite (**Falta registrar el cobro**).
+- **3.18** — Ficha de la firma: las **pestañas se habilitan por pasos** (Datos → Documentos → Pago → Uanataca) y el recuadro **Siguiente paso** indica qué falta y quién actúa. **Estado Trámite** y **Estado Pago** pasan a ser de **solo lectura**: avanzan con las acciones de Trámite, entre ellas las nuevas **Confirmar documentos**, **Sin cobro (regalía)** (factura con 100 % de descuento, sin cobro), **Reabrir solicitud**, **Continuar el trámite** y **Regresar al paso que corresponde**. Una firma nueva nace en *Borrador* y no se puede registrar el pago sin los documentos. Un pago marcado «Confirmado» a mano, sin cobro, se puede registrar desde Trámite (**Falta registrar el cobro**). Nota junto al botón de reenviar factura. Nueva sección *Cómo avanza el trámite: siguiente paso y estados*.
 - **3.17** — **Enlaces y QR por vendedor**: pestaña **Vendedores** en el engranaje (un enlace y un QR por vendedor), campo **Vendedor** en *Enviar link*, columna **Vendedor** en el listado, en el Excel y en *Enlaces enviados*; la factura de la firma sale con ese vendedor y las renovaciones lo conservan. Requiere `database/20261110_firmas_enlaces_vendedor.sql`.
 - **3.16** — Botón **Renovar** al pie de la ficha de una firma emitida (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.
 - **3.15** — El cliente puede corregir sus datos y reemplazar sus documentos **después de pagar**, mientras la firma esté *Por registrar* (antes de enviarse a Uanataca); la validez y la factura no cambian. La empresa recibe un correo de aviso y, si el cliente cambia su correo, debe confirmarlo de nuevo.

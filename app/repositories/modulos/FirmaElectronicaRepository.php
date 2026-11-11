@@ -639,7 +639,8 @@ class FirmaElectronicaRepository extends BaseRepository
              FROM {$this->table} f
              JOIN ventas_cabecera v ON v.id = f.id_factura AND v.eliminado = false AND v.estado = 'borrador'
              JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
-             WHERE f.eliminado = false AND f.estado_pago = 'confirmado' AND f.id_ingreso IS NOT NULL
+             WHERE f.eliminado = false AND f.estado_pago = 'confirmado'
+               AND (f.id_ingreso IS NOT NULL OR f.tipo_pago = 'cortesia')
                AND f.pago_revisado_at > CURRENT_TIMESTAMP - INTERVAL '3 days'
                AND f.pago_revisado_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes'
              ORDER BY f.id

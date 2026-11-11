@@ -97,6 +97,11 @@ class FirmaElectronicaService
         $this->validarTipoPersonaFirma((int) $data['id_empresa'], (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         // El motivo ya no se escribe en la ficha: el de por defecto para representante legal.
         $data['motivo'] = self::motivoParaTipo((string) ($data['tipo_persona'] ?? 'natural'), null);
+        // Una solicitud nace sin documentos ni pago: el estado avanza solo con las acciones
+        // del trámite (confirmar documentos, registrar pago o regalía, Uanataca, emitida).
+        $data['estado']      = 'borrador';
+        $data['estado_pago'] = 'pendiente';
+        $data['tipo_pago']   = '';
 
         $this->repository->beginTransaction();
         try {
@@ -133,6 +138,14 @@ class FirmaElectronicaService
         if (in_array($antes['estado'] ?? '', FirmaElectronicaRules::ESTADOS_CERRADOS, true)) {
             throw new Exception('Esta solicitud ya está ' . mb_strtolower(self::etiquetaEstado((string) $antes['estado']), 'UTF-8')
                 . ' y no se puede editar. El avance del trámite se lleva desde la pestaña Trámite.');
+        }
+        // El estado del trámite y el del pago no se cambian desde el formulario: avanzan solo
+        // con las acciones (accionTramite, aprobarPago, registrarCortesia, Uanataca). Marcarlos
+        // a mano dejaba firmas "pagadas" sin cobro ni factura y "en trámite" sin enviar.
+        $data['estado']      = $antes['estado'];
+        $data['estado_pago'] = $antes['estado_pago'];
+        if (($antes['estado_pago'] ?? '') === 'confirmado') {
+            $data['tipo_pago'] = $antes['tipo_pago'] ?? '';
         }
         // Con factura activa se pueden corregir los datos del titular, el tipo de firma y el
         // trámite; el pago y los datos de facturación se conservan tal cual.
@@ -1424,13 +1437,12 @@ class FirmaElectronicaService
         }
         // "Confirmado" sin cobro = el Estado Pago se marcó a mano en la ficha: eso no genera el
         // ingreso (ni la factura), así que aquí todavía se puede registrar.
-        $sinCobro = $firma['estado_pago'] === 'confirmado' && empty($firma['id_ingreso']);
+        $sinCobro = $firma['estado_pago'] === 'confirmado' && empty($firma['id_ingreso'])
+            && ($firma['tipo_pago'] ?? '') !== FirmaElectronicaRules::TIPO_PAGO_CORTESIA;
         if (!$sinCobro && !in_array((string) $firma['estado_pago'], ['pendiente', 'en_revision', 'rechazado'], true)) {
             throw new Exception('El pago de esta firma ya fue registrado.');
         }
-        if ($firma['estado'] === 'cancelada') {
-            throw new Exception('Esta solicitud fue cancelada.');
-        }
+        $this->exigirListaParaPago($firma);
         $forma = $this->repository->getFormaCobro($idFormaCobro, $idEmpresa);
         if (!$forma) {
             throw new Exception('Elija la forma de cobro (cuenta) donde se recibió el pago.');
@@ -1439,6 +1451,81 @@ class FirmaElectronicaService
         $tot = $this->totalesProducto((int) $firma['id_producto'], $idEmpresa, $cfg['id_punto_emision'] ?: null);
 
         return $this->registrarPagoYFacturar($firma, $idUsuario, $forma, $tot['total'], $referencia, 'transferencia', null);
+    }
+
+    /** El pago (o la regalía) se registra con los documentos ya confirmados y la solicitud vigente. */
+    private function exigirListaParaPago(array $firma): void
+    {
+        if ($firma['estado'] === 'cancelada') {
+            throw new Exception('Esta solicitud fue cancelada.');
+        }
+        if ($firma['estado'] === 'borrador') {
+            throw new Exception('Primero suba los documentos del titular y confirme que están completos (pestaña Trámite).');
+        }
+    }
+
+    /**
+     * Firma sin cobro (regalía): emite la factura con 100 % de descuento (total 0), sin
+     * ingreso, y deja el pago como confirmado para que el trámite continúe.
+     */
+    public function registrarCortesia(int $idFirma, int $idEmpresa, int $idUsuario, string $motivo): array
+    {
+        $motivo = trim($motivo);
+        if ($motivo === '') {
+            throw new Exception('Indique el motivo de la regalía: queda en el historial y en la factura.');
+        }
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $this->repository->lockFirma($idFirma);
+            $firma = $this->repository->findById($idFirma, $idEmpresa);
+            if (!$firma) {
+                throw new Exception('Firma no encontrada.');
+            }
+            if (!empty($firma['id_ingreso'])) {
+                throw new Exception('Esta firma ya tiene un cobro registrado: no puede pasar a regalía.');
+            }
+            if (($firma['tipo_pago'] ?? '') === FirmaElectronicaRules::TIPO_PAGO_CORTESIA && $firma['estado_pago'] === 'confirmado') {
+                throw new Exception('Esta firma ya está registrada como regalía.');
+            }
+            $this->exigirListaParaPago($firma);
+            if ($this->facturaActiva($firma)) {
+                throw new Exception('Esta firma ya tiene una factura por su valor normal. Anúlela o elimínela en Facturas de Venta antes de registrarla como regalía.');
+            }
+
+            [$idFactura, $facturaData] = $this->crearFactura($firma, $idUsuario, '01', 'Regalía (100 % de descuento): ' . $motivo);
+            $nuevoEstado = $firma['estado'] === 'pendiente' ? 'por_registrar' : (string) $firma['estado'];
+            $estimada = empty($firma['fecha_caducidad'])
+                ? $this->caducidadEstimada((int) $firma['id_producto'], $idEmpresa)
+                : null;
+            $this->repository->actualizarTramite($idFirma, $idEmpresa, ($estimada ? ['fecha_caducidad' => $estimada] : []) + [
+                'estado_pago' => 'confirmado', 'tipo_pago' => FirmaElectronicaRules::TIPO_PAGO_CORTESIA, 'estado' => $nuevoEstado,
+                'id_factura' => $idFactura, 'pago_motivo_rechazo' => null,
+                'pago_revisado_by' => $idUsuario, 'pago_revisado_at' => date('Y-m-d H:i:s'),
+            ], $idUsuario);
+
+            $numFact = $this->numeroFactura($idFactura, $idEmpresa);
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'cortesia', 'Firma sin costo (regalía)', null, true, $idUsuario);
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'cortesia_motivo', 'Regalía: factura ' . $numFact . ' con 100 % de descuento', $motivo, false, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'registrar_cortesia', 'firmas_electronicas', $idFirma,
+                ['estado_pago' => $firma['estado_pago'], 'estado' => $firma['estado']],
+                ['estado_pago' => 'confirmado', 'tipo_pago' => FirmaElectronicaRules::TIPO_PAGO_CORTESIA, 'estado' => $nuevoEstado, 'id_factura' => $idFactura, 'motivo' => $motivo]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        try {
+            $this->facturaService()->generarYGuardarXml($idFactura, $facturaData['empresa_config'] ?? []);
+        } catch (\Throwable $e) {
+            error_log('[Firmas] XML de la factura #' . $idFactura . ': ' . $e->getMessage());
+        }
+        $this->emitirFacturaYConfirmar($idFirma, $idEmpresa);
+
+        return ['id_factura' => $idFactura, 'numero' => $numFact];
     }
 
     public function rechazarPago(int $idFirma, int $idEmpresa, int $idUsuario, string $motivo): void
@@ -1677,8 +1764,10 @@ class FirmaElectronicaService
         $nombre  = trim(($firma['nombres'] ?? '') . ' ' . ($firma['apellidos'] ?? ''));
         $urlConf = url_absoluta('solicitud-firma/confirmar-correo/' . $token);
         $cuerpo = '<p>Hola ' . self::h($nombre) . ':</p>'
-            . '<p>Recibimos el pago de tu <b>firma electrónica</b>. Adjuntamos tu factura <b>' . self::h($numero) . '</b> por <b>$'
-            . number_format((float) $f['importe_total'], 2) . '</b>.</p>'
+            . (($firma['tipo_pago'] ?? '') === FirmaElectronicaRules::TIPO_PAGO_CORTESIA
+                ? '<p>Tu <b>firma electrónica</b> no tiene costo. Adjuntamos tu factura <b>' . self::h($numero) . '</b> con el 100 % de descuento.</p>'
+                : '<p>Recibimos el pago de tu <b>firma electrónica</b>. Adjuntamos tu factura <b>' . self::h($numero) . '</b> por <b>$'
+                    . number_format((float) $f['importe_total'], 2) . '</b>.</p>')
             . '<p>A este mismo correo te llegará la activación de tu firma, por eso necesitamos que confirmes que es tuyo:</p>'
             . '<p style="text-align:center;margin:24px 0;"><a href="' . self::h($urlConf) . '" '
             . 'style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;">'
@@ -1777,6 +1866,45 @@ class FirmaElectronicaService
             $aviso  = null;
 
             switch ($accion) {
+                case 'confirmar_documentos':
+                    // Lo mismo que hace el cliente en su enlace al terminar de subir sus documentos.
+                    if (!in_array($estado, ['borrador', 'observada'], true)) {
+                        throw new Exception('Los documentos de esta solicitud ya fueron confirmados.');
+                    }
+                    if ($faltan = $this->documentosFaltantes($firma)) {
+                        throw new Exception('Falta subir: ' . implode(', ', $faltan) . '.');
+                    }
+                    $nuevo = $firma['estado_pago'] === 'confirmado' ? 'por_registrar' : 'pendiente';
+                    $this->repository->actualizarTramite($idFirma, $idEmpresa, ['estado' => $nuevo, 'observacion_cliente' => null], $idUsuario);
+                    $this->repository->crearEvento($idEmpresa, $idFirma, 'documentos',
+                        $estado === 'observada' ? 'Corrección registrada por la empresa' : 'Documentos completos',
+                        $nuevo === 'pendiente' ? 'Falta el pago.' : null, true, $idUsuario);
+                    $d['estado_nuevo'] = $nuevo;
+                    break;
+
+                case 'recalcular':
+                    // Devuelve el trámite al estado que corresponde a lo realmente hecho
+                    // (documentos y pago): reabrir una cancelada o deshacer un estado adelantado.
+                    if (!in_array($estado, ['cancelada', 'en_proceso', 'pendiente', 'por_registrar'], true)) {
+                        throw new Exception('Esta firma no se puede regresar de estado.');
+                    }
+                    if (!empty($firma['uanataca_uuid'])) {
+                        throw new Exception('Esta firma ya tiene una solicitud en Uanataca: su estado se actualiza desde allá.');
+                    }
+                    $nuevo = $this->documentosFaltantes($firma)
+                        ? 'borrador'
+                        : ($firma['estado_pago'] === 'confirmado' ? 'por_registrar' : 'pendiente');
+                    if ($nuevo === $estado) {
+                        throw new Exception('El estado ya corresponde al avance del trámite.');
+                    }
+                    $this->repository->actualizarTramite($idFirma, $idEmpresa, [
+                        'estado' => $nuevo, 'uanataca_referencia' => null, 'uanataca_registrada_at' => null,
+                    ], $idUsuario);
+                    $this->repository->crearEvento($idEmpresa, $idFirma, 'estado',
+                        'Estado corregido: ' . self::etiquetaEstado($nuevo), 'Antes: ' . self::etiquetaEstado($estado) . '.', false, $idUsuario);
+                    $d['estado_nuevo'] = $nuevo;
+                    break;
+
                 case 'registrar_uanataca':
                     if (!in_array($estado, ['por_registrar', 'en_proceso'], true)) {
                         throw new Exception('Solo se registra en Uanataca una firma pagada (por registrar).');
@@ -1866,6 +1994,17 @@ class FirmaElectronicaService
         if ($aviso) {
             $this->notificarCliente($idFirma, $idEmpresa, $aviso[0], $aviso[1]);
         }
+    }
+
+    /**
+     * Documentos obligatorios (según el tipo de persona) que aún no se han subido.
+     * @return string[] etiquetas; vacío = están completos
+     */
+    public function documentosFaltantes(array $firma): array
+    {
+        $subidos = array_column($this->repository->getAdjuntos((int) $firma['id'], (int) $firma['id_empresa']), 'tipo');
+        $faltan  = array_diff($this->rules->adjuntosRequeridos((string) ($firma['tipo_persona'] ?? 'natural')), $subidos);
+        return array_values(array_map(static fn($t) => FirmaElectronicaRules::ETIQUETAS_ADJUNTO[$t] ?? $t, $faltan));
     }
 
     /** Correo al titular con el mensaje y el botón a su enlace (seguimiento del trámite). */
@@ -2824,7 +2963,7 @@ class FirmaElectronicaService
     }
 
     /** @return array{0:int, 1:array} id de la factura y el payload usado. */
-    private function crearFactura(array $firma, int $idUsuario, string $codigoSriPago): array
+    private function crearFactura(array $firma, int $idUsuario, string $codigoSriPago, ?string $cortesia = null): array
     {
         $idEmpresa = (int) $firma['id_empresa'];
         if ((int) ($firma['id_producto'] ?? 0) <= 0) {
@@ -2846,6 +2985,13 @@ class FirmaElectronicaService
             ? \App\Helpers\SriIvaHelper::codigoPorcentaje($tot['pct'])
             : (string) ($prod['codigo_porcentaje_iva'] ?? '0');
 
+        // Regalía ($cortesia = motivo): el precio se muestra completo y se descuenta el 100 %,
+        // así la base, el IVA y el total quedan en 0 (sin cobro).
+        $esCortesia = $cortesia !== null;
+        $neto  = $esCortesia ? 0.0 : $tot['base'];
+        $iva   = $esCortesia ? 0.0 : $tot['iva'];
+        $total = $esCortesia ? 0.0 : $tot['total'];
+
         $correoCliente = $this->datosFacturacion($firma)['correo'];
         $data = [
             'id_empresa'          => $idEmpresa,
@@ -2862,11 +3008,11 @@ class FirmaElectronicaService
             'secuencial'          => $secInfo['formateado'],
             'fecha_emision'       => date('Y-m-d'),
             'estado'              => 'borrador',
-            'total_sin_impuestos' => $tot['base'],
-            'total_descuento'     => 0,
-            'importe_total'       => $tot['total'],
+            'total_sin_impuestos' => $neto,
+            'total_descuento'     => $esCortesia ? $tot['base'] : 0,
+            'importe_total'       => $total,
             'propina'             => 0,
-            'observaciones'       => null,
+            'observaciones'       => $esCortesia ? mb_substr($cortesia, 0, 300) : null,
             'detalles'            => [[
                 'id_producto'               => (int) $prod['id'],
                 'nombre'                    => $prod['nombre'],
@@ -2876,19 +3022,19 @@ class FirmaElectronicaService
                 'id_unidad_medida'          => $prod['id_medida'] ?? null,
                 'cantidad'                  => 1,
                 'precio_unitario'           => $tot['base'],
-                'descuento'                 => 0,
-                'precio_total_sin_impuesto' => $tot['base'],
+                'descuento'                 => $esCortesia ? $tot['base'] : 0,
+                'precio_total_sin_impuesto' => $neto,
                 'porcentaje_iva'            => $tot['pct'],
                 'id_tarifa_iva'             => !empty($prod['id_tarifa_iva']) ? (int) $prod['id_tarifa_iva'] : null,
                 'impuestos'                 => [[
                     'codigo_impuesto'   => '2',
                     'codigo_porcentaje' => $codigoPct,
                     'tarifa'            => $tot['pct'],
-                    'base_imponible'    => $tot['base'],
-                    'valor'             => $tot['iva'],
+                    'base_imponible'    => $neto,
+                    'valor'             => $iva,
                 ]],
             ]],
-            'pagos'          => [['forma_pago' => $codigoSriPago, 'total' => $tot['total'], 'plazo' => 0, 'unidad_tiempo' => 'dias']],
+            'pagos'          => [['forma_pago' => $codigoSriPago, 'total' => $total, 'plazo' => 0, 'unidad_tiempo' => 'dias']],
             'info_adicional' => filter_var($correoCliente, FILTER_VALIDATE_EMAIL)
                 ? [['nombre' => 'correo del cliente', 'valor' => $correoCliente]] : [],
         ];

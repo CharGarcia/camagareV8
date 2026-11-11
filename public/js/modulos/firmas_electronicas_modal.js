@@ -420,8 +420,9 @@
         }
 
         // Datos del titular: se bloquean al quedar aprobada o emitida
+        // Estado Trámite y Estado Pago: siempre de solo lectura (avanzan con las acciones de Trámite).
         document.querySelector('#tab-firma-general')?.querySelectorAll('input, select, textarea').forEach(el => {
-            el.disabled = soloLectura || (conFactura && CAMPOS_FACTURADOS.some(s => el.matches(s)));
+            el.disabled = soloLectura || el.matches('#firma_estado, #firma_estado_pago') || (conFactura && CAMPOS_FACTURADOS.some(s => el.matches(s)));
         });
         // Pago y Facturación: fijos mientras exista la factura activa o la solicitud esté cerrada
         ['#tab-firma-pago', '#tab-firma-fact'].forEach(sel => {
@@ -832,7 +833,15 @@
         document.getElementById('tab-firma-fact-btn')?.classList.add('disabled');
         document.getElementById('tab-firma-tramite-btn')?.classList.add('disabled');
         document.getElementById('tab-firma-uanataca-btn')?.classList.add('disabled');
-        setVal('firma_estado', 'pendiente');
+        // Documentos y Pago también esperan: primero se guardan los datos del titular.
+        ['tab-firma-docs-btn', 'tab-firma-pago-btn'].forEach(id => {
+            const b = document.getElementById(id);
+            if (!b) return;
+            b.classList.add('disabled');
+            if (b.parentElement) b.parentElement.title = 'Primero guarde los datos del titular.';
+        });
+        setVal('firma_estado', 'borrador');
+        setVal('firma_estado_pago', 'pendiente');
 
         aplicarBloqueoFirma();
         activarTab('tab-firma-general-btn');
@@ -957,9 +966,10 @@
 
         const tabInfoBtn = document.getElementById('tab-firma-info-btn');
         if (tabInfoBtn) tabInfoBtn.classList.remove('disabled');
-        document.getElementById('tab-firma-fact-btn')?.classList.remove('disabled');
-        document.getElementById('tab-firma-tramite-btn')?.classList.remove('disabled');
-        document.getElementById('tab-firma-uanataca-btn')?.classList.remove('disabled');
+        // Documentos y Trámite ya; Pago, Facturación y Uanataca los habilita
+        // aplicarPestanasPorAvance() al cargar el trámite, según el avance real.
+        ['tab-firma-docs-btn', 'tab-firma-tramite-btn'].forEach(id => document.getElementById(id)?.classList.remove('disabled'));
+        ['tab-firma-pago-btn', 'tab-firma-fact-btn', 'tab-firma-uanataca-btn'].forEach(id => document.getElementById(id)?.classList.add('disabled'));
 
         aplicarBloqueoFirma();
         cargarTramite(data.id);
@@ -1009,7 +1019,9 @@
             const resp = await fetch(url, { method: 'POST', body: fd });
             const json = await resp.json();
 
-            mostrarAlerta(json.msg || json.error, json.ok ? 'success' : 'danger');
+            mostrarAlerta(json.ok && !id && json.id
+                ? 'Datos guardados. Ahora suba los documentos del titular en la pestaña Documentos.'
+                : (json.msg || json.error), json.ok ? 'success' : 'danger');
 
             if (json.ok) {
                 if (!id && json.id) {
@@ -1017,11 +1029,10 @@
                     document.getElementById('firma_id_modal').value = json.id;
                     activarSubidaArchivos(json.id);
                     document.getElementById('tab-firma-info-btn')?.classList.remove('disabled');
-                    document.getElementById('tab-firma-fact-btn')?.classList.remove('disabled');
-                    document.getElementById('tab-firma-tramite-btn')?.classList.remove('disabled');
-                    document.getElementById('tab-firma-uanataca-btn')?.classList.remove('disabled');
                     document.getElementById('btnEliminarFirmaModal')?.classList.remove('d-none');
-                    cargarTramite(json.id);
+                    // cargarTramite() habilita las pestañas que corresponden al avance (Documentos y Trámite).
+                    await cargarTramite(json.id);
+                    activarTab('tab-firma-docs-btn');
                     document.getElementById('tituloModalFirma').textContent = 'Editar Firma Electrónica';
                     actualizarBtnGenerarFactura();
                 }
@@ -1250,6 +1261,7 @@
                 mostrarAlerta('Archivo cargado correctamente.', 'success');
                 input.value = '';
                 fetchDetalleFirma(idFirma);
+                cargarTramite(idFirma);   // documentos que faltan → guía y pestañas
             } else {
                 mostrarAlerta(json.error || 'Error al subir.', 'danger');
             }
@@ -1269,7 +1281,7 @@
             const json = await resp.json();
             if (json.ok) {
                 const idFirma = _idFirmaActual || document.getElementById('firma_id_modal')?.value;
-                if (idFirma) fetchDetalleFirma(idFirma);
+                if (idFirma) { fetchDetalleFirma(idFirma); cargarTramite(idFirma); }
             } else {
                 mostrarAlerta(json.error || 'Error al eliminar.', 'danger');
             }
@@ -1385,16 +1397,19 @@
         const UANATACA = 'tab-firma-uanataca-btn';
 
         if (t.estado === 'cancelada') {
-            return { quien: '', color: 'secondary', texto: 'La solicitud está cancelada: no tiene más pasos. Si el cliente la vuelve a pedir, use «Nueva solicitud con estos datos» en la pestaña Trámite.', tab: TRAMITE };
+            return { quien: '', color: 'secondary', texto: 'La solicitud está cancelada: no tiene más pasos. Si se canceló por error, use «Reabrir solicitud» en la pestaña Trámite; si el cliente pide otra, «Nueva solicitud con estos datos».', tab: TRAMITE };
         }
         if (t.estado === 'emitida') {
             return { quien: '', color: 'success', texto: `Trámite terminado: la firma fue emitida${t.fecha_caducidad ? ' y vence el ' + t.fecha_caducidad : ''}.` };
         }
         if (t.estado === 'observada') {
-            return { quien: 'Cliente', color: 'warning', texto: 'Se le pidió una corrección. El cliente corrige desde su enlace y pulsa «Enviar corrección»; al hacerlo el trámite continúa solo.', tab: TRAMITE };
+            return { quien: 'Cliente o usted', color: 'warning', texto: 'Se pidió una corrección. El cliente corrige desde su enlace y pulsa «Enviar corrección»; si la corrige usted en la ficha, pulse «Confirmar documentos» en la pestaña Trámite.', tab: TRAMITE };
         }
         if (t.estado === 'borrador') {
-            return { quien: 'Cliente', color: 'warning', texto: 'Faltan los documentos. El cliente los sube y los confirma desde su enlace, y la solicitud pasa sola a «Pendiente de pago». Si usted ya los cargó en la ficha, cambie Estado Trámite a «Pendiente de pago» y pulse Guardar.' };
+            const faltan = t.docs_faltantes || [];
+            return faltan.length
+                ? { quien: 'Cliente o usted', color: 'warning', texto: `Paso 2 de 5 · Documentos. Falta subir: ${faltan.join(', ')}. Súbalos en la pestaña Documentos (o el cliente desde su enlace). Las pestañas de pago se habilitan después.`, tab: 'tab-firma-docs-btn' }
+                : { quien: 'Usted', color: 'info', texto: 'Paso 2 de 5 · Documentos completos. En la pestaña Trámite pulse «Confirmar documentos» para pasar al pago.', tab: TRAMITE };
         }
         if (!pagoOk) {
             const adelantado = ['por_registrar', 'en_proceso', 'aprobada'].includes(t.estado)
@@ -1404,13 +1419,13 @@
             }
             return { quien: 'Cliente o usted', color: adelantado ? 'danger' : 'warning', texto: adelantado
                 + (t.estado_pago === 'rechazado' ? 'El comprobante fue rechazado. ' : 'Falta el pago. ')
-                + 'El cliente paga desde su enlace (tarjeta o comprobante). Si usted ya recibió el dinero, en la pestaña Trámite elija la forma de cobro y pulse «Aprobar y facturar»: se genera la factura y el trámite pasa a «Por registrar».', tab: TRAMITE };
+                + 'El cliente paga desde su enlace (tarjeta o comprobante). Si usted ya recibió el dinero, en la pestaña Trámite elija la forma de cobro y pulse «Aprobar y facturar»: se genera la factura y el trámite pasa a «Por registrar». Si la firma es una regalía, use «Sin cobro (regalía)».', tab: TRAMITE };
         }
-        if (!t.id_ingreso) {
+        if (!t.id_ingreso && !t.es_cortesia) {
             return { quien: 'Usted', color: 'danger', texto: 'El pago figura «Confirmado» porque se marcó a mano, pero no se generó el cobro en Ingresos. En la pestaña Trámite elija la forma de cobro y regístrelo (si ya lo registró en el módulo Ingresos, no lo repita).', tab: TRAMITE };
         }
         if (t.estado === 'pendiente') {
-            return { quien: 'Usted', color: 'warning', texto: 'El pago ya figura confirmado. Cambie Estado Trámite a «Por registrar» y pulse Guardar para continuar con el registro en Uanataca.' };
+            return { quien: 'Usted', color: 'warning', texto: 'El pago ya está registrado. En la pestaña Trámite pulse «Continuar el trámite» para pasar al registro en Uanataca.', tab: TRAMITE };
         }
         if (t.estado === 'por_registrar') {
             const correo = correoPend ? 'El cliente aún no confirma su correo (botón del correo con la factura); en Trámite puede reenviarlo o marcarlo confirmado. Luego: ' : '';
@@ -1424,7 +1439,7 @@
         const emision = t.uanataca_uuid
             ? 'El estado se actualiza solo; puede adelantarlo con «Consultar estado ahora» en Trámite.'
             : (t.uanataca_api
-                ? 'Esta firma no se envió a Uanataca por API, así que el estado no se actualiza solo. Si aún no la registró en Uanataca, regrese el Estado Trámite a «Por registrar», guarde y use «Enviar a Uanataca»; si ya la registró a mano, cuando la emitan pulse «Marcar emitida» en Trámite.'
+                ? 'Esta firma no se envió a Uanataca por API, así que el estado no se actualiza solo. Si aún no la registró en Uanataca, pulse «Regresar al paso que corresponde» en Trámite y luego «Enviar a Uanataca»; si ya la registró a mano, cuando la emitan pulse «Marcar emitida» en Trámite.'
                 : 'Cuando Uanataca emita la firma, en la pestaña Trámite indique el vencimiento y pulse «Marcar emitida».');
         if (t.estado === 'en_proceso') {
             return { quien: 'Uanataca / cliente', color: 'primary', texto: 'La solicitud está en Uanataca: el cliente valida su identidad con ellos. ' + emision, tab: TRAMITE };
@@ -1439,7 +1454,7 @@
         const g = siguientePasoFirma(t);
         if (!g) return '';
         const texto = g.texto.charAt(0).toUpperCase() + g.texto.slice(1);
-        const nombreTab = g.tab === 'tab-firma-uanataca-btn' ? 'Uanataca' : 'Trámite';
+        const nombreTab = { 'tab-firma-uanataca-btn': 'Uanataca', 'tab-firma-docs-btn': 'Documentos' }[g.tab] || 'Trámite';
         return `<div class="d-flex align-items-start gap-2 border border-${g.color} bg-${g.color} bg-opacity-10 rounded-3 px-2 py-1 mt-1 small text-dark">
             <i class="bi bi-signpost-2 text-${g.color}"></i>
             <div class="flex-grow-1"><b>Siguiente paso${g.quien ? ' (' + esc(g.quien) + ')' : ''}:</b> ${esc(texto)}</div>
@@ -1450,21 +1465,31 @@
     document.addEventListener('click', e => {
         const btn = e.target.closest('[data-guia-tab]');
         if (btn && !document.getElementById(btn.dataset.guiaTab)?.classList.contains('disabled')) activarTab(btn.dataset.guiaTab);
-        // Deja el Estado Trámite en «Por registrar» para poder enviarla a Uanataca; se guarda con Guardar.
-        if (e.target.closest('[data-volver-por-registrar]')) {
-            setVal('firma_estado', 'por_registrar');
-            activarTab('tab-firma-general-btn');
-            mostrarAlerta('El Estado Trámite quedó en «Por registrar». Pulse Guardar y luego, en la pestaña Trámite, use «Enviar a Uanataca».', 'info');
-        }
     });
 
-    // Cambiar el Estado Trámite a mano no ejecuta el paso (no registra el pago ni factura): se avisa.
-    document.addEventListener('change', e => {
-        if (e.target.id !== 'firma_estado' || !_idFirmaActual || e.target.value === _firmaEstado) return;
-        if (['por_registrar', 'en_proceso', 'aprobada', 'emitida'].includes(e.target.value) && _tramite && _tramite.estado_pago !== 'confirmado') {
-            mostrarAlerta('Esta firma aún no tiene el pago registrado. Cambiar el estado a mano no registra el pago ni genera la factura: hágalo en la pestaña Trámite con «Aprobar y facturar» y el estado avanzará solo.', 'warning');
-        }
-    });
+    // Pestañas por avance: cada una se habilita cuando el paso anterior está cumplido, para
+    // que no se llene el pago sin documentos ni se registre en Uanataca sin pago.
+    //   Documentos y Trámite → al guardar los datos · Pago y Facturación → documentos
+    //   confirmados · Uanataca → pago (o regalía) registrado.
+    function aplicarPestanasPorAvance(t) {
+        const docsOk = t.estado !== 'borrador';
+        const pagoOk = t.estado_pago === 'confirmado' || ['en_proceso', 'aprobada', 'emitida'].includes(t.estado);
+        const reglas = {
+            'tab-firma-docs-btn':     [true, ''],
+            'tab-firma-tramite-btn':  [true, ''],
+            'tab-firma-pago-btn':     [docsOk, 'Primero suba y confirme los documentos del titular.'],
+            'tab-firma-fact-btn':     [docsOk, 'Primero suba y confirme los documentos del titular.'],
+            'tab-firma-uanataca-btn': [docsOk && pagoOk, 'Se habilita al registrar el pago (o la regalía).'],
+        };
+        Object.entries(reglas).forEach(([id, [habilitada, motivo]]) => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.classList.toggle('disabled', !habilitada);
+            // El botón deshabilitado no recibe el cursor: el motivo va en su <li>.
+            if (btn.parentElement) btn.parentElement.title = habilitada ? '' : motivo;
+            if (!habilitada && btn.classList.contains('active')) activarTab('tab-firma-general-btn');
+        });
+    }
 
     async function cargarTramite(id) {
         const cont = document.getElementById('tramiteContenido');
@@ -1479,6 +1504,8 @@
             consultarSaldoUanataca();
             renderUanataca(json);
             renderHistorialEstado(json);
+            aplicarPestanasPorAvance(json);
+            setVal('firma_estado_pago', json.estado_pago || 'pendiente');
             // Si el trámite cambió de estado (consulta a Uanataca, marcar emitida…), la ficha
             // lo refleja y, al quedar aprobada o emitida, pasa a solo lectura.
             if (json.estado && json.estado !== _firmaEstado) {
@@ -1534,9 +1561,22 @@
         let acciones = '';
 
         // Pago "Confirmado" sin cobro: el Estado Pago se marcó a mano y no existe el ingreso.
-        const sinCobro = pagoOk && !t.id_ingreso;
+        const sinCobro = pagoOk && !t.id_ingreso && !t.es_cortesia;
         const conFacturaActiva = !!t.id_factura && !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado);
-        if (puede && (['pendiente', 'en_revision', 'rechazado'].includes(t.estado_pago) || sinCobro) && t.estado !== 'cancelada') {
+
+        // Paso 1: documentos del titular. Mientras falten, no se ofrece registrar el pago.
+        if (puede && ['borrador', 'observada'].includes(t.estado)) {
+            const faltan = t.docs_faltantes || [];
+            acciones += `<div class="border rounded-3 p-2 mb-2 ${faltan.length ? 'border-warning bg-warning bg-opacity-10' : 'border-success bg-success bg-opacity-10'}">
+                <div class="fw-semibold mb-1"><i class="bi bi-paperclip me-1"></i>Documentos del titular</div>
+                ${faltan.length
+                    ? `<div class="small text-dark mb-1">Falta subir: <b>${faltan.map(esc).join(', ')}</b>. Súbalos en la pestaña Documentos (o el cliente desde su enlace).</div>
+                       <button type="button" class="btn btn-outline-primary btn-sm" data-guia-tab="tab-firma-docs-btn"><i class="bi bi-upload me-1"></i>Ir a Documentos</button>`
+                    : `<div class="small text-dark mb-1">${t.estado === 'observada' ? 'Si ya se corrigió lo observado, confírmelo para continuar.' : 'Los documentos obligatorios están cargados. Confírmelos para pasar al pago.'}</div>
+                       <button type="button" class="btn btn-success btn-sm" data-tr="confirmar_documentos"><i class="bi bi-check2-circle me-1"></i>Confirmar documentos</button>`}
+            </div>`;
+        }
+        if (puede && (['pendiente', 'en_revision', 'rechazado'].includes(t.estado_pago) || sinCobro) && !['cancelada', 'borrador'].includes(t.estado)) {
             acciones += `
             <div class="border rounded-3 p-2 mb-2 ${t.estado_pago === 'en_revision' ? 'border-info bg-info bg-opacity-10' : (sinCobro ? 'border-danger bg-danger bg-opacity-10' : '')}">
                 <div class="fw-semibold mb-1"><i class="bi bi-cash-coin me-1"></i>${t.estado_pago === 'en_revision' ? 'Revisar comprobante de pago' : (sinCobro ? 'Falta registrar el cobro' : 'Registrar pago recibido')}</div>
@@ -1554,6 +1594,7 @@
                         <input type="text" class="form-control form-control-sm" id="trReferencia" style="width:160px;" placeholder="N.º de transferencia"></div>
                     <button type="button" class="btn btn-success btn-sm" data-tr="aprobar"><i class="bi bi-check2-circle me-1"></i>${conFacturaActiva ? 'Registrar cobro' : 'Aprobar y facturar'}</button>
                     ${t.estado_pago === 'en_revision' ? '<button type="button" class="btn btn-outline-danger btn-sm" data-tr="rechazar"><i class="bi bi-x-circle me-1"></i>Rechazar</button>' : ''}
+                    ${!conFacturaActiva ? '<button type="button" class="btn btn-outline-secondary btn-sm" data-tr="cortesia" title="No se cobra: factura con 100 % de descuento"><i class="bi bi-gift me-1"></i>Sin cobro (regalía)</button>' : ''}
                 </div>
                 <div class="form-text small">${conFacturaActiva ? `Registra el cobro de la factura ${esc(t.factura_numero || '')} que ya existe; no crea otra factura.` : 'Genera la factura (serie configurada), la envía al SRI y registra el cobro.'}</div>
             </div>`;
@@ -1599,11 +1640,11 @@
                 <div class="fw-semibold mb-1"><i class="bi bi-cloud-slash me-1"></i>Esta firma no tiene una solicitud enviada a Uanataca por API</div>
                 <div class="small text-dark">Por eso no aparece «Consultar estado ahora»: el sistema no tiene qué consultar.
                     <ul class="mb-1 ps-3">
-                        <li><b>Si aún no la registró en Uanataca:</b> regrese el Estado Trámite a «Por registrar» y guarde; aparecerá el botón «Enviar a Uanataca» y desde ahí el estado se actualiza solo.</li>
+                        <li><b>Si aún no la registró en Uanataca:</b> pulse «Regresar al paso que corresponde»; el trámite vuelve a donde realmente está (documentos, pago o «Por registrar») y, al llegar a «Por registrar», aparece «Enviar a Uanataca».</li>
                         <li><b>Si ya la registró a mano en el portal de Uanataca:</b> el estado se lleva a mano; cuando Uanataca la emita, indique el vencimiento y pulse «Marcar emitida».</li>
                     </ul>
                 </div>
-                ${t.estado === 'en_proceso' ? '<button type="button" class="btn btn-outline-primary btn-sm" data-volver-por-registrar><i class="bi bi-arrow-counterclockwise me-1"></i>Regresar a «Por registrar»</button>' : ''}
+                ${t.estado === 'en_proceso' ? '<button type="button" class="btn btn-outline-primary btn-sm" data-tr="recalcular"><i class="bi bi-arrow-counterclockwise me-1"></i>Regresar al paso que corresponde</button>' : ''}
             </div>`;
         }
         if (puede && ['por_registrar', 'en_proceso', 'aprobada'].includes(t.estado)) {
@@ -1634,6 +1675,12 @@
                 <button type="button" class="btn btn-outline-primary btn-sm" data-tr="nueva_solicitud"><i class="bi bi-files me-1"></i>Nueva solicitud con estos datos</button>
             </div>`;
         }
+        // Estado que no corresponde al avance real: se corrige con una acción (ya no a mano).
+        if (puede && !t.uanataca_uuid && (t.estado === 'cancelada' || (t.estado === 'pendiente' && pagoOk))) {
+            acciones += `<div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-outline-primary btn-sm" data-tr="recalcular"><i class="bi bi-arrow-counterclockwise me-1"></i>${t.estado === 'cancelada' ? 'Reabrir solicitud' : 'Continuar el trámite'}</button>
+            </div>`;
+        }
         if (puede && !['emitida', 'cancelada'].includes(t.estado)) {
             acciones += `<div class="d-flex flex-wrap gap-2 mb-2">
                 ${!['borrador', 'aprobada'].includes(t.estado) ? '<button type="button" class="btn btn-outline-warning btn-sm" data-tr="observar"><i class="bi bi-exclamation-triangle me-1"></i>Pedir corrección al cliente</button>' : ''}
@@ -1660,7 +1707,7 @@
             <div class="col-lg-5">
                 <div class="mb-2"><span class="text-muted">Estado:</span> <b>${esc(t.estado_label)}</b>${t.total !== null ? ` · <span class="text-muted">Total:</span> <b>$${Number(t.total).toFixed(2)}</b>` : ''}</div>
                 ${paso(t.estado !== 'borrador', t.estado === 'borrador', 'Datos y documentos del cliente', t.estado === 'borrador' ? 'El cliente aún no envía sus documentos.' : '')}
-                ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${esc(t.tipo_pago || '')}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
+                ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${t.es_cortesia ? 'Regalía (sin cobro)' : esc(t.tipo_pago || '')}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
                 ${!correoRequerido && !correoOk ? paso(pagoOk, false, 'Correo confirmado', 'No se exige (configuración del módulo).') : paso(correoOk, pagoOk && !correoOk, 'Correo confirmado', correoOk ? `${esc(t.correo)} · ${esc(t.correo_confirmado_at)}` : (t.correo_enviado_at ? `Factura enviada a ${esc(t.correo)} el ${esc(t.correo_enviado_at)}; esperando confirmación.` : esc(t.correo || '')))}
                 ${paso(registrada, t.estado === 'por_registrar', 'Registrada en Uanataca', registrada ? `${t.uanataca_referencia ? 'Ref. ' + esc(t.uanataca_referencia) + ' · ' : ''}${esc(t.uanataca_registrada_at || '')}` : 'Use la pestaña Uanataca para copiar los datos.')}
                 ${paso(['aprobada', 'emitida'].includes(t.estado), t.estado === 'en_proceso', 'Aprobada por Uanataca', t.estado === 'en_proceso' ? 'Aún no: en espera de la aprobación de Uanataca.' : '')}
@@ -1831,6 +1878,17 @@
                     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando…';
                     await postTramite('enviarUanatacaAjax', null, ['Enviando a Uanataca…', 'Se envían los datos y documentos del cliente. Esto puede tardar unos segundos.']);
                 }
+            } else if (accion === 'confirmar_documentos') {
+                if (await confirmar('Se registran como completos los documentos del titular y el trámite pasa al pago.', 'Sí, confirmar')) {
+                    await postTramite('accionTramiteAjax', { accion: 'confirmar_documentos' });
+                }
+            } else if (accion === 'recalcular') {
+                if (await confirmar('El trámite vuelve al paso que corresponde a lo realmente hecho (documentos y pago). No borra documentos, pagos ni facturas.', 'Sí, corregir')) {
+                    await postTramite('accionTramiteAjax', { accion: 'recalcular' });
+                }
+            } else if (accion === 'cortesia') {
+                const motivo = await pedirTexto('Firma sin cobro (regalía)', 'Motivo de la regalía. Se emite la factura con 100 % de descuento (total $0.00), se envía al SRI y no se registra ningún cobro.');
+                if (motivo) await postTramite('registrarCortesiaAjax', { motivo }, ['Registrando la regalía…', 'Generando la factura con 100 % de descuento y enviándola al SRI. No cierre la ventana.']);
             } else if (accion === 'aviso_vencimiento') {
                 if (await confirmar('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp).', 'Sí, enviar')) {
                     await postTramite('avisoVencimientoAjax', null, ['Enviando el aviso…', 'Correo y, si hay plantilla aprobada, WhatsApp.']);

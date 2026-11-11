@@ -585,6 +585,9 @@ class FirmasElectronicasController extends BaseModuloController
                 'estado_label'        => FirmaElectronicaService::etiquetaEstado((string) $f['estado']),
                 'estado_pago'         => $f['estado_pago'],
                 'tipo_pago'           => $f['tipo_pago'],
+                'es_cortesia'         => ($f['tipo_pago'] ?? '') === \App\Rules\modulos\FirmaElectronicaRules::TIPO_PAGO_CORTESIA,
+                // Documentos obligatorios que faltan: habilitan «Confirmar documentos» y las pestañas de pago.
+                'docs_faltantes'      => $this->service->documentosFaltantes($f),
                 'origen'              => $f['origen'] ?? 'interno',
                 'total'               => $d['total'],
                 'pago_motivo_rechazo' => $f['pago_motivo_rechazo'],
@@ -664,6 +667,18 @@ class FirmasElectronicasController extends BaseModuloController
                 (int) ($_POST['id_forma_cobro'] ?? 0), trim($_POST['referencia'] ?? '')
             );
             return ['msg' => $res['ya_existia'] ? 'El pago ya estaba registrado; no se creó otro.' : 'Pago aprobado: se generó la factura y su cobro.'];
+        });
+    }
+
+    /** Firma sin cobro (regalía): factura con 100 % de descuento, sin ingreso. */
+    public function registrarCortesiaAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $r = $this->service->registrarCortesia(
+                (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (string) ($_POST['motivo'] ?? '')
+            );
+            return ['msg' => 'Regalía registrada: se generó la factura ' . $r['numero'] . ' con 100 % de descuento, sin cobro.'];
         });
     }
 
