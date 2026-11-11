@@ -380,6 +380,15 @@ class LogSistemaService
             return '(vacío)';
         }
 
+        // Cualquier otra lista de registros (detalles y pagos de un ingreso o egreso, líneas de un
+        // documento…): igual que arriba, se resume. El JSON crudo es ilegible y, al no tener
+        // espacios, desbordaba la pestaña Información. El contenido completo se consulta en
+        // config/log-sistema (formatearDatosCompletos lo muestra como tabla).
+        if (is_array($valor) && array_keys($valor) === range(0, count($valor) - 1) && is_array($valor[0])) {
+            $n = count($valor);
+            return $n . ($n === 1 ? ' registro' : ' registros');
+        }
+
         return $this->resolverValor($key, $valor);
     }
 

@@ -46,7 +46,8 @@
 
     function renderCambios(detalles) {
         if (!Array.isArray(detalles) || !detalles.length) return '<span class="text-muted">Sin cambios registrados</span>';
-        return `<ul class="list-unstyled mb-0">${detalles.map(d => {
+        // overflow-wrap: un valor largo sin espacios (JSON, clave de acceso, URL) no debe ensanchar el modal.
+        return `<ul class="list-unstyled mb-0" style="overflow-wrap:anywhere;">${detalles.map(d => {
             if (!d || typeof d !== 'object') return `<li><i class="bi bi-dot"></i> ${esc(d)}</li>`;
             const antes = (d.antes !== null && d.antes !== undefined)
                 ? `<span class="text-decoration-line-through text-muted">${esc(d.antes)}</span> ` : '';
@@ -93,7 +94,7 @@
                          style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
                         <i class="bi ${iconoAccion(h.accion)}" style="font-size: 0.7rem;"></i>
                     </div>
-                    <div>
+                    <div style="min-width:0;">
                         <div class="d-flex justify-content-between align-items-center mb-0 gap-2">
                             <span class="fw-bold" style="font-size: 0.75rem;">${esc(etiquetaAccion(h.accion))}</span>
                             <span class="text-muted text-nowrap" style="font-size: 0.65rem;">${esc(h.fecha || '')}</span>
