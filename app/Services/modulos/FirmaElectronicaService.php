@@ -442,7 +442,51 @@ class FirmaElectronicaService
             'avisos_vencimiento_activo' => $bool($cfg['avisos_vencimiento_activo'] ?? null, false),
             'avisos_dias_correo'        => (string) ($cfg['avisos_dias_correo'] ?? '30,15,5,0'),
             'avisos_dias_whatsapp'      => (string) ($cfg['avisos_dias_whatsapp'] ?? '30,5,0'),
+            // Términos que acepta el cliente en su enlace: vacío = texto base (TERMINOS_BASE).
+            'terminos_disponible'       => $this->repository->tieneTerminos(),
+            'terminos_texto'            => trim((string) ($cfg['terminos_texto'] ?? '')),
         ];
+    }
+
+    /**
+     * Texto base de términos y tratamiento de datos personales (LOPDP). Cada empresa puede
+     * reemplazarlo en la configuración del módulo. {EMPRESA} y {RUC} se sustituyen al mostrarlo.
+     */
+    public const TERMINOS_BASE = <<<'TXT'
+TÉRMINOS, CONDICIONES Y TRATAMIENTO DE DATOS PERSONALES
+
+1. Responsable del tratamiento. {EMPRESA}, con RUC {RUC}, es responsable del tratamiento de los datos personales que usted entrega en este formulario.
+
+2. Datos que se recogen. Datos de identificación y contacto (nombres, número de cédula o pasaporte, código dactilar, fecha de nacimiento, sexo, nacionalidad, dirección, teléfono y correo), imágenes de su documento de identidad y una fotografía suya (selfie), los documentos de la empresa que representa, cuando corresponda, y los datos necesarios para la facturación y el pago.
+
+3. Finalidad. Sus datos se usan únicamente para: a) verificar su identidad; b) gestionar la solicitud y emisión de su certificado de firma electrónica; c) emitir la factura y registrar el pago; d) comunicarle el estado del trámite y avisarle del vencimiento y la renovación de su firma.
+
+4. Comunicación a terceros. Para emitir la firma, sus datos y documentos se entregan a la entidad de certificación acreditada que emite el certificado, y los datos de facturación al Servicio de Rentas Internas (SRI). No se venden ni se ceden a terceros para otros fines.
+
+5. Conservación. Los datos se conservan durante la vigencia de la firma electrónica y, después, por el tiempo que exijan las obligaciones legales, tributarias y de la entidad de certificación.
+
+6. Sus derechos. Usted puede ejercer sus derechos de acceso, rectificación y actualización, eliminación, oposición, portabilidad y suspensión del tratamiento, así como revocar este consentimiento, escribiendo a {EMPRESA} por los canales de contacto con los que recibió este enlace. La revocación no afecta el tratamiento ya realizado ni las obligaciones legales de conservación. También puede presentar un reclamo ante la Superintendencia de Protección de Datos Personales.
+
+7. Veracidad. Usted declara que los datos y documentos que entrega son verdaderos, le pertenecen y están vigentes, y que, si actúa en nombre de una empresa, tiene la representación para hacerlo.
+
+8. Servicio. La emisión de la firma está sujeta a la validación de su identidad y de sus documentos por la entidad de certificación. La firma electrónica es personal e intransferible: su uso y la custodia de su clave son responsabilidad del titular.
+
+Al marcar la casilla, usted declara haber leído este texto y consiente de forma libre, específica, informada e inequívoca el tratamiento de sus datos personales, incluidos los de su documento de identidad y su fotografía, para las finalidades indicadas.
+TXT;
+
+    /** Texto que ve (y acepta) el cliente: el propio de la empresa o el base. null = función no disponible. */
+    public function textoTerminos(int $idEmpresa): ?string
+    {
+        $cfg = $this->getConfigModulo($idEmpresa);
+        if (!$cfg['terminos_disponible']) {
+            return null;
+        }
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+        $nombre  = trim((string) (($empresa['nombre'] ?? '') ?: ($empresa['nombre_comercial'] ?? '')));
+        return strtr($cfg['terminos_texto'] !== '' ? $cfg['terminos_texto'] : self::TERMINOS_BASE, [
+            '{EMPRESA}' => $nombre !== '' ? $nombre : 'La empresa',
+            '{RUC}'     => trim((string) ($empresa['ruc'] ?? '')),
+        ]);
     }
 
     public function guardarConfigModulo(int $idEmpresa, int $idUsuario, array $d, bool $regenerarEnlace = false): array
@@ -488,12 +532,23 @@ class FirmaElectronicaService
             || (($d['uanataca_clave'] ?? '') === '' && !$antes['uanataca_tiene_clave']))) {
             throw new Exception('Para activar la API de Uanataca ingrese el usuario y la clave que le entregó Uanataca.');
         }
+        // Términos propios de la empresa (vacío = texto base). Solo si el formulario los envió.
+        $guardarTerminos = $antes['terminos_disponible'] && array_key_exists('terminos_texto', $d);
+        if ($guardarTerminos) {
+            $nuevo['terminos_texto'] = trim((string) $d['terminos_texto']);
+            if (mb_strlen($nuevo['terminos_texto'], 'UTF-8') > 20000) {
+                throw new Exception('El texto de términos y condiciones es demasiado largo (máximo 20.000 caracteres).');
+            }
+        }
         // La clave no entra en $nuevo (auditoría): va aparte y cifrada.
         $guardar = $nuevo + ['uanataca_clave' => (string) ($d['uanataca_clave'] ?? '')];
 
         $this->repository->beginTransaction();
         try {
             $this->repository->guardarConfig($idEmpresa, $guardar, $idUsuario);
+            if ($guardarTerminos) {
+                $this->repository->guardarTerminosConfig($idEmpresa, $nuevo['terminos_texto'], $idUsuario);
+            }
             $this->logService->registrar($idUsuario, $idEmpresa, 'configurar', 'firmas_electronicas_config', null, $antes, $nuevo);
             $this->repository->commit();
         } catch (\Throwable $e) {
@@ -918,6 +973,8 @@ class FirmaElectronicaService
                 'datos'         => $cfg['datos_transferencia'],
             ],
             'editable'   => !$firma || $this->editableEnPortal($firma),
+            // Solo se piden al crear la solicitud: una que ya existe no vuelve a aceptarlos.
+            'terminos'   => $firma ? null : $this->textoTerminos($idEmpresa),
         ];
     }
 
@@ -968,6 +1025,8 @@ class FirmaElectronicaService
                     $cambioCorreo = mb_strtolower(trim((string) $firma['correo']), 'UTF-8') !== mb_strtolower(trim((string) $data['correo']), 'UTF-8');
                 }
                 $data['id_empresa'] = $idEmpresa;
+                // Los términos se aceptan solo al crear la solicitud: al editar no se piden ni se registran.
+                unset($data['acepta_terminos'], $data['terminos_ip'], $data['terminos_user_agent']);
                 // El portal no pide observaciones ni motivo: se conserva lo que tenía la ficha.
                 $data['observaciones'] = $firma['observaciones'] ?? null;
                 $data['motivo']        = self::motivoParaTipo((string) $data['tipo_persona'], $firma['motivo'] ?? null);
@@ -1129,6 +1188,16 @@ class FirmaElectronicaService
         // también un usuario sin "acceso total" (registros propios, CLAUDE.md §6).
         $owner = (int) ($sol['created_by'] ?? 0) ?: $this->getConfigModulo($idEmpresa)['id_usuario_responsable'];
 
+        // Consentimiento (LOPDP): sin la casilla marcada no se crea la solicitud. Se valida aquí,
+        // en el servidor, porque es el único punto por el que nace una firma desde el enlace.
+        $terminos = $this->textoTerminos($idEmpresa);
+        if ($terminos !== null && empty($data['acepta_terminos'])) {
+            throw new Exception('Para continuar debe aceptar los términos y condiciones y el tratamiento de sus datos personales.');
+        }
+        $ipCliente = (string) ($data['terminos_ip'] ?? '');
+        $uaCliente = (string) ($data['terminos_user_agent'] ?? '');
+        unset($data['acepta_terminos'], $data['terminos_ip'], $data['terminos_user_agent']);
+
         $firmaData = array_merge($data, [
             'motivo'                   => self::motivoParaTipo((string) ($data['tipo_persona'] ?? 'natural'), null),
             'id_empresa'               => $idEmpresa,
@@ -1146,6 +1215,14 @@ class FirmaElectronicaService
             $firmaData['id_vendedor'] = (int) $sol['id_vendedor'];
         }
         $this->solRepo->marcarCompletado((int) $sol['id'], $idFirma);
+        if ($terminos !== null) {
+            $this->repository->registrarAceptacionTerminos($idFirma, $idEmpresa, $terminos, $ipCliente, $uaCliente);
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'terminos', 'Términos y tratamiento de datos aceptados',
+                'El titular aceptó los términos y condiciones y el tratamiento de sus datos personales.', true, null);
+            $this->logService->registrar(0, $idEmpresa, 'aceptar_terminos', 'firmas_electronicas', $idFirma, null, [
+                'ip' => $ipCliente, 'user_agent' => mb_substr($uaCliente, 0, 300), 'texto_sha256' => hash('sha256', $terminos),
+            ]);
+        }
         $this->repository->crearEvento($idEmpresa, $idFirma, 'datos', 'Datos del titular registrados', 'Falta subir los documentos.', true, null);
         $this->logService->registrar(0, $idEmpresa, 'crear_portal', 'firmas_electronicas', $idFirma, null, $firmaData);
         return $idFirma;

@@ -38,6 +38,52 @@ class FirmaElectronicaRepository extends BaseRepository
         return self::$conVendedor;
     }
 
+    // ── Términos y tratamiento de datos (aceptación del cliente) ──
+
+    private static ?bool $conTerminos = null;
+
+    /**
+     * ¿Ya se aplicó database/20261112_firmas_terminos_aceptacion.sql? Sin las columnas, el
+     * enlace del cliente no muestra la casilla y el módulo sigue como antes.
+     */
+    public function tieneTerminos(): bool
+    {
+        if (self::$conTerminos === null) {
+            $st = $this->db->query(
+                "SELECT COUNT(*) FROM information_schema.columns
+                 WHERE table_schema = current_schema()
+                   AND ((table_name = 'firmas_electronicas' AND column_name = 'terminos_aceptados_at')
+                     OR (table_name = 'firmas_electronicas' AND column_name = 'terminos_texto')
+                     OR (table_name = 'firmas_electronicas_config' AND column_name = 'terminos_texto'))"
+            );
+            self::$conTerminos = (int) $st->fetchColumn() === 3;
+        }
+        return self::$conTerminos;
+    }
+
+    /** Texto propio de la empresa (null = usa el texto base). */
+    public function guardarTerminosConfig(int $idEmpresa, string $texto, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE firmas_electronicas_config SET terminos_texto = :t, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+             WHERE id_empresa = :ie AND eliminado = false"
+        )->execute([':t' => $texto !== '' ? $texto : null, ':u' => $idUsuario, ':ie' => $idEmpresa]);
+    }
+
+    /** Constancia de que el cliente aceptó: cuándo, desde dónde y qué texto exacto. */
+    public function registrarAceptacionTerminos(int $idFirma, int $idEmpresa, string $texto, ?string $ip, ?string $userAgent): void
+    {
+        $this->db->prepare(
+            "UPDATE {$this->table}
+             SET terminos_aceptados_at = CURRENT_TIMESTAMP, terminos_ip = :ip, terminos_user_agent = :ua, terminos_texto = :t
+             WHERE id = :id AND id_empresa = :ie AND eliminado = false"
+        )->execute([
+            ':ip' => ($ip ?? '') !== '' ? mb_substr((string) $ip, 0, 45) : null,
+            ':ua' => ($userAgent ?? '') !== '' ? mb_substr((string) $userAgent, 0, 300) : null,
+            ':t'  => $texto, ':id' => $idFirma, ':ie' => $idEmpresa,
+        ]);
+    }
+
     /** Vendedor activo de la empresa (id, nombre) o null. */
     public function getVendedorActivo(int $idVendedor, int $idEmpresa): ?array
     {

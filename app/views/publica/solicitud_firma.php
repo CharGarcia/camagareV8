@@ -36,6 +36,8 @@ if (!$firma) {
     $paso = 4;
 }
 $mostrarForm = !$firma || $estado === 'observada';
+// Términos y tratamiento de datos: solo se aceptan al crear la solicitud (nunca en una ya creada).
+$terminos    = !$firma ? trim((string) ($portal['terminos'] ?? '')) : '';
 $puedePagar  = $firma && $estado === 'pendiente' && in_array($estadoPago, ['pendiente', 'rechazado'], true);
 // Pago confirmado: la validez y la facturación quedan como se facturaron.
 $pagada      = $firma && $estadoPago === 'confirmado';
@@ -452,6 +454,21 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
     </div>
     <?php endif; ?>
 
+    <?php if ($terminos !== ''): ?>
+    <div class="card border-0 shadow-sm rounded-3 mb-3">
+        <div class="card-body p-3">
+            <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="acepta_terminos" name="acepta_terminos" value="1">
+                <label class="form-check-label small" for="acepta_terminos">
+                    He leído y acepto los
+                    <a href="#" data-bs-toggle="modal" data-bs-target="#modalTerminos">términos y condiciones y el tratamiento de mis datos personales</a>.
+                    <span class="req">*</span>
+                </label>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
     <div class="d-grid mb-4">
         <button type="submit" class="btn btn-primary btn-lg fw-semibold" id="btnGuardarDatos">
             <i class="bi bi-arrow-right-circle me-2"></i><?= $firma ? 'Guardar cambios' : 'Continuar' ?>
@@ -585,6 +602,26 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
 
 <p class="text-center small text-muted">Guarda este enlace: con él puedes volver a ver el estado de tu solicitud.</p>
 </div>
+
+<?php if ($terminos !== ''): ?>
+<div class="modal fade" id="modalTerminos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold"><i class="bi bi-shield-check me-1"></i>Términos y tratamiento de datos</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body small" style="white-space:pre-line;"><?= $e($terminos) ?></div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAceptarTerminos" data-bs-dismiss="modal">
+                    <i class="bi bi-check-lg me-1"></i>Acepto
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
@@ -842,10 +879,19 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             if (limpio.length === 13) buscarEmpresaSri(false);
         });
 
+        // Términos: «Acepto» en la ventana marca la casilla. El servidor vuelve a exigirla.
+        const chkTerminos = document.getElementById('acepta_terminos');
+        document.getElementById('btnAceptarTerminos')?.addEventListener('click', () => { if (chkTerminos) chkTerminos.checked = true; });
+
         let guardando = false;
         form.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             if (guardando) return;
+            if (chkTerminos && !chkTerminos.checked) {
+                aviso('Para continuar debe aceptar los términos y condiciones y el tratamiento de sus datos personales.');
+                chkTerminos.focus();
+                return;
+            }
             guardando = true;
             const btn = document.getElementById('btnGuardarDatos');
             ocupado(btn, true, 'Guardando...');

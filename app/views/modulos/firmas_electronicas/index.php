@@ -483,6 +483,30 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         </div>
                         <div class="form-text small">Cualquier persona con este enlace puede iniciar una solicitud (máximo 5 por hora desde la misma conexión).</div>
                     </div>
+                    <?php if (!empty($cfgM['terminos_disponible'])): ?>
+                    <div class="col-12 mt-2">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label small fw-bold text-muted mb-0" for="cfgTerminosTexto">Términos y tratamiento de datos (el cliente los acepta en su enlace)</label>
+                            <button type="button" class="btn btn-sm btn-outline-secondary py-0" onclick="cargarTerminosBaseFirmas()" title="Copia el texto base del sistema para adaptarlo">
+                                <i class="bi bi-file-earmark-text me-1"></i>Cargar texto base
+                            </button>
+                        </div>
+                        <textarea class="form-control form-control-sm" name="terminos_texto" id="cfgTerminosTexto" rows="5" maxlength="20000"
+                                  placeholder="Vacío = se usa el texto base del sistema."><?= htmlspecialchars($cfgM['terminos_texto'] ?? '') ?></textarea>
+                        <div class="form-text small">
+                            Vacío = texto base. Puede escribir <code>{EMPRESA}</code> y <code>{RUC}</code>: se reemplazan por los datos de la empresa.
+                            Cada solicitud guarda el texto que el cliente aceptó; un cambio aquí solo aplica a las nuevas.
+                        </div>
+                        <script>
+                        window.cargarTerminosBaseFirmas = function () {
+                            const t = document.getElementById('cfgTerminosTexto');
+                            const base = <?= json_encode(\App\Services\modulos\FirmaElectronicaService::TERMINOS_BASE, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP) ?>;
+                            if (t.value.trim() !== '' && !confirm('Se reemplazará el texto escrito por el texto base. ¿Continuar?')) return;
+                            t.value = base;
+                        };
+                        </script>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 </div><!-- /tab-cfg-general -->
 

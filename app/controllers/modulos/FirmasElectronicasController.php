@@ -867,7 +867,8 @@ class FirmasElectronicasController extends BaseModuloController
                 'avisos_vencimiento_activo' => !empty($_POST['avisos_vencimiento_activo']),
                 'avisos_dias_correo'        => (string) ($_POST['avisos_dias_correo'] ?? ''),
                 'avisos_dias_whatsapp'      => (string) ($_POST['avisos_dias_whatsapp'] ?? ''),
-            ], !empty($_POST['regenerar_enlace']));
+            ] + (isset($_POST['terminos_texto']) ? ['terminos_texto' => (string) $_POST['terminos_texto']] : []),
+            !empty($_POST['regenerar_enlace']));
             if (isset($_POST['vig']) && is_array($_POST['vig'])) {
                 $this->service->guardarVigencias((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], $_POST['vig']);
             }

@@ -265,6 +265,10 @@ class SolicitudFirmaController extends Controller
             'facturacion_direccion' => $mismos ? null : $fn(mb_strtoupper($str('facturacion_direccion'), 'UTF-8')),
             'facturacion_correo'    => $mismos ? null : $fn(mb_strtolower($str('facturacion_correo'), 'UTF-8')),
             'facturacion_telefono'  => $mismos ? null : $fn($str('facturacion_telefono')),
+            // Aceptación de términos y tratamiento de datos: solo cuenta al crear la solicitud.
+            'acepta_terminos'       => !empty($_POST['acepta_terminos']),
+            'terminos_ip'           => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
+            'terminos_user_agent'   => (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
         ];
     }
 

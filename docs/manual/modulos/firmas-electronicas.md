@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.19
+etiquetas: firma electronica, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.20
 orden: 20
 estado: activo
 ---
@@ -241,6 +241,54 @@ Botón del **engranaje**, junto a los botones de PDF y Excel (requiere permiso d
 | Pago con tarjeta / por transferencia | Qué formas de pago ve el cliente. Al menos una. |
 | Datos para la transferencia | Banco, cuenta y titular que el cliente ve para transferir. |
 | Enlace público fijo | Un enlace permanente (para su web, redes o un QR) donde cualquiera inicia su solicitud. Se puede regenerar; el anterior deja de funcionar. Máximo 5 solicitudes por hora desde una misma conexión. |
+| Términos y tratamiento de datos | Texto que el cliente debe aceptar en su enlace antes de enviar sus datos. Vacío = texto base del sistema. Ver *Términos y protección de datos personales*. |
+
+## Términos y protección de datos personales
+
+El formulario del cliente recoge datos personales sensibles (cédula, código
+dactilar, fotos del documento y una selfie) y los entrega a la entidad de
+certificación. Por eso, antes de **Continuar**, el cliente debe marcar la
+casilla **He leído y acepto los términos y condiciones y el tratamiento de mis
+datos personales**, como exige la Ley Orgánica de Protección de Datos
+Personales.
+
+- La casilla aparece **desmarcada**, al final del formulario de datos, en los
+  tres tipos de enlace: el que usted envía, el enlace público fijo y el de cada
+  vendedor. Los enlaces no cambian: no hay que reenviar nada ni reimprimir QR.
+- El enlace del texto abre una ventana para leerlo completo; el botón
+  **Acepto** de esa ventana marca la casilla.
+- Sin la casilla marcada la solicitud **no se crea** (el sistema lo valida
+  también en el servidor).
+- Solo se pide **al crear la solicitud**. Quien ya envió sus datos (está
+  subiendo documentos, pagando, corrigiendo o en trámite) no la ve ni queda
+  bloqueado.
+
+### Qué queda como constancia
+
+Cada solicitud guarda la **fecha y hora** de la aceptación, la **dirección IP**,
+el **navegador** y una **copia del texto exacto** que el cliente aceptó. En el
+historial de la firma (y en el del cliente) aparece *Términos y tratamiento de
+datos aceptados*.
+
+Las firmas creadas antes de esta función, las que usted registra a mano desde
+el sistema y las solicitudes de renovación (que copian los datos de la firma
+anterior) no tienen esa constancia.
+
+### Cambiar el texto
+
+Engranaje → pestaña **General** → **Términos y tratamiento de datos**.
+
+- **Vacío**: se usa el texto base del sistema, con el nombre y el RUC de su
+  empresa.
+- **Cargar texto base**: copia el texto base al cuadro para que lo adapte.
+- Puede escribir `{EMPRESA}` y `{RUC}`: se reemplazan por los datos de la
+  empresa al mostrarlo.
+- Un cambio solo aplica a las solicitudes **nuevas**; las anteriores conservan
+  el texto que aceptó cada cliente.
+
+> El texto base es una guía general. Haga que su asesor legal lo revise y lo
+> ajuste a su empresa: la empresa es la responsable del tratamiento de los
+> datos de sus clientes.
 
 ### Imprimir el QR del enlace fijo
 
@@ -720,6 +768,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.20** — **Términos y protección de datos personales**: el cliente debe marcar una casilla de aceptación antes de enviar sus datos (enlace enviado, enlace fijo y enlace por vendedor). Se guarda la fecha, la IP, el navegador y el texto aceptado. Texto base del sistema, editable por empresa en el engranaje (pestaña General). No afecta a las solicitudes ya iniciadas. Requiere `database/20261112_firmas_terminos_aceptacion.sql`.
 - **3.19** — **Solicitud cancelada o eliminada por Uanataca**: aviso por correo a la empresa con el motivo, la firma cuenta en el ícono de Firmas del menú y la ficha muestra un recuadro rojo en Trámite. Nuevo botón **Reabrir para corregir y reenviar** (también para rechazadas): conserva pago, factura y documentos, devuelve la firma a *Por registrar* y espera el envío manual a Uanataca.
 - **3.18** — Ficha de la firma: las **pestañas se habilitan por pasos** (Datos → Documentos → Pago → Uanataca) y el recuadro **Siguiente paso** indica qué falta y quién actúa. **Estado Trámite** y **Estado Pago** pasan a ser de **solo lectura**: avanzan con las acciones de Trámite, entre ellas las nuevas **Confirmar documentos**, **Sin cobro (regalía)** (factura con 100 % de descuento, sin cobro), **Reabrir solicitud**, **Continuar el trámite** y **Regresar al paso que corresponde**. Una firma nueva nace en *Borrador* y no se puede registrar el pago sin los documentos. Un pago marcado «Confirmado» a mano, sin cobro, se puede registrar desde Trámite (**Falta registrar el cobro**). Nota junto al botón de reenviar factura. Nueva sección *Cómo avanza el trámite: siguiente paso y estados*.
 - **3.17** — **Enlaces y QR por vendedor**: pestaña **Vendedores** en el engranaje (un enlace y un QR por vendedor), campo **Vendedor** en *Enviar link*, columna **Vendedor** en el listado, en el Excel y en *Enlaces enviados*; la factura de la firma sale con ese vendedor y las renovaciones lo conservan. Requiere `database/20261110_firmas_enlaces_vendedor.sql`.
