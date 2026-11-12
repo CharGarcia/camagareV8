@@ -6,7 +6,7 @@ ruta_modulo: modulos/crm_configuracion
 tipo: modulo
 visibilidad: todos
 etiquetas: app de meta, app id, app secret, id de configuracion, config_id, unified login, inicio de sesion unificado, portafolio comercial, token de verificacion, configuracion crm, ajustes crm, conectar instagram, vincular instagram, cuenta de instagram, redes sociales, instagram empresa, desconectar instagram, reconectar, acceso vencido, token, embudo, embudos, etapas, etapas del embudo, pipeline, probabilidad, orden de etapas, origenes, origen del contacto, motivos de perdida, asignar conversaciones, repartir mensajes, turnos, human agent, siete dias, asistente virtual, bot, chatbot, respuesta automatica, probar asistente, consumo ia, linkedin, conectar linkedin, app de linkedin, client id, pagina de empresa, publicar
-version: 1.4
+version: 1.5
 orden: 15
 estado: activo
 ---
@@ -88,9 +88,12 @@ app, solo si no hay cuentas conectadas con ella.
 
 1. Pestaña **Canales** → **Conectar Instagram** (aparece cuando la app está registrada).
    Un aviso explica lo que va a pasar; pulse **Abrir y conectar**.
-2. Meta se abre en una **ventana aparte** (el sistema queda abierto detrás): inicie
-   sesión (con Instagram o con Facebook), elija el **portafolio comercial** y la
-   **cuenta de Instagram**, y acepte.
+2. Meta se abre en una **ventana aparte** (el sistema queda abierto detrás): pulse
+   **Continuar con Facebook** (no con Instagram) y entre con la cuenta administradora
+   del portafolio dueño de la app; elija **ese portafolio**, la **cuenta de
+   Instagram** y ninguna cuenta publicitaria, y pulse **Continuar → Guardar**. Si la
+   cuenta de Instagram está en otro portafolio, compártala antes como **socio** (guía
+   *App de Meta para Instagram*).
 3. Al terminar, **esa ventana se cierra sola** y el sistema muestra *«Cuenta @…
    conectada»*; la cuenta aparece con estado **Conectada**. Si se compartieron varias
    cuentas, aparece una tarjeta por cada una. Si el navegador bloquea las ventanas
@@ -256,6 +259,7 @@ catálogos.
 
 ## Historial de cambios
 
+- **1.5** — Paso a paso de Meta con dos tarjetas nuevas: **configuración básica** de la app (dominio, privacidad, eliminación de datos, categoría, ícono) y **cuenta de Instagram de otro portafolio** (compartirla como socio). Conectar: entrar con Facebook y elegir el portafolio dueño de la app.
 - **1.4** — Sin el botón «Ir al CRM» en el encabezado (el CRM se abre desde el menú). Canales en **secciones plegables** (Instagram y LinkedIn). **Unified login** (apps de Meta nuevas): **paso a paso en un modal** (una tarjeta por paso, con la ruta de menús y los campos como en Meta), **Conectar** Instagram y LinkedIn en una **ventana aparte** que se cierra sola y devuelve el resultado al sistema, campo **ID de configuración**, App ID/Secret de la app de Meta, acceso del portafolio que no vence, una tarjeta por cuenta compartida, aviso de permisos que faltan en la configuración y de acceso revocado.
 - **1.3** — **LinkedIn**: app de la empresa y conexión de perfil y páginas (solo
   para publicar). Aviso para reconectar Instagram y dar los permisos de publicar y

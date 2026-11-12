@@ -30,7 +30,7 @@ $campo = static function (string $etiqueta, string $contenido) use ($h): string 
 $valor = static fn(string $t) => '<div class="crmc-meta-valor">' . $t . '</div>';
 $tokenWebhook = $app['configurada']
     ? $copiable((string) $app['verify_token'], 'crmc-verify-token-guia')
-    : '<div class="small text-warning-emphasis"><i class="bi bi-hourglass-split me-1"></i>Aparece al guardar la app en el paso 3.</div>';
+    : '<div class="small text-warning-emphasis"><i class="bi bi-hourglass-split me-1"></i>Aparece al guardar la app en el paso 4.</div>';
 
 $pasos = [
     [
@@ -40,10 +40,23 @@ $pasos = [
         'campos' => [
             ['Nombre de la app', $valor('El de su empresa, p. ej. <strong>MiEmpresa CRM</strong>. Sin «Instagram», «Facebook», «Meta» ni «WhatsApp»: Meta lo rechaza.')],
             ['Correo de contacto', $valor('Uno de la empresa que revisen seguido (ahí llegan los avisos de la revisión).')],
-            ['Casos de uso', $valor('Marque <strong>Administrar mensajes y contenido en Instagram</strong>.')],
+            ['Casos de uso', $valor('Marque <strong>solo</strong> <strong>Administrar mensajes y contenido en Instagram</strong> (filtro «Todo» si no aparece). Ni anuncios, ni WhatsApp, ni inicio de sesión con Facebook.')],
             ['Portafolio comercial', $valor('El de la empresa (si dice «Verificación completada», mejor).')],
         ],
         'nota' => 'Si la empresa ya tiene una app de Meta para WhatsApp, cree otra para el CRM: así la revisión de Instagram no toca la de WhatsApp.',
+    ],
+    [
+        'titulo' => 'Completar la configuración básica',
+        'ruta'   => ['Configuración de la app', 'Básica'],
+        'campos' => [
+            ['Dominios de la app', $copiable((string) (parse_url((string) $urlsMeta['oauth'], PHP_URL_HOST) ?: ''))],
+            ['URL de la política de privacidad', $valor('La página pública de privacidad de la empresa.')],
+            ['Eliminación de datos de usuario', $copiable((string) $urlsMeta['eliminar'])
+                . '<div class="small text-muted">Elija <strong>URL de devolución de llamada para eliminar datos</strong> y pegue esta dirección.</div>'],
+            ['Categoría', $valor('<strong>Empresas y páginas</strong> (o la más parecida).')],
+            ['Ícono de la app', $valor('El logo de la empresa (1024 × 1024).')],
+        ],
+        'nota' => 'Hágalo antes de conectar: si esta pantalla queda vacía, Meta corta la conexión con «No se pudo conectar… no pudimos establecer conexión con nuestro servidor». Pulse Guardar cambios.',
     ],
     [
         'titulo' => 'Crear la configuración de inicio de sesión',
@@ -53,11 +66,12 @@ $pasos = [
             ['Identificador de acceso', $valor('<strong>Identificador de acceso de usuario del sistema</strong>')],
             ['Fecha de caducidad', $valor('<strong>El identificador no caduca nunca</strong>')],
             ['Activos', $valor('<strong>Cuentas de Instagram</strong> (las cuentas publicitarias no hacen falta)')],
-            ['Permisos', $valor('<code>instagram_basic</code>, <code>instagram_manage_messages</code>, <code>instagram_manage_comments</code>, '
-                . '<code>instagram_content_publish</code> e <code>instagram_manage_insights</code> (este da las métricas). '
-                . 'Si puede, quite <code>ads_management</code> y <code>ads_read</code>.')],
+            ['Permisos', $valor('Meta la crea con <code>ads_management</code> y <code>ads_read</code>. Pulse <strong>Editar permisos</strong>: quite esos dos y deje '
+                . '<code>instagram_basic</code>, <code>instagram_manage_messages</code>, <code>instagram_manage_comments</code>, '
+                . '<code>instagram_content_publish</code> e <code>instagram_manage_insights</code> (este da las métricas).')],
+            ['Permisos y funciones', $valor('En el menú del caso de uso, los cinco deben decir <strong>Listo para prueba</strong>.')],
         ],
-        'nota' => 'Si la pantalla no deja cambiar los permisos, confírmela así y edítela después en «Inicio de sesión con Facebook para empresas → Configuraciones» (el identificador no cambia).',
+        'nota' => 'No use «Crear otra configuración» para corregir algo: hace una copia igual. Las configuraciones se ven en «Inicio de sesión con Facebook para empresas → Ajustes» (el identificador no cambia al editar).',
     ],
     [
         'titulo' => 'URL de redirección e ID de configuración',
@@ -83,14 +97,6 @@ $pasos = [
         'nota' => 'Está más abajo en la misma página de «API setup with Unified login», después de «2. Generar identificadores de acceso».',
     ],
     [
-        'titulo' => 'Eliminación de datos',
-        'ruta'   => ['Configuración de la app', 'Básica'],
-        'campos' => [
-            ['URL de instrucciones / devolución de llamada de eliminación de datos', $copiable((string) $urlsMeta['eliminar'])],
-        ],
-        'nota' => 'Meta la exige para publicar la app. Cuando alguien pide borrar sus datos, el sistema los borra y le entrega a Meta un código de confirmación.',
-    ],
-    [
         'titulo' => 'Agregar la cuenta de Instagram para probar',
         'ruta'   => ['API setup with Unified login', '2. Generar identificadores de acceso'],
         'enlace' => ['https://www.instagram.com/accounts/manage_access/', 'Abrir Apps y sitios web en Instagram'],
@@ -102,10 +108,22 @@ $pasos = [
         'nota' => 'Mientras la app no esté publicada, solo funcionan las cuentas con un rol en la app. Para usarla con cualquier cliente hay que pasar la revisión de Meta (App Review) y publicarla.',
     ],
     [
+        'titulo' => 'Si la cuenta de Instagram es de otro portafolio',
+        'ruta'   => ['business.facebook.com/settings', 'Cuentas', 'Cuentas de Instagram', 'Asignar socio'],
+        'enlace' => ['https://business.facebook.com/settings', 'Abrir la configuración del portafolio'],
+        'campos' => [
+            ['Cuándo', $valor('Si la cuenta de Instagram tiene su propio portafolio (Meta lo crea con el nombre de la cuenta) y su única persona es la identidad de Instagram «@cuenta». Esa identidad no puede crear el usuario del sistema y la conexión falla al pulsar Guardar.')],
+            ['1. En el portafolio dueño de la app', $valor('Entrando con Facebook: <em>Información del negocio</em> → copie el <strong>identificador del portafolio</strong>.')],
+            ['2. En el portafolio de la cuenta', $valor('Entrando como la cuenta de Instagram: <em>Cuentas de Instagram</em> → la cuenta → <strong>Asignar socio</strong> → pegue ese identificador → todos los permisos.')],
+        ],
+        'nota' => 'Si Meta dice «El identificador del negocio del socio no puede ser el tuyo», copió el número del mismo portafolio. Si la cuenta ya está en el portafolio de la app, salte este paso.',
+    ],
+    [
         'titulo' => 'Conectar la cuenta',
         'ruta'   => ['Sistema', 'Configuración del CRM', 'Canales', 'Conectar Instagram'],
         'campos' => [
-            ['Conectar Instagram', $valor('Se abre Meta en una ventana aparte. Inicie sesión con Instagram o con Facebook, elija el <strong>portafolio comercial</strong> y la <strong>cuenta de Instagram</strong>, y acepte.')],
+            ['Conectar Instagram', $valor('Se abre Meta en una ventana aparte. Pulse <strong>Continuar con Facebook</strong> (no con Instagram) y entre con la cuenta administradora del portafolio dueño de la app.')],
+            ['Qué elegir', $valor('Portafolio: el <strong>dueño de la app</strong>. Cuenta de Instagram: la de la empresa. Cuentas publicitarias: <strong>ninguna</strong>. Luego Continuar → Guardar.')],
             ['Al terminar', $valor('La ventana de Meta se cierra sola y esta pantalla muestra el resultado.')],
             ['Mensajes', $valor('Solo se pueden responder los mensajes que lleguen <strong>después</strong> de conectar.')],
         ],
@@ -171,7 +189,7 @@ $total = count($pasos);
                 <button type="button" class="btn btn-primary btn-sm" id="crmc-guia-siguiente" onclick="CRMC.guiaMover(1)">Siguiente<i class="bi bi-chevron-right ms-1"></i></button>
                 <?php if (!empty($perm['crear'])): ?>
                     <button type="button" class="btn btn-success btn-sm d-none" id="crmc-guia-conectar" onclick="CRMC.guiaConectar()"
-                            <?= $app['configurada'] ? '' : 'disabled title="Primero registre la app (paso 3)"' ?>><i class="bi bi-instagram me-1"></i>Conectar Instagram</button>
+                            <?= $app['configurada'] ? '' : 'disabled title="Primero registre la app (paso 4)"' ?>><i class="bi bi-instagram me-1"></i>Conectar Instagram</button>
                 <?php endif; ?>
             </div>
         </div>

@@ -180,3 +180,22 @@ Conclusiones para programar:
   `CrmConversacionRepository::adoptarEco()` ahora reconoce el eco por texto/tipo entre los salientes
   del sistema de los últimos 10 min sin eco (`contenido.eco_mid`), aunque ya tengan id; guarda el
   `mid` del eco en `contenido.eco_mid` y reconoce sus reintentos. Prueba: `test_eco_unified.php`.
+- **App bloqueada y app nueva (10-12/11/2026)**: la app `2284857582363461` quedó con «API access
+  blocked» (código 200, fbtrace `AuUp_F6cRo4byBycptQNKUV`) sin causa en el código; Meta no da
+  soporte directo. Se eliminó y se creó **CaMaGaRe Redes** (app `1878953656853084`, configuración
+  `1443086370677400`). Al conectar, Meta respondía «No se pudo conectar CaMaGaRe Redes… no pudimos
+  establecer conexión con nuestro servidor» (también desde *Generar identificador* del panel; el
+  callback nunca llegaba). Causas encontradas, en orden:
+  1. **Configuración de la app → Básica vacía** (dominio, privacidad, eliminación de datos,
+     categoría): al completarla el diálogo pasó a la pantalla de resumen.
+  2. **Portafolio de la cuenta ≠ portafolio de la app**: `@camagare.ec` está en el portafolio
+     «CaMaGaRe» cuya única administradora es la identidad de Instagram (no puede crear usuarios
+     del sistema: «Agregar» desactivado); la app es de «CMG Business Administration» (Mauricio
+     Garcia, Facebook). Fallaba justo al pulsar **Guardar** (creación del usuario del sistema).
+     Prueba que lo aisló: un ajuste con *identificador de acceso de usuario* sí completaba.
+     Solución: en «CaMaGaRe» → Cuentas de Instagram → `@camagare.ec` → **Asignar socio** con el ID
+     de CMG Business Administration, y conectar entrando con **Facebook** (Mauricio) eligiendo
+     **CMG Business Administration**. Conectado el 12-11-2026.
+  Quedan para limpiar en Meta: ajustes de prueba `1656603572793632` y `1788601369040496`, la
+  integración de prueba «Mauricio Garcia → CaMaGaRe Redes» y `ads_*` de la configuración.
+  Documentado en `guias/instagram-app-meta` 3.1 y en dos tarjetas nuevas del paso a paso.

@@ -310,9 +310,9 @@
     const REDES = {
         instagram: {
             titulo: 'Conectar Instagram', nombre: 'Meta (Facebook / Instagram)',
-            pasos: ['Inicie sesión con <strong>Instagram</strong> o con <strong>Facebook</strong>.',
-                'Elija el <strong>portafolio comercial</strong> de la empresa y la <strong>cuenta de Instagram</strong>.',
-                'Acepte los permisos.'],
+            pasos: ['Pulse <strong>Continuar con Facebook</strong> (no con Instagram) y entre con la cuenta administradora del portafolio dueño de la app.',
+                'Elija el <strong>portafolio dueño de la app</strong>, la <strong>cuenta de Instagram</strong> y ninguna cuenta publicitaria.',
+                'Pulse Continuar y luego Guardar.'],
             pedirUrl: () => api('conectarInstagramAjax', { post: {} }),
         },
         linkedin: {
