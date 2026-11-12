@@ -199,3 +199,12 @@ Conclusiones para programar:
   Quedan para limpiar en Meta: ajustes de prueba `1656603572793632` y `1788601369040496`, la
   integración de prueba «Mauricio Garcia → CaMaGaRe Redes» y `ads_*` de la configuración.
   Documentado en `guias/instagram-app-meta` 3.1 y en dos tarjetas nuevas del paso a paso.
+- **Mensajes que no llegaban (12-11-2026)**: conectada y sin avisos, pero Meta no enviaba
+  ningún evento real (ni DM, ni eco propio, ni comentario); el `POST` de prueba del panel sí
+  llegaba (200) y `scripts/crm_diagnostico_instagram.php` mostró suscripción, permisos y perfil
+  correctos; publicar la app tampoco cambió nada. Causa: `@camagare.ec` era **propiedad** de
+  «CaMaGaRe» y llegaba a la app solo como **socio** de CMG Business Administration. Solución: quitarla
+  de «CaMaGaRe» (Cuentas de Instagram → Eliminar), **añadirla como propia** en CMG Business
+  Administration (inicio de sesión de Instagram) y Reconectar → llegaron los mensajes. Regla: la
+  cuenta de Instagram debe ser **propiedad del portafolio dueño de la app** (guía 3.1). App
+  publicada (Live) el 12-11-2026, con ícono `mobile/assets/icon.png` sin fondo y política de privacidad.

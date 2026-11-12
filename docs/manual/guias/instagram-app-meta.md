@@ -4,7 +4,7 @@ resumen: Cómo crea la empresa su app de Meta (Unified login), la registra en Co
 categoria: Ventas
 tipo: guia
 visibilidad: todos
-etiquetas: meta, socio, asignar socio, portafolio comercial, no se pudo conectar, configuracion basica, politica de privacidad, facebook developers, app de meta, instagram api, unified login, inicio de sesion unificado, id de configuracion, config_id, configuracion de inicio de sesion, usuario del sistema, suat, instagram login, app id, app secret, redirect uri, url de redireccion, oauth, webhook, token de verificacion, verify token, app review, revision de la app, permisos instagram, instagram_manage_insights, evaluador de instagram, instagram tester, permitir acceso a los mensajes, human agent, eliminacion de datos, data deletion, desautorizar, deauthorize, privacidad, crm instagram, conectar instagram, publicar en instagram, estadisticas, app_url
+etiquetas: meta, propiedad de la cuenta, mover cuenta de instagram, socio, portafolio comercial, no llegan mensajes, bandeja vacia, no se pudo conectar, configuracion basica, politica de privacidad, facebook developers, app de meta, instagram api, unified login, inicio de sesion unificado, id de configuracion, config_id, configuracion de inicio de sesion, usuario del sistema, suat, instagram login, app id, app secret, redirect uri, url de redireccion, oauth, webhook, token de verificacion, verify token, app review, revision de la app, permisos instagram, instagram_manage_insights, evaluador de instagram, instagram tester, permitir acceso a los mensajes, human agent, eliminacion de datos, data deletion, desautorizar, deauthorize, privacidad, crm instagram, conectar instagram, publicar en instagram, estadisticas, app_url
 version: 3.1
 orden: 50
 estado: activo
@@ -126,8 +126,8 @@ en la app:
    Instagram**.
 2. Acepte la invitación en **instagram.com/accounts/manage_access → Invitaciones de
    evaluador**.
-3. Si la cuenta de Instagram es de **otro portafolio** que el de la app, compártala
-   antes como **socio** (sección siguiente).
+3. La cuenta de Instagram debe ser **propiedad** del portafolio de la app; si es de
+   otro, páselo antes (sección siguiente).
 4. En el sistema pulse **Conectar Instagram** y luego **Abrir y conectar**. Meta se
    abre en una ventana aparte:
    - Pulse **Continuar con Facebook** (no «Continuar con Instagram») y entre con la
@@ -143,21 +143,28 @@ el acceso solo, cifrado.
 
 ## Si la cuenta de Instagram está en otro portafolio
 
-Pasa cuando la cuenta de Instagram se creó o se administra desde Instagram: Meta le
-arma un portafolio propio (con el nombre de la cuenta) donde la única administradora
-es la identidad de Instagram, que no puede crear usuarios del sistema. Para unirla
-con la app:
+La cuenta de Instagram tiene que ser **propiedad** del portafolio dueño de la app.
+Si solo está **compartida como socio**, la conexión funciona (perfil, permisos,
+publicar) pero Meta **no envía ningún evento**: no llegan mensajes, ni ecos, ni
+comentarios a la Bandeja (verificado 12-11-2026).
 
-1. En el portafolio **dueño de la app** (entrando con Facebook): **Configuración →
-   Información del negocio** → copie el **identificador del portafolio**.
+Pasa cuando la cuenta se administra desde Instagram: Meta le arma un portafolio
+propio (con el nombre de la cuenta) cuya única persona es la identidad de Instagram.
+Para pasarla al portafolio de la app:
+
+1. Antes, revise qué más tiene ese portafolio (páginas, cuentas publicitarias,
+   WhatsApp, apps) y que no haya promociones activas.
 2. En **business.facebook.com/settings**, entrando como la cuenta de Instagram, elija
-   **su** portafolio → **Cuentas → Cuentas de Instagram** → la cuenta → **Asignar
-   socio** → pegue ese identificador → **todos los permisos** → confirmar.
-3. Conecte como en el paso 5, eligiendo el portafolio **dueño de la app**.
+   **su** portafolio → **Cuentas → Cuentas de Instagram** → la cuenta → **Eliminar**.
+   Solo la quita de ese portafolio: la cuenta, sus seguidores y mensajes no se tocan.
+3. En el portafolio **dueño de la app** (entrando con Facebook): **Cuentas →
+   Cuentas de Instagram → Añadir** → inicie sesión con la cuenta de Instagram. Debe
+   quedar *Propiedad de:* ese portafolio. El interruptor «Añadir este perfil a la
+   lista de personas» puede quedar apagado.
+4. En el sistema pulse **Reconectar** (o **Conectar Instagram**) como en el paso 5.
 
-Si Meta responde «El identificador del negocio del socio no puede ser el tuyo», se
-copió el número del mismo portafolio: compare las personas de cada uno (son
-portafolios distintos aunque los nombres se parezcan).
+Para revisar a quién pertenece: en el portafolio de la app, **Cuentas de
+Instagram** no debe mostrar la etiqueta «Pertenece a {otro portafolio}».
 
 ## Cómo queda conectada la cuenta
 
@@ -238,8 +245,14 @@ Si la app tiene **«API setup with Instagram login»**:
   2. Quien conecta entra con **Facebook**, es **administrador del portafolio dueño de
      la app** y tiene rol en la app. Si entra como la identidad de Instagram, o la
      cuenta está en otro portafolio, falla justo al pulsar **Guardar** (Meta no puede
-     crear el usuario del sistema): comparta la cuenta como **socio** (sección *Si la
-     cuenta de Instagram está en otro portafolio*).
+     crear el usuario del sistema): pase la cuenta al portafolio de la app (sección
+     *Si la cuenta de Instagram está en otro portafolio*).
+- **Conectada y sin avisos, pero no llega nada a la Bandeja** (ni mensajes, ni
+  comentarios; el log de Apache no muestra `POST /instagram-webhook`): la cuenta está
+  compartida como **socio** y no es propiedad del portafolio de la app. Pásela (sección
+  *Si la cuenta de Instagram está en otro portafolio*) y reconecte. Para revisar la
+  suscripción desde el servidor: `php scripts/crm_diagnostico_instagram.php {id_cuenta}`
+  (con `--suscribir` la renueva).
 - **«Meta no compartió ninguna cuenta de Instagram»**: en la ventana de Meta no se
   eligió la cuenta, o la cuenta es personal. Vuelva a conectar y elíjala.
 - **«Hay cuentas de Instagram conectadas con la forma anterior…»**: al poner o quitar
@@ -264,9 +277,10 @@ debe tener configurada su dirección pública con **https** (`app_url` en
 ## Historial de cambios
 
 - **3.1** — Configuración básica de la app obligatoria antes de conectar; conectar
-  entrando con Facebook y eligiendo el portafolio dueño de la app; cuenta de
-  Instagram de otro portafolio compartida como **socio**; error «No se pudo
-  conectar…» con sus dos causas; editar permisos con «Editar permisos».
+  entrando con Facebook y eligiendo el portafolio dueño de la app; la cuenta de
+  Instagram debe ser **propiedad** de ese portafolio (como socio no llegan eventos) y
+  cómo pasarla; error «No se pudo conectar…» con sus dos causas; editar permisos con
+  «Editar permisos»; script de diagnóstico de webhooks.
 
 - **3.0** — **Unified login** para las apps nuevas de Meta (con paso a paso en pantalla y conexión en ventana aparte): campo **ID de
   configuración**, App ID/Secret de la app de Meta, configuración con usuario del

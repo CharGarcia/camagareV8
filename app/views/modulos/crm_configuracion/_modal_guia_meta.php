@@ -109,14 +109,15 @@ $pasos = [
     ],
     [
         'titulo' => 'Si la cuenta de Instagram es de otro portafolio',
-        'ruta'   => ['business.facebook.com/settings', 'Cuentas', 'Cuentas de Instagram', 'Asignar socio'],
+        'ruta'   => ['business.facebook.com/settings', 'Cuentas', 'Cuentas de Instagram'],
         'enlace' => ['https://business.facebook.com/settings', 'Abrir la configuración del portafolio'],
         'campos' => [
-            ['Cuándo', $valor('Si la cuenta de Instagram tiene su propio portafolio (Meta lo crea con el nombre de la cuenta) y su única persona es la identidad de Instagram «@cuenta». Esa identidad no puede crear el usuario del sistema y la conexión falla al pulsar Guardar.')],
-            ['1. En el portafolio dueño de la app', $valor('Entrando con Facebook: <em>Información del negocio</em> → copie el <strong>identificador del portafolio</strong>.')],
-            ['2. En el portafolio de la cuenta', $valor('Entrando como la cuenta de Instagram: <em>Cuentas de Instagram</em> → la cuenta → <strong>Asignar socio</strong> → pegue ese identificador → todos los permisos.')],
+            ['Regla', $valor('La cuenta de Instagram debe ser <strong>propiedad</strong> del portafolio dueño de la app. Compartida como <em>socio</em> se conecta, pero Meta <strong>no envía mensajes ni comentarios</strong> a la Bandeja.')],
+            ['Cómo saberlo', $valor('En el portafolio de la app, <em>Cuentas de Instagram</em>: si la cuenta dice «Pertenece a …» otro portafolio, hay que pasarla.')],
+            ['1. En el portafolio de la cuenta', $valor('Entrando como la cuenta de Instagram: <em>Cuentas de Instagram</em> → la cuenta → <strong>Eliminar</strong>. Solo la quita de ese portafolio; seguidores y mensajes no se tocan.')],
+            ['2. En el portafolio de la app', $valor('Entrando con Facebook: <em>Cuentas de Instagram</em> → <strong>Añadir</strong> → inicie sesión con la cuenta de Instagram. Debe quedar «Propiedad de» ese portafolio.')],
         ],
-        'nota' => 'Si Meta dice «El identificador del negocio del socio no puede ser el tuyo», copió el número del mismo portafolio. Si la cuenta ya está en el portafolio de la app, salte este paso.',
+        'nota' => 'Antes revise que el otro portafolio no tenga promociones activas. Si la cuenta ya es del portafolio de la app, salte este paso. Si ya estaba conectada, pulse Reconectar después.',
     ],
     [
         'titulo' => 'Conectar la cuenta',
