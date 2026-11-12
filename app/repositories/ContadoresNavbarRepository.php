@@ -84,7 +84,8 @@ class ContadoresNavbarRepository
     /**
      * Firmas electrónicas por atender: comprobantes de pago en revisión + firmas pagadas
      * que faltan registrar en Uanataca (con el correo confirmado por el cliente, salvo que
-     * la configuración del módulo no lo exija: "Esperar a que el cliente confirme su correo").
+     * la configuración del módulo no lo exija: "Esperar a que el cliente confirme su correo")
+     * + solicitudes que Uanataca canceló y la empresa aún no reabre ni cancela.
      * Consulta aparte: firmas_electronicas puede no tener las columnas sin la migración
      * database/20261023_firmas_electronicas_autoservicio.sql.
      */
@@ -95,6 +96,8 @@ class ContadoresNavbarRepository
               LEFT JOIN firmas_electronicas_config c ON c.id_empresa = f.id_empresa AND c.eliminado = false
               WHERE f.id_empresa = :e AND f.eliminado = false
                 AND (f.estado_pago = 'en_revision'
+                     OR (f.uanataca_estado IN ('CANCELED', 'NOT_FOUND') AND f.uanataca_uuid IS NOT NULL
+                         AND f.estado NOT IN ('emitida', 'cancelada'))
                      OR (f.estado = 'por_registrar'
                          AND (f.correo_confirmado_at IS NOT NULL OR c.uanataca_exigir_correo = false)))"
         );

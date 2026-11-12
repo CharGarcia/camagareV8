@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.18
+etiquetas: firma electronica, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.19
 orden: 20
 estado: activo
 ---
@@ -448,7 +448,48 @@ también con **Consultar estado ahora** en la pestaña Trámite):
 | Corrección solicitada o Rechazada | Pasa a *Observada*; el cliente recibe por correo el comentario de Uanataca |
 | Corregida | Vuelve a *En trámite* |
 | Emitida | Pasa a *Emitida* con la fecha de vencimiento que informa Uanataca |
-| Cancelada | Queda en el historial interno para que usted decida |
+| Cancelada, o eliminada por el operador | El trámite no cambia solo: el sistema **le avisa** y usted decide (ver *Solicitud cancelada por Uanataca*) |
+
+### Solicitud cancelada por Uanataca
+
+La API de Uanataca no permite cancelar ni corregir una solicitud desde el
+sistema: si un dato quedó mal (por ejemplo el celular, al que Uanataca envía la
+validación), pida a su operador de Uanataca que la corrija o la **cancele**.
+
+Cuando Uanataca cancela una solicitud, el sistema lo detecta en la siguiente
+consulta de estado y le avisa por tres vías:
+
+- **Correo a la empresa** (el de la ficha de la empresa) con el titular y el
+  motivo que informó Uanataca.
+- **Ícono de Firmas del menú superior**: la firma cuenta como *por atender*
+  hasta que la reabra o la cancele.
+- **Ficha de la firma**: recuadro rojo en la pestaña **Trámite** con el motivo,
+  y el mismo aviso en **Siguiente paso**.
+
+Para volver a enviarla pulse **Reabrir para corregir y reenviar** (permiso
+*Modificar*):
+
+1. El sistema confirma en Uanataca que la solicitud realmente está cancelada o
+   rechazada; si sigue viva, no la reabre.
+2. La firma se desenlaza de esa solicitud y vuelve a *Por registrar* con su
+   **pago, factura y documentos** (nada se cobra ni se factura otra vez). El
+   número de la solicitud anterior queda en el historial.
+3. Corrija los datos en la ficha y guarde (el cliente también puede corregir
+   desde su enlace).
+4. Pulse **Enviar a Uanataca**. Una firma reabierta **no se envía sola** aunque
+   el envío automático esté activo, para que alcance a corregirla.
+
+El reenvío crea una solicitud **nueva** en Uanataca y consume Uanacréditos otra
+vez; consulte con Uanataca si devuelven los de la cancelada. Lo mismo aplica a
+una solicitud **rechazada**.
+
+Si el operador **elimina** la solicitud en vez de cancelarla, Uanataca deja de
+devolverla al consultar el estado: el sistema la marca *Eliminada en Uanataca*
+y se comporta igual que una cancelada (correo, ícono del menú, recuadro rojo y
+botón **Reabrir para corregir y reenviar**). Si fue una falla momentánea de
+Uanataca y la solicitud vuelve a aparecer, la siguiente consulta (cada 10
+minutos) restablece su estado real. Si el cliente ya no quiere la firma, use
+**Cancelar solicitud**.
 
 Una solicitud ya creada en Uanataca **no se vuelve a enviar**: si el cliente
 corrige algo después, actualice los documentos en el portal de distribuidores
@@ -669,8 +710,17 @@ archivo, y volver a cargar la firma no lo soluciona.
   está inactiva), o el servidor no tiene definida su dirección pública
   (`APP_URL`), necesaria para armar el enlace desde el cron.
 
+- **El celular (u otro dato) quedó mal en una solicitud ya enviada a Uanataca**:
+  desde el sistema no se puede cambiar ni cancelar en Uanataca. Pida al operador
+  de Uanataca que la cancele; cuando llegue el aviso, use **Reabrir para corregir
+  y reenviar** en la pestaña Trámite (ver *Solicitud cancelada por Uanataca*).
+- **«En Uanataca la solicitud está … Solo se reabre una solicitud cancelada o
+  rechazada»**: Uanataca todavía no la cancela. Confirme con el operador y vuelva
+  a intentar.
+
 ## Historial de cambios
 
+- **3.19** — **Solicitud cancelada o eliminada por Uanataca**: aviso por correo a la empresa con el motivo, la firma cuenta en el ícono de Firmas del menú y la ficha muestra un recuadro rojo en Trámite. Nuevo botón **Reabrir para corregir y reenviar** (también para rechazadas): conserva pago, factura y documentos, devuelve la firma a *Por registrar* y espera el envío manual a Uanataca.
 - **3.18** — Ficha de la firma: las **pestañas se habilitan por pasos** (Datos → Documentos → Pago → Uanataca) y el recuadro **Siguiente paso** indica qué falta y quién actúa. **Estado Trámite** y **Estado Pago** pasan a ser de **solo lectura**: avanzan con las acciones de Trámite, entre ellas las nuevas **Confirmar documentos**, **Sin cobro (regalía)** (factura con 100 % de descuento, sin cobro), **Reabrir solicitud**, **Continuar el trámite** y **Regresar al paso que corresponde**. Una firma nueva nace en *Borrador* y no se puede registrar el pago sin los documentos. Un pago marcado «Confirmado» a mano, sin cobro, se puede registrar desde Trámite (**Falta registrar el cobro**). Nota junto al botón de reenviar factura. Nueva sección *Cómo avanza el trámite: siguiente paso y estados*.
 - **3.17** — **Enlaces y QR por vendedor**: pestaña **Vendedores** en el engranaje (un enlace y un QR por vendedor), campo **Vendedor** en *Enviar link*, columna **Vendedor** en el listado, en el Excel y en *Enlaces enviados*; la factura de la firma sale con ese vendedor y las renovaciones lo conservan. Requiere `database/20261110_firmas_enlaces_vendedor.sql`.
 - **3.16** — Botón **Renovar** al pie de la ficha de una firma emitida (junto a Cancelar): crea la solicitud de renovación con los datos y documentos del cliente; si la firma aún no vence, avisa antes con la fecha y los días que faltan.

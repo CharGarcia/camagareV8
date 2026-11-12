@@ -828,6 +828,17 @@ class FirmasElectronicasController extends BaseModuloController
         });
     }
 
+    /** Reabre una firma cuya solicitud fue cancelada o rechazada en Uanataca, para corregir y reenviar. */
+    public function reabrirUanatacaAjax(): void
+    {
+        $this->requireActualizar();
+        session_write_close();
+        $this->responderJson(function () {
+            $this->service->reabrirUanataca((int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            return ['msg' => 'Solicitud reabierta: corrija los datos en la ficha y pulse «Enviar a Uanataca».'];
+        });
+    }
+
     public function avisoVencimientoAjax(): void
     {
         $this->requireActualizar();

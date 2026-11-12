@@ -1049,6 +1049,7 @@ class FirmaElectronicaRepository extends BaseRepository
      * Firmas listas para el envío automático: pagadas, sin solicitud en Uanataca, de
      * empresas con la API y el envío automático activos (y correo confirmado si la
      * empresa lo exige). Un intento fallido espera 1 hora antes del siguiente.
+     * Una firma reabierta tras cancelarse en Uanataca (REOPENED) espera el envío manual.
      */
     public function getPendientesEnvioUanataca(int $limite = 10): array
     {
@@ -1060,6 +1061,7 @@ class FirmaElectronicaRepository extends BaseRepository
              JOIN empresas e ON e.id = f.id_empresa AND e.estado = '1' AND e.eliminado = false
              WHERE f.eliminado = false AND f.estado = 'por_registrar' AND f.estado_pago = 'confirmado'
                AND f.uanataca_uuid IS NULL
+               AND COALESCE(f.uanataca_estado, '') <> 'REOPENED'
                AND (c.uanataca_exigir_correo = false OR f.correo_confirmado_at IS NOT NULL)
                AND (f.uanataca_estado_at IS NULL OR f.uanataca_estado_at < CURRENT_TIMESTAMP - INTERVAL '1 hour')
              ORDER BY f.id

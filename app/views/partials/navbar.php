@@ -518,7 +518,7 @@ $urlManual = $base . '/documentacion' . ($rutaActualAyuda !== '' ? '?ruta=' . ur
                     <i class="bi bi-qr-code" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark factura-express-pendientes-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>
-                <a href="<?= $base ?>/modulos/firmas_electronicas" class="text-white text-decoration-none position-relative d-none cmg-icon-update firmas-por-atender-icon" title="Firmas electrónicas por atender (pagos por revisar o por registrar en Uanataca)">
+                <a href="<?= $base ?>/modulos/firmas_electronicas" class="text-white text-decoration-none position-relative d-none cmg-icon-update firmas-por-atender-icon" title="Firmas electrónicas por atender (pagos por revisar, por registrar en Uanataca o canceladas por Uanataca)">
                     <i class="bi bi-pen" style="font-size: 1.1rem;"></i>
                     <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark firmas-por-atender-badge" style="font-size: 0.6rem; padding: 0.25em 0.5em;">0</span>
                 </a>

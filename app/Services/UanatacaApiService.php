@@ -37,7 +37,11 @@ class UanatacaApiService
         'REJECTED'         => 'Rechazada',
         'ISSUED'           => 'Emitida',
         'CANCELED'         => 'Cancelada',
+        // No es un estado de la API: lo pone el sistema cuando la consulta ya no devuelve la solicitud.
+        self::ESTADO_ELIMINADA => 'Eliminada en Uanataca',
     ];
+
+    public const ESTADO_ELIMINADA = 'NOT_FOUND';
 
     private const LOG = '/storage/logs/uanataca_api.log';
 

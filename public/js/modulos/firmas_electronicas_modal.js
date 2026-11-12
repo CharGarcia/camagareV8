@@ -1387,6 +1387,22 @@
         caja.classList.remove('d-none');
     }
 
+    // Uanataca dio por terminada la solicitud sin emitir la firma (cancelada o rechazada).
+    function uanatacaTerminada(t) {
+        return ['CANCELED', 'REJECTED', 'NOT_FOUND'].includes(t.uanataca_estado);
+    }
+
+    // NOT_FOUND: la consulta ya no devuelve la solicitud (el operador la eliminó).
+    function verboUanatacaTerminada(t) {
+        return { CANCELED: 'canceló', NOT_FOUND: 'eliminó' }[t.uanataca_estado] || 'rechazó';
+    }
+
+    // Uanataca acumula el historial en una línea por evento ("fecha - usuario - TEXTO"): la última, sin el prefijo.
+    function ultimoComentarioUanataca(c) {
+        const lineas = String(c || '').split(/\r?\n|(?=\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} - )/).map(s => s.trim()).filter(Boolean);
+        return (lineas.pop() || '').replace(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\s*-\s*\S+@\S+\s*-\s*/, '').trim();
+    }
+
     // Guía «Siguiente paso»: qué falta para que el trámite avance y quién debe hacerlo.
     // Se calcula con el estado real (pago, correo, Uanataca), no solo con el Estado Trámite,
     // así avisa también cuando el estado se adelantó a mano y quedó un paso sin cumplir.
@@ -1396,6 +1412,9 @@
         const TRAMITE = 'tab-firma-tramite-btn';
         const UANATACA = 'tab-firma-uanataca-btn';
 
+        if (t.uanataca_uuid && uanatacaTerminada(t) && t.estado !== 'emitida') {
+            return { quien: 'Usted', color: 'danger', texto: `Uanataca ${verboUanatacaTerminada(t)} la solicitud (${t.uanataca_estado === 'NOT_FOUND' ? 'ya no existe allá' : (ultimoComentarioUanataca(t.uanataca_comentarios) || 'sin motivo informado')}). En la pestaña Trámite pulse «Reabrir para corregir y reenviar»: corrija los datos y envíela de nuevo. Si el cliente ya no la quiere, use «Cancelar solicitud».`, tab: TRAMITE };
+        }
         if (t.estado === 'cancelada') {
             return { quien: '', color: 'secondary', texto: 'La solicitud está cancelada: no tiene más pasos. Si se canceló por error, use «Reabrir solicitud» en la pestaña Trámite; si el cliente pide otra, «Nueva solicitud con estos datos».', tab: TRAMITE };
         }
@@ -1615,7 +1634,21 @@
             </div>`;
         }
         // API de Uanataca: envío y estado de la solicitud.
-        if (t.uanataca_uuid) {
+        if (t.uanataca_uuid && uanatacaTerminada(t)) {
+            // Uanataca canceló o rechazó la solicitud: aviso con el motivo y salida para reenviarla.
+            const eliminada = t.uanataca_estado === 'NOT_FOUND';
+            acciones += `<div class="border rounded-3 p-2 mb-2 border-danger bg-danger bg-opacity-10">
+                <div class="fw-semibold text-danger mb-1"><i class="bi bi-exclamation-octagon me-1"></i>Uanataca ${verboUanatacaTerminada(t)} esta solicitud</div>
+                <div class="small mb-1">${eliminada ? 'La solicitud ya no existe en Uanataca.' : '<b>Motivo:</b> ' + esc(ultimoComentarioUanataca(t.uanataca_comentarios) || 'Uanataca no indicó el motivo.')}</div>
+                <div class="text-muted">${esc(t.uanataca_uuid)}${t.uanataca_estado_at ? ' · consultado ' + esc(t.uanataca_estado_at) : ''}</div>
+                ${t.uanataca_comentarios ? `<details class="mt-1"><summary class="text-muted">Comentarios de Uanataca</summary><div class="small" style="white-space:pre-wrap;">${esc(t.uanataca_comentarios)}</div></details>` : ''}
+                ${t.estado !== 'emitida' ? '<div class="small mt-1">El pago, la factura y los documentos se conservan. Al reabrirla podrá corregir los datos (por ejemplo, el celular) y enviarla de nuevo; el reenvío crea otra solicitud y consume Uanacréditos.</div>' : ''}
+                ${puede ? `<div class="d-flex flex-wrap gap-2 mt-2">
+                    ${t.estado !== 'emitida' ? '<button type="button" class="btn btn-danger btn-sm" data-tr="reabrir_uanataca"><i class="bi bi-arrow-counterclockwise me-1"></i>Reabrir para corregir y reenviar</button>' : ''}
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-tr="sincronizar_uanataca"><i class="bi bi-arrow-repeat me-1"></i>Consultar estado ahora</button>
+                </div>` : ''}
+            </div>`;
+        } else if (t.uanataca_uuid) {
             acciones += `<div class="border rounded-3 p-2 mb-2 border-primary bg-primary bg-opacity-10">
                 <div class="fw-semibold mb-1"><i class="bi bi-cloud-check me-1"></i>Solicitud en Uanataca: ${esc(t.uanataca_estado_label || t.uanataca_estado || '')}</div>
                 <div class="text-muted">${esc(t.uanataca_uuid)}${t.uanataca_estado_at ? ' · consultado ' + esc(t.uanataca_estado_at) : ''}</div>
@@ -1629,6 +1662,7 @@
                 <div class="fw-semibold mb-1"><i class="bi bi-cloud-upload me-1"></i>Enviar a Uanataca por API</div>
                 ${faltan.length ? `<div class="alert alert-warning py-1 px-2 mb-2">Falta: ${faltan.map(esc).join(', ')}.</div>` : ''}
                 ${correoRequerido && !t.correo_confirmado_at ? '<div class="small text-muted mb-1">El cliente aún no confirma su correo.</div>' : ''}
+                ${t.uanataca_estado === 'REOPENED' ? '<div class="alert alert-info py-1 px-2 mb-2">Solicitud reabierta tras cancelarse en Uanataca: corrija los datos en la ficha, guarde y pulse «Enviar a Uanataca». No se envía sola aunque el envío automático esté activo.</div>' : ''}
                 ${t.uanataca_error ? `<div class="small text-danger mb-1">Último intento: ${esc(t.uanataca_error)}</div>` : ''}
                 <button type="button" class="btn btn-primary btn-sm" data-tr="enviar_uanataca" ${faltan.length ? 'disabled' : ''}><i class="bi bi-send me-1"></i>Enviar a Uanataca</button>
                 <span class="small text-muted ms-1">Consume Uanacréditos.</span>
@@ -1896,6 +1930,10 @@
             } else if (accion === 'nueva_solicitud') {
                 if (await confirmar('Se creará una nueva solicitud de firma con los datos y documentos de este cliente (el pago no se copia). Luego podrá enviarle el enlace.', 'Sí, crear')) {
                     await crearNuevaSolicitud();
+                }
+            } else if (accion === 'reabrir_uanataca') {
+                if (await confirmar('La firma se desenlaza de la solicitud cancelada o eliminada en Uanataca y vuelve a «Por registrar», con su pago, factura y documentos. Luego corrija los datos y pulse «Enviar a Uanataca» (crea una solicitud nueva y consume Uanacréditos).', 'Sí, reabrir')) {
+                    await postTramite('reabrirUanatacaAjax', null, ['Reabriendo la solicitud…', 'Se confirma primero el estado en Uanataca.']);
                 }
             } else if (accion === 'sincronizar_uanataca') {
                 await postTramite('sincronizarUanatacaAjax', null, ['Consultando a Uanataca…', '']);

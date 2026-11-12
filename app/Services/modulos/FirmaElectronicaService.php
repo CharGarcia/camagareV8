@@ -2519,6 +2519,15 @@ class FirmaElectronicaService
     /** Mientras se envía, la firma queda marcada para que otro proceso no la envíe también. */
     private const UANATACA_ENVIANDO = 'SENDING';
 
+    /** Reabierta tras una cancelación en Uanataca: espera el envío manual (el automático la salta). */
+    public const UANATACA_REABIERTA = 'REOPENED';
+
+    /** Estados de Uanataca en los que la solicitud ya no sigue y la firma se puede reabrir. */
+    private const UANATACA_REABRIBLES = ['CANCELED', 'REJECTED'];
+
+    /** Uanataca ya no devuelve la solicitud: el operador la eliminó (estado propio, no de la API). */
+    public const UANATACA_ELIMINADA = \App\Services\UanatacaApiService::ESTADO_ELIMINADA;
+
     private function clienteUanataca(int $idEmpresa): \App\Services\UanatacaApiService
     {
         $cfg = $this->repository->getConfig($idEmpresa);
@@ -2834,11 +2843,10 @@ class FirmaElectronicaService
             throw new Exception('Esta firma no tiene una solicitud en Uanataca.');
         }
         $r = $this->clienteUanataca($idEmpresa)->consultarSolicitud((string) $firma['uanataca_uuid']);
-        if (!$r) {
-            $this->repository->actualizarTramite($idFirma, $idEmpresa, ['uanataca_estado_at' => date('Y-m-d H:i:s')], $idUsuario);
-            throw new Exception('Uanataca no devolvió la solicitud ' . $firma['uanataca_uuid'] . '.');
-        }
-        $nuevo   = strtoupper((string) ($r['status'] ?? ''));
+        // Uanataca ya no la devuelve: el operador la eliminó. Se trata como una cancelada
+        // (aviso + reabrir); si vuelve a aparecer, la siguiente consulta corrige el estado.
+        $nuevo   = $r ? strtoupper((string) ($r['status'] ?? '')) : self::UANATACA_ELIMINADA;
+        $r       = $r ?? [];
         $antes   = (string) ($firma['uanataca_estado'] ?? '');
         $coment  = trim((string) ($r['comments'] ?? ''));
         $aviso   = null;
@@ -2875,6 +2883,15 @@ class FirmaElectronicaService
                 } elseif (in_array($nuevo, ['IN_VALIDATION', 'UPDATED'], true) && in_array($firma['estado'], ['observada', 'por_registrar'], true)) {
                     $campos += ['estado' => 'en_proceso', 'observacion_cliente' => null];
                     $this->repository->crearEvento($idEmpresa, $idFirma, 'uanataca', 'En validación en la entidad certificadora', null, true, null);
+                } elseif (in_array($nuevo, ['CANCELED', self::UANATACA_ELIMINADA], true) && $firma['estado'] !== 'emitida') {
+                    // Cancelada o eliminada en Uanataca: el trámite no cambia solo (la empresa
+                    // decide si la reabre para reenviar o la cancela), pero se le avisa.
+                    $eliminada = $nuevo === self::UANATACA_ELIMINADA;
+                    $motivoCancelada = $eliminada
+                        ? 'La solicitud ya no existe en Uanataca (fue eliminada).'
+                        : ($ultimo !== '' ? $ultimo : 'Uanataca no indicó el motivo.');
+                    $this->repository->crearEvento($idEmpresa, $idFirma, 'uanataca_estado',
+                        $eliminada ? 'La solicitud fue eliminada en Uanataca' : 'Uanataca canceló la solicitud', $motivoCancelada, false, null);
                 } else {
                     $this->repository->crearEvento($idEmpresa, $idFirma, 'uanataca_estado', 'Uanataca: ' . $etiqueta,
                         $ultimo !== '' ? $ultimo : null, $nuevo === 'APPROVED', null);
@@ -2892,7 +2909,127 @@ class FirmaElectronicaService
         if ($aviso) {
             $this->notificarCliente($idFirma, $idEmpresa, $aviso[0], $aviso[1]);
         }
+        if (isset($motivoCancelada)) {
+            $this->avisarCancelacionUanatacaEmpresa($firma, $motivoCancelada, !empty($eliminada));
+        }
         return ['estado' => $nuevo, 'etiqueta' => $etiqueta, 'cambio' => $nuevo !== $antes];
+    }
+
+    /**
+     * Correo a la empresa: Uanataca canceló la solicitud de una firma (con el motivo que
+     * informó). Un fallo del correo no interrumpe la sincronización.
+     */
+    private function avisarCancelacionUanatacaEmpresa(array $firma, string $motivo, bool $eliminada = false): void
+    {
+        $hecho = $eliminada ? 'eliminó' : 'canceló';
+        $idEmpresa = (int) $firma['id_empresa'];
+        try {
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $correo  = trim((string) ($empresa['mail'] ?? ''));
+            if ($correo === '') {
+                error_log('[Firmas] Empresa ' . $idEmpresa . ' sin correo: no se avisó la cancelación en Uanataca de la firma #' . $firma['id'] . '.');
+                return;
+            }
+            $nomEmp  = (string) (($empresa['nombre_comercial'] ?? '') ?: ($empresa['nombre'] ?? ''));
+            $titular = trim(($firma['nombres'] ?? '') . ' ' . ($firma['apellidos'] ?? ''));
+            $filas = [
+                'Titular'             => $titular,
+                'Identificación'      => (string) ($firma['numero_identificacion'] ?? ''),
+                'Tipo de firma'       => (string) ($firma['nombre_producto'] ?? ''),
+                'Teléfono'            => (string) ($firma['telefono'] ?? ''),
+                'Correo'              => (string) ($firma['correo'] ?? ''),
+                'Solicitud Uanataca'  => (string) ($firma['uanataca_uuid'] ?? ''),
+                'Fecha'               => date('d-m-Y H:i:s'),
+            ];
+            $tabla = '';
+            foreach ($filas as $k => $v) {
+                $tabla .= '<tr><td style="padding:4px 12px 4px 0;color:#64748b;">' . self::h($k) . '</td>'
+                    . '<td style="padding:4px 0;font-weight:600;">' . self::h($v !== '' ? $v : '—') . '</td></tr>';
+            }
+            $url = url_absoluta('modulos/firmas_electronicas');
+            $cuerpo = '<p><b>Uanataca ' . $hecho . ' la solicitud de firma electrónica</b> de este cliente. '
+                . ($eliminada ? 'Detalle:' : 'Motivo informado:') . '</p>'
+                . '<p style="background:#fee2e2;padding:8px 12px;border-radius:6px;">' . nl2br(self::h($motivo)) . '</p>'
+                . '<table style="border-collapse:collapse;font-size:14px;margin:12px 0;">' . $tabla . '</table>'
+                . '<p>El pago y la factura de la firma se conservan. En la ficha, pestaña <b>Trámite</b>, pulse '
+                . '<b>Reabrir para corregir y reenviar</b>: corrija los datos y envíela de nuevo a Uanataca. '
+                . 'Si el cliente ya no la quiere, cancele la solicitud.</p>'
+                . '<p style="text-align:center;margin:24px 0;"><a href="' . self::h($url) . '" '
+                . 'style="background:#2563eb;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;">'
+                . 'Abrir Firmas electrónicas</a></p>';
+
+            $ok = (new \App\Services\EnvioDocumentosSRIService())->enviarAvisoSimple(
+                $idEmpresa, $correo, $nomEmp, 'Uanataca ' . $hecho . ' una solicitud de firma - ' .($titular !== '' ? $titular : 'cliente'), $cuerpo, $nomEmp
+            );
+            $this->repository->crearEvento($idEmpresa, (int) $firma['id'], 'nota',
+                $ok ? 'Aviso a la empresa enviado: solicitud cancelada en Uanataca' : 'No se pudo enviar el aviso a la empresa: solicitud cancelada en Uanataca',
+                $correo, false, null);
+        } catch (\Throwable $e) {
+            error_log('[Firmas] Aviso de cancelación en Uanataca, firma #' . ($firma['id'] ?? '?') . ': ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Reabre una firma cuya solicitud fue cancelada (o rechazada) en Uanataca: la desenlaza
+     * de esa solicitud y la devuelve al paso que corresponde (normalmente "Por registrar"),
+     * conservando pago, factura y documentos, para corregir los datos y enviarla de nuevo.
+     * Antes confirma el estado real en Uanataca: reabrir una solicitud viva la duplicaría.
+     * Queda marcada REOPENED para que el envío automático no la mande antes de corregirla.
+     */
+    public function reabrirUanataca(int $idFirma, int $idEmpresa, int $idUsuario): string
+    {
+        $firma = $this->repository->findById($idFirma, $idEmpresa);
+        if (!$firma) {
+            throw new Exception('Firma no encontrada.');
+        }
+        $uuid = (string) ($firma['uanataca_uuid'] ?? '');
+        if ($uuid === '') {
+            throw new Exception('Esta firma no tiene una solicitud en Uanataca.');
+        }
+        if ($firma['estado'] === 'emitida') {
+            throw new Exception('Una firma emitida no se puede reabrir.');
+        }
+
+        // Estado real, fuera de la transacción (llamada externa).
+        try {
+            $r = $this->clienteUanataca($idEmpresa)->consultarSolicitud($uuid);
+        } catch (\Throwable $e) {
+            throw new Exception('No se pudo confirmar en Uanataca que la solicitud esté cancelada: ' . $e->getMessage());
+        }
+        $real = $r ? strtoupper((string) ($r['status'] ?? '')) : '';
+        if ($r && !in_array($real, self::UANATACA_REABRIBLES, true)) {
+            throw new Exception('En Uanataca la solicitud está «' . (\App\Services\UanatacaApiService::ESTADOS[$real] ?? $real)
+                . '». Solo se reabre una solicitud cancelada o rechazada: pida a Uanataca que la cancele y vuelva a intentar.');
+        }
+        $etiqueta = $r ? (\App\Services\UanatacaApiService::ESTADOS[$real] ?? $real) : 'ya no existe en Uanataca';
+
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->lockFirma($idFirma);
+            $firma = $this->repository->findById($idFirma, $idEmpresa);
+            if (!$firma || (string) ($firma['uanataca_uuid'] ?? '') !== $uuid || $firma['estado'] === 'emitida') {
+                throw new Exception('La firma cambió mientras se consultaba a Uanataca. Abra de nuevo la ficha.');
+            }
+            $nuevo = $this->documentosFaltantes($firma)
+                ? 'borrador'
+                : ($firma['estado_pago'] === 'confirmado' ? 'por_registrar' : 'pendiente');
+            $this->repository->actualizarTramite($idFirma, $idEmpresa, [
+                'estado' => $nuevo, 'observacion_cliente' => null,
+                'uanataca_uuid' => null, 'uanataca_estado' => self::UANATACA_REABIERTA, 'uanataca_estado_at' => date('Y-m-d H:i:s'),
+                'uanataca_comentarios' => null, 'uanataca_enviada_at' => null, 'uanataca_error' => null,
+                'uanataca_referencia' => null, 'uanataca_registrada_at' => null,
+            ], $idUsuario);
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'estado', 'Solicitud reabierta para corregir y reenviar a Uanataca',
+                'Solicitud anterior en Uanataca: ' . $uuid . ' (' . $etiqueta . '). Estado: ' . self::etiquetaEstado($nuevo) . '.', false, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'reabrir_uanataca', 'firmas_electronicas', $idFirma,
+                ['estado' => $firma['estado'], 'uanataca_uuid' => $uuid, 'uanataca_estado' => $firma['uanataca_estado'] ?? null],
+                ['estado' => $nuevo, 'uanataca_uuid' => null, 'uanataca_estado_real' => $real ?: 'NO_EXISTE']);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+        return $nuevo;
     }
 
     /** Cron: envíos automáticos pendientes y sincronización de estados. */
