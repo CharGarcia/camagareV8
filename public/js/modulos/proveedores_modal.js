@@ -368,7 +368,14 @@
         // Forzar selección de RUC por defecto (después de cargar si es necesario)
         setTimeout(() => {
             const selTipos = document.getElementById('prov_tipo_id');
-            if (selTipos) {
+            // El favorito del usuario manda: RUC es solo el valor por defecto
+            // cuando no hay favorito (o el favorito ya no existe en el catálogo).
+            const favTipo = (typeof APP_FAVORITOS !== 'undefined') ? APP_FAVORITOS['tipo_id_proveedor'] : undefined;
+            const hayFavTipo = selTipos && favTipo !== undefined && favTipo !== null && favTipo !== ''
+                && Array.from(selTipos.options).some(o => o.value === String(favTipo));
+            if (hayFavTipo) {
+                selTipos.value = String(favTipo);
+            } else if (selTipos) {
                 for (let i = 0; i < selTipos.options.length; i++) {
                     if (selTipos.options[i].text.toUpperCase().includes('RUC') || selTipos.options[i].value === '04') {
                         selTipos.selectedIndex = i;
