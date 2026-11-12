@@ -763,9 +763,27 @@ class InstagramApiService
                 throw new \RuntimeException('Instagram no permite responder: han pasado más de 24 h desde el último mensaje del cliente, '
                     . 'o lo escribió antes de conectar la cuenta al sistema. Espere a que vuelva a escribir.');
             }
-            throw new \RuntimeException('Instagram rechazó la operación: ' . $this->mensajeError($json, $codigo));
+            throw new \RuntimeException('Instagram rechazó la operación: ' . $this->mensajeError($json, $codigo) . self::datosSoporte($err));
         }
         return $json;
+    }
+
+    /**
+     * Código de error y código de rastreo de Meta (fbtrace_id): es lo que pide el
+     * soporte para desarrolladores de Meta para revisar una llamada rechazada. No es
+     * secreto. Texto vacío si Meta no los manda.
+     */
+    private static function datosSoporte(array $err): string
+    {
+        $partes = [];
+        if (isset($err['code'])) {
+            $partes[] = 'código ' . (int) $err['code'] . (isset($err['error_subcode']) ? '/' . (int) $err['error_subcode'] : '');
+        }
+        $traza = preg_replace('/[^A-Za-z0-9_\-]/', '', (string) ($err['fbtrace_id'] ?? ''));
+        if ($traza !== '') {
+            $partes[] = 'rastreo de Meta: ' . $traza;
+        }
+        return $partes ? ' (' . implode(', ', $partes) . ')' : '';
     }
 
     /**
