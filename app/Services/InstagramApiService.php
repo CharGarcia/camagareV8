@@ -276,6 +276,24 @@ class InstagramApiService
     }
 
     /**
+     * Apps a las que está suscrita la cuenta y con qué campos (diagnóstico de webhooks).
+     * @return list<array{id:string, name:string, campos:list<string>}>
+     */
+    public function suscripcionesWebhook(string $token, string $igId = ''): array
+    {
+        $r = $this->http('GET', $this->graph($this->nodo($igId) . '/subscribed_apps'), [], $token);
+        $out = [];
+        foreach ((array) ($r['data'] ?? []) as $app) {
+            $out[] = [
+                'id'     => (string) ($app['id'] ?? ''),
+                'name'   => (string) ($app['name'] ?? ''),
+                'campos' => array_values(array_map('strval', (array) ($app['subscribed_fields'] ?? []))),
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Unified login: cuentas de Instagram que el cliente compartió con la app (un
      * token puede traer varias). @return list<array{id:string, username:string}>
      */
