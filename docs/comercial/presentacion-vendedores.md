@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.13 | 13-11-2026 | Aprobadas la misión (opción A) y la visión (opción B) |
 | 0.12 | 13-11-2026 | Sección 1 «Quiénes somos»: propuestas de misión, visión, valores y propuesta de valor para elegir |
 | 0.11 | 13-11-2026 | Los precios se calculan con el nuevo módulo **Cotizador de Planes** (precio por módulo, dependencias, anual y mensual en vivo, proforma enlazada al CRM) |
 | 0.10 | 13-11-2026 | Los usuarios se cuentan por RUC y se comparten entre establecimientos (3 cupos por establecimiento, sumados a nivel de RUC) |
@@ -22,7 +23,7 @@
 
 ## Índice
 
-1. Quiénes somos: nombre, misión, visión y valores — *borrador con opciones para elegir*
+1. Quiénes somos: nombre, misión, visión y valores — *misión y visión aprobadas*
 2. Conociendo al cliente: target y problemas que resolvemos — *pendiente*
 3. **Lo que ofrecemos** — *borrador listo para revisión*
 4. **Módulos del sistema** — *borrador listo para revisión*
@@ -35,7 +36,7 @@
 
 ---
 
-## 1. Quiénes somos *(borrador — elegir una opción de cada bloque)*
+## 1. Quiénes somos *(misión y visión aprobadas; faltan historia del nombre y valores)*
 
 ### 1.1 Nombre
 
@@ -46,37 +47,18 @@ Ecuador.
 > vendedor pueda contar (quién lo creó, desde cuándo, por qué)? Una historia
 > real de origen genera confianza en la primera reunión.
 
-### 1.2 Misión *(propuestas)*
+### 1.2 Misión ✅
 
-**Opción A — enfocada en el cliente**
 > Simplificar la gestión de las empresas ecuatorianas con un sistema en la
 > nube que integra facturación electrónica, contabilidad, inventario, nómina e
 > impuestos, para que sus dueños dediquen su tiempo a hacer crecer el negocio
 > y no a cumplir trámites.
 
-**Opción B — enfocada en el cumplimiento**
-> Ayudar a las empresas del Ecuador a cumplir con el SRI y llevar sus cuentas
-> en orden, con una herramienta completa, segura y fácil de usar desde el
-> computador o el celular.
+### 1.3 Visión ✅
 
-**Opción C — corta, para decir en voz alta**
-> Todo tu negocio, en orden y al día, en un solo sistema.
-
-### 1.3 Visión *(propuestas)*
-
-**Opción A**
-> Ser el sistema de gestión preferido por las pequeñas y medianas empresas y
-> los estudios contables del Ecuador, reconocido por su cumplimiento
-> tributario, su facilidad de uso y la cercanía de su soporte.
-
-**Opción B**
 > Que toda empresa ecuatoriana, sin importar su tamaño o su giro, pueda
 > administrar su negocio con la misma información y control que una gran
 > empresa.
-
-> **Para decidir:** ¿hasta dónde llega la visión? ¿Solo Ecuador, o hay planes
-> de ir a otros países? ¿Hay una meta concreta (por ejemplo, número de
-> empresas o un año)? Una visión con fecha o cifra motiva más al equipo.
 
 ### 1.4 Valores *(propuesta — basados en cómo está construido el sistema)*
 
