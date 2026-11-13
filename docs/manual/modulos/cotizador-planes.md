@@ -34,6 +34,10 @@ hacer el seguimiento.
 
 ## Requisitos previos
 
+El módulo está en el menú **CRM → Cotizador de Planes** (dirección
+`/modulos/cotizador-planes`). Cada usuario necesita su permiso en
+*Configuración → Permisos de módulos*.
+
 Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
 **Configuración**:
 
