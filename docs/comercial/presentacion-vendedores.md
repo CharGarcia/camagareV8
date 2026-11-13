@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.14 | 13-11-2026 | Valores aprobados. Nueva sección 2 «Conociendo al cliente»: perfiles, dolores, preguntas de descubrimiento y señales de buen o mal cliente |
 | 0.13 | 13-11-2026 | Aprobadas la misión (opción A) y la visión (opción B) |
 | 0.12 | 13-11-2026 | Sección 1 «Quiénes somos»: propuestas de misión, visión, valores y propuesta de valor para elegir |
 | 0.11 | 13-11-2026 | Los precios se calculan con el nuevo módulo **Cotizador de Planes** (precio por módulo, dependencias, anual y mensual en vivo, proforma enlazada al CRM) |
@@ -23,8 +24,8 @@
 
 ## Índice
 
-1. Quiénes somos: nombre, misión, visión y valores — *misión y visión aprobadas*
-2. Conociendo al cliente: target y problemas que resolvemos — *pendiente*
+1. Quiénes somos: nombre, misión, visión y valores — *aprobado (falta historia del nombre)*
+2. Conociendo al cliente: target y problemas que resolvemos — *borrador para revisión*
 3. **Lo que ofrecemos** — *borrador listo para revisión*
 4. **Módulos del sistema** — *borrador listo para revisión*
 5. Cómo funciona el sistema (alta, puesta en marcha, soporte) — *pendiente*
@@ -36,7 +37,7 @@
 
 ---
 
-## 1. Quiénes somos *(misión y visión aprobadas; faltan historia del nombre y valores)*
+## 1. Quiénes somos *(misión, visión y valores aprobados; falta la historia del nombre)*
 
 ### 1.1 Nombre
 
@@ -60,7 +61,7 @@ Ecuador.
 > administrar su negocio con la misma información y control que una gran
 > empresa.
 
-### 1.4 Valores *(propuesta — basados en cómo está construido el sistema)*
+### 1.4 Valores ✅
 
 | Valor | Qué significa | Cómo se ve en el sistema |
 |---|---|---|
@@ -81,6 +82,95 @@ Ecuador.
 > ⚠️ **Antes de usar este discurso:** confirmar con la dirección que todo lo
 > prometido se cumple. Por ejemplo, «siempre tiene a quién preguntar» depende
 > de los horarios de soporte, que aún no están definidos (sección 7).
+
+---
+
+## 2. Conociendo al cliente *(borrador para revisión)*
+
+> Los perfiles salen de los módulos que el sistema ya tiene. **No hay todavía
+> datos de ventas** que digan cuáles compran más: la prioridad de cada perfil
+> la define la dirección (ver 2.6).
+
+### 2.1 ¿Quién decide y quién usa?
+
+En casi toda venta hay tres personas. El vendedor debe hablar con cada una en
+su idioma:
+
+| Persona | Qué le preocupa | Qué le mostramos |
+|---|---|---|
+| **Dueño o gerente** (decide y paga) | Saber cuánto vende, cuánto le deben, cuánto tiene; no tener multas; no depender de una sola persona. | Tablero, cuentas por cobrar, reportes, permisos y auditoría, app en el celular. |
+| **Contador** (influye mucho) | Recibir la información completa y a tiempo; declarar sin errores. | Asientos automáticos, ATS, declaraciones, estados financieros, Superintendencia de Compañías, multiempresa. |
+| **Personal operativo** (usa todos los días) | Que sea rápido y fácil; no hacer doble trabajo. | Facturar en segundos, POS, carga desde el XML del SRI, app móvil. |
+
+> **Tip:** el contador puede ser el mejor aliado o el mayor obstáculo. Si el
+> contador ya usa CaMaGaRe con otros clientes, la venta es mucho más fácil.
+
+### 2.2 Perfiles de cliente
+
+| Perfil | Señales para reconocerlo | Dolores típicos | Módulos que lo resuelven |
+|---|---|---|---|
+| **Emprendedor o profesional independiente** | Persona natural, factura servicios, pocas facturas al mes. | Facturar electrónicamente sin complicarse; llevar sus retenciones. | Facturación electrónica, Proformas, Retenciones de venta, app móvil (Android). |
+| **Comercio y distribuidora** | Vende productos, tiene bodega, vendedores o repartidores. | No sabe cuánto stock tiene; cartera desordenada; pedidos que se pierden. | Inventario, Compras desde XML, Pedidos, Consignaciones, Cuentas por cobrar, Vendedores, POS. |
+| **Restaurante, cafetería o bar** | Mesas, cocina, cierre de caja diario. | Comandas en papel; descuadres de caja; pedidos que no llegan a cocina. | Mesas, Comandas, Pantalla de cocina (KDS), POS, Reporte de restaurante. |
+| **Taller mecánico, car wash o servicio técnico** | Recibe vehículos o equipos, trabaja por órdenes. | No sabe en qué etapa está cada trabajo; olvida avisar mantenimientos. | Taller, Car wash, Vehículos, Servicio externo, Automatizaciones (recordatorios). |
+| **Centro educativo** | Alumnos, pensiones mensuales. | Cobro de pensiones y control de pagos atrasados. | Alumnos, Suscripciones, Cuentas por cobrar. |
+| **Condominio o administradora** | Alícuotas y cuotas extraordinarias. | Cobrar a cada condómino, mora y multas. | Condominios, Suscripciones, Cuentas por cobrar. |
+| **Fábrica o productor** | Transforma materia prima en producto. | No conoce el costo real de lo que produce. | Producción (fórmulas, órdenes, costos), Inventario. |
+| **Negocio con citas** | Consultorios, estéticas, profesionales con agenda. | Agenda desordenada; citas sin cobrar. | Citas, Portal de citas, Pagos de citas. |
+| **Empresa con cobros recurrentes** | Vende planes, mantenimientos, arriendos, membresías. | Facturar cada mes a mano; olvidar cobros. | Suscripciones, Automatizaciones, cobro con tarjeta. |
+| **Importador** | Trae mercadería del exterior. | Calcular el costo real con los gastos de importación. | Importaciones, Compras, Inventario. |
+| **Empresa obligada a llevar contabilidad** | Sociedad o persona natural obligada; tiene contador. | Contabilidad atrasada; declaraciones con errores; presentar a la Superintendencia. | Contabilidad, Impuestos SRI, Nómina, Superintendencia de Compañías. |
+| **Estudio contable** | Lleva la contabilidad de muchas empresas. | Recibir la información tarde y en desorden; digitar todo. | Multiempresa, Descargas del SRI, Compras desde XML, ATS, declaraciones. |
+| **Cadena o grupo empresarial** | Un RUC con varios locales, o varias empresas del mismo dueño. | No ver el consolidado; mover mercadería entre locales. | Multiempresa, Transferencias entre establecimientos, Balances consolidados. |
+
+### 2.3 Preguntas para descubrir al cliente
+
+El vendedor **pregunta antes de mostrar**. Estas preguntas ayudan a armar la
+cotización en el Cotizador de Planes:
+
+1. ¿A qué se dedica su negocio y desde cuándo?
+2. ¿Cuántos locales o establecimientos tiene? ¿Piensa abrir más?
+3. ¿Cuántas personas trabajarán en el sistema?
+4. ¿Cómo factura hoy? ¿Qué es lo que más le cuesta de facturar?
+5. ¿Maneja inventario? ¿Sabe hoy, sin contar, cuánto tiene en bodega?
+6. ¿Vende a crédito? ¿Cómo controla lo que le deben?
+7. ¿Tiene contador? ¿Cómo le pasa la información cada mes?
+8. ¿Está obligado a llevar contabilidad? ¿Tiene empleados en relación de dependencia?
+9. ¿Qué sistema o herramienta usa hoy (Excel, otro sistema, el portal del SRI)?
+10. Si pudiera resolver un solo problema este mes, ¿cuál sería?
+
+> **Tip:** la pregunta 10 es la más importante. La demo debe empezar por ese
+> problema, no por la lista de módulos.
+
+### 2.4 Señales de un buen cliente
+
+- Tiene un problema concreto que el sistema resuelve (pregunta 10).
+- Quien decide está en la conversación o es fácil llegar a él.
+- Tiene RUC activo en el SRI y emite o debe emitir comprobantes electrónicos.
+- Tiene un equipo de trabajo (2 o más usuarios): podrá usar también la app en iPhone.
+
+### 2.5 Señales de alerta (cuidado con prometer)
+
+- Opera **fuera de Ecuador** o no emite comprobantes ante el SRI: el sistema
+  está hecho para la normativa ecuatoriana.
+- Pide funciones que el sistema **no tiene**: no se promete «lo hacemos
+  después» sin confirmarlo con la dirección.
+- Quiere usar **solo iPhone con un único usuario**: en iPhone/iPad la app
+  exige un equipo de al menos 2 usuarios; con uno solo usa la web o Android.
+- Espera que el sistema **reemplace al contador** o que nos hagamos cargo de
+  sus declaraciones: el sistema prepara la información, pero las declaraciones
+  y su contenido son responsabilidad del cliente (Contrato de uso, cláusula
+  OCTAVA).
+
+### 2.6 Pendiente de definir por la dirección
+
+- ¿Cuáles son los **3 perfiles prioritarios** a los que deben apuntar los
+  vendedores primero?
+- ¿Hay **ciudades o provincias** de enfoque?
+- ¿Hay un **tamaño de empresa** ideal (número de facturas al mes, de empleados
+  o de establecimientos)?
+- ¿Se trabaja con **contadores como aliados o referidores**? ¿Tienen algún
+  beneficio por traer clientes?
 
 ---
 
