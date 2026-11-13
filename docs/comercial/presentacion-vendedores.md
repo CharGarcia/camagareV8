@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.3 | 13-11-2026 | Unidad de cobro definida: **por establecimiento**, con precio del establecimiento principal y descuento para los adicionales. Cada establecimiento incluye 3 usuarios. Se corrige la descripción de multisucursal |
 | 0.2 | 13-11-2026 | Se suman los 7 módulos confirmados (Factura Express QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas). Propuesta de arquitectura de planes: módulos que se venden y módulos que van incluidos |
 
 ---
@@ -65,9 +66,12 @@ empresa, y se usa desde el computador o desde el celular.**
    Auditoría contable revisa que cada documento tenga su asiento correcto.
 
 4. **Multiempresa y multisucursal.** Un mismo usuario puede trabajar con
-   varias empresas, y cada empresa con varios establecimientos y puntos de
-   emisión. Hay balances consolidados de los establecimientos de un mismo RUC.
-   Ideal para **estudios contables** y **grupos empresariales**.
+   varias empresas desde un solo acceso. Un mismo RUC puede tener varios
+   establecimientos (locales), y cada uno opera de forma independiente, con
+   sus propios puntos de emisión, módulos y plan de cuentas. Entre
+   establecimientos del mismo RUC se puede transferir mercadería y ver los
+   balances consolidados. Ideal para **estudios contables**, **cadenas de
+   locales** y **grupos empresariales**.
 
 5. **Control y seguridad.**
    - Permisos por usuario y por módulo: ver, crear, modificar, eliminar y
@@ -285,10 +289,56 @@ programe. Por ejemplo:
 - **Regalía** («Plan sin costo») para empresas que no pagan, como cortesías o
   demos.
 
-> **Decisión pendiente:** hoy los combos se aplican **por usuario**. Hay que
-> definir si el plan se cobra **por empresa**, **por usuario** o **por empresa
-> con N usuarios incluidos y un valor por usuario adicional**. De esto depende
-> cómo se arma el cotizador.
+### 6.1.1 Unidad de cobro: por establecimiento ✅ (decidido)
+
+**El plan se cobra por establecimiento.** Un RUC puede tener varios
+establecimientos, y cada uno puede ser un negocio o local separado (por
+ejemplo, el 001 es una ferretería y el 002 un restaurante). Por eso **cada
+establecimiento contrata su propio plan**:
+
+- **Establecimiento principal**: precio completo del plan.
+- **Establecimientos adicionales del mismo RUC**: precio con descuento.
+- Cada establecimiento puede tener un **plan distinto** según su giro.
+- **Cada establecimiento nace con 3 usuarios incluidos.** Con 2 o más
+  usuarios activos, la empresa cumple el requisito de Apple para usar la app
+  en iPhone/iPad (sección 3). Ojo: ese requisito cuenta los usuarios
+  **activos y asignados**, no los cupos del plan.
+
+**Por qué funciona con el sistema tal como está hoy:**
+
+- En CaMaGaRe cada establecimiento de un RUC se registra como una **empresa
+  independiente**, con su propio plan de cuentas, configuración, puntos de
+  emisión y usuarios asignados.
+- Cada empresa (establecimiento) se vincula a **su propia suscripción**
+  (campo *suscripción* en Empresas del sistema → Cobro y vigencia).
+- Los permisos y los combos se asignan por usuario **en cada empresa**, así
+  que cada establecimiento recibe solo los módulos de su plan.
+
+**Ejemplo de cálculo** (valores ilustrativos, **no son precios reales**):
+
+| Establecimiento | Plan | Precio de lista | Descuento | Paga |
+|---|---|---|---|---|
+| 001 – Ferretería (principal) | Comercial | $ A | — | $ A |
+| 002 – Restaurante | Comercial + Restaurante | $ B | X % | $ B × (1 − X %) |
+| **Total mensual del RUC** | | | | **suma** |
+
+> **Por definir:**
+> - ¿El descuento es el mismo para todos los adicionales o escalonado (por
+>   ejemplo, 2.º establecimiento X %, 3.º en adelante Y %)?
+> - ¿El descuento aplica sobre el plan completo o también sobre los módulos
+>   adicionales?
+> - Si el adicional tiene un plan **más caro** que el principal, ¿cuál se
+>   considera principal: el primero contratado o el de mayor precio?
+>   *(Sugerencia: el de mayor precio paga completo, para no regalar margen.)*
+> - Usuarios: **3 incluidos por establecimiento** ✅. Falta definir el
+>   **precio del usuario adicional**, y si un usuario que trabaja en dos
+>   establecimientos del mismo RUC ocupa un cupo en cada uno.
+
+> **Nota técnica para el cotizador:** hoy *Combos de submódulos* guarda un
+> precio por combo, pero no sabe de establecimiento principal ni de
+> descuentos. El cotizador debe calcular «principal + adicionales con
+> descuento» y la suscripción de cada establecimiento se factura con su valor
+> final.
 
 ### 6.2 Principio: módulos que se venden y módulos que van incluidos
 
@@ -357,7 +407,8 @@ avanzada y Firmas electrónicas.
 ## Notas internas para la siguiente revisión
 
 - Validar la tabla 6.2: qué es módulo principal y qué va incluido.
-- Definir la unidad de cobro: empresa, usuario o empresa + usuarios.
+- ~~Definir la unidad de cobro~~ → **por establecimiento** (v0.3). Faltan las
+  reglas del descuento (sección 6.1.1).
 - Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
