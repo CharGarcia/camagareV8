@@ -166,6 +166,10 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     ['v' => 'si', 'l' => 'Sí'],
                     ['v' => 'no', 'l' => 'No'],
                 ]],
+                ['key' => 'terminos',            'label' => 'Aceptó términos',        'icon' => 'bi-shield-check',        'type' => 'select',     'grupo' => 'Titular', 'col' => 4, 'options' => [
+                    ['v' => 'si', 'l' => 'Sí'],
+                    ['v' => 'no', 'l' => 'No registra'],
+                ]],
                 ['key' => 'telefono',            'label' => 'Teléfono',               'icon' => 'bi-telephone',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
                 ['key' => 'correo',              'label' => 'Correo',                 'icon' => 'bi-envelope',            'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
                 ['key' => 'empresa',             'label' => 'Empresa (RUC o nombre)', 'icon' => 'bi-briefcase',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
@@ -208,6 +212,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     'factura_estado'        => 'Factura',
                     'estado'                => 'Estado',
                     'fecha_caducidad'       => 'Vencimiento',
+                    'terminos_aceptados_at' => 'Términos',
                     'created_at'            => 'Fecha',
                 ];
                 echo \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo);
@@ -252,13 +257,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="text-center sortable-header-f" data-sort="factura_estado" data-col="factura_estado" role="button">Factura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header-f" data-sort="estado" data-col="estado" role="button">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-center sortable-header-f" data-sort="fecha_caducidad" data-col="fecha_caducidad" role="button">Vencimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center sortable-header-f" data-sort="terminos_aceptados_at" data-col="terminos_aceptados_at" role="button" title="Aceptación de términos y tratamiento de datos desde el enlace">Términos <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="text-end pe-3 sortable-header-f" data-sort="created_at" data-col="created_at" role="button">Fecha <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyFirmas">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="11" class="text-center py-5 text-muted">
+                            <td colspan="12" class="text-center py-5 text-muted">
                                 <i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.
                             </td>
                         </tr>
@@ -316,6 +322,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-center" data-col="factura_estado"><?= $badgeFactura ?></td>
                                 <td class="text-center" data-col="estado"><?= $badgeEstado ?></td>
                                 <td class="text-center" data-col="fecha_caducidad"><?= $badgeCaducidad ?></td>
+                                <td class="text-center" data-col="terminos_aceptados_at"><?= \App\controllers\modulos\FirmasElectronicasController::badgeTerminos($row['terminos_aceptados_at'] ?? null) ?></td>
                                 <td class="text-end pe-3 small text-muted" data-col="created_at"><?= $row['created_at'] ?? '-' ?></td>
                             </tr>
                         <?php endforeach; ?>

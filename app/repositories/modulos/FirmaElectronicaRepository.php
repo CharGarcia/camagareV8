@@ -199,6 +199,8 @@ class FirmaElectronicaRepository extends BaseRepository
         // se aplicaban.
         // Vendedor: el de la factura activa si tiene; si no, el de la firma (enlace de origen).
         $conVendedor = $this->tieneVendedor();
+        // Aceptación de términos (database/20261112_firmas_terminos_aceptacion.sql): sin la columna, se omite.
+        $conTerminos = $this->tieneTerminos();
 
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
@@ -240,7 +242,8 @@ class FirmaElectronicaRepository extends BaseRepository
                 'tipo_firma'     => 'f.nombre_producto',
                 'empresa'        => "CONCAT_WS(' ', f.ruc_empresa, f.nombre_empresa)",
             ],
-            'exacto' => ($conVendedor ? ['id_vendedor' => 'ven.id'] : []) + [
+            'exacto' => ($conVendedor ? ['id_vendedor' => 'ven.id'] : [])
+                + ($conTerminos ? ['terminos' => "CASE WHEN f.terminos_aceptados_at IS NOT NULL THEN 'si' ELSE 'no' END"] : []) + [
                 'estado'              => 'f.estado',
                 'estado_pago'         => 'f.estado_pago',
                 'tipo_identificacion' => 'f.tipo_identificacion',
@@ -271,6 +274,7 @@ class FirmaElectronicaRepository extends BaseRepository
                             CASE WHEN v.id IS NOT NULL AND v.eliminado = false THEN v.id_vendedor END, f.id_vendedor)";
         }
         $colVendedor = $conVendedor ? 'ven.nombre AS vendedor_nombre,' : 'NULL AS vendedor_nombre,';
+        $colTerminos = $conTerminos ? 'f.terminos_aceptados_at,' : 'NULL AS terminos_aceptados_at,';
 
         $cols = ($conVendedor ? ['vendedor' => 'ven.nombre'] : []) + [
             'nombres'              => 'f.nombres',
@@ -284,7 +288,7 @@ class FirmaElectronicaRepository extends BaseRepository
             'correo'               => 'f.correo',
             'fecha_caducidad'      => 'f.fecha_caducidad',
             'tipo_persona'         => 'f.tipo_persona',
-        ];
+        ] + ($conTerminos ? ['terminos_aceptados_at' => 'f.terminos_aceptados_at'] : []);
         $col = $cols[$ordenCol] ?? 'f.created_at';
         $dir = ($ordenDir === 'DESC') ? 'DESC' : 'ASC';
 
@@ -305,7 +309,7 @@ class FirmaElectronicaRepository extends BaseRepository
                            f.observaciones, f.created_at, f.updated_at,
                            f.facturacion_mismos_datos, f.facturacion_tipo_id, f.facturacion_num_id,
                            f.facturacion_nombres, f.facturacion_direccion, f.facturacion_correo,
-                           f.facturacion_telefono, f.id_factura, {$colVendedor}
+                           f.facturacion_telefono, f.id_factura, {$colVendedor} {$colTerminos}
                            p.nombre AS provincia_nombre, c.nombre AS ciudad_nombre,
                            v.estado AS factura_estado, v.eliminado AS factura_eliminada,
                            v.establecimiento AS factura_establecimiento,

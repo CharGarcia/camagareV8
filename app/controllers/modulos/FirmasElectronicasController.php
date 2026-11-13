@@ -128,7 +128,7 @@ class FirmasElectronicasController extends BaseModuloController
         $base = BASE_URL;
         ob_start();
         if (empty($rows)) {
-            echo '<tr><td colspan="11" class="text-center py-5 text-muted"><i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.</td></tr>';
+            echo '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-pen fs-3 d-block mb-2"></i>No se encontraron firmas electrónicas.</td></tr>';
         } else {
             foreach ($rows as $r) {
                 $created = !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '—';
@@ -159,6 +159,7 @@ class FirmasElectronicasController extends BaseModuloController
                 echo '<td class="text-center" data-col="factura_estado">' . $badgeFactura . '</td>';
                 echo '<td class="text-center" data-col="estado">' . $badgeEstado . '</td>';
                 echo '<td class="text-center" data-col="fecha_caducidad">' . $badgeCaducidad . '</td>';
+                echo '<td class="text-center" data-col="terminos_aceptados_at">' . self::badgeTerminos($r['terminos_aceptados_at'] ?? null) . '</td>';
                 echo '<td class="text-end pe-3 small text-muted" data-col="created_at">' . $created . '</td>';
                 echo '</tr>';
             }
@@ -464,13 +465,14 @@ class FirmasElectronicasController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:22%">Nombre</th>
-                            <th style="width:12%">Identificación</th>
-                            <th style="width:18%">Tipo Firma</th>
-                            <th style="width:12%">Teléfono</th>
-                            <th style="width:18%">Correo</th>
-                            <th style="width:9%">Pago</th>
-                            <th style="width:9%">Estado</th>
+                            <th style="width:19%">Nombre</th>
+                            <th style="width:11%">Identificación</th>
+                            <th style="width:16%">Tipo Firma</th>
+                            <th style="width:10%">Teléfono</th>
+                            <th style="width:16%">Correo</th>
+                            <th style="width:8%">Pago</th>
+                            <th style="width:8%">Estado</th>
+                            <th style="width:12%">Términos</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -483,6 +485,7 @@ class FirmasElectronicasController extends BaseModuloController
                                 <td><?= htmlspecialchars($r['correo'] ?? '—') ?></td>
                                 <td><?= htmlspecialchars(ucfirst($r['estado_pago'] ?? '')) ?></td>
                                 <td><?= htmlspecialchars(ucfirst($r['estado'] ?? '')) ?></td>
+                                <td><?= !empty($r['terminos_aceptados_at']) ? 'Sí, ' . date('d-m-Y H:i:s', strtotime($r['terminos_aceptados_at'])) : 'No registra' ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -521,7 +524,7 @@ class FirmasElectronicasController extends BaseModuloController
 
             require_once MVC_ROOT . '/vendor/autoload.php';
 
-            $headers    = ['Nombres', 'Apellidos', 'Tipo ID', 'Nro. Identificación', 'Tipo Firma', 'Vendedor', 'Teléfono', 'Correo', 'Estado Pago', 'Estado', 'Fecha'];
+            $headers    = ['Nombres', 'Apellidos', 'Tipo ID', 'Nro. Identificación', 'Tipo Firma', 'Vendedor', 'Teléfono', 'Correo', 'Estado Pago', 'Estado', 'Términos aceptados', 'Fecha'];
             $exportData = [];
             foreach ($rows as $r) {
                 $exportData[] = [
@@ -535,6 +538,7 @@ class FirmasElectronicasController extends BaseModuloController
                     $r['correo'] ?? '—',
                     ucfirst($r['estado_pago'] ?? ''),
                     ucfirst($r['estado'] ?? ''),
+                    !empty($r['terminos_aceptados_at']) ? 'Sí, ' . date('d-m-Y H:i:s', strtotime($r['terminos_aceptados_at'])) : 'No registra',
                     !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '—',
                 ];
             }
@@ -980,6 +984,23 @@ class FirmasElectronicasController extends BaseModuloController
         ];
         [$color, $label] = $map[$estado] ?? ['secondary', ucfirst($estado)];
         return "<span class=\"badge bg-{$color} bg-opacity-10 text-{$color} border border-{$color} border-opacity-25\">{$label}</span>";
+    }
+
+    /**
+     * Columna «Términos» del listado: si el titular aceptó los términos y el tratamiento de
+     * datos desde el enlace (con la fecha y hora), o no hay aceptación registrada (firmas
+     * creadas a mano o antes de pedir la casilla). La usan la vista y la recarga por AJAX.
+     */
+    public static function badgeTerminos(?string $aceptadoAt): string
+    {
+        if ($aceptadoAt === null || $aceptadoAt === '') {
+            return '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" '
+                 . 'title="No hay aceptación registrada (firma creada a mano o antes de pedir la casilla)">No registra</span>';
+        }
+        $fecha = date('d-m-Y H:i:s', strtotime($aceptadoAt));
+        return '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25" '
+             . 'title="Aceptó los términos y el tratamiento de datos el ' . $fecha . '">'
+             . '<i class="bi bi-check-circle me-1"></i>Aceptó ' . $fecha . '</span>';
     }
 
     private function badgeCaducidad(?string $fecha): string
