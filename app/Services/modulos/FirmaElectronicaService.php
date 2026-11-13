@@ -1025,6 +1025,8 @@ TXT;
                     $cambioCorreo = mb_strtolower(trim((string) $firma['correo']), 'UTF-8') !== mb_strtolower(trim((string) $data['correo']), 'UTF-8');
                 }
                 $data['id_empresa'] = $idEmpresa;
+                // No cuentan la propia firma ni la que esta renueva (la renovación copia sus datos).
+                $this->exigirSinFirmaVigente($idEmpresa, $data, [(int) $firma['id'], (int) ($firma['id_firma_anterior'] ?? 0)]);
                 // Los términos se aceptan solo al crear la solicitud: al editar no se piden ni se registran.
                 unset($data['acepta_terminos'], $data['terminos_ip'], $data['terminos_user_agent']);
                 // El portal no pide observaciones ni motivo: se conserva lo que tenía la ficha.
@@ -1194,6 +1196,9 @@ TXT;
         if ($terminos !== null && empty($data['acepta_terminos'])) {
             throw new Exception('Para continuar debe aceptar los términos y condiciones y el tratamiento de sus datos personales.');
         }
+        // Un enlace (de la empresa, de un vendedor o enviado por el operador) no crea otra
+        // solicitud para un titular que ya tiene una firma igual emitida y vigente.
+        $this->exigirSinFirmaVigente($idEmpresa, $data);
         $ipCliente = (string) ($data['terminos_ip'] ?? '');
         $uaCliente = (string) ($data['terminos_user_agent'] ?? '');
         unset($data['acepta_terminos'], $data['terminos_ip'], $data['terminos_user_agent']);
@@ -1226,6 +1231,19 @@ TXT;
         $this->repository->crearEvento($idEmpresa, $idFirma, 'datos', 'Datos del titular registrados', 'Falta subir los documentos.', true, null);
         $this->logService->registrar(0, $idEmpresa, 'crear_portal', 'firmas_electronicas', $idFirma, null, $firmaData);
         return $idFirma;
+    }
+
+    /**
+     * Rechaza la solicitud si el titular ya tiene en la empresa una firma emitida y vigente
+     * con los mismos datos (identificación, tipo de persona y RUC). El mensaje no revela la
+     * fecha ni otros datos de esa firma: el portal es público.
+     */
+    private function exigirSinFirmaVigente(int $idEmpresa, array $data, array $excluir = []): void
+    {
+        if ($this->repository->getEmitidaVigenteMismosDatos($idEmpresa, $data, $excluir)) {
+            throw new Exception('Ya existe una firma electrónica emitida y vigente con estos datos, por lo que no se puede '
+                . 'registrar otra solicitud igual. Si necesita renovarla o tiene alguna duda, comuníquese con la empresa.');
+        }
     }
 
     /** Sube (o reemplaza) un documento del cliente. */

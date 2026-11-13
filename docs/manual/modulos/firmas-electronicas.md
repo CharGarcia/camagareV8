@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.20
+etiquetas: firma electronica, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.21
 orden: 20
 estado: activo
 ---
@@ -569,6 +569,19 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
   usar en los datos de **facturación** (factura a otro nombre).
 - Un enlace genera **una sola** solicitud; un pago genera **una sola** factura y
   un solo cobro aunque se repita el clic o Payphone avise dos veces.
+- **No se repite una firma vigente**: desde ningún enlace (el fijo de la empresa,
+  el de un vendedor o el enviado por la empresa) se puede registrar una solicitud
+  si el titular ya tiene en la empresa una firma **emitida y vigente** (vence hoy o
+  después, o todavía no tiene fecha de vencimiento) con los **mismos datos**: misma identificación y mismo tipo de persona;
+  en persona jurídica o miembro de empresa, además el mismo RUC de la empresa, y en
+  persona natural, la misma opción **Firma electrónica con RUC**. El cliente ve el
+  aviso *«Ya existe una firma electrónica emitida y vigente con estos datos…»* y no
+  se crea nada (el aviso no muestra la fecha ni otros datos de esa firma). Lo mismo
+  si edita una solicitud ya iniciada para poner esos datos. **Para renovar** una
+  firma vigente use el botón **Renovar** de la ficha, *Nueva solicitud con estos
+  datos*, el enlace de los avisos de vencimiento o **Solicitar una nueva firma**
+  desde el enlace del cliente: esas renovaciones sí se permiten. Una firma ya
+  vencida, cancelada o de otro tipo de persona no lo impide.
 - El cliente puede corregir sus datos y documentos mientras la solicitud está
   en *Borrador*, *Pendiente de pago*, *Observada* o *Por registrar* (pagada y aún
   sin enviar a Uanataca). Después de pagar no puede cambiar la validez elegida ni
@@ -618,6 +631,11 @@ crear otra. Las fotos de más de 1 MB se reducen antes de enviarlas.
 - **«El servidor no respondió a tiempo» al enviar el enlace**: el servidor de
   correo tardó demasiado. Abra **Enlaces enviados**: si el enlace aparece, ya se
   creó (cópielo desde ahí o reenvíelo); si no, vuelva a intentar.
+- **«Ya existe una firma electrónica emitida y vigente con estos datos»**: el
+  titular ya tiene una firma igual que aún no vence (por ejemplo, un vendedor
+  volvió a usar su enlace con los datos de un cliente ya atendido). Búsquela en el
+  listado por la identificación; si el cliente necesita renovarla, use **Renovar**
+  en su ficha.
 - **«Este enlace ya no está disponible»**: el enlace venció sin usarse (15
   días) o la empresa está inactiva. Envíe uno nuevo.
 - **«Uanataca rechazó el usuario o la clave de la API»**: revise las
@@ -768,6 +786,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.21** — Un enlace (fijo, de vendedor o enviado) ya no registra una solicitud si el titular tiene una firma **emitida y vigente** con los mismos datos (identificación, tipo de persona y RUC de la empresa o «con RUC»); tampoco al editar una solicitud iniciada. Las renovaciones no cambian.
 - **3.20** — **Términos y protección de datos personales**: el cliente debe marcar una casilla de aceptación antes de enviar sus datos (enlace enviado, enlace fijo y enlace por vendedor). Se guarda la fecha, la IP, el navegador y el texto aceptado. Texto base del sistema, editable por empresa en el engranaje (pestaña General). No afecta a las solicitudes ya iniciadas. Requiere `database/20261112_firmas_terminos_aceptacion.sql`.
 - **3.19** — **Solicitud cancelada o eliminada por Uanataca**: aviso por correo a la empresa con el motivo, la firma cuenta en el ícono de Firmas del menú y la ficha muestra un recuadro rojo en Trámite. Nuevo botón **Reabrir para corregir y reenviar** (también para rechazadas): conserva pago, factura y documentos, devuelve la firma a *Por registrar* y espera el envío manual a Uanataca.
 - **3.18** — Ficha de la firma: las **pestañas se habilitan por pasos** (Datos → Documentos → Pago → Uanataca) y el recuadro **Siguiente paso** indica qué falta y quién actúa. **Estado Trámite** y **Estado Pago** pasan a ser de **solo lectura**: avanzan con las acciones de Trámite, entre ellas las nuevas **Confirmar documentos**, **Sin cobro (regalía)** (factura con 100 % de descuento, sin cobro), **Reabrir solicitud**, **Continuar el trámite** y **Regresar al paso que corresponde**. Una firma nueva nace en *Borrador* y no se puede registrar el pago sin los documentos. Un pago marcado «Confirmado» a mano, sin cobro, se puede registrar desde Trámite (**Falta registrar el cobro**). Nota junto al botón de reenviar factura. Nueva sección *Cómo avanza el trámite: siguiente paso y estados*.

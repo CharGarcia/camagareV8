@@ -625,6 +625,46 @@ class FirmaElectronicaRepository extends BaseRepository
         $this->db->prepare($sql)->execute($params);
     }
 
+    /**
+     * Firma emitida y vigente (caduca hoy o después, o aún sin fecha: Uanataca puede emitirla sin
+     * informar la caducidad) de la empresa con los mismos datos del
+     * titular: misma identificación y tipo de persona; con RUC de la empresa en jurídica/miembro
+     * y con el mismo «con RUC» en persona natural. $excluir: ids que no cuentan (la propia firma
+     * y la que esta renueva). null si no hay.
+     */
+    public function getEmitidaVigenteMismosDatos(int $idEmpresa, array $data, array $excluir = []): ?array
+    {
+        $tipoPersona = (string) ($data['tipo_persona'] ?? 'natural');
+        $where  = "f.id_empresa = :ie AND f.eliminado = false AND f.estado = 'emitida'
+                   AND (f.fecha_caducidad IS NULL OR f.fecha_caducidad >= CURRENT_DATE)
+                   AND TRIM(f.numero_identificacion) = :ident AND f.tipo_persona = :tp";
+        $params = [
+            ':ie'    => $idEmpresa,
+            ':ident' => trim((string) ($data['numero_identificacion'] ?? '')),
+            ':tp'    => $tipoPersona,
+        ];
+        if (in_array($tipoPersona, ['juridica', 'miembro'], true)) {
+            $where .= " AND TRIM(COALESCE(f.ruc_empresa, '')) = :ruc";
+            $params[':ruc'] = trim((string) ($data['ruc_empresa'] ?? ''));
+        } else {
+            $where .= " AND COALESCE(f.con_ruc, false) = :con_ruc";
+            $params[':con_ruc'] = !empty($data['con_ruc']) ? 'true' : 'false';
+        }
+        $i = 0;
+        foreach (array_filter(array_map('intval', $excluir)) as $id) {
+            $where .= " AND f.id <> :ex{$i}";
+            $params[":ex{$i}"] = $id;
+            $i++;
+        }
+        $st = $this->db->prepare(
+            "SELECT f.id, f.fecha_caducidad FROM {$this->table} f WHERE {$where}
+             ORDER BY f.id DESC LIMIT 1"
+        );
+        $st->execute($params);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
     /** Firma creada desde el portal: guarda además el origen y la solicitud que la generó. */
     public function createDesdePortal(array $data, int $idSolicitud): int
     {
