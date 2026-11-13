@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.6 | 13-11-2026 | Descuento por establecimiento adicional fijado en **20 %** (solo plan anual, solo plan base) |
 | 0.5 | 13-11-2026 | El descuento por establecimiento adicional aplica **solo en planes anuales**; en mensual todos pagan precio completo |
 | 0.4 | 13-11-2026 | Reglas del descuento: % fijo e igual para todos los establecimientos adicionales, solo sobre el plan base. Los módulos adicionales se cobran aparte en cada establecimiento, sin descuento |
 | 0.3 | 13-11-2026 | Unidad de cobro definida: **por establecimiento**, con precio del establecimiento principal y descuento para los adicionales. Cada establecimiento incluye 3 usuarios. Se corrige la descripción de multisucursal |
@@ -300,7 +301,7 @@ establecimiento contrata su propio plan**:
 
 - **Establecimiento principal**: precio completo del plan.
 - **Establecimientos adicionales del mismo RUC**: el plan base con un
-  **descuento de % fijo**, el mismo para todos los adicionales (2.º, 3.º,
+  **descuento fijo del 20 %**, el mismo para todos los adicionales (2.º, 3.º,
   4.º…). **El descuento solo aplica en planes anuales.** En plan mensual,
   todos los establecimientos pagan el precio completo.
 - **Módulos adicionales** (Restaurante, Taller, Producción, CRM, WhatsApp,
@@ -328,19 +329,18 @@ establecimiento contrata su propio plan**:
 | Periodicidad | Establecimiento principal | Establecimiento adicional |
 |---|---|---|
 | **Mensual** | plan base + módulos adicionales | plan base + módulos adicionales (sin descuento) |
-| **Anual** | plan base + módulos adicionales | plan base × (1 − % de descuento) + módulos adicionales |
+| **Anual** | plan base + módulos adicionales | plan base × 0,80 (20 % de descuento) + módulos adicionales |
 
 **Ejemplo de cálculo en plan anual** (valores ilustrativos, **no son precios reales**):
 
 | Establecimiento | Plan base | Descuento plan | Módulos adicionales | Paga |
 |---|---|---|---|---|
 | 001 – Ferretería (principal) | Comercial: $ A | — | — | $ A |
-| 002 – Restaurante | Comercial: $ A | X % | Restaurante: $ R (sin descuento) | $ A × (1 − X %) + $ R |
-| 003 – Ferretería sucursal | Comercial: $ A | X % | — | $ A × (1 − X %) |
+| 002 – Restaurante | Comercial: $ A | 20 % | Restaurante: $ R (sin descuento) | $ A × 0,80 + $ R |
+| 003 – Ferretería sucursal | Comercial: $ A | 20 % | — | $ A × 0,80 |
 | **Total anual del RUC** | | | | **suma** |
 
 > **Por definir:**
-> - El **valor del % fijo** de descuento para los establecimientos adicionales.
 > - ¿El plan anual tiene **además** su propio precio rebajado frente a 12
 >   mensualidades, o el único beneficio del plan anual es el descuento de los
 >   establecimientos adicionales?
@@ -428,7 +428,7 @@ avanzada y Firmas electrónicas.
 - ~~Definir la unidad de cobro~~ → **por establecimiento** (v0.3).
 - ~~Reglas del descuento~~ → % fijo al plan base de los adicionales; módulos
   adicionales aparte y sin descuento (v0.4). Solo en planes anuales (v0.5).
-  Falta el valor del %.
+  Descuento: **20 %** (v0.6).
 - Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
