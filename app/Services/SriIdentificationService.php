@@ -230,7 +230,34 @@ class SriIdentificationService
             'telefono' => '',
             'mail' => '',
             'tipo' => $this->mapearTipoContribuyente($tipoContribuyente),
+            // Todos los establecimientos que reporta el SRI (abiertos y cerrados). Lo usa el
+            // Cotizador de Planes para precargar los locales del RUC; los demás llamadores
+            // no lo leen.
+            'establecimientos' => $this->listarEstablecimientos($establecimientos),
         ];
+    }
+
+    /**
+     * Establecimientos del RUC tal como los reporta el SRI: código de 3 dígitos,
+     * nombre comercial, dirección, estado (ABIERTO / CERRADO) y si es la matriz.
+     *
+     * @return array<int, array{codigo:string, nombre:string, direccion:string, estado:string, matriz:bool}>
+     */
+    private function listarEstablecimientos(array $establecimientos): array
+    {
+        $out = [];
+        foreach ($establecimientos as $est) {
+            if (!is_array($est)) continue;
+            $out[] = [
+                'codigo'    => $this->extraerEstablecimiento($est),
+                'nombre'    => $this->fixEncoding($this->strClean((string) ($est['nombreFantasiaComercial'] ?? ''))),
+                'direccion' => $this->fixEncoding($this->strClean((string) ($est['direccionCompleta'] ?? ''))),
+                'estado'    => strtoupper((string) ($est['estado'] ?? '')),
+                'matriz'    => ($est['tipoEstablecimiento'] ?? '') === 'MAT' || ($est['matriz'] ?? '') === 'SI',
+            ];
+        }
+        usort($out, static fn($a, $b) => strcmp($a['codigo'], $b['codigo']));
+        return $out;
     }
 
     /**
