@@ -570,35 +570,130 @@
         cfgItems = j.items || [];
         cfgSubmodulos = j.submodulos || [];
         pintarCfgItems();
-        pintarSubmodulos();
         $('cfgEditor').classList.add('d-none');
     }
 
-    function pintarSubmodulos() {
+    /** Ítems cargados + submódulos del menú que aún no están en el catálogo (a $0, «Sin cargar»). */
+    function filasCatalogo() {
         const usados = new Set(cfgItems.filter((it) => it.id_submodulo).map((it) => Number(it.id_submodulo)));
-        const grupos = {};
-        cfgSubmodulos.forEach((s) => { if (!usados.has(s.id_submodulo)) (grupos[s.grupo || 'Otros'] ||= []).push(s); });
-        $('cfgSubmodulo').innerHTML = '<option value="">Elegir submódulo…</option>' + Object.keys(grupos).sort().map((g) =>
-            `<optgroup label="${esc(g)}">` + grupos[g].map((s) => `<option value="${s.id_submodulo}">${esc(s.nombre)}</option>`).join('') + '</optgroup>').join('');
+        const filas = cfgItems.map((it) => ({ ...it, _k: 'i' + it.id }));
+        cfgSubmodulos.forEach((sm) => {
+            if (usados.has(sm.id_submodulo)) return;
+            filas.push({
+                _k: 's' + sm.id_submodulo, _virtual: true, tipo: 'modulo', id_submodulo: sm.id_submodulo, ruta: sm.ruta,
+                nombre: sm.nombre, grupo: sm.grupo, precio_anual: 0, cobro: 'recurrente',
+                aplica_descuento_establecimiento: true, por_defecto: false, estado: 'activo', requiere: [],
+            });
+        });
+        const orden = (x) => [x.tipo === 'servicio' ? 1 : 0, (x.grupo || '').toLowerCase(), (x.nombre || '').toLowerCase()];
+        return filas.sort((x, y) => {
+            const a = orden(x), b = orden(y);
+            for (let i = 0; i < a.length; i++) { if (a[i] < b[i]) return -1; if (a[i] > b[i]) return 1; }
+            return 0;
+        });
     }
 
     function pintarCfgItems() {
         const f = ($('cfgFiltro').value || '').toLowerCase();
+        const ver = $('cfgVer').value;
         const nombres = {};
         cfgItems.forEach((it) => { nombres[it.id] = it.nombre; });
-        const filas = cfgItems.filter((it) => !f || `${it.grupo || ''} ${it.nombre}`.toLowerCase().includes(f));
-        $('cfgItems').querySelector('tbody').innerHTML = filas.map((it) => `<tr role="button" onclick="CP_editarItem(${it.id})">
-            <td class="small text-muted">${esc(it.grupo || '')}</td>
-            <td>${esc(it.nombre)}</td>
-            <td>${it.tipo === 'servicio' ? 'Servicio' : 'Módulo'}</td>
-            <td>${it.cobro === 'unico' ? 'Una vez' : 'Cada periodo'}</td>
-            <td class="text-end">${money(it.precio_anual)}</td>
-            <td class="text-center">${it.cobro === 'unico' ? '—' : (it.aplica_descuento_establecimiento ? 'Base' : 'Adicional')}</td>
-            <td class="text-center">${it.por_defecto ? '<i class="bi bi-check-lg text-success"></i>' : ''}</td>
-            <td class="small cp-celda" style="max-width:220px;">${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}</td>
-            <td class="text-center">${it.estado === 'activo' ? '<span class="badge bg-success bg-opacity-10 text-success">Activo</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>'}</td>
-        </tr>`).join('') || '<tr><td colspan="9" class="text-muted text-center py-3">El catálogo está vacío. Agregue los módulos del menú que se venden y sus precios.</td></tr>';
+        const todas = filasCatalogo();
+        const filas = todas.filter((it) => (!f || `${it.grupo || ''} ${it.nombre}`.toLowerCase().includes(f))
+            && (ver === 'todos' || (ver === 'cargados' ? !it._virtual : it._virtual)));
+        const sinCargar = todas.filter((it) => it._virtual).length;
+        $('cfgResumen').textContent = `${todas.length - sinCargar} cargados · ${sinCargar} sin cargar`;
+
+        // Conservar el scroll y el campo con foco al repintar (para escribir precios seguidos con Tab).
+        const caja = $('cfgItems').closest('.table-responsive');
+        const scroll = caja ? caja.scrollTop : 0;
+        const foco = document.activeElement?.dataset?.k || null;
+
+        $('cfgItems').querySelector('tbody').innerHTML = filas.map((it) => {
+            const estado = it._virtual
+                ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Sin cargar</span>'
+                : (it.estado === 'activo' ? '<span class="badge bg-success bg-opacity-10 text-success">Activo</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>');
+            const accion = it._virtual
+                ? `<button type="button" class="btn btn-outline-primary btn-sm py-0" onclick="CP_cargarItem('${it._k}')" title="Cargar al catálogo con el precio escrito">Cargar</button>`
+                : `<button type="button" class="btn btn-link btn-sm p-0" onclick="CP_editarItem('${it._k}')" title="Editar"><i class="bi bi-pencil-square"></i></button>`;
+            return `<tr class="${it._virtual ? 'text-muted' : ''}">
+                <td class="small">${esc(it.tipo === 'servicio' ? 'Servicios' : (it.grupo || ''))}</td>
+                <td><a href="#" class="text-reset" onclick="CP_editarItem('${it._k}');return false;">${esc(it.nombre)}</a></td>
+                <td class="small">${it.cobro === 'unico' ? 'Una vez' : 'Cada periodo'}</td>
+                <td><input type="number" min="0" step="0.01" class="form-control form-control-sm text-end py-0" style="height:24px;"
+                        data-k="${it._k}" value="${Number(it.precio_anual || 0).toFixed(2)}" onchange="CP_precioCatalogo('${it._k}', this)"></td>
+                <td class="text-center small">${it.cobro === 'unico' ? '—' : (it.aplica_descuento_establecimiento ? 'Base' : 'Adicional')}</td>
+                <td class="text-center">${it.por_defecto ? '<i class="bi bi-check-lg text-success"></i>' : ''}</td>
+                <td class="small cp-celda" style="max-width:200px;" title="${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}">${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}</td>
+                <td class="text-center">${estado}</td>
+                <td class="text-center">${accion}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="9" class="text-muted text-center py-3">No hay módulos con ese filtro.</td></tr>';
+
+        if (caja) caja.scrollTop = scroll;
+        if (foco) {
+            const el = $('cfgItems').querySelector(`input[data-k="${foco}"]`);
+            if (el) el.focus();
+        }
     }
+    $('cfgVer').addEventListener('change', pintarCfgItems);
+
+    function filaPorClave(k) {
+        return filasCatalogo().find((x) => x._k === k) || null;
+    }
+
+    /** Datos completos de un ítem en el formato de guardarItemAjax. */
+    function payloadItem(it, cambios) {
+        const d = {
+            id: it._virtual ? 0 : it.id, tipo: it.tipo, id_submodulo: it.id_submodulo || 0, ruta: it.ruta || '',
+            nombre: it.nombre, grupo: it.grupo || '', descripcion: it.descripcion || '', precio_anual: it.precio_anual,
+            cobro: it.cobro, aplica_descuento_establecimiento: !!it.aplica_descuento_establecimiento,
+            por_defecto: !!it.por_defecto, estado: it.estado || 'activo', orden: it.orden || 0,
+            id_producto: it.id_producto || 0, requiere: (it.requiere || []).map(Number),
+        };
+        return Object.assign(d, cambios || {});
+    }
+
+    // Los guardados van en cola: escribir precios seguidos (Tab) no pierde ninguno.
+    let colaGuardado = Promise.resolve();
+    function guardarFila(k, precio) {
+        colaGuardado = colaGuardado.then(() => guardarFilaAhora(k, precio)).catch(() => {});
+        return colaGuardado;
+    }
+    async function guardarFilaAhora(k, precio) {
+        let it = filaPorClave(k);
+        // Un submódulo que se acaba de cargar ya tiene clave de ítem.
+        if (!it && k.startsWith('s')) {
+            const real = cfgItems.find((x) => Number(x.id_submodulo) === Number(k.slice(1)));
+            it = real ? filaPorClave('i' + real.id) : null;
+        }
+        if (!it) return;
+        const valor = precio === undefined ? Number(it.precio_anual || 0) : precio;
+        if (!(valor >= 0)) return alerta('warning', 'Precio no válido', 'El precio debe ser un número mayor o igual a cero.');
+        try {
+            const j = await postJson(`${URL}/guardarItemAjax`, payloadItem(it, { precio_anual: valor }));
+            if (!j.ok) { alerta('warning', 'No se guardó', j.error); pintarCfgItems(); return; }
+            if (it._virtual) {
+                cfgItems.push(payloadItem(it, { id: j.id, precio_anual: valor, estado: 'activo' }));
+                // El foco sigue en la fila: su clave cambia de submódulo a ítem.
+                const el = document.activeElement;
+                if (el?.dataset?.k === it._k) el.dataset.k = 'i' + j.id;
+            } else {
+                const real = cfgItems.find((x) => x.id === it.id);
+                if (real) real.precio_anual = valor;
+            }
+            pintarCfgItems();
+        } catch (e) {
+            alerta('error', 'Error de conexión', 'No se guardó el precio.');
+        }
+    }
+    window.CP_precioCatalogo = function (k, el) {
+        guardarFila(k, Math.round(parseFloat(el.value || 0) * 100) / 100);
+    };
+    window.CP_cargarItem = function (k) {
+        const el = $('cfgItems').querySelector(`input[data-k="${k}"]`);
+        guardarFila(k, el ? Math.round(parseFloat(el.value || 0) * 100) / 100 : 0);
+    };
     $('cfgFiltro').addEventListener('input', pintarCfgItems);
 
     function abrirEditor(it) {
@@ -635,16 +730,13 @@
     }
     $('it_cobro').addEventListener('change', actualizarEditorCobro);
 
-    window.CP_editarItem = function (id) {
-        const it = cfgItems.find((x) => x.id === id);
-        if (it) abrirEditor(it);
+    window.CP_editarItem = function (k) {
+        const it = filaPorClave(k);
+        if (!it) return;
+        const datos = { ...it };
+        if (it._virtual) delete datos.id; // aún no está en el catálogo: el editor lo crea
+        abrirEditor(datos);
     };
-    $('cfgBtnAgregarModulo').addEventListener('click', () => {
-        const id = parseInt($('cfgSubmodulo').value || 0, 10);
-        const s = cfgSubmodulos.find((x) => x.id_submodulo === id);
-        if (!s) return alerta('info', 'Elija un submódulo', 'Seleccione el submódulo del menú que quiere poner a la venta.');
-        abrirEditor({ tipo: 'modulo', id_submodulo: s.id_submodulo, ruta: s.ruta, nombre: s.nombre, grupo: s.grupo, precio_anual: 0, cobro: 'recurrente', aplica_descuento_establecimiento: true, estado: 'activo' });
-    });
     $('cfgBtnAgregarServicio').addEventListener('click', () => {
         abrirEditor({ tipo: 'servicio', nombre: '', grupo: 'Servicios', precio_anual: 0, cobro: 'unico', aplica_descuento_establecimiento: false, estado: 'activo' });
     });

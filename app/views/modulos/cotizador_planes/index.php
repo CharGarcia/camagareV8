@@ -335,15 +335,25 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="cfg-tab-catalogo">
                         <div class="d-flex flex-wrap gap-2 align-items-end mb-2">
-                            <div style="width:420px;max-width:100%;">
-                                <label class="form-label small fw-bold mb-1">Agregar un módulo del menú</label>
-                                <select class="form-select form-select-sm" id="cfgSubmodulo"></select>
+                            <div style="width:170px;">
+                                <label class="form-label small fw-bold mb-1">Mostrar</label>
+                                <select class="form-select form-select-sm" id="cfgVer">
+                                    <option value="todos">Todos</option>
+                                    <option value="cargados">Cargados</option>
+                                    <option value="sin_cargar">Sin cargar</option>
+                                </select>
                             </div>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="cfgBtnAgregarModulo"><i class="bi bi-plus-lg"></i> Agregar módulo</button>
+                            <div style="width:260px;">
+                                <label class="form-label small fw-bold mb-1">Buscar</label>
+                                <input type="search" class="form-control form-control-sm" id="cfgFiltro" placeholder="Módulo o grupo…">
+                            </div>
                             <button type="button" class="btn btn-outline-secondary btn-sm" id="cfgBtnAgregarServicio"><i class="bi bi-plus-lg"></i> Agregar servicio</button>
-                            <div class="ms-auto" style="width:240px;">
-                                <input type="search" class="form-control form-control-sm" id="cfgFiltro" placeholder="Filtrar el catálogo…">
-                            </div>
+                            <div class="ms-auto small text-muted" id="cfgResumen"></div>
+                        </div>
+                        <div class="small text-muted mb-2">
+                            Aquí están todos los módulos del menú. Escriba el <strong>precio anual</strong> directo en la tabla y se guarda solo.
+                            Los que dicen <em>Sin cargar</em> todavía no se ofrecen al cotizar: se cargan al escribir su precio o con <strong>Cargar</strong> (también a $0, para los que van incluidos).
+                            Para dependencias y demás opciones, pulse el nombre del módulo.
                         </div>
 
                         <!-- Editor de ítem -->
@@ -418,7 +428,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <div class="table-responsive" style="max-height:52vh;">
                             <table class="table table-sm table-hover mb-0" id="cfgItems">
                                 <thead class="table-light" style="position:sticky;top:0;z-index:1;">
-                                    <tr><th>Grupo</th><th>Nombre</th><th>Tipo</th><th>Se cobra</th><th class="text-end">Precio anual</th><th class="text-center">Desc. establ.</th><th class="text-center">Por defecto</th><th>Requiere</th><th class="text-center">Estado</th></tr>
+                                    <tr><th>Grupo</th><th>Nombre</th><th>Se cobra</th><th class="text-end" style="width:130px;">Precio anual</th><th class="text-center">Desc. establ.</th><th class="text-center">Por defecto</th><th>Requiere</th><th class="text-center">Estado</th><th class="text-center" style="width:80px;"></th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>

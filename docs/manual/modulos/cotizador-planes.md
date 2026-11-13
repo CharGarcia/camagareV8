@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.0
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -41,8 +41,14 @@ El módulo está en el menú **CRM → Cotizador de Planes** (dirección
 Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
 **Configuración**:
 
-1. **Catálogo de precios**: los módulos del menú que se venden, con su precio
-   anual, y los servicios (implementación, migración, capacitación…).
+1. **Catálogo de precios**: la pestaña muestra **todos los módulos del menú**.
+   El precio anual se escribe directo en la tabla y se guarda solo. Los que
+   dicen *Sin cargar* todavía no se ofrecen al cotizar: se cargan al escribir
+   su precio o con el botón **Cargar** (también a $0, para los módulos que van
+   incluidos). El filtro **Mostrar** separa cargados y sin cargar. Al pulsar el
+   nombre de un módulo se abren sus demás opciones (dependencias, base o
+   adicional, por defecto). Los servicios (implementación, migración,
+   capacitación…) se agregan con **Agregar servicio**.
 2. **Parámetros**: recargo del plan mensual, descuento por establecimiento
    adicional, usuarios incluidos, precio del usuario adicional y los
    **productos** de la línea resumen (plan anual y plan mensual). Esos
@@ -174,3 +180,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.0** — Versión inicial: catálogo de precios por módulo con dependencias,
   cálculo anual y mensual en vivo, consulta del RUC con sus establecimientos y
   generación de la proforma enlazada al CRM.
+- **1.1** — El catálogo de precios lista todos los módulos del menú (los que faltan, «Sin cargar» a $0) y el precio se escribe directo en la tabla. El botón Configuración pasa junto a PDF y Excel, y el de crear se llama «Nueva».
