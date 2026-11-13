@@ -460,3 +460,7 @@ avanzada y Firmas electrónicas.
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
   esta tabla se convierte en la base del **cotizador por módulos**.
+- **Los precios se definirán con el Cotizador de Planes** (diseño en
+  `docs/diseno/cotizador-planes-fase1.md`): el precio sale del perfil de cada
+  cliente y no de una lista fija. Cuando exista, la sección 6 explicará al
+  vendedor cómo usarlo.
