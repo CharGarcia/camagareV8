@@ -571,6 +571,27 @@ class FacturaVentaService
      * reabrir un documento), Postgres lo rechaza con un error críptico de
      * truncado. Se valida antes, con un mensaje que dice qué valor era.
      */
+    /**
+     * Una factura con total 0,00 (p. ej. todo con descuento del 100 %) no tiene nada
+     * que cobrar, así que no se le exige forma de pago. Si llega sin ninguna, se le
+     * pone una con valor 0,00 y código 01 (sin utilización del sistema financiero),
+     * para que el XML del SRI lleve siempre su bloque <pagos> con al menos un <pago>.
+     * Con total distinto de 0 no se toca nada: las Rules siguen exigiendo los pagos.
+     */
+    private function pagoPorDefectoTotalCero(array $data): array
+    {
+        $total = round((float) ($data['importe_total'] ?? 0), 2);
+        if (abs($total) < 0.001 && empty($data['pagos'])) {
+            $data['pagos'] = [[
+                'forma_pago'    => '01',
+                'total'         => 0,
+                'plazo'         => 0,
+                'unidad_tiempo' => 'dias',
+            ]];
+        }
+        return $data;
+    }
+
     private function validarFormaPago(array $p): void
     {
         $codigo = (string) ($p['forma_pago'] ?? '');
@@ -767,6 +788,7 @@ class FacturaVentaService
         // IVA recalculado en el servidor con la configuración de facturación de la serie
         // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
         $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'la factura');
+        $data = $this->pagoPorDefectoTotalCero($data);
 
         $this->rules->validar($data, $estConfig ?? []);
 
@@ -1078,6 +1100,7 @@ class FacturaVentaService
         // IVA recalculado en el servidor con la configuración de facturación de la serie
         // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
         $data = \App\Helpers\CalculoIvaDocumento::normalizar($data, 'la factura');
+        $data = $this->pagoPorDefectoTotalCero($data);
 
         $this->rules->validar($data, $estConfig ?? []);
 

@@ -2185,6 +2185,20 @@ $totalPages = $totalPagesOriginal;
             text: 'Seleccione la forma de pago SRI para cada monto ingresado.'
         });
 
+        // Factura con total 0 (p. ej. todo con descuento del 100%): no hay nada que
+        // cobrar, así que no se exige forma de pago. Se envía una con valor 0,00 (la
+        // elegida en la primera fila o, si no hay, 01 - Sin utilización del sistema
+        // financiero) para que el XML del SRI lleve siempre su bloque <pagos>.
+        if (pagos.length === 0 && totalFactura === 0) {
+            const selPago = document.querySelector('#m-container-pagos .row-pago select[name="f_pago_id[]"]');
+            pagos.push({
+                forma_pago: (selPago && selPago.value) ? selPago.value : '01',
+                total: '0.00',
+                plazo: diasCred,
+                unidad_tiempo: 'dias'
+            });
+        }
+
         if (pagos.length === 0) return Swal.fire({
             icon: 'warning',
             title: 'Atención',
