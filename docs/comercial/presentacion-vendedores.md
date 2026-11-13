@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.10 | 13-11-2026 | Los usuarios se cuentan por RUC y se comparten entre establecimientos (3 cupos por establecimiento, sumados a nivel de RUC) |
 | 0.9 | 13-11-2026 | Usuario adicional: $20 anual ($2 mensual). Principal = establecimiento con el plan base más caro |
 | 0.8 | 13-11-2026 | Regla fija de precios: mensual = anual ÷ 12 × 1,20 (20 % de recargo), para planes y módulos adicionales |
 | 0.7 | 13-11-2026 | El plan mensual tiene un precio más alto que el anual. Se agrega el argumento de venta del pago anual |
@@ -316,7 +317,12 @@ establecimiento contrata su propio plan**:
   usuarios activos, la empresa cumple el requisito de Apple para usar la app
   en iPhone/iPad (sección 3). Ojo: ese requisito cuenta los usuarios
   **activos y asignados**, no los cupos del plan.
-- **Usuario adicional** (sobre los 3 incluidos): **$20 al año** por usuario,
+- **Los usuarios se cuentan por RUC y se comparten entre establecimientos.**
+  Un usuario que trabaja en varios establecimientos del mismo RUC ocupa
+  **un solo cupo**. Los cupos incluidos se suman a nivel de RUC: 3 por cada
+  establecimiento contratado. *Ejemplo:* un RUC con 2 establecimientos tiene
+  6 usuarios incluidos, y cada uno puede trabajar en uno o en los dos locales.
+- **Usuario adicional** (sobre los cupos incluidos del RUC): **$20 al año** por usuario,
   o **$2 al mes** con la regla mensual (20 ÷ 12 × 1,20 = 2,00).
 - **Establecimiento principal**: si los establecimientos tienen planes
   distintos, el principal es **el de plan base más caro**. Ese paga completo
@@ -363,9 +369,9 @@ si tiene más locales, cada uno le sale con 20 % de descuento».*
 | **Total anual del RUC** | | | | **suma** |
 
 > **Por definir:**
-> - Si un mismo usuario trabaja en dos establecimientos del mismo RUC,
->   ¿ocupa un cupo en cada uno? *(En el sistema, el usuario se asigna a cada
->   empresa/establecimiento por separado.)*
+> - **Control de cupos:** hoy el sistema no limita automáticamente el número
+>   de usuarios por RUC. El control lo hace quien da de alta los usuarios
+>   (o el futuro cotizador o un aviso en Empresas del sistema).
 
 > **Nota técnica para el cotizador:** hoy *Combos de submódulos* guarda un
 > precio por combo, pero no sabe de establecimiento principal ni de
@@ -449,6 +455,7 @@ avanzada y Firmas electrónicas.
   precios anuales.
 - ~~Usuario adicional~~ → $20 anual / $2 mensual (v0.9).
 - ~~Establecimiento principal~~ → el de plan base más caro (v0.9).
+- ~~Usuarios compartidos~~ → se cuentan por RUC (v0.10).
 - Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
