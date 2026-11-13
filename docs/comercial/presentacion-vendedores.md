@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.12 | 13-11-2026 | Sección 1 «Quiénes somos»: propuestas de misión, visión, valores y propuesta de valor para elegir |
 | 0.11 | 13-11-2026 | Los precios se calculan con el nuevo módulo **Cotizador de Planes** (precio por módulo, dependencias, anual y mensual en vivo, proforma enlazada al CRM) |
 | 0.10 | 13-11-2026 | Los usuarios se cuentan por RUC y se comparten entre establecimientos (3 cupos por establecimiento, sumados a nivel de RUC) |
 | 0.9 | 13-11-2026 | Usuario adicional: $20 anual ($2 mensual). Principal = establecimiento con el plan base más caro |
@@ -21,7 +22,7 @@
 
 ## Índice
 
-1. Quiénes somos: nombre, misión, visión y valores — *pendiente*
+1. Quiénes somos: nombre, misión, visión y valores — *borrador con opciones para elegir*
 2. Conociendo al cliente: target y problemas que resolvemos — *pendiente*
 3. **Lo que ofrecemos** — *borrador listo para revisión*
 4. **Módulos del sistema** — *borrador listo para revisión*
@@ -31,6 +32,73 @@
 8. De qué somos responsables y de qué no — *pendiente (base: Contrato de uso y Acuerdo de datos)*
 9. Preguntas frecuentes y manejo de objeciones — *pendiente*
 10. Proceso de venta: demo, cotización, contrato y alta — *pendiente*
+
+---
+
+## 1. Quiénes somos *(borrador — elegir una opción de cada bloque)*
+
+### 1.1 Nombre
+
+**CaMaGaRe** — sistema de gestión empresarial en la nube para empresas del
+Ecuador.
+
+> **Pendiente:** ¿qué significa el nombre? ¿Hay una historia detrás que el
+> vendedor pueda contar (quién lo creó, desde cuándo, por qué)? Una historia
+> real de origen genera confianza en la primera reunión.
+
+### 1.2 Misión *(propuestas)*
+
+**Opción A — enfocada en el cliente**
+> Simplificar la gestión de las empresas ecuatorianas con un sistema en la
+> nube que integra facturación electrónica, contabilidad, inventario, nómina e
+> impuestos, para que sus dueños dediquen su tiempo a hacer crecer el negocio
+> y no a cumplir trámites.
+
+**Opción B — enfocada en el cumplimiento**
+> Ayudar a las empresas del Ecuador a cumplir con el SRI y llevar sus cuentas
+> en orden, con una herramienta completa, segura y fácil de usar desde el
+> computador o el celular.
+
+**Opción C — corta, para decir en voz alta**
+> Todo tu negocio, en orden y al día, en un solo sistema.
+
+### 1.3 Visión *(propuestas)*
+
+**Opción A**
+> Ser el sistema de gestión preferido por las pequeñas y medianas empresas y
+> los estudios contables del Ecuador, reconocido por su cumplimiento
+> tributario, su facilidad de uso y la cercanía de su soporte.
+
+**Opción B**
+> Que toda empresa ecuatoriana, sin importar su tamaño o su giro, pueda
+> administrar su negocio con la misma información y control que una gran
+> empresa.
+
+> **Para decidir:** ¿hasta dónde llega la visión? ¿Solo Ecuador, o hay planes
+> de ir a otros países? ¿Hay una meta concreta (por ejemplo, número de
+> empresas o un año)? Una visión con fecha o cifra motiva más al equipo.
+
+### 1.4 Valores *(propuesta — basados en cómo está construido el sistema)*
+
+| Valor | Qué significa | Cómo se ve en el sistema |
+|---|---|---|
+| **Cumplimiento** | Hacemos las cosas como exige la ley. | Comprobantes electrónicos, anexos y declaraciones del SRI, nómina según la ley laboral, acuerdo de datos personales (LOPDP). |
+| **Confianza** | La información del cliente es suya y está protegida. | Permisos por usuario, registro de auditoría, nada se borra físicamente, respaldos periódicos. |
+| **Simplicidad** | Lo complejo lo resuelve el sistema, no el usuario. | Asientos contables automáticos, carga desde Excel y desde el XML del SRI, guardado sin duplicados. |
+| **Cercanía** | Acompañamos al cliente. | Chat de soporte en todas las pantallas, manual en línea y asistente con IA. |
+| **Mejora continua** | El sistema crece con sus clientes. | Novedades del sistema y módulos por industria que se suman constantemente. |
+
+### 1.5 Propuesta de valor (lo que el vendedor dice en 30 segundos)
+
+> «CaMaGaRe es el sistema que lleva su negocio completo en la nube: factura
+> electrónicamente al SRI, controla su inventario, sus cobros y pagos, su
+> nómina y su contabilidad, que se hace sola. Lo usa desde el computador o el
+> celular, sus datos están seguros y siempre tiene a quién preguntar. Usted se
+> dedica a vender; nosotros nos encargamos de que todo cuadre.»
+
+> ⚠️ **Antes de usar este discurso:** confirmar con la dirección que todo lo
+> prometido se cumple. Por ejemplo, «siempre tiene a quién preguntar» depende
+> de los horarios de soporte, que aún no están definidos (sección 7).
 
 ---
 
