@@ -48,7 +48,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
     <h5 class="mb-0 fw-bold"><i class="bi bi-calculator text-primary me-1"></i> <?= $e($titulo) ?></h5>
     <div class="d-flex gap-2">
         <?php if ($disponible && $perm['crear']): ?>
-            <button type="button" class="btn btn-primary btn-sm px-3" onclick="CP_nueva()"><i class="bi bi-plus-lg"></i> Nueva cotización</button>
+            <button type="button" class="btn btn-primary btn-sm px-3" onclick="CP_nueva()"><i class="bi bi-plus-lg"></i> Nueva</button>
         <?php endif; ?>
     </div>
 </div>
