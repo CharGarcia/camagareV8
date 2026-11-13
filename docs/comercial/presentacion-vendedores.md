@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.15 | 13-11-2026 | Nueva sección 5 «Cómo funciona el sistema» (acceso, ciclo del cliente, soporte, pagos y vencimiento). Sección 3: aviso de firma por caducar y ambiente de pruebas |
 | 0.14 | 13-11-2026 | Valores aprobados. Nueva sección 2 «Conociendo al cliente»: perfiles, dolores, preguntas de descubrimiento y señales de buen o mal cliente |
 | 0.13 | 13-11-2026 | Aprobadas la misión (opción A) y la visión (opción B) |
 | 0.12 | 13-11-2026 | Sección 1 «Quiénes somos»: propuestas de misión, visión, valores y propuesta de valor para elegir |
@@ -26,9 +27,9 @@
 
 1. Quiénes somos: nombre, misión, visión y valores — *aprobado (falta historia del nombre)*
 2. Conociendo al cliente: target y problemas que resolvemos — *borrador para revisión*
-3. **Lo que ofrecemos** — *borrador listo para revisión*
+3. **Lo que ofrecemos** — *borrador listo para revisión (v0.15: dos argumentos nuevos)*
 4. **Módulos del sistema** — *borrador listo para revisión*
-5. Cómo funciona el sistema (alta, puesta en marcha, soporte) — *pendiente*
+5. **Cómo funciona el sistema** (alta, puesta en marcha, soporte, pagos) — *borrador para revisión*
 6. Planes de suscripción y qué incluye cada plan — *en construcción: propuesta de arquitectura, faltan nombres y precios*
 7. Qué cubre y qué no cubre la membresía — *pendiente*
 8. De qué somos responsables y de qué no — *pendiente (base: Contrato de uso y Acuerdo de datos)*
@@ -207,6 +208,8 @@ empresa, y se usa desde el computador o desde el celular.**
      cuarto, utilidades (15%) y vacaciones.
    - IVA del 8% en feriados programable: los productos vuelven solos a su
      tarifa normal al terminar.
+   - Aviso por correo antes de que caduque la **firma electrónica** de la
+     empresa, para que nunca se quede sin poder facturar.
 
 3. **La contabilidad se hace sola.** Cada documento genera su asiento contable
    automáticamente. El sistema entrega estados financieros, balance de
@@ -260,6 +263,8 @@ empresa, y se usa desde el computador o desde el celular.**
      IA que responde con el manual y chat de soporte en todas las pantallas.
    - Todos los listados tienen buscador, filtros y exportación a PDF y Excel.
      Cada usuario elige qué columnas ver.
+   - **Ambiente de pruebas**: se puede practicar emitiendo comprobantes sin
+     validez tributaria antes de pasar a producción.
 
 10. **Los datos son del cliente.** Así lo dicen el Contrato de uso y el
     Acuerdo de tratamiento de datos personales (LOPDP), que el cliente acepta
@@ -418,6 +423,86 @@ programe. Por ejemplo:
 > usuario**. Las descripciones de arriba salen de sus pantallas en el sistema.
 > Antes de entregar este documento conviene crear esos manuales, para que el
 > vendedor pueda remitir al cliente.
+
+---
+
+## 5. Cómo funciona el sistema *(borrador para revisión)*
+
+### 5.1 Cómo se accede
+
+- **En la nube**: se entra desde cualquier navegador, sin instalar nada. Los
+  datos viven en el servidor, no en el computador del cliente.
+- **App móvil** para **Android y iPhone/iPad**, con los mismos datos y permisos
+  que la web. En iPhone/iPad la empresa necesita **al menos 2 usuarios
+  activos** (regla de Apple); con un solo usuario usa la web o Android.
+- **Un usuario, varias empresas**: quien trabaja en varias empresas (por
+  ejemplo, un contador) cambia de empresa sin salir del sistema.
+
+### 5.2 El camino del cliente, paso a paso
+
+| # | Paso | Quién lo hace | Qué pasa en el sistema |
+|---|---|---|---|
+| 1 | **Cotización** | Vendedor | Arma el precio en el *Cotizador de Planes* y genera la proforma con la oportunidad en el CRM. |
+| 2 | **Aceptación** | Cliente | Aprueba la proforma con el botón del correo. |
+| 3 | **Alta de la empresa** | CaMaGaRe (superadministrador) | Crea la empresa en *Empresas del sistema*. La empresa queda registrada como cliente para facturarle la suscripción. |
+| 4 | **Documentos legales** | Cliente | Recibe por correo el **Contrato de uso** y el **Acuerdo de datos personales (LOPDP)** y los acepta en línea; queda constancia de fecha, hora e IP. |
+| 5 | **Configuración inicial** | *Por definir (CaMaGaRe o el cliente)* | Datos de la empresa y logo, establecimientos, puntos de emisión y secuenciales, y la **firma electrónica (.p12)**. |
+| 6 | **Usuarios y permisos** | *Por definir* | Se crean los usuarios y se asigna a cada uno qué puede ver, crear, modificar o eliminar. |
+| 7 | **Carga de datos** | *Por definir* | Clientes, proveedores y productos por **Excel**; **saldos iniciales** de cartera, bancos e inventario. |
+| 8 | **Pruebas** | Cliente | Puede practicar en **ambiente de pruebas** (sin validez tributaria). |
+| 9 | **Producción** | Cliente | Pasa a **producción** y empieza a emitir documentos reales. |
+| 10 | **Operación y soporte** | Cliente / CaMaGaRe | Trabajo diario con chat de soporte, manual y asistente con IA. |
+| 11 | **Renovación** | Cliente | Paga su suscripción según su modalidad (anual o mensual). |
+
+> **Por definir con la dirección:** quién hace los pasos 5 a 7 (¿los hace
+> CaMaGaRe como parte de la *Implementación* o el cliente con guía?), cuánto
+> tiempo toma la puesta en marcha y si incluye capacitación (¿cuántas horas?,
+> ¿presencial o en línea?).
+
+### 5.3 Soporte y ayuda dentro del sistema
+
+| Canal | Qué es |
+|---|---|
+| **Chat de soporte** | Burbuja de ayuda en todas las pantallas para escribirle al equipo de soporte. |
+| **Manual en línea** | Artículos de cada módulo y guías paso a paso, con buscador, desde el propio sistema. |
+| **Asistente con IA** | Responde preguntas usando el manual del sistema y los documentos que cargue la empresa. |
+| **Novedades del sistema** | Al entrar, una tarjeta avisa de las mejoras nuevas. |
+
+> **Por definir:** horario de atención del soporte, tiempos de respuesta y si
+> hay soporte por teléfono o WhatsApp. **No prometer** «24/7» ni tiempos de
+> respuesta hasta que estén definidos.
+
+### 5.4 Pagos y vencimiento de la suscripción
+
+Así funciona hoy en el sistema:
+
+- La empresa ve su **suscripción y vigencia** en *Empresa → Información General*.
+- Desde unos días antes del vencimiento aparece un **aviso en la barra
+  superior** para todos los usuarios (5 días antes si es mensual; 15 si es
+  anual).
+- Después de la fecha de pago hay **3 días de gracia**. Pasados esos días, la
+  suscripción figura como **vencida** y cada usuario ve una ventana de aviso al
+  entrar.
+- El cliente puede responder **«¿Ya pagaste? Envíanos el comprobante»** desde
+  esa ventana: adjunta la transferencia y el pago queda **en revisión**. Si se
+  rechaza, recibe un correo con el motivo.
+- También se puede cobrar con **tarjeta** (débito automático).
+- El aviso **no bloquea** el sistema. Según el Contrato de uso (cláusula
+  TERCERA), la falta de pago permite **suspender el acceso, previo aviso**,
+  conservando la información del cliente. La suspensión la hace CaMaGaRe
+  desactivando la empresa, lo que cierra las sesiones de sus usuarios.
+
+> **Por definir:** cuántos días de atraso se toleran antes de suspender y
+> quién lo decide.
+
+### 5.5 Seguridad de la información (en palabras del cliente)
+
+- Cada usuario entra con su clave y solo ve lo que se le permite.
+- Todo queda registrado: quién creó, modificó o anuló cada documento.
+- Nada se borra físicamente; lo eliminado queda guardado.
+- Respaldos periódicos y comunicación cifrada (Acuerdo de datos, cláusula QUINTA).
+- Los datos son del cliente y puede pedir su exportación al terminar
+  (Contrato de uso, cláusulas SÉPTIMA y NOVENA).
 
 ---
 
