@@ -3,23 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-| Versión | Fecha | Cambios |
-|---|---|---|
-| 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
-| 0.15 | 13-11-2026 | Nueva sección 5 «Cómo funciona el sistema» (acceso, ciclo del cliente, soporte, pagos y vencimiento). Sección 3: aviso de firma por caducar y ambiente de pruebas |
-| 0.14 | 13-11-2026 | Valores aprobados. Nueva sección 2 «Conociendo al cliente»: perfiles, dolores, preguntas de descubrimiento y señales de buen o mal cliente |
-| 0.13 | 13-11-2026 | Aprobadas la misión (opción A) y la visión (opción B) |
-| 0.12 | 13-11-2026 | Sección 1 «Quiénes somos»: propuestas de misión, visión, valores y propuesta de valor para elegir |
-| 0.11 | 13-11-2026 | Los precios se calculan con el nuevo módulo **Cotizador de Planes** (precio por módulo, dependencias, anual y mensual en vivo, proforma enlazada al CRM) |
-| 0.10 | 13-11-2026 | Los usuarios se cuentan por RUC y se comparten entre establecimientos (3 cupos por establecimiento, sumados a nivel de RUC) |
-| 0.9 | 13-11-2026 | Usuario adicional: $20 anual ($2 mensual). Principal = establecimiento con el plan base más caro |
-| 0.8 | 13-11-2026 | Regla fija de precios: mensual = anual ÷ 12 × 1,20 (20 % de recargo), para planes y módulos adicionales |
-| 0.7 | 13-11-2026 | El plan mensual tiene un precio más alto que el anual. Se agrega el argumento de venta del pago anual |
-| 0.6 | 13-11-2026 | Descuento por establecimiento adicional fijado en **20 %** (solo plan anual, solo plan base) |
-| 0.5 | 13-11-2026 | El descuento por establecimiento adicional aplica **solo en planes anuales**; en mensual todos pagan precio completo |
-| 0.4 | 13-11-2026 | Reglas del descuento: % fijo e igual para todos los establecimientos adicionales, solo sobre el plan base. Los módulos adicionales se cobran aparte en cada establecimiento, sin descuento |
-| 0.3 | 13-11-2026 | Unidad de cobro definida: **por establecimiento**, con precio del establecimiento principal y descuento para los adicionales. Cada establecimiento incluye 3 usuarios. Se corrige la descripción de multisucursal |
-| 0.2 | 13-11-2026 | Se suman los 7 módulos confirmados (Factura Express QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas). Propuesta de arquitectura de planes: módulos que se venden y módulos que van incluidos |
+Versión actual: **0.16** (13-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -27,14 +11,16 @@
 
 1. Quiénes somos: nombre, misión, visión y valores — *aprobado (falta historia del nombre)*
 2. Conociendo al cliente: target y problemas que resolvemos — *borrador para revisión*
-3. **Lo que ofrecemos** — *borrador listo para revisión (v0.15: dos argumentos nuevos)*
+3. **Lo que ofrecemos** — *borrador listo para revisión*
 4. **Módulos del sistema** — *borrador listo para revisión*
 5. **Cómo funciona el sistema** (alta, puesta en marcha, soporte, pagos) — *borrador para revisión*
-6. Planes de suscripción y qué incluye cada plan — *en construcción: propuesta de arquitectura, faltan nombres y precios*
+6. **Planes y precios**: cómo se calcula lo que paga el cliente — *reglas aprobadas; faltan los precios*
 7. Qué cubre y qué no cubre la membresía — *pendiente*
 8. De qué somos responsables y de qué no — *pendiente (base: Contrato de uso y Acuerdo de datos)*
 9. Preguntas frecuentes y manejo de objeciones — *pendiente*
 10. Proceso de venta: demo, cotización, contrato y alta — *pendiente*
+
+Al final: **Pendientes por definir** (lista única) e **Historial de versiones**.
 
 ---
 
@@ -82,7 +68,7 @@ Ecuador.
 
 > ⚠️ **Antes de usar este discurso:** confirmar con la dirección que todo lo
 > prometido se cumple. Por ejemplo, «siempre tiene a quién preguntar» depende
-> de los horarios de soporte, que aún no están definidos (sección 7).
+> de los horarios de soporte, que aún no están definidos (sección 5.3).
 
 ---
 
@@ -242,7 +228,7 @@ empresa, y se usa desde el computador o desde el celular.**
      pedidos, órdenes de servicio y entregas con ubicación GPS.
    - ⚠️ En **iPhone/iPad** la app solo está disponible para empresas con
      equipo de trabajo (**al menos 2 usuarios activos**). Una empresa con un
-     solo usuario usa la web o Android. Ver la regla de Apple en la sección 9.
+     solo usuario usa la web o Android (ver 2.5 y 5.1).
 
 7. **Se adapta a cada giro de negocio.** Además de lo general, hay módulos
    especializados para restaurantes, talleres mecánicos, car wash, centros
@@ -417,12 +403,8 @@ programe. Por ejemplo:
 - avisar por WhatsApp los chats sin leer;
 - recordar a los clientes de car wash su próxima cita o cambio de aceite.
 
-> **Nota interna:** los módulos Factura Express por QR, Automatizaciones,
-> Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio
-> externo y Portal de citas todavía **no tienen artículo en el manual de
-> usuario**. Las descripciones de arriba salen de sus pantallas en el sistema.
-> Antes de entregar este documento conviene crear esos manuales, para que el
-> vendedor pueda remitir al cliente.
+> **Nota interna:** siete módulos de esta sección aún no tienen artículo en
+> el manual de usuario (ver *Pendientes*, punto P-20).
 
 ---
 
@@ -506,129 +488,77 @@ Así funciona hoy en el sistema:
 
 ---
 
-## 6. Planes de suscripción *(en construcción)*
+## 6. Planes y precios *(reglas aprobadas; faltan los precios)*
 
-### 6.1 Lo que el sistema ya permite
+### 6.1 Cómo se arma el precio
 
-- **Combos de submódulos** (`/config/combos-submodulos`, solo superadmin):
-  catálogo global para armar «planes» de submódulos (por ejemplo, *Solo
-  Facturación Electrónica*), cada uno con nombre, descripción y **precio**.
-  Se aplica **a un usuario** con un clic desde `/config/permisos-modulos`.
-  Aplicar un combo **suma** permisos a los que el usuario ya tiene; no los
-  reemplaza.
-- **Suscripciones** de la empresa controladora: así se factura y se cobra el
-  plan a cada cliente, con vigencia, avisos de vencimiento, cobro con tarjeta
-  y reventa.
-- **Regalía** («Plan sin costo») para empresas que no pagan, como cortesías o
-  demos.
+No hay una lista de precios fija: **cada cliente paga por lo que usa**. El
+vendedor arma la cotización en el módulo **CRM → Cotizador de Planes**:
 
-### 6.1.1 Unidad de cobro: por establecimiento ✅ (decidido)
+1. Escribe el RUC y el sistema trae los establecimientos abiertos del SRI.
+2. En cada establecimiento elige los **módulos**. Cada módulo tiene su precio
+   anual y trae solos los módulos que necesita para funcionar (por ejemplo,
+   *Facturas de Venta* trae *Clientes* y *Productos*).
+3. Indica cuántos **usuarios** necesita el RUC.
+4. El sistema muestra al instante el precio **anual** y el **mensual**, y genera
+   la proforma enlazada al CRM.
 
-**El plan se cobra por establecimiento.** Un RUC puede tener varios
-establecimientos, y cada uno puede ser un negocio o local separado (por
-ejemplo, el 001 es una ferretería y el 002 un restaurante). Por eso **cada
-establecimiento contrata su propio plan**:
+Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
 
-- **Establecimiento principal**: precio completo del plan.
-- **Establecimientos adicionales del mismo RUC**: el plan base con un
-  **descuento fijo del 20 %**, el mismo para todos los adicionales (2.º, 3.º,
-  4.º…). **El descuento solo aplica en planes anuales.** En plan mensual,
-  todos los establecimientos pagan el precio completo.
-- **Módulos adicionales** (Restaurante, Taller, Producción, CRM, WhatsApp,
-  etc.): se cobran **aparte en cada establecimiento** que los use, a
-  **precio completo**. El descuento del establecimiento adicional **no** se
-  aplica a ellos.
-- Cada establecimiento puede tener un **plan distinto** según su giro.
-- **Cada establecimiento nace con 3 usuarios incluidos.** Con 2 o más
-  usuarios activos, la empresa cumple el requisito de Apple para usar la app
-  en iPhone/iPad (sección 3). Ojo: ese requisito cuenta los usuarios
-  **activos y asignados**, no los cupos del plan.
-- **Los usuarios se cuentan por RUC y se comparten entre establecimientos.**
-  Un usuario que trabaja en varios establecimientos del mismo RUC ocupa
-  **un solo cupo**. Los cupos incluidos se suman a nivel de RUC: 3 por cada
-  establecimiento contratado. *Ejemplo:* un RUC con 2 establecimientos tiene
-  6 usuarios incluidos, y cada uno puede trabajar en uno o en los dos locales.
-- **Usuario adicional** (sobre los cupos incluidos del RUC): **$20 al año** por usuario,
-  o **$2 al mes** con la regla mensual (20 ÷ 12 × 1,20 = 2,00).
-- **Establecimiento principal**: si los establecimientos tienen planes
-  distintos, el principal es **el de plan base más caro**. Ese paga completo
-  y los demás reciben el 20 % de descuento en plan anual. Así nunca se
-  descuenta el plan de mayor valor.
+### 6.2 Reglas de precio ✅ (aprobadas)
 
-**Por qué funciona con el sistema tal como está hoy:**
+| Regla | Valor |
+|---|---|
+| Unidad de cobro | **Por establecimiento.** Cada local del RUC contrata sus módulos; puede ser un negocio distinto (p. ej. 001 ferretería, 002 restaurante). |
+| Tipos de módulo | **Módulos base** (entran en el descuento por establecimiento) y **módulos adicionales** (por ejemplo, de una industria: van a precio completo). Cada módulo lo marca así el catálogo. |
+| Plan mensual | **Precio anual ÷ 12 × 1,20** (20 % de recargo). Solo se cargan precios anuales. |
+| Establecimiento principal | El de **módulos base más caros**. Paga completo. |
+| Establecimientos adicionales | **20 % de descuento** en sus módulos base, **solo en plan anual**. En mensual todos pagan completo. |
+| Módulos adicionales | Precio completo en **cada** establecimiento que los use. |
+| Usuarios incluidos | **3 por establecimiento**, sumados y **compartidos en el RUC** (un usuario en dos locales ocupa un solo cupo). |
+| Usuario adicional | **$20 al año** ($2 al mes). |
+| Servicios de una sola vez | Implementación, migración, etc. Se cobran una vez; sin recargo ni descuentos. **Implementación** entra por defecto (valor inicial $0). |
+| Descuento comercial del vendedor | Solo si la configuración lo permite y hasta el tope fijado. |
 
-- En CaMaGaRe cada establecimiento de un RUC se registra como una **empresa
-  independiente**, con su propio plan de cuentas, configuración, puntos de
-  emisión y usuarios asignados.
-- Cada empresa (establecimiento) se vincula a **su propia suscripción**
-  (campo *suscripción* en Empresas del sistema → Cobro y vigencia).
-- Los permisos y los combos se asignan por usuario **en cada empresa**, así
-  que cada establecimiento recibe solo los módulos de su plan.
+Todos los precios son **sin IVA**.
 
-**Mensual vs. anual:** el plan **mensual tiene un precio más alto** que el
-anual. **Regla fija:** se carga solo el **precio anual** de cada plan y de
-cada módulo adicional, y el mensual se calcula así:
+### 6.3 Ejemplo para explicar al cliente *(valores ilustrativos, no reales)*
 
-> **Mensual = precio anual ÷ 12 × 1,20** (20 % de recargo)
+Un RUC con 3 locales, cada uno con $1.000 al año en módulos base; el segundo
+local además es restaurante ($300 al año, módulo adicional); 10 usuarios.
 
-Ejemplo ilustrativo (no es un precio real): un plan de $1.000 al año cuesta
-$100 al mes (1.000 ÷ 12 = 83,33 × 1,20 = 100). Doce mensualidades suman
-$1.200, es decir, **pagando anual el cliente ahorra $200**.
-Además, solo el plan anual tiene el 20 % de descuento en los establecimientos
-adicionales. **Argumento de venta:** *«pagando anual ahorra en el plan y,
-si tiene más locales, cada uno le sale con 20 % de descuento».*
-
-**Fórmula por establecimiento:**
-
-| Periodicidad | Establecimiento principal | Establecimiento adicional |
+| | Anual | Mensual |
 |---|---|---|
-| **Mensual** | plan base + módulos adicionales | plan base + módulos adicionales (sin descuento) |
-| **Anual** | plan base + módulos adicionales | plan base × 0,80 (20 % de descuento) + módulos adicionales |
+| 001 (principal) | $1.000 | $100 |
+| 002 (con restaurante) | $800 + $300 = $1.100 | $130 |
+| 003 | $800 | $100 |
+| Usuarios: 10 − 9 incluidos = 1 adicional | $20 | $2 |
+| **Total** | **$2.920 al año** | **$332 al mes** ($3.984 en 12 meses) |
 
-**Ejemplo de cálculo en plan anual** (valores ilustrativos, **no son precios reales**):
+**Argumento de venta:** *«pagando anual ahorra en el plan y, si tiene más
+locales, cada uno le sale con 20 % de descuento».* En el ejemplo, pagar anual
+ahorra **$1.064**.
 
-| Establecimiento | Plan base | Descuento plan | Módulos adicionales | Paga |
-|---|---|---|---|---|
-| 001 – Ferretería (principal) | Comercial: $ A | — | — | $ A |
-| 002 – Restaurante | Comercial: $ A | 20 % | Restaurante: $ R (sin descuento) | $ A × 0,80 + $ R |
-| 003 – Ferretería sucursal | Comercial: $ A | 20 % | — | $ A × 0,80 |
-| **Total anual del RUC** | | | | **suma** |
+### 6.4 Qué módulos traen consigo a otros *(propuesta — se carga como dependencias en el catálogo)*
 
-> **Por definir:**
-> - **Control de cupos:** hoy el sistema no limita automáticamente el número
->   de usuarios por RUC. El control lo hace quien da de alta los usuarios
->   (o el futuro cotizador o un aviso en Empresas del sistema).
+El cliente no compra 130 módulos sueltos. Al elegir un módulo principal, el
+cotizador agrega solos los que necesita. Si esos módulos tienen precio $0 en el
+catálogo, en la práctica van **incluidos**.
 
-> **Nota técnica para el cotizador:** hoy *Combos de submódulos* guarda un
-> precio por combo, pero no sabe de establecimiento principal ni de
-> descuentos. El cotizador debe aplicar la fórmula de arriba
-> (descuento solo en plan anual y solo al plan base de los adicionales; módulos adicionales a
-> precio completo) y la suscripción de cada establecimiento se factura con su valor
-> final.
-
-### 6.2 Principio: módulos que se venden y módulos que van incluidos
-
-El cliente no compra 130 módulos sueltos. Compra **módulos principales**, y
-cada uno trae los **módulos incluidos** que necesita para funcionar. Estos no
-se venden ni se cobran por separado.
-
-**Propuesta para validar** (armada según cómo se relacionan los módulos en el
-sistema):
-
-| Módulo principal (se vende) | Incluye (no se cobra aparte) |
+| Módulo principal | Trae consigo |
 |---|---|
 | **Facturación electrónica** | Clientes, Productos, Categorías, Marcas, Unidades de medida, Vendedores, Notas de crédito, Notas de débito, Retenciones de venta, Envío en lote al SRI, Descargas masivas, Plantillas PDF, Tablero, Reporte de ventas, Mejor cliente, Productos más vendidos |
 | **Proformas y pedidos** | Reporte de pedidos, Responsables de traslado |
 | **Punto de venta (POS)** | Reporte del punto de venta, Resumen diario |
 | **Guías de remisión** | Transportistas |
 | **Consignaciones** | Entregas, Facturación de consignaciones, Retornos, Cambios de productos, Responsables de traslado |
-| **Suscripciones** (cobros recurrentes) | Carga de suscripciones por Excel, Reporte de ingresos diferidos |
+| **Suscripciones** | Carga de suscripciones por Excel, Reporte de ingresos diferidos |
 | **Factura Express por QR** | Configuración y solicitudes de Factura Express |
 | **Compras** | Proveedores, Descargas del SRI, Retenciones de compra, Liquidaciones de compra, Órdenes de compra, Reporte de compras, Reporte de retenciones |
-| **Importaciones** | — (requiere Compras) |
+| **Importaciones** | Requiere Compras |
 | **Inventario** | Bodegas, Transferencias de inventario, Cargas de inventario, Carga de productos por Excel, Reporte de inventarios, Trazabilidad de productos |
 | **Tesorería** | Cuentas por cobrar, Cuentas por pagar, Ingresos, Egresos, Traspasos, Formas de cobro y pago, Opciones de ingreso y egreso, Reporte de cartera, Reporte de ingresos y egresos, Flujo de caja, Retenciones de venta pendientes |
-| **Conciliaciones** | Conciliación bancaria, Conciliación de cobros, Conciliación de tarjetas, Cargar transferencias |
+| **Conciliaciones** | Conciliación bancaria, de cobros y de tarjetas, Cargar transferencias |
 | **Contabilidad** | Plan de cuentas, Configuración contable, Asientos, Mayores, Balance de comprobación, Estados financieros, Índices financieros, Periodos contables, Cierre del ejercicio, Auditoría contable, Centros de costo, Proyectos, Saldos iniciales |
 | **Contabilidad avanzada** | Presupuestos, Activos fijos, Balances consolidados |
 | **Impuestos SRI** | ATS, Declaración de IVA, Declaración de retenciones, Impuesto a la Renta, Anexo de Dividendos, Reporte consolidado, archivos de la Superintendencia de Compañías |
@@ -637,58 +567,104 @@ sistema):
 | **Restaurante** | Mesas, Comandas, Menú, Pantalla de cocina (KDS), Configuración de restaurante, Reporte de restaurante (requiere POS) |
 | **Taller mecánico** | Checklist de recepción, Departamentos, Estación, Tablero del taller, Vehículos |
 | **Car wash** | Vehículos |
-| **Servicio externo** | — |
 | **Centros educativos** | Alumnos, Campus, Niveles y cursos (las pensiones se cobran con Suscripciones) |
 | **Condominios** | Configuración de condominios |
 | **Citas** | Agenda, Pagos de citas, Portal de citas |
 | **Producción** | Configuración, Fórmulas, Órdenes de producción, Reportes de producción (requiere Inventario) |
-| **Cotización de publicidad** | — |
 | **CRM y redes sociales** | Configuración del CRM, Bandeja social, Asistente virtual de Instagram, Publicaciones |
 | **WhatsApp** | Chat de WhatsApp, Plantillas, Campañas |
-| **Firmas electrónicas** (reventa) | — |
-| **Incluido en todos los planes** | Chat de soporte, IA de soporte, manual en línea, Automatizaciones, Videollamadas, app móvil (según los módulos contratados) |
+| Sin dependencias | Servicio externo, Cotización de publicidad, Firmas electrónicas (reventa) |
+| **En todos los planes** *(propuesta)* | Chat de soporte, IA de soporte, manual en línea, Automatizaciones, Videollamadas, app móvil (según los módulos contratados) |
 
-> Puntos a confirmar en esta tabla: ¿Automatizaciones y Videollamadas van
-> incluidas en todos los planes o se venden aparte? ¿Contabilidad e Impuestos
-> se venden juntos? ¿Retenciones de venta van con Facturación o con
-> Tesorería?
+### 6.5 Paquetes de referencia *(opcional — por decidir si se usan)*
 
-### 6.3 Planes sugeridos (sin precios todavía)
+Para que el vendedor no arme cada cotización desde cero, se podrían definir
+combinaciones típicas. El precio de cada una igual lo calcula el cotizador.
 
-| Plan | Para quién | Módulos principales |
+| Paquete | Para quién | Módulos principales |
 |---|---|---|
-| **Facturación** | Emprendedores y profesionales que solo necesitan facturar | Facturación electrónica + Proformas |
+| **Facturación** | Emprendedores y profesionales | Facturación electrónica + Proformas |
 | **Comercial** | Negocios que compran, venden y manejan stock | Facturación + Proformas y pedidos + POS + Compras + Inventario + Tesorería |
 | **Empresarial** | Empresas obligadas a llevar contabilidad | Comercial + Contabilidad + Impuestos SRI + Conciliaciones + Nómina |
-| **Estudio contable** | Contadores que llevan varias empresas | A definir (Contabilidad + Impuestos + Compras + Facturación, por empresa atendida) |
-
-**Adicionales** (se suman a cualquier plan): Restaurante, Taller, Car wash,
-Servicio externo, Centros educativos, Condominios, Citas, Producción,
-Importaciones, Consignaciones, Suscripciones, Factura Express QR, Cotización
-de publicidad, CRM y redes, WhatsApp, Control de asistencia, Contabilidad
-avanzada y Firmas electrónicas.
+| **Estudio contable** | Contadores que llevan varias empresas | Por definir |
 
 ---
 
-## Notas internas para la siguiente revisión
+## Pendientes por definir (lista única)
 
-- Validar la tabla 6.2: qué es módulo principal y qué va incluido.
-- ~~Definir la unidad de cobro~~ → **por establecimiento** (v0.3).
-- ~~Reglas del descuento~~ → % fijo al plan base de los adicionales; módulos
-  adicionales aparte y sin descuento (v0.4). Solo en planes anuales (v0.5).
-  Descuento: **20 %** (v0.6).
-- ~~Mensual vs. anual~~ → mensual = anual ÷ 12 × 1,20 (v0.8). Solo se cargan
-  precios anuales.
-- ~~Usuario adicional~~ → $20 anual / $2 mensual (v0.9).
-- ~~Establecimiento principal~~ → el de plan base más caro (v0.9).
-- ~~Usuarios compartidos~~ → se cuentan por RUC (v0.10).
-- Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
-  anual, con descuento por pago anual).
-- Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
-  esta tabla se convierte en la base del **cotizador por módulos**.
-- **Los precios salen del Cotizador de Planes** (módulo *Cotizador de Planes*,
-  manual en `docs/manual/modulos/cotizador-planes.md`): cada módulo tiene su
-  precio anual y declara qué otros módulos necesita; el vendedor arma la
-  cotización por establecimiento y el sistema calcula anual y mensual con estas
-  mismas reglas. La tabla 6.2 se carga como **dependencias** en el catálogo de
-  precios del cotizador.
+Todo lo que falta para entregar el documento. Cuando un punto se resuelva, se
+actualiza su sección y se tacha aquí.
+
+### A. Identidad
+| # | Pendiente | Sección |
+|---|---|---|
+| P-01 | Significado del nombre **CaMaGaRe** y su historia de origen (quién lo creó, desde cuándo, por qué). | 1.1 |
+| P-02 | Confirmar que el discurso de 30 segundos se cumple (depende de P-11). | 1.5 |
+
+### B. Cliente y mercado
+| # | Pendiente | Sección |
+|---|---|---|
+| P-03 | Los **3 perfiles de cliente prioritarios**. | 2.6 |
+| P-04 | **Ciudades o provincias** de enfoque. | 2.6 |
+| P-05 | **Tamaño de empresa ideal** (facturas al mes, empleados, establecimientos). | 2.6 |
+| P-06 | ¿Trabajamos con **contadores como aliados o referidores**? ¿Con qué beneficio? | 2.6 |
+
+### C. Puesta en marcha y soporte
+| # | Pendiente | Sección |
+|---|---|---|
+| P-07 | Quién hace la **configuración inicial, usuarios y carga de datos** (CaMaGaRe o el cliente con guía). | 5.2 |
+| P-08 | **Tiempo** de la puesta en marcha. | 5.2 |
+| P-09 | ¿Incluye **capacitación**? Horas y modalidad (presencial / en línea). | 5.2 |
+| P-10 | ¿*Implementación* sigue en $0 o tiene precio según el tamaño del cliente? | 6.2 |
+| P-11 | **Soporte**: horario, tiempos de respuesta y canales (chat, teléfono, WhatsApp). | 5.3 |
+| P-12 | **Días de atraso** tolerados antes de suspender el servicio y quién lo decide. | 5.4 |
+
+### D. Precios
+| # | Pendiente | Sección |
+|---|---|---|
+| P-13 | **Precio anual de cada módulo** y de cada servicio, para cargarlo en el Cotizador. | 6.2 |
+| P-14 | Validar la tabla de **dependencias** (qué módulo trae a cuál). | 6.4 |
+| P-15 | ¿Qué módulos son **base** y cuáles **adicionales** (con o sin descuento por establecimiento)? | 6.2 |
+| P-16 | ¿Automatizaciones y Videollamadas van en todos los planes o se venden aparte? ¿Contabilidad e Impuestos se venden juntos? ¿Retenciones de venta van con Facturación o con Tesorería? | 6.4 |
+| P-17 | ¿Se usan **paquetes de referencia**? Si sí, sus nombres y el del estudio contable. | 6.5 |
+| P-18 | ¿El **vendedor puede dar descuento comercial**? ¿Hasta qué %? | 6.2 |
+| P-19 | **Control de cupos** de usuarios por RUC: hoy no es automático; ¿quién lo controla? | 6.2 |
+
+### E. Producto y documentación
+| # | Pendiente | Sección |
+|---|---|---|
+| P-20 | Crear el manual de usuario de 7 módulos: Factura Express por QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas. | 4 |
+| P-21 | Instalar el Cotizador de Planes (dos SQL), dar permisos y crear los productos «Plan anual» y «Plan mensual». | 6.1 |
+
+### F. Secciones por escribir
+| # | Pendiente | Sección |
+|---|---|---|
+| P-22 | Qué cubre y qué no cubre la membresía. | 7 |
+| P-23 | De qué somos responsables y de qué no (base: Contrato de uso y Acuerdo de datos). | 8 |
+| P-24 | Preguntas frecuentes y manejo de objeciones. | 9 |
+| P-25 | Proceso de venta: demo, cotización, contrato y alta. | 10 |
+| P-26 | Capacitación de vendedores (documento aparte): cómo vender, target, guion de demo. | — |
+| P-27 | Revisión legal del Contrato de uso y del Acuerdo de datos (el propio sistema lo recomienda). | 8 |
+
+---
+
+## Historial de versiones
+
+| Versión | Fecha | Cambios |
+|---|---|---|
+| 0.16 | 13-11-2026 | Revisión completa: sección 6 reescrita con las reglas aprobadas y un ejemplo; referencias corregidas; lista única de pendientes; historial al final |
+| 0.15 | 13-11-2026 | Nueva sección 5 «Cómo funciona el sistema» (acceso, ciclo del cliente, soporte, pagos y vencimiento). Sección 3: aviso de firma por caducar y ambiente de pruebas |
+| 0.14 | 13-11-2026 | Valores aprobados. Nueva sección 2 «Conociendo al cliente»: perfiles, dolores, preguntas de descubrimiento y señales de buen o mal cliente |
+| 0.13 | 13-11-2026 | Aprobadas la misión (opción A) y la visión (opción B) |
+| 0.12 | 13-11-2026 | Sección 1 «Quiénes somos»: propuestas de misión, visión, valores y propuesta de valor para elegir |
+| 0.11 | 13-11-2026 | Los precios se calculan con el nuevo módulo **Cotizador de Planes** (precio por módulo, dependencias, anual y mensual en vivo, proforma enlazada al CRM) |
+| 0.10 | 13-11-2026 | Los usuarios se cuentan por RUC y se comparten entre establecimientos (3 cupos por establecimiento, sumados a nivel de RUC) |
+| 0.9 | 13-11-2026 | Usuario adicional: $20 anual ($2 mensual). Principal = establecimiento con el plan base más caro |
+| 0.8 | 13-11-2026 | Regla fija de precios: mensual = anual ÷ 12 × 1,20 (20 % de recargo), para planes y módulos adicionales |
+| 0.7 | 13-11-2026 | El plan mensual tiene un precio más alto que el anual. Se agrega el argumento de venta del pago anual |
+| 0.6 | 13-11-2026 | Descuento por establecimiento adicional fijado en **20 %** (solo plan anual, solo plan base) |
+| 0.5 | 13-11-2026 | El descuento por establecimiento adicional aplica **solo en planes anuales**; en mensual todos pagan precio completo |
+| 0.4 | 13-11-2026 | Reglas del descuento: % fijo e igual para todos los establecimientos adicionales, solo sobre el plan base. Los módulos adicionales se cobran aparte en cada establecimiento, sin descuento |
+| 0.3 | 13-11-2026 | Unidad de cobro definida: **por establecimiento**, con precio del establecimiento principal y descuento para los adicionales. Cada establecimiento incluye 3 usuarios. Se corrige la descripción de multisucursal |
+| 0.2 | 13-11-2026 | Se suman los 7 módulos confirmados (Factura Express QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas). Propuesta de arquitectura de planes: módulos que se venden y módulos que van incluidos |
+| 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
