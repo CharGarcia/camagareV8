@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.11 | 13-11-2026 | Los precios se calculan con el nuevo módulo **Cotizador de Planes** (precio por módulo, dependencias, anual y mensual en vivo, proforma enlazada al CRM) |
 | 0.10 | 13-11-2026 | Los usuarios se cuentan por RUC y se comparten entre establecimientos (3 cupos por establecimiento, sumados a nivel de RUC) |
 | 0.9 | 13-11-2026 | Usuario adicional: $20 anual ($2 mensual). Principal = establecimiento con el plan base más caro |
 | 0.8 | 13-11-2026 | Regla fija de precios: mensual = anual ÷ 12 × 1,20 (20 % de recargo), para planes y módulos adicionales |
@@ -460,7 +461,9 @@ avanzada y Firmas electrónicas.
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
   esta tabla se convierte en la base del **cotizador por módulos**.
-- **Los precios se definirán con el Cotizador de Planes** (diseño en
-  `docs/diseno/cotizador-planes-fase1.md`): el precio sale del perfil de cada
-  cliente y no de una lista fija. Cuando exista, la sección 6 explicará al
-  vendedor cómo usarlo.
+- **Los precios salen del Cotizador de Planes** (módulo *Cotizador de Planes*,
+  manual en `docs/manual/modulos/cotizador-planes.md`): cada módulo tiene su
+  precio anual y declara qué otros módulos necesita; el vendedor arma la
+  cotización por establecimiento y el sistema calcula anual y mensual con estas
+  mismas reglas. La tabla 6.2 se carga como **dependencias** en el catálogo de
+  precios del cotizador.

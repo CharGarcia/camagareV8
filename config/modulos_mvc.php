@@ -110,6 +110,15 @@ return [
         'legacy_rutas' => [],
     ],
 
+    // Cotizador de Planes: el vendedor arma el precio del sistema por RUC, establecimientos,
+    // módulos y usuarios, y genera una Proforma enlazada al CRM.
+    // SQL: database/2026-11-13_cotizador_planes.sql. Registrar el submódulo en submodulos_menu
+    // (ruta = 'modulos/cotizador-planes') y actualizar este id_submodulo con el id real.
+    'modulos/cotizador-planes' => [
+        'id_submodulo' => 0,
+        'legacy_rutas' => [],
+    ],
+
     // Cotización de Publicidad (agencia): servicios publicitarios con comisión de
     // agencia, costos por proveedor y conversión a Factura de Venta.
     // Registrar el submódulo manualmente (submodulos_menu/modulos_asignados) tras

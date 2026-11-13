@@ -90,6 +90,10 @@ class InformacionRegistro
             'tabla'  => 'proformas_cabecera',
             'nombre' => 'la proforma',
         ],
+        'modulos/cotizador-planes' => [
+            'tabla'  => 'cotizaciones_planes',
+            'nombre' => 'la cotización',
+        ],
         'modulos/recibo_venta' => [
             'tabla'  => 'recibos_venta_cabecera',
             'nombre' => 'el recibo',
