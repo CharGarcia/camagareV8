@@ -47,11 +47,6 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-calculator text-primary me-1"></i> <?= $e($titulo) ?></h5>
     <div class="d-flex gap-2">
-        <?php if ($disponible && $esAdmin): ?>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="CP_abrirConfig()" title="Parámetros y catálogo de precios">
-                <i class="bi bi-gear"></i><span class="d-none d-md-inline"> Configuración</span>
-            </button>
-        <?php endif; ?>
         <?php if ($disponible && $perm['crear']): ?>
             <button type="button" class="btn btn-primary btn-sm px-3" onclick="CP_nueva()"><i class="bi bi-plus-lg"></i> Nueva cotización</button>
         <?php endif; ?>
@@ -116,6 +111,11 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <a id="btnExcelCP" href="<?= $urlCP ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam) ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
+                <?php if ($esAdmin): ?>
+                    <button type="button" class="btn btn-outline-secondary" onclick="CP_abrirConfig()" title="Configuración: parámetros y catálogo de precios">
+                        <i class="bi bi-gear"></i><span class="d-none d-md-inline"> Configuración</span>
+                    </button>
+                <?php endif; ?>
             </div>
         </div>
         <div class="d-flex align-items-center gap-3">
