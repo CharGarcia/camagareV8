@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.8 | 13-11-2026 | Regla fija de precios: mensual = anual ÷ 12 × 1,20 (20 % de recargo), para planes y módulos adicionales |
 | 0.7 | 13-11-2026 | El plan mensual tiene un precio más alto que el anual. Se agrega el argumento de venta del pago anual |
 | 0.6 | 13-11-2026 | Descuento por establecimiento adicional fijado en **20 %** (solo plan anual, solo plan base) |
 | 0.5 | 13-11-2026 | El descuento por establecimiento adicional aplica **solo en planes anuales**; en mensual todos pagan precio completo |
@@ -326,7 +327,14 @@ establecimiento contrata su propio plan**:
   que cada establecimiento recibe solo los módulos de su plan.
 
 **Mensual vs. anual:** el plan **mensual tiene un precio más alto** que el
-anual. Pagar 12 mensualidades cuesta más que pagar un año por adelantado.
+anual. **Regla fija:** se carga solo el **precio anual** de cada plan y de
+cada módulo adicional, y el mensual se calcula así:
+
+> **Mensual = precio anual ÷ 12 × 1,20** (20 % de recargo)
+
+Ejemplo ilustrativo (no es un precio real): un plan de $1.000 al año cuesta
+$100 al mes (1.000 ÷ 12 = 83,33 × 1,20 = 100). Doce mensualidades suman
+$1.200, es decir, **pagando anual el cliente ahorra $200**.
 Además, solo el plan anual tiene el 20 % de descuento en los establecimientos
 adicionales. **Argumento de venta:** *«pagando anual ahorra en el plan y,
 si tiene más locales, cada uno le sale con 20 % de descuento».*
@@ -348,9 +356,6 @@ si tiene más locales, cada uno le sale con 20 % de descuento».*
 | **Total anual del RUC** | | | | **suma** |
 
 > **Por definir:**
-> - El plan anual es más barato que 12 mensualidades ✅. Falta definir la
->   **diferencia**: ¿un % de recargo al mensual (por ejemplo, anual ÷ 12 +
->   X %), o precios fijados uno por uno?
 > - Si el plan base de un adicional es **más caro** que el del principal,
 >   ¿cuál se considera principal: el primero contratado o el de mayor precio?
 >   *(Sugerencia: el de mayor precio paga completo, para no regalar margen.)*
@@ -436,6 +441,8 @@ avanzada y Firmas electrónicas.
 - ~~Reglas del descuento~~ → % fijo al plan base de los adicionales; módulos
   adicionales aparte y sin descuento (v0.4). Solo en planes anuales (v0.5).
   Descuento: **20 %** (v0.6).
+- ~~Mensual vs. anual~~ → mensual = anual ÷ 12 × 1,20 (v0.8). Solo se cargan
+  precios anuales.
 - Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
