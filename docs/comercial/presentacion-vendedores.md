@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.2 | 13-11-2026 | Se suman los 7 módulos confirmados (Factura Express QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas). Propuesta de arquitectura de planes: módulos que se venden y módulos que van incluidos |
 
 ---
 
@@ -16,7 +17,7 @@
 3. **Lo que ofrecemos** — *borrador listo para revisión*
 4. **Módulos del sistema** — *borrador listo para revisión*
 5. Cómo funciona el sistema (alta, puesta en marcha, soporte) — *pendiente*
-6. Planes de suscripción y qué incluye cada plan — *pendiente (falta información de precios y planes)*
+6. Planes de suscripción y qué incluye cada plan — *en construcción: propuesta de arquitectura, faltan nombres y precios*
 7. Qué cubre y qué no cubre la membresía — *pendiente*
 8. De qué somos responsables y de qué no — *pendiente (base: Contrato de uso y Acuerdo de datos)*
 9. Preguntas frecuentes y manejo de objeciones — *pendiente*
@@ -145,6 +146,7 @@ sirve al cliente» está escrita en lenguaje de venta.
 | Envío en lote al SRI | Envía muchos comprobantes al SRI sin esperar frente a la pantalla. |
 | Vendedores | Asigna las ventas a cada asesor y mide su gestión. |
 | Firmas electrónicas | Permite vender firmas electrónicas a sus propios clientes (Uanataca). |
+| Factura Express por QR | El cliente escanea un código QR, llena sus datos en un formulario público y recibe su factura. La empresa decide si la factura sale automáticamente o si primero revisa la solicitud. |
 
 **Consignaciones** (mercadería entregada que se cobra cuando se vende):
 Consignaciones de venta, Entregas (con la app del repartidor), Facturación de
@@ -161,6 +163,7 @@ Transportistas.
 | Liquidaciones de compra | Comprobante para proveedores que no pueden emitir factura. |
 | Órdenes de compra | Pedido formal al proveedor antes de recibir la mercadería. |
 | Proveedores | Ficha del proveedor con sus datos de pago y retenciones predeterminadas. |
+| Importaciones | Registra la nacionalización de la mercadería importada y reparte (prorratea) los gastos de importación para obtener el costo real de cada producto. Cuenta para la Declaración de IVA. |
 
 ### 4.3 Inventario
 
@@ -218,14 +221,18 @@ Superintendencia de Compañías.
 | **Centros educativos** | Alumnos, campus, niveles y cursos, y facturación de pensiones. |
 | **Condominios** | Condóminos, alícuotas, cuotas extraordinarias, mora, multas y reajustes. |
 | **Producción / manufactura** | Fórmulas, órdenes de producción con costo real, lotes, mermas y reportes. Ejemplos en el manual: imprenta, laboratorio de cosméticos, camal y panadería. |
-| **Servicios con agenda** | Agenda de citas y pagos de citas. |
+| **Servicios con agenda** | Agenda de citas, pagos de citas y **Portal de citas**: una página pública de reservas que el cliente puede poner en su propia web. |
+| **Servicio técnico en sitio** | **Servicio externo**: órdenes de mantenimiento en las instalaciones del cliente, con repuestos de bodega y mano de obra. Se convierten en factura electrónica o recibo y se envían por correo o WhatsApp. |
+| **Agencias de publicidad** | **Cotización de publicidad**: cotizaciones con versiones, aprobación y envío por correo, costos reales por proveedor y generación de la factura de venta. |
 
 ### 4.9 CRM, marketing y comunicación
 
 CRM con embudo de ventas, Bandeja social (Instagram), asistente virtual con
 IA para Instagram, Publicaciones programadas en Instagram y LinkedIn con
 redacción por IA, Chat y Plantillas de WhatsApp (envío de documentos y
-enlaces de pago) y Videollamadas dentro del sistema.
+enlaces de pago), **Campañas de WhatsApp** (envío masivo de una plantilla
+aprobada por Meta, personalizada con los datos de cada cliente) y
+Videollamadas dentro del sistema.
 
 ### 4.10 Reportes
 
@@ -244,18 +251,114 @@ PDF personalizables (facturas, comprobantes y cheques), chat de soporte, IA de
 soporte con los documentos de la empresa y el manual, y avisos de tareas y
 obligaciones por vencer.
 
-> **Por confirmar con la dirección antes de ofrecerlos:** estos módulos existen
-> en el sistema, pero todavía no tienen artículo en el manual: *Factura
-> Express por QR*, *Automatizaciones*, *Importaciones*, *Campañas de
-> WhatsApp*, *Cotización de publicidad*, *Servicio externo* (mantenimiento en
-> el sitio del cliente) y *Portal de citas*. Hay que definir si se venden y
-> cómo se describen.
+**Automatizaciones**: tareas que el sistema hace solo, en el horario que se
+programe. Por ejemplo:
+- enviar al SRI los documentos en borrador;
+- enviar por correo los comprobantes autorizados, reintentando los que fallaron;
+- sincronizar las descargas del SRI;
+- avisar por correo el IVA a pagar del mes, a tiempo para decidir antes del cierre;
+- avisar por WhatsApp los chats sin leer;
+- recordar a los clientes de car wash su próxima cita o cambio de aceite.
+
+> **Nota interna:** los módulos Factura Express por QR, Automatizaciones,
+> Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio
+> externo y Portal de citas todavía **no tienen artículo en el manual de
+> usuario**. Las descripciones de arriba salen de sus pantallas en el sistema.
+> Antes de entregar este documento conviene crear esos manuales, para que el
+> vendedor pueda remitir al cliente.
+
+---
+
+## 6. Planes de suscripción *(en construcción)*
+
+### 6.1 Lo que el sistema ya permite
+
+- **Combos de submódulos** (`/config/combos-submodulos`, solo superadmin):
+  catálogo global para armar «planes» de submódulos (por ejemplo, *Solo
+  Facturación Electrónica*), cada uno con nombre, descripción y **precio**.
+  Se aplica **a un usuario** con un clic desde `/config/permisos-modulos`.
+  Aplicar un combo **suma** permisos a los que el usuario ya tiene; no los
+  reemplaza.
+- **Suscripciones** de la empresa controladora: así se factura y se cobra el
+  plan a cada cliente, con vigencia, avisos de vencimiento, cobro con tarjeta
+  y reventa.
+- **Regalía** («Plan sin costo») para empresas que no pagan, como cortesías o
+  demos.
+
+> **Decisión pendiente:** hoy los combos se aplican **por usuario**. Hay que
+> definir si el plan se cobra **por empresa**, **por usuario** o **por empresa
+> con N usuarios incluidos y un valor por usuario adicional**. De esto depende
+> cómo se arma el cotizador.
+
+### 6.2 Principio: módulos que se venden y módulos que van incluidos
+
+El cliente no compra 130 módulos sueltos. Compra **módulos principales**, y
+cada uno trae los **módulos incluidos** que necesita para funcionar. Estos no
+se venden ni se cobran por separado.
+
+**Propuesta para validar** (armada según cómo se relacionan los módulos en el
+sistema):
+
+| Módulo principal (se vende) | Incluye (no se cobra aparte) |
+|---|---|
+| **Facturación electrónica** | Clientes, Productos, Categorías, Marcas, Unidades de medida, Vendedores, Notas de crédito, Notas de débito, Retenciones de venta, Envío en lote al SRI, Descargas masivas, Plantillas PDF, Tablero, Reporte de ventas, Mejor cliente, Productos más vendidos |
+| **Proformas y pedidos** | Reporte de pedidos, Responsables de traslado |
+| **Punto de venta (POS)** | Reporte del punto de venta, Resumen diario |
+| **Guías de remisión** | Transportistas |
+| **Consignaciones** | Entregas, Facturación de consignaciones, Retornos, Cambios de productos, Responsables de traslado |
+| **Suscripciones** (cobros recurrentes) | Carga de suscripciones por Excel, Reporte de ingresos diferidos |
+| **Factura Express por QR** | Configuración y solicitudes de Factura Express |
+| **Compras** | Proveedores, Descargas del SRI, Retenciones de compra, Liquidaciones de compra, Órdenes de compra, Reporte de compras, Reporte de retenciones |
+| **Importaciones** | — (requiere Compras) |
+| **Inventario** | Bodegas, Transferencias de inventario, Cargas de inventario, Carga de productos por Excel, Reporte de inventarios, Trazabilidad de productos |
+| **Tesorería** | Cuentas por cobrar, Cuentas por pagar, Ingresos, Egresos, Traspasos, Formas de cobro y pago, Opciones de ingreso y egreso, Reporte de cartera, Reporte de ingresos y egresos, Flujo de caja, Retenciones de venta pendientes |
+| **Conciliaciones** | Conciliación bancaria, Conciliación de cobros, Conciliación de tarjetas, Cargar transferencias |
+| **Contabilidad** | Plan de cuentas, Configuración contable, Asientos, Mayores, Balance de comprobación, Estados financieros, Índices financieros, Periodos contables, Cierre del ejercicio, Auditoría contable, Centros de costo, Proyectos, Saldos iniciales |
+| **Contabilidad avanzada** | Presupuestos, Activos fijos, Balances consolidados |
+| **Impuestos SRI** | ATS, Declaración de IVA, Declaración de retenciones, Impuesto a la Renta, Anexo de Dividendos, Reporte consolidado, archivos de la Superintendencia de Compañías |
+| **Nómina** | Empleados, Novedades, Roles de pago, Décimo tercero, Décimo cuarto, Utilidades, Vacaciones, Anexo RDEP |
+| **Control de asistencia** | Horarios, Marcaciones, Puntos de servicio, Jornadas (requiere Empleados) |
+| **Restaurante** | Mesas, Comandas, Menú, Pantalla de cocina (KDS), Configuración de restaurante, Reporte de restaurante (requiere POS) |
+| **Taller mecánico** | Checklist de recepción, Departamentos, Estación, Tablero del taller, Vehículos |
+| **Car wash** | Vehículos |
+| **Servicio externo** | — |
+| **Centros educativos** | Alumnos, Campus, Niveles y cursos (las pensiones se cobran con Suscripciones) |
+| **Condominios** | Configuración de condominios |
+| **Citas** | Agenda, Pagos de citas, Portal de citas |
+| **Producción** | Configuración, Fórmulas, Órdenes de producción, Reportes de producción (requiere Inventario) |
+| **Cotización de publicidad** | — |
+| **CRM y redes sociales** | Configuración del CRM, Bandeja social, Asistente virtual de Instagram, Publicaciones |
+| **WhatsApp** | Chat de WhatsApp, Plantillas, Campañas |
+| **Firmas electrónicas** (reventa) | — |
+| **Incluido en todos los planes** | Chat de soporte, IA de soporte, manual en línea, Automatizaciones, Videollamadas, app móvil (según los módulos contratados) |
+
+> Puntos a confirmar en esta tabla: ¿Automatizaciones y Videollamadas van
+> incluidas en todos los planes o se venden aparte? ¿Contabilidad e Impuestos
+> se venden juntos? ¿Retenciones de venta van con Facturación o con
+> Tesorería?
+
+### 6.3 Planes sugeridos (sin precios todavía)
+
+| Plan | Para quién | Módulos principales |
+|---|---|---|
+| **Facturación** | Emprendedores y profesionales que solo necesitan facturar | Facturación electrónica + Proformas |
+| **Comercial** | Negocios que compran, venden y manejan stock | Facturación + Proformas y pedidos + POS + Compras + Inventario + Tesorería |
+| **Empresarial** | Empresas obligadas a llevar contabilidad | Comercial + Contabilidad + Impuestos SRI + Conciliaciones + Nómina |
+| **Estudio contable** | Contadores que llevan varias empresas | A definir (Contabilidad + Impuestos + Compras + Facturación, por empresa atendida) |
+
+**Adicionales** (se suman a cualquier plan): Restaurante, Taller, Car wash,
+Servicio externo, Centros educativos, Condominios, Citas, Producción,
+Importaciones, Consignaciones, Suscripciones, Factura Express QR, Cotización
+de publicidad, CRM y redes, WhatsApp, Control de asistencia, Contabilidad
+avanzada y Firmas electrónicas.
 
 ---
 
 ## Notas internas para la siguiente revisión
 
-- Definir qué módulos entran en cada plan (sección 6). Esta lista de módulos
-  sirve de base para el futuro **cotizador por módulos**.
-- Confirmar si los módulos por industria se venden como **add-on** o dentro de
-  un plan.
+- Validar la tabla 6.2: qué es módulo principal y qué va incluido.
+- Definir la unidad de cobro: empresa, usuario o empresa + usuarios.
+- Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
+  anual, con descuento por pago anual).
+- Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
+  esta tabla se convierte en la base del **cotizador por módulos**.
