@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.5 | 13-11-2026 | El descuento por establecimiento adicional aplica **solo en planes anuales**; en mensual todos pagan precio completo |
 | 0.4 | 13-11-2026 | Reglas del descuento: % fijo e igual para todos los establecimientos adicionales, solo sobre el plan base. Los módulos adicionales se cobran aparte en cada establecimiento, sin descuento |
 | 0.3 | 13-11-2026 | Unidad de cobro definida: **por establecimiento**, con precio del establecimiento principal y descuento para los adicionales. Cada establecimiento incluye 3 usuarios. Se corrige la descripción de multisucursal |
 | 0.2 | 13-11-2026 | Se suman los 7 módulos confirmados (Factura Express QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas). Propuesta de arquitectura de planes: módulos que se venden y módulos que van incluidos |
@@ -300,7 +301,8 @@ establecimiento contrata su propio plan**:
 - **Establecimiento principal**: precio completo del plan.
 - **Establecimientos adicionales del mismo RUC**: el plan base con un
   **descuento de % fijo**, el mismo para todos los adicionales (2.º, 3.º,
-  4.º…).
+  4.º…). **El descuento solo aplica en planes anuales.** En plan mensual,
+  todos los establecimientos pagan el precio completo.
 - **Módulos adicionales** (Restaurante, Taller, Producción, CRM, WhatsApp,
   etc.): se cobran **aparte en cada establecimiento** que los use, a
   **precio completo**. El descuento del establecimiento adicional **no** se
@@ -323,20 +325,25 @@ establecimiento contrata su propio plan**:
 
 **Fórmula por establecimiento:**
 
-- Principal = plan base + módulos adicionales
-- Adicional = plan base × (1 − % de descuento) + módulos adicionales
+| Periodicidad | Establecimiento principal | Establecimiento adicional |
+|---|---|---|
+| **Mensual** | plan base + módulos adicionales | plan base + módulos adicionales (sin descuento) |
+| **Anual** | plan base + módulos adicionales | plan base × (1 − % de descuento) + módulos adicionales |
 
-**Ejemplo de cálculo** (valores ilustrativos, **no son precios reales**):
+**Ejemplo de cálculo en plan anual** (valores ilustrativos, **no son precios reales**):
 
 | Establecimiento | Plan base | Descuento plan | Módulos adicionales | Paga |
 |---|---|---|---|---|
 | 001 – Ferretería (principal) | Comercial: $ A | — | — | $ A |
 | 002 – Restaurante | Comercial: $ A | X % | Restaurante: $ R (sin descuento) | $ A × (1 − X %) + $ R |
 | 003 – Ferretería sucursal | Comercial: $ A | X % | — | $ A × (1 − X %) |
-| **Total mensual del RUC** | | | | **suma** |
+| **Total anual del RUC** | | | | **suma** |
 
 > **Por definir:**
 > - El **valor del % fijo** de descuento para los establecimientos adicionales.
+> - ¿El plan anual tiene **además** su propio precio rebajado frente a 12
+>   mensualidades, o el único beneficio del plan anual es el descuento de los
+>   establecimientos adicionales?
 > - Si el plan base de un adicional es **más caro** que el del principal,
 >   ¿cuál se considera principal: el primero contratado o el de mayor precio?
 >   *(Sugerencia: el de mayor precio paga completo, para no regalar margen.)*
@@ -347,7 +354,7 @@ establecimiento contrata su propio plan**:
 > **Nota técnica para el cotizador:** hoy *Combos de submódulos* guarda un
 > precio por combo, pero no sabe de establecimiento principal ni de
 > descuentos. El cotizador debe aplicar la fórmula de arriba
-> (descuento solo al plan base de los adicionales; módulos adicionales a
+> (descuento solo en plan anual y solo al plan base de los adicionales; módulos adicionales a
 > precio completo) y la suscripción de cada establecimiento se factura con su valor
 > final.
 
@@ -420,7 +427,8 @@ avanzada y Firmas electrónicas.
 - Validar la tabla 6.2: qué es módulo principal y qué va incluido.
 - ~~Definir la unidad de cobro~~ → **por establecimiento** (v0.3).
 - ~~Reglas del descuento~~ → % fijo al plan base de los adicionales; módulos
-  adicionales aparte y sin descuento (v0.4). Falta el valor del %.
+  adicionales aparte y sin descuento (v0.4). Solo en planes anuales (v0.5).
+  Falta el valor del %.
 - Poner nombre y precio a cada plan y adicional, y su periodicidad (mensual,
   anual, con descuento por pago anual).
 - Con eso, cada plan se carga como **Combo de submódulos** con su precio, y
