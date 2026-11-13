@@ -28,13 +28,17 @@ pantalla registra **acciones de negocio**.
 ## Cómo se usa
 
 1. Entre a **Configuración → Auditoría del sistema**.
-2. Por defecto verá los eventos del año en curso. Ajuste **Desde** y **Hasta** para
-   acotar el rango: mientras más corto el rango, más rápida la consulta.
+2. La pantalla abre **vacía**: no consulta nada hasta que usted lo pida. Ajuste
+   **Desde** y **Hasta** (vienen con el año en curso) y los demás filtros, y pulse
+   **Mostrar**. Mientras más corto el rango, más rápida la consulta.
 3. Use los filtros de la barra superior para acotar por **Usuario**, **Empresa**
    (solo nivel 3), **Acción** o **Módulo**. Los cuatro tienen **buscador**: haga
    clic en el filtro y escriba parte del nombre (sin importar mayúsculas ni tildes)
    para acortar la lista, y elija con el ratón o con Enter. Para quitar el filtro
    haga clic en él y pulse **Suprimir** o **Retroceso**, o use **Limpiar**.
+   Cambiar un filtro **no** recarga el listado: pulse **Mostrar** otra vez (o
+   **Enter** en un campo de texto). **Limpiar** restablece los filtros y deja la
+   tabla vacía.
 4. Para encontrar un evento por lo que dice adentro, escriba en **Contenido del
    mensaje** (ver más abajo).
 5. Haga clic en cualquier fila para abrir el **detalle del evento**: en el
@@ -79,8 +83,7 @@ cambios) como los de los **documentos** de ese tercero (facturas, compras, egres
 - Escriba parte del nombre (`ARMIJOS SOLANO`) o la identificación (`0705210052001`).
 - **Todas las palabras deben aparecer**, en cualquier orden, sin importar mayúsculas
   ni tildes.
-- Necesita **al menos 3 caracteres** para buscar mientras escribe; con **Enter** se
-  ejecuta de inmediato.
+- Se ejecuta con **Enter** o con el botón **Mostrar**.
 - Se combina con los demás filtros (usuario, acción, módulo, fechas) y se respeta en
   las exportaciones a PDF y Excel.
 - Equivale a las claves `tercero:` / `referencia:` del buscador general.
@@ -186,8 +189,7 @@ Cómo se comporta:
 - **No distingue mayúsculas ni tildes**: `garcia` encuentra `GARCÍA`.
 - Se combina con el resto de filtros: puede pedir "eventos de María, del módulo
   Compras, en julio, que mencionen DELIVERY HERO".
-- Necesita **al menos 3 caracteres** para lanzar la búsqueda mientras escribe. Con
-  **Enter** se ejecuta de inmediato.
+- Se ejecuta con **Enter** o con el botón **Mostrar**.
 - También funciona como clave en el buscador general:
   `contenido:"DELIVERY HERO"` o su alias `datos:CO-000039`.
 
@@ -267,8 +269,9 @@ espacios.
   siempre es el rango de fechas. Amplíe **Desde**/**Hasta** o pulse *Limpiar*.
 - **La búsqueda por contenido tarda**: es normal, revisa el texto completo de cada
   evento. Acote el rango de fechas y, si puede, el módulo.
-- **Escribo en Contenido del mensaje y no pasa nada**: necesita al menos 3
-  caracteres. Pulse **Enter** para forzar la búsqueda.
+- **Abro la pantalla y la tabla está vacía**, o **cambio un filtro y no pasa nada**:
+  la bitácora solo se consulta al pulsar **Mostrar** (o **Enter** en un campo de
+  texto).
 - **No encuentro un evento que sé que existe**: verifique que no esté buscando
   fuera de su alcance de empresa (nivel 2) y que la palabra esté realmente en los
   datos guardados —abra un evento parecido y mire *Ver información en detalle*.
@@ -284,6 +287,11 @@ espacios.
 
 ## Historial de cambios
 
+- **1.6** — La pantalla ya no consulta la bitácora al abrir ni al cambiar un filtro:
+  se agrega el botón **Mostrar**, que es el que ejecuta la consulta (también **Enter**
+  en los campos de texto). **Limpiar** deja la tabla vacía. Las listas de los filtros
+  Usuario, Empresa, Acción y Módulo se recuerdan unos minutos, así que una opción
+  recién aparecida puede tardar hasta 10 minutos en verse en ellas.
 - **1.5** — Campo **Referencia** en la barra de filtros: busca por la columna
   Referencia (nombre o identificación del cliente, proveedor, empleado o producto) sin
   tener que escribir la clave `tercero:`. Se aplica también a PDF y Excel. Los filtros

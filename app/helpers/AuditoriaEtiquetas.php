@@ -113,6 +113,21 @@ class AuditoriaEtiquetas
         return substr(sha1('tbl:' . trim($tabla)), 0, 12);
     }
 
+    /**
+     * Tabla del mapa a la que corresponde un código opaco, o null si no es una tabla
+     * mapeada. Evita recorrer la bitácora entera solo para traducir el filtro de Módulo.
+     */
+    public static function tablaPorCodigo(string $codigo): ?string
+    {
+        $codigo = trim($codigo);
+        foreach (self::MAP as $tabla => $_etiqueta) {
+            if (self::codigo($tabla) === $codigo) {
+                return $tabla;
+            }
+        }
+        return null;
+    }
+
     /** Normaliza la acción para mostrar (casing consistente, sin guiones bajos). */
     public static function accion(string $accion): string
     {

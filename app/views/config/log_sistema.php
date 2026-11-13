@@ -105,7 +105,7 @@ $verIntentos = $nivel >= 3;
 
         <!-- Pestaña: Auditoría -->
         <div id="logHeaderAuditoria" class="log-tab-panel log-toolbar">
-            <form id="logFormBuscar" class="input-group input-group-sm" style="width:280px;max-width:100%" onsubmit="event.preventDefault(); LOGSIS_cambiarPagina(1);">
+            <form id="logFormBuscar" class="input-group input-group-sm" style="width:280px;max-width:100%" onsubmit="event.preventDefault(); LOGSIS_buscar();">
                 <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
                 <input type="text" id="logInputBuscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar…  N° de documento  usuario:juan  accion:eliminar" autocomplete="off">
                 <button type="button" class="btn btn-outline-secondary" title="Ayuda de búsqueda" data-bs-toggle="collapse" data-bs-target="#logFiltrosAyuda"><i class="bi bi-question-lg"></i></button>
@@ -114,7 +114,7 @@ $verIntentos = $nivel >= 3;
             <div>
                 <label class="form-label small mb-0 text-muted" for="fltContenido">
                     Contenido del mensaje
-                    <i class="bi bi-info-circle" title="Busca dentro de los datos del evento: concepto, proveedor/cliente, N° de comprobante, importes… Mínimo 3 caracteres."></i>
+                    <i class="bi bi-info-circle" title="Busca dentro de los datos del evento: concepto, proveedor/cliente, N° de comprobante, importes… Enter o «Mostrar» para buscar."></i>
                 </label>
                 <div class="input-group input-group-sm" style="width:260px;max-width:100%">
                     <span class="input-group-text bg-white text-muted" style="height:30px;"><i class="bi bi-braces"></i></span>
@@ -126,7 +126,7 @@ $verIntentos = $nivel >= 3;
             <div>
                 <label class="form-label small mb-0 text-muted" for="fltReferencia">
                     Referencia
-                    <i class="bi bi-info-circle" title="Busca por la columna Referencia: nombre o identificación del cliente, proveedor, empleado o producto del registro (o del tercero del documento). Mínimo 3 caracteres."></i>
+                    <i class="bi bi-info-circle" title="Busca por la columna Referencia: nombre o identificación del cliente, proveedor, empleado o producto del registro (o del tercero del documento). Enter o «Mostrar» para buscar."></i>
                 </label>
                 <div class="input-group input-group-sm" style="width:220px;max-width:100%">
                     <span class="input-group-text bg-white text-muted" style="height:30px;"><i class="bi bi-person-vcard"></i></span>
@@ -185,6 +185,10 @@ $verIntentos = $nivel >= 3;
                 <label class="form-label small mb-0 text-muted">Hasta</label>
                 <input type="date" id="fltHasta" class="form-control form-control-sm" style="height:30px;" value="<?= date('Y-m-d') ?>">
             </div>
+
+            <button type="button" id="btnMostrarLog" class="btn btn-primary btn-sm" style="height:30px;" title="Consultar la bitácora con los filtros elegidos">
+                <i class="bi bi-search me-1"></i> Mostrar
+            </button>
 
             <button type="button" id="btnLimpiarFiltros" class="btn btn-outline-secondary btn-sm" style="height:30px;" title="Limpiar filtros">
                 <i class="bi bi-x-circle me-1"></i> Limpiar
@@ -286,8 +290,8 @@ $verIntentos = $nivel >= 3;
                     </thead>
                     <tbody id="tbodyLogSistema">
                         <tr>
-                            <td colspan="9" class="text-center py-5">
-                                <span class="spinner-border spinner-border-sm text-primary me-2"></span> Cargando auditoría...
+                            <td colspan="9" class="text-center py-5 text-muted">
+                                <i class="bi bi-search me-1"></i> Elija los filtros y pulse <strong>Mostrar</strong> para consultar la bitácora.
                             </td>
                         </tr>
                     </tbody>
@@ -349,8 +353,3 @@ $verIntentos = $nivel >= 3;
     window.BASE_URL = '<?= $base ?>';
 </script>
 <script src="<?= $base ?>/js/config/log_sistema.js?v=<?= asset_ver('/js/config/log_sistema.js') ?>"></script>
-<script>
-    document.addEventListener('DOMContentLoaded', function () {
-        if (typeof LOGSIS_cargarListado === 'function') LOGSIS_cargarListado(1);
-    });
-</script>

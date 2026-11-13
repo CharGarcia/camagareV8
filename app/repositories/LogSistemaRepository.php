@@ -715,6 +715,12 @@ class LogSistemaRepository extends BaseRepository
         if ($codigo === '') {
             return null;
         }
+        // Tabla mapeada (casi todas): se resuelve sin tocar la BD. El alcance por empresa
+        // lo sigue aplicando el WHERE del listado, así que no abre nada fuera de alcance.
+        $conocida = \App\Helpers\AuditoriaEtiquetas::tablaPorCodigo($codigo);
+        if ($conocida !== null) {
+            return $conocida;
+        }
         [$where, $params] = $this->whereAlcance($scope);
         $st = $this->db->prepare(
             "SELECT DISTINCT tabla_afectada FROM log_sistema l {$where}

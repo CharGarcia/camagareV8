@@ -7,11 +7,15 @@
     let currentPage = 1;
     let sortCol = 'created_at';
     let sortDir = 'DESC';
-    let timerBusqueda = null;
     let turnoListado = 0;      // n.º de la última consulta del listado lanzada
     let abortListado = null;   // para cancelar la consulta anterior aún en curso
     let modalDetalle = null;
     let detalleId = null; // id del evento cargado en el modal (para el PDF)
+    // La bitácora NO se consulta sola: ni al abrir la pantalla ni al cambiar un filtro.
+    // Solo con el botón «Mostrar» (o Enter en un campo de texto). Hasta entonces, el
+    // orden y el paginador no disparan nada.
+    let consultado = false;
+    const MSG_INICIAL = '<tr><td colspan="9" class="text-center py-5 text-muted"><i class="bi bi-search me-1"></i> Elija los filtros y pulse <strong>Mostrar</strong> para consultar la bitácora.</td></tr>';
 
     function getBuscar() {
         const el = document.getElementById('logInputBuscar');
@@ -79,8 +83,27 @@
         }
     };
 
+    // Botón «Mostrar» / Enter: la única forma de lanzar la consulta.
+    window.LOGSIS_buscar = function () {
+        consultado = true;
+        LOGSIS_cargarListado(1);
+    };
+
+    // Vuelve la tabla al estado inicial (sin datos) y descarta la consulta en curso.
+    function vaciarListado() {
+        consultado = false;
+        turnoListado++;
+        if (abortListado) abortListado.abort();
+        const tbody = document.getElementById('tbodyLogSistema');
+        if (tbody) tbody.innerHTML = MSG_INICIAL;
+        const info = document.getElementById('logPaginationInfo');
+        if (info) info.textContent = '0-0 / 0';
+        const pag = document.getElementById('logWrapperPagination');
+        if (pag) pag.querySelectorAll('button').forEach(function (b) { b.disabled = true; });
+    }
+
     window.LOGSIS_cambiarPagina = function (page) {
-        if (page < 1) return;
+        if (page < 1 || !consultado) return;
         LOGSIS_cargarListado(page);
     };
 
@@ -268,7 +291,7 @@
                     if (ts.control_input.value !== '' || ts.getValue() === '') return;
                     ev.preventDefault();
                     ev.stopPropagation();
-                    ts.clear(); // dispara 'change' → recarga el listado
+                    ts.clear();
                     ts.close();
                 }, true);
             } catch (e) {
@@ -287,38 +310,21 @@
     document.addEventListener('DOMContentLoaded', function () {
         initFiltrosBuscables();
 
-        // Auditoría: búsqueda con debounce.
-        const input = document.getElementById('logInputBuscar');
-        if (input) {
-            input.addEventListener('input', function () {
-                clearTimeout(timerBusqueda);
-                timerBusqueda = setTimeout(() => LOGSIS_cargarListado(1), 400);
-            });
-        }
-
-        // Contenido del mensaje: busca dentro del JSON del evento. Es una consulta
-        // pesada (sin índice), así que se espera un poco más que en el buscador
-        // normal y no se dispara con 1-2 letras; con Enter se fuerza igual.
-        // Referencia (cliente/proveedor/empleado/producto): mismo comportamiento, porque
-        // resuelve el nombre con una lectura por fila.
+        // Sin búsqueda al escribir: los campos de texto consultan solo con Enter (el buscador
+        // general, por el submit de su formulario) y el resto con el botón «Mostrar».
         ['fltContenido', 'fltReferencia'].forEach(function (idCampo) {
-            const inputContenido = document.getElementById(idCampo);
-            if (!inputContenido) return;
-            let timerContenido = null;
-            inputContenido.addEventListener('input', function () {
-                clearTimeout(timerContenido);
-                const valor = inputContenido.value.trim();
-                if (valor !== '' && valor.length < 3) return;
-                timerContenido = setTimeout(() => LOGSIS_cargarListado(1), 600);
-            });
-            inputContenido.addEventListener('keydown', function (ev) {
+            const campo = document.getElementById(idCampo);
+            if (!campo) return;
+            campo.addEventListener('keydown', function (ev) {
                 if (ev.key === 'Enter') {
                     ev.preventDefault();
-                    clearTimeout(timerContenido);
-                    LOGSIS_cargarListado(1);
+                    LOGSIS_buscar();
                 }
             });
         });
+
+        const btnMostrar = document.getElementById('btnMostrarLog');
+        if (btnMostrar) btnMostrar.addEventListener('click', function () { LOGSIS_buscar(); });
 
         document.querySelectorAll('.log-sort').forEach(function (th) {
             th.addEventListener('click', function () {
@@ -331,13 +337,8 @@
                     sortDir = 'DESC';
                 }
                 actualizarIndicadoresOrden('.log-sort', sortCol, sortDir);
-                LOGSIS_cargarListado(1);
+                if (consultado) LOGSIS_cargarListado(1);
             });
-        });
-
-        ['fltUsuario', 'fltEmpresa', 'fltAccion', 'fltTabla', 'fltDesde', 'fltHasta'].forEach(function (id) {
-            const el = document.getElementById(id);
-            if (el) el.addEventListener('change', function () { LOGSIS_cargarListado(1); });
         });
 
         const btnLimpiar = document.getElementById('btnLimpiarFiltros');
@@ -354,7 +355,7 @@
                 });
                 const inputB = document.getElementById('logInputBuscar');
                 if (inputB) inputB.value = '';
-                LOGSIS_cargarListado(1);
+                vaciarListado();
             });
         }
 

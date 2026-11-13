@@ -36,7 +36,7 @@ class LogSistemaConsultaController extends Controller
         // Registra la preferencia "filas por página" para que favoritos.js pinte el selector junto al paginador.
         \App\Helpers\PreferenciasHelper::porPaginaModulo('log_sistema');
 
-        $opciones = $this->service->getOpcionesFiltros($this->getScope());
+        $opciones = $this->opcionesFiltros();
 
         $this->viewWithLayout('layouts.main', 'config.log_sistema', [
             'titulo'          => 'Auditoría del sistema',
@@ -339,6 +339,26 @@ class LogSistemaConsultaController extends Controller
         }
         echo '</tbody></table>';
         return (string) ob_get_clean();
+    }
+
+    /**
+     * Opciones de los filtros (usuarios, empresas, acciones, módulos). Calcularlas recorre
+     * la bitácora completa, así que se guardan en la sesión unos minutos por alcance en vez
+     * de repetir esas consultas cada vez que se abre la pantalla.
+     */
+    private function opcionesFiltros(): array
+    {
+        $scope = $this->getScope();
+        $clave = $scope['nivel'] . ':' . $scope['id_empresa'];
+        $cache = $_SESSION['log_sistema_opciones'] ?? null;
+        if (is_array($cache) && ($cache['clave'] ?? '') === $clave
+            && (time() - (int) ($cache['ts'] ?? 0)) < 600 && is_array($cache['datos'] ?? null)) {
+            return $cache['datos'];
+        }
+
+        $datos = $this->service->getOpcionesFiltros($scope);
+        $_SESSION['log_sistema_opciones'] = ['clave' => $clave, 'ts' => time(), 'datos' => $datos];
+        return $datos;
     }
 
     /**
