@@ -6,6 +6,7 @@
 | Versión | Fecha | Cambios |
 |---|---|---|
 | 0.1 | 13-11-2026 | Estructura general + secciones «Lo que ofrecemos» y «Módulos del sistema» |
+| 0.7 | 13-11-2026 | El plan mensual tiene un precio más alto que el anual. Se agrega el argumento de venta del pago anual |
 | 0.6 | 13-11-2026 | Descuento por establecimiento adicional fijado en **20 %** (solo plan anual, solo plan base) |
 | 0.5 | 13-11-2026 | El descuento por establecimiento adicional aplica **solo en planes anuales**; en mensual todos pagan precio completo |
 | 0.4 | 13-11-2026 | Reglas del descuento: % fijo e igual para todos los establecimientos adicionales, solo sobre el plan base. Los módulos adicionales se cobran aparte en cada establecimiento, sin descuento |
@@ -324,6 +325,12 @@ establecimiento contrata su propio plan**:
 - Los permisos y los combos se asignan por usuario **en cada empresa**, así
   que cada establecimiento recibe solo los módulos de su plan.
 
+**Mensual vs. anual:** el plan **mensual tiene un precio más alto** que el
+anual. Pagar 12 mensualidades cuesta más que pagar un año por adelantado.
+Además, solo el plan anual tiene el 20 % de descuento en los establecimientos
+adicionales. **Argumento de venta:** *«pagando anual ahorra en el plan y,
+si tiene más locales, cada uno le sale con 20 % de descuento».*
+
 **Fórmula por establecimiento:**
 
 | Periodicidad | Establecimiento principal | Establecimiento adicional |
@@ -341,9 +348,9 @@ establecimiento contrata su propio plan**:
 | **Total anual del RUC** | | | | **suma** |
 
 > **Por definir:**
-> - ¿El plan anual tiene **además** su propio precio rebajado frente a 12
->   mensualidades, o el único beneficio del plan anual es el descuento de los
->   establecimientos adicionales?
+> - El plan anual es más barato que 12 mensualidades ✅. Falta definir la
+>   **diferencia**: ¿un % de recargo al mensual (por ejemplo, anual ÷ 12 +
+>   X %), o precios fijados uno por uno?
 > - Si el plan base de un adicional es **más caro** que el del principal,
 >   ¿cuál se considera principal: el primero contratado o el de mayor precio?
 >   *(Sugerencia: el de mayor precio paga completo, para no regalar margen.)*
