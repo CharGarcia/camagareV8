@@ -472,3 +472,13 @@ La app iOS (`mobile/`, bundle `com.camagare.mobile`) fue **aprobada por Apple el
 - **Permisos del dispositivo** (cámara, ubicación, fotos, micrófono): cada uno con su texto de uso real en `mobile/app.json`; no pedir permisos que la app no usa.
 - **Cuenta demo para revisores**: debe pertenecer a una empresa que cumpla la regla de equipo (≥2 usuarios reales) y mantenerse funcionando.
 - **Ante la duda, avisar antes de cambiar**: si un cambio (en `mobile/` o en `api/v1`) puede chocar con una guideline de Apple, detenerse y consultarlo con el usuario en lugar de implementarlo.
+
+---
+
+## 14. Despliegue a producción (para el asistente)
+
+- El usuario publica con **`tools/deploy.ps1`** (PowerShell, en su PC, a menudo vía un acceso directo en el escritorio). El script trabaja sobre **`main`**: commit → `pull --rebase` → **fusiona las ramas `claude/*` pendientes (pregunta por cada una)** → revisión de SQL/composer/docs → `push` → `git pull` + reload de Apache en el servidor por SSH. Opciones: `-Rama claude/x`, `-SinRamas`, `-SoloDeploy`.
+- Los cambios hechos en sesiones de Claude en la nube quedan en una rama `claude/...`, **no en `main`**. Al terminar, decirle al usuario que corra `.\tools\deploy.ps1` y responda **s** a la rama en el paso **[3/6]**. Si el script dice **[x/5]**, su copia es vieja: que haga `git pull origin main` en la carpeta del proyecto (o que el acceso directo apunte a `tools\deploy.ps1` del proyecto, no a una copia).
+- Antes de terminar una tarea, **actualizar la rama con `origin/main`** (merge) para que el paso 3 no choque.
+- Si el cambio trae SQL, avisarlo: el script pregunta si ya se aplicó en producción (el SQL va primero). Si toca `docs/manual/`, recordar **Sincronizar** en `/documentacion/gestion`.
+- Guía completa (también cómo configurar una PC nueva): `docs/manual/config/despliegue.md`. Si se cambia el script, actualizar esa guía y esta sección.
