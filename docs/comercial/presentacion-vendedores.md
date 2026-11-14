@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.16** (13-11-2026). El historial de cambios está al final.
+Versión actual: **0.17** (14-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -15,10 +15,10 @@ Versión actual: **0.16** (13-11-2026). El historial de cambios está al final.
 4. **Módulos del sistema** — *borrador listo para revisión*
 5. **Cómo funciona el sistema** (alta, puesta en marcha, soporte, pagos) — *borrador para revisión*
 6. **Planes y precios**: cómo se calcula lo que paga el cliente — *reglas aprobadas; faltan los precios*
-7. Qué cubre y qué no cubre la membresía — *pendiente*
-8. De qué somos responsables y de qué no — *pendiente (base: Contrato de uso y Acuerdo de datos)*
-9. Preguntas frecuentes y manejo de objeciones — *pendiente*
-10. Proceso de venta: demo, cotización, contrato y alta — *pendiente*
+7. **Qué cubre y qué no cubre la membresía** — *borrador para revisión*
+8. **De qué somos responsables y de qué no** — *borrador basado en el Contrato de uso y el Acuerdo de datos*
+9. **Preguntas frecuentes y manejo de objeciones** — *borrador para revisión*
+10. **Proceso de venta**: demo, cotización, contrato y alta — *borrador para revisión*
 
 Al final: **Pendientes por definir** (lista única) e **Historial de versiones**.
 
@@ -590,6 +590,143 @@ combinaciones típicas. El precio de cada una igual lo calcula el cotizador.
 
 ---
 
+## 7. Qué cubre y qué no cubre la membresía *(borrador para revisión)*
+
+### 7.1 Lo que cubre la membresía
+
+| Incluye | Detalle | Base |
+|---|---|---|
+| **Uso del sistema en la nube** | Licencia de uso de los **módulos contratados**, para los establecimientos contratados, mientras la suscripción esté vigente. | Contrato de uso, cláusulas PRIMERA y SEGUNDA |
+| **Usuarios incluidos** | 3 por establecimiento, compartidos en el RUC. | Sección 6.2 |
+| **Servidor, seguridad y respaldos** | Alojamiento en la nube, comunicación cifrada y **respaldos periódicos**. | Contrato, QUINTA; Acuerdo de datos, QUINTA |
+| **Soporte** | Por los canales establecidos (chat de soporte en el sistema). | Contrato, QUINTA — horario por definir (P-11) |
+| **Ayuda dentro del sistema** | Manual en línea, asistente con IA y novedades. | Sección 5.3 |
+| **App móvil** | Android e iPhone/iPad (en iPhone, empresas con 2 o más usuarios). | Sección 5.1 |
+| **Aviso de mantenimientos** | Los mantenimientos programados se avisan con anticipación. | Contrato, QUINTA |
+| **Mejoras del sistema** | *Por definir:* ¿las mejoras y módulos nuevos de lo contratado van incluidos sin costo? | P-28 |
+
+### 7.2 Lo que NO cubre la membresía (se cobra aparte o lo pone el cliente)
+
+| No incluye | Por qué / cómo se resuelve |
+|---|---|
+| **Módulos no contratados** | Se agregan a la suscripción con su precio (Cotizador de Planes). |
+| **Usuarios adicionales** | Sobre los incluidos: $20 al año por usuario. |
+| **Firma electrónica** | La emite una entidad certificadora. CaMaGaRe también la vende aparte (módulo Firmas electrónicas). |
+| **Implementación, migración de datos y capacitación** | Servicios de una sola vez, según la cotización (P-07, P-09, P-10). |
+| **Servicio contable y declaraciones** | El sistema prepara la información; la contabilidad y las declaraciones las hace el cliente o su contador. |
+| **Computadores, impresoras, internet** | Equipos y conexión los pone el cliente. |
+| **Costos de terceros** | Comisiones de pasarelas de pago (Payphone, Nuvei, Kushki) y, si aplica, costos de WhatsApp de Meta. *Confirmar* (P-29). |
+| **Desarrollos a la medida** | *Por definir* si se ofrecen y cómo se cobran (P-30). |
+
+---
+
+## 8. De qué somos responsables y de qué no *(basado en los documentos legales del sistema)*
+
+> Estos puntos resumen el **Contrato de uso** y el **Acuerdo de tratamiento de
+> datos personales (LOPDP)** que el cliente acepta en línea al dar de alta su
+> empresa. El texto legal manda: ante una duda, el vendedor remite al contrato.
+> El propio sistema recomienda que un asesor legal revise esos textos (P-27).
+>
+> ⚠️ Las cláusulas citadas son de la **versión base (v1)** que trae el sistema.
+> Los textos se pueden editar en `/config/documentos-legales`: si en producción
+> ya se cambiaron, hay que revisar que este resumen siga coincidiendo.
+
+### 8.1 CaMaGaRe es responsable de
+
+- **Mantener el servicio disponible** en condiciones razonables (QUINTA).
+- **Hacer respaldos periódicos** de la información (QUINTA).
+- **Dar soporte** por los canales establecidos (QUINTA).
+- **Avisar con anticipación** los mantenimientos programados (QUINTA).
+- **Guardar reserva** de la información del cliente: no la cede ni la vende (Acuerdo, CUARTA).
+- **Proteger los datos** con control de acceso por usuario, cifrado y registro de auditoría (Acuerdo, QUINTA).
+- **Avisar sin demora** si hay un incidente de seguridad que afecte los datos (Acuerdo, NOVENA).
+- **Permitir que el cliente exporte su información** al terminar la relación (Contrato, NOVENA; Acuerdo, SÉPTIMA).
+
+### 8.2 CaMaGaRe NO es responsable de
+
+- **Errores en la información que ingresa el cliente** (Contrato, OCTAVA).
+- **El uso indebido del sistema** (OCTAVA).
+- **Sanciones por incumplimiento tributario del cliente** (OCTAVA).
+- **Interrupciones por mantenimiento, fuerza mayor o fallas de terceros**: se procura la máxima continuidad, pero no se garantiza un servicio ininterrumpido (SEXTA).
+
+### 8.3 El cliente es responsable de
+
+- **Usar el sistema conforme a la ley** (CUARTA).
+- **Cuidar sus claves** y las de sus usuarios (CUARTA).
+- **Verificar que lo que registra sea verdadero** (CUARTA).
+- **Sus declaraciones y comprobantes ante el SRI** (CUARTA).
+- **Los datos personales que registra** (clientes, proveedores, empleados): el cliente es el responsable del tratamiento y CaMaGaRe es el encargado (Acuerdo, SEGUNDA).
+- **Pagar la suscripción**: la falta de pago permite suspender el acceso, previo aviso (Contrato, TERCERA).
+
+### 8.4 De quién es cada cosa
+
+| Qué | De quién es |
+|---|---|
+| El sistema, su código, diseño y marca | De CaMaGaRe (Contrato, SÉPTIMA) |
+| La información y los datos que carga el cliente | **Del cliente** (Contrato, SÉPTIMA) |
+
+---
+
+## 9. Preguntas frecuentes y manejo de objeciones *(borrador para revisión)*
+
+### 9.1 Preguntas frecuentes
+
+| Pregunta del cliente | Respuesta |
+|---|---|
+| ¿Tengo que instalar algo? | No. Se usa desde el navegador y desde la app del celular. |
+| ¿Funciona en el celular? | Sí, en Android y en iPhone/iPad. En iPhone la empresa necesita al menos 2 usuarios. |
+| ¿Mis datos están seguros? ¿De quién son? | Cada usuario entra con su clave y permisos, todo queda registrado y se hacen respaldos. Los datos son suyos y puede pedir su exportación (sección 8). |
+| ¿Factura electrónicamente al SRI? | Sí: facturas, notas de crédito y débito, retenciones, liquidaciones de compra, guías de remisión y facturas de reembolso. |
+| ¿Necesito firma electrónica? | Sí, para emitir comprobantes electrónicos. Si no tiene, también se la vendemos. |
+| ¿Puedo probar antes de emitir documentos reales? | Sí, en el **ambiente de pruebas**, sin validez tributaria. |
+| ¿Cuánto cuesta? | Depende de sus locales, módulos y usuarios. Se lo calculo al momento con el Cotizador. |
+| ¿Por qué el plan mensual cuesta más? | El mensual tiene un 20 % de recargo frente al anual; pagando anual ahorra, y sus otros locales tienen 20 % de descuento. |
+| Tengo varios locales con el mismo RUC, ¿pago por cada uno? | Sí, cada establecimiento contrata sus módulos. En plan anual, los adicionales tienen 20 % de descuento y los usuarios se comparten. |
+| ¿Puedo cargar mis clientes y productos que ya tengo? | Sí, por Excel, y los saldos iniciales de cartera, bancos e inventario. |
+| ¿Hace mis declaraciones? | Prepara la información (ATS, IVA, retenciones, renta), pero las declaraciones son responsabilidad del cliente o de su contador. |
+| ¿Qué pasa si me atraso en el pago? | El sistema avisa y da 3 días de gracia. La falta de pago permite suspender el acceso, previo aviso, sin perder la información. |
+| ¿Puedo cancelar? | El contrato rige mientras la suscripción esté activa y cualquiera de las partes puede terminarlo con aviso razonable; usted puede pedir la exportación de su información. |
+| ¿Qué horario tiene el soporte? | *Por definir (P-11).* No prometer horarios hasta tenerlos. |
+| ¿Cuánto tarda la puesta en marcha? | *Por definir (P-08).* |
+
+### 9.2 Objeciones frecuentes
+
+| Objeción | Cómo responder |
+|---|---|
+| **«Es caro»** | Compare con lo que hoy cuesta digitar dos veces, los errores y las multas. Muestre el plan **anual** (más barato) y arme solo los módulos que necesita con el Cotizador. |
+| **«Ya tengo un sistema»** | Pregunte qué le falta o qué le cuesta hoy (pregunta 10 de 2.3) y muestre solo eso. Destaque: todo en un solo sistema, contabilidad automática y celular. |
+| **«Mi contador ya me lleva todo»** | Ofrézcalo como herramienta para su contador: recibe la información completa y a tiempo, con ATS y declaraciones listas. Invite al contador a la demo. |
+| **«No tengo tiempo para aprender otro sistema»** | Muestre lo rápido que se factura, la carga por Excel, el manual y el chat de soporte dentro del sistema. |
+| **«¿Y si se cae internet?»** | Es un sistema en la nube: necesita internet. Funciona en el celular con datos móviles. No prometer funcionamiento sin conexión. |
+| **«Me da miedo perder mis datos»** | Respaldos periódicos, nada se borra físicamente, auditoría y los datos son del cliente, con exportación al terminar (sección 8). |
+| **«Lo pienso»** | Registre la oportunidad en el CRM con una actividad de seguimiento con fecha y envíe la proforma por correo con el botón de aprobación. |
+
+---
+
+## 10. Proceso de venta *(borrador para revisión)*
+
+| # | Etapa | Qué hace el vendedor | Herramienta |
+|---|---|---|---|
+| 1 | **Prospección** | Identifica clientes de los perfiles prioritarios (P-03). Registra el contacto. | CRM (contactos, Bandeja social) |
+| 2 | **Descubrimiento** | Hace las preguntas de la sección 2.3 y anota el problema principal. | CRM (actividad o nota) |
+| 3 | **Demo** | Empieza por el problema del cliente, no por la lista de módulos. Muestra 2 o 3 cosas que lo resuelven. | Sistema (empresa de demostración) |
+| 4 | **Cotización** | Arma el precio con el RUC, los locales, los módulos y los usuarios. Muestra anual y mensual. | Cotizador de Planes |
+| 5 | **Proforma** | La genera desde la cotización y la envía por correo o WhatsApp; el cliente la aprueba con un botón. | Cotizador → Proformas |
+| 6 | **Seguimiento** | Agenda actividades con fecha (llamar, reunión) hasta la respuesta. | CRM (oportunidad y actividades) |
+| 7 | **Cierre** | Con la proforma aprobada, marca la oportunidad como **ganada**. Si no, la marca **perdida** con su motivo. | CRM |
+| 8 | **Entrega a implementación** | Pasa el cliente al responsable del alta y la puesta en marcha (sección 5.2). | *Por definir (P-07)* |
+
+### 10.1 Reglas de oro del vendedor
+
+1. **Pregunte antes de mostrar.** El problema del cliente guía la demo.
+2. **No prometa lo que no está en este documento.** Funciones nuevas, horarios de soporte o tiempos de entrega se confirman con la dirección.
+3. **Toda venta pasa por el Cotizador.** Así el precio sigue siempre las mismas reglas.
+4. **Toda oportunidad queda en el CRM**, con su siguiente actividad y fecha.
+5. **iPhone:** no ofrezca la app de iPhone a una empresa de un solo usuario, y **nunca** indique al cliente que pague, compre o se suscriba desde la app (regla de Apple).
+6. **Las declaraciones son del cliente:** el sistema las prepara, no las presenta por él.
+
+---
+
 ## Pendientes por definir (lista única)
 
 Todo lo que falta para entregar el documento. Cuando un punto se resuelva, se
@@ -639,12 +776,20 @@ actualiza su sección y se tacha aquí.
 ### F. Secciones por escribir
 | # | Pendiente | Sección |
 |---|---|---|
-| P-22 | Qué cubre y qué no cubre la membresía. | 7 |
-| P-23 | De qué somos responsables y de qué no (base: Contrato de uso y Acuerdo de datos). | 8 |
-| P-24 | Preguntas frecuentes y manejo de objeciones. | 9 |
-| P-25 | Proceso de venta: demo, cotización, contrato y alta. | 10 |
+| P-22 | ~~Escribir qué cubre la membresía~~ → borrador v0.17; revisar. | 7 |
+| P-23 | ~~Escribir responsabilidades~~ → borrador v0.17; revisar. | 8 |
+| P-24 | ~~Escribir preguntas frecuentes y objeciones~~ → borrador v0.17; revisar. | 9 |
+| P-25 | ~~Escribir el proceso de venta~~ → borrador v0.17; revisar. | 10 |
 | P-26 | Capacitación de vendedores (documento aparte): cómo vender, target, guion de demo. | — |
 | P-27 | Revisión legal del Contrato de uso y del Acuerdo de datos (el propio sistema lo recomienda). | 8 |
+
+### G. Nuevos (v0.17)
+| # | Pendiente | Sección |
+|---|---|---|
+| P-28 | ¿Las **mejoras y módulos nuevos** de lo contratado van incluidos en la suscripción sin costo? | 7.1 |
+| P-29 | Confirmar **costos de terceros** que paga el cliente: comisiones de pasarelas de pago y costos de WhatsApp de Meta. | 7.2 |
+| P-30 | ¿Se ofrecen **desarrollos a la medida**? ¿Cómo se cobran? | 7.2 |
+| P-31 | ¿Hay una **empresa de demostración** para las demos de los vendedores? ¿Con qué usuario? | 10 |
 
 ---
 
@@ -652,6 +797,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.17 | 14-11-2026 | Nuevas secciones 7 (qué cubre la membresía), 8 (responsabilidades, desde el contrato y el acuerdo de datos), 9 (preguntas frecuentes y objeciones) y 10 (proceso de venta). Pendientes P-28 a P-31 |
 | 0.16 | 13-11-2026 | Revisión completa: sección 6 reescrita con las reglas aprobadas y un ejemplo; referencias corregidas; lista única de pendientes; historial al final |
 | 0.15 | 13-11-2026 | Nueva sección 5 «Cómo funciona el sistema» (acceso, ciclo del cliente, soporte, pagos y vencimiento). Sección 3: aviso de firma por caducar y ambiente de pruebas |
 | 0.14 | 13-11-2026 | Valores aprobados. Nueva sección 2 «Conociendo al cliente»: perfiles, dolores, preguntas de descubrimiento y señales de buen o mal cliente |
