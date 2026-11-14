@@ -780,7 +780,7 @@ actualiza su sección y se tacha aquí.
 | P-23 | ~~Escribir responsabilidades~~ → borrador v0.17; revisar. | 8 |
 | P-24 | ~~Escribir preguntas frecuentes y objeciones~~ → borrador v0.17; revisar. | 9 |
 | P-25 | ~~Escribir el proceso de venta~~ → borrador v0.17; revisar. | 10 |
-| P-26 | Capacitación de vendedores (documento aparte): cómo vender, target, guion de demo. | — |
+| P-26 | ~~Capacitación de vendedores~~ → borrador en `docs/comercial/capacitacion-vendedores.md` (v0.1); revisar. | — |
 | P-27 | Revisión legal del Contrato de uso y del Acuerdo de datos (el propio sistema lo recomienda). | 8 |
 
 ### G. Nuevos (v0.17)
