@@ -264,7 +264,7 @@ class NotaDebitoController extends BaseModuloController
         $empresa       = $empresaModel->getPorId($idEmpresa);
         $nombreEmpresa = $empresa['nombre'] ?? '';
 
-        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Total', 'Estado'];
+        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Total', 'Estado SRI'];
         $exportData = [];
         foreach ($rows as $r) {
             $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
@@ -335,7 +335,7 @@ class NotaDebitoController extends BaseModuloController
                             <th style="width: 12%">Identificación</th>
                             <th style="width: 14%">Doc. Modificado</th>
                             <th style="width: 14%" class="text-end">Total</th>
-                            <th style="width: 12%">Estado</th>
+                            <th style="width: 12%">Estado SRI</th>
                         </tr>
                     </thead>
                     <tbody>

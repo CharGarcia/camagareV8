@@ -100,7 +100,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             $filtrosFacturasReembolso = [
                 // ── Documento ──
                 ['tab' => $tF, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
-                ['tab' => $tF, 'key' => 'estado',     'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                ['tab' => $tF, 'key' => 'estado',     'label' => 'Estado SRI',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
                     ['v' => 'borrador',   'l' => 'Borrador'],
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
@@ -168,7 +168,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { key: 'numero',      label: 'Factura', class: 'font-monospace fw-semibold' },
                                 { key: 'fecha',       label: 'Fecha' },
                                 { key: 'cliente',     label: 'Cliente' },
-                                { key: 'estado',      label: 'Estado' },
+                                { key: 'estado',      label: 'Estado SRI' },
                             ],
                             onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
                             onOpen: (row, fm) => {
@@ -195,7 +195,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'total_reembolsado'              => 'Reembolsado',
                     'importe_total'                  => 'Total',
                     'usuario_nombre'                 => 'Usuario',
-                    'estado'                          => 'Estado',
+                    'estado'                          => 'Estado SRI',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -233,7 +233,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <th class="sortable-header text-end" role="button" onclick="window.FR_ordenar('total_base_imponible_reembolso')" data-col="total_reembolsado">Reembolsado <i class="bi <?= $ordenCol === 'total_base_imponible_reembolso' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i></th>
                         <th class="sortable-header text-end" role="button" onclick="window.FR_ordenar('importe_total')" data-col="importe_total">Total <i class="bi <?= $ordenCol === 'importe_total' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i></th>
                         <th class="sortable-header" role="button" onclick="window.FR_ordenar('usuario_nombre')" data-col="usuario_nombre">Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i></th>
-                        <th class="text-center pe-3 sortable-header" role="button" onclick="window.FR_ordenar('estado')" data-col="estado">Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i></th>
+                        <th class="text-center pe-3 sortable-header" role="button" onclick="window.FR_ordenar('estado')" data-col="estado">Estado SRI <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="fr-table-body">

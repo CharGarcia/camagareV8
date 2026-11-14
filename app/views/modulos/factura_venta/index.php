@@ -245,7 +245,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             //              [Observaciones 4][Placa 2][Guía de remisión 3][Clave de acceso 3]
             $filtrosFacturas = [
                 ['tab' => $tF, 'key' => 'fecha',   'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
-                ['tab' => $tF, 'key' => 'estado',  'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 2, 'options' => [
+                ['tab' => $tF, 'key' => 'estado',  'label' => 'Estado SRI',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 2, 'options' => [
                     ['v' => 'borrador',   'l' => 'Borrador'],
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
@@ -334,7 +334,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { key: 'numero',      label: 'Factura', class: 'font-monospace fw-semibold' },
                                 { key: 'fecha',       label: 'Fecha' },
                                 { key: 'cliente',     label: 'Cliente' },
-                                { key: 'estado',      label: 'Estado' },
+                                { key: 'estado',      label: 'Estado SRI' },
                             ],
                             onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
                             onOpen: (row, fm) => {
@@ -369,7 +369,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'usuario_nombre'      => 'Usuario',
                     'estado_correo'       => 'Estado correo',
                     'estado_pago'         => 'Estado pago',
-                    'estado'              => 'Estado',
+                    'estado'              => 'Estado SRI',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -457,7 +457,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             Pago <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">
-                            Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
+                            Estado SRI <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
                         </th>
                     </tr>
                 </thead>

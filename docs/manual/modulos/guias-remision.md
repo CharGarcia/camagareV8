@@ -6,7 +6,7 @@ ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
 etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, error 45, secuencial registrado
-version: 1.18
+version: 1.19
 orden: 55
 estado: activo
 ---
@@ -334,6 +334,7 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
+- **1.19** — En el listado, la columna que muestra el estado ante el SRI (borrador, autorizado, anulado…) se llama ahora **Estado SRI** (antes solo «Estado»), igual en el selector de columnas, el filtro y las exportaciones a PDF y Excel, para no confundirla con el estado de pago o de correo.
 - **1.18** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
 - **1.17** — Cuando una guía nueva **salta un número** porque el SRI ya tiene registrada una guía eliminada con ese número, aparece un **triángulo amarillo** junto al Secuencial que lo explica. El **superadministrador** puede ver las guías eliminadas con `estado:eliminada` en el buscador y **restaurarlas como borrador** con su mismo número (también desde el aviso del número saltado). Ver *Número saltado: guía eliminada que ya pasó por el SRI*.
 - **1.16** — Al **guardar una guía nueva**, el número se reserva en ese momento. Si otra persona de la misma serie ya usó el que mostraba la pantalla, la guía se guarda con el **siguiente libre** y aparece el aviso *«Guía guardada con otro número»*, en vez de rechazarse con *"El número de secuencial ya existe"*.

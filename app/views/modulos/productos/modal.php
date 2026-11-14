@@ -274,7 +274,7 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                             <i class="bi bi-arrow-repeat"></i> Actualizar desde Kardex
                                         </button>
                                     </div>
-                                    <div class="form-text small">Se calcula con el promedio ponderado de las entradas registradas en el Kardex (todas las bodegas).</div>
+                                    <div class="form-text small">Al abrir el producto, si la facturación afecta al inventario, el costo se recalcula solo con el método de costeo de Empresa → Facturación (promedio, FIFO o LIFO; todas las bodegas). El botón usa siempre el promedio ponderado.</div>
                                 </div>
                             </div>
                         </div>

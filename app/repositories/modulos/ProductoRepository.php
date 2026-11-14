@@ -881,6 +881,42 @@ class ProductoRepository extends BaseRepository
         return ($valor === false || $valor === null) ? null : (float) $valor;
     }
 
+    /**
+     * Entradas vigentes del producto en el Kardex (todas las bodegas), de la más antigua a la más
+     * nueva. Base de los costos FIFO / LIFO del producto; mismo filtro y orden que
+     * InventarioRepository::getEntradas() (salida por venta). Las transferencias no cuentan.
+     */
+    public function getCapasCostoKardex(int $idProducto, int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT cantidad, costo_unitario
+               FROM inventario_kardex
+              WHERE id_empresa = :e AND id_producto = :p
+                AND tipo_movimiento = 'entrada' AND eliminado = false
+              ORDER BY fecha_movimiento ASC, id ASC"
+        );
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto]);
+
+        return ['entradas' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /** Candado transaccional del costo de un producto (leer → calcular → escribir, §8). */
+    public function lockCosto(int $idProducto, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('costo_producto:' || :e || ':' || :p))");
+        $st->execute([':e' => $idEmpresa, ':p' => $idProducto]);
+    }
+
+    /** Costo guardado del producto (dentro del candado). */
+    public function getCostoGuardado(int $idProducto, int $idEmpresa): ?float
+    {
+        $st = $this->db->prepare("SELECT costo_producto FROM {$this->table}
+                                   WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idProducto, ':e' => $idEmpresa]);
+        $v = $st->fetchColumn();
+        return $v === false ? null : (float) $v;
+    }
+
     /** Actualiza únicamente el costo del producto (usado por "Actualizar desde Kardex"). */
     public function actualizarCosto(int $id, int $idEmpresa, float $costo, int $idUsuario): void
     {

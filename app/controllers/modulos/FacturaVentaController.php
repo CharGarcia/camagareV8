@@ -1526,7 +1526,7 @@ class FacturaVentaController extends BaseModuloController
                             <th style="width:11%">Vendedor</th>
                             <th style="width:6%">Correo</th>
                             <th style="width:6%">Pago</th>
-                            <th style="width:6%">Estado</th>
+                            <th style="width:6%">Estado SRI</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1584,7 +1584,7 @@ class FacturaVentaController extends BaseModuloController
 
             $headers = ['Nº Factura', 'Fecha', 'Cliente', 'Identificación', 'Subtotal', 'Descuento',
                         'IVA', 'ICE', 'Propina', 'Total', 'Saldo', 'Vendedor', 'Usuario', 'Observaciones',
-                        'Correo', 'Pago', 'Estado'];
+                        'Correo', 'Pago', 'Estado SRI'];
 
             $exportData = [];
             foreach ($rows as $r) {

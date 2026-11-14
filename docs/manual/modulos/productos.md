@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
-etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto
-version: 1.18
+etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto, costo automatico, recalcular costo, metodo de costeo, fifo, lifo, promedio ponderado
+version: 1.19
 orden: 10
 estado: activo
 ---
@@ -90,6 +90,25 @@ mismo para **todos los productos inventariables** de la empresa de una sola
 vez, y muestra cuántos se actualizaron y cuántos no tenían movimientos. Un
 usuario sin acceso total solo actualiza los productos que él mismo creó,
 igual que en el listado.
+
+### Recálculo automático al abrir el producto
+
+Cada vez que se abre la ventana de un producto que **trabaja con inventario**
+(marcado como inventariable y que no es un servicio), el sistema recalcula su
+costo según la configuración de **Empresa → Facturación** del establecimiento
+principal y lo **guarda de inmediato**:
+
+- Solo ocurre si está activa la opción **La facturación afecta al inventario**.
+- Se usa el **Método de costeo de inventario** configurado (todas las bodegas):
+  - **Promedio ponderado**: promedio de todas las entradas del Kardex.
+  - **FIFO**: costo de la entrada más antigua del Kardex, el mismo criterio
+    con que la factura de venta costea la salida.
+  - **LIFO**: costo de la entrada más reciente.
+- Si el producto no tiene entradas en el Kardex, o el costo calculado es igual
+  al guardado, no se cambia nada. Cuando sí cambia, queda registrado en el
+  historial del producto.
+
+El botón **Actualizar desde Kardex** sigue usando siempre el promedio ponderado.
 
 ## Varios precios por producto
 
@@ -289,6 +308,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.19** — Al abrir un producto que trabaja con inventario, su costo se recalcula y guarda solo con el método de costeo de Empresa → Facturación (promedio, FIFO o LIFO), si la facturación afecta al inventario.
 - **1.18** — Nueva pestaña **Información** en la ventana del producto (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.17** — Botón **IVA temporal** (solo prestadores de servicios turísticos): programa el cambio de tarifa de IVA de los productos entre dos fechas (IVA 8% en feriados) y lo restaura solo al terminar.
 - **1.16** — Al guardar la ficha con su pestaña de bodegas, el saldo de cada bodega sale siempre del Kardex (antes una bodega nueva podía nacer con el número del formulario) y una bodega quitada de la ficha que todavía tiene existencias sigue visible. Desde la ficha ya no se puede mover stock: los ajustes se hacen en Inventario.

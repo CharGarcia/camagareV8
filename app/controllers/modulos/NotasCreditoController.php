@@ -285,7 +285,7 @@ class NotasCreditoController extends BaseModuloController
         $empresa       = $empresaModel->getPorId($idEmpresa);
         $nombreEmpresa = $empresa['nombre'] ?? '';
 
-        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Descuento', 'Total', 'Motivo', 'Vendedor', 'Estado'];
+        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Doc. Modificado', 'Subtotal', 'Descuento', 'Total', 'Motivo', 'Vendedor', 'Estado SRI'];
         $exportData = [];
         foreach ($rows as $r) {
             $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
@@ -368,7 +368,7 @@ class NotasCreditoController extends BaseModuloController
                             <th style="width: <?= $w['total'] ?>%" class="text-end">Total</th>
                             <th style="width: <?= $w['motivo'] ?>%">Motivo</th>
                             <th style="width: <?= $w['vend'] ?>%">Vendedor</th>
-                            <th style="width: <?= $w['estado'] ?>%">Estado</th>
+                            <th style="width: <?= $w['estado'] ?>%">Estado SRI</th>
                         </tr>
                     </thead>
                     <tbody>

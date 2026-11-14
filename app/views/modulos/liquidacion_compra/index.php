@@ -176,7 +176,7 @@ $pestanasConfigLiq = array_merge(
                 ['tab' => $tL, 'key' => 'fecha',         'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event',  'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
                 ['tab' => $tL, 'key' => 'serie',         'label' => 'Serie',              'icon' => 'bi-upc-scan',        'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
                 ['tab' => $tL, 'key' => 'secuencial',    'label' => 'Secuencial',         'icon' => 'bi-123',             'type' => 'text',       'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
-                ['tab' => $tL, 'key' => 'estado',        'label' => 'Estado',             'icon' => 'bi-flag',            'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                ['tab' => $tL, 'key' => 'estado',        'label' => 'Estado SRI',             'icon' => 'bi-flag',            'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
                     ['v' => 'borrador',   'l' => 'Borrador'],
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
@@ -241,7 +241,7 @@ $pestanasConfigLiq = array_merge(
                                 { key: 'numero',      label: 'Liquidación', class: 'font-monospace fw-semibold' },
                                 { key: 'fecha',       label: 'Fecha' },
                                 { key: 'proveedor',   label: 'Proveedor' },
-                                { key: 'estado',      label: 'Estado' },
+                                { key: 'estado',      label: 'Estado SRI' },
                             ],
                             onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
                             onOpen: (row, fm) => {
@@ -272,7 +272,7 @@ $pestanasConfigLiq = array_merge(
                     'saldo'               => 'Saldo',
                     'usuario_nombre'      => 'Usuario',
                     'estado_correo'       => 'Estado correo',
-                    'estado'              => 'Estado',
+                    'estado'              => 'Estado SRI',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -331,7 +331,7 @@ $pestanasConfigLiq = array_merge(
                             Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th class="text-center pe-3 sortable-header" role="button" data-sort="estado" data-col="estado">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                            Estado SRI <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                     </tr>
                 </thead>

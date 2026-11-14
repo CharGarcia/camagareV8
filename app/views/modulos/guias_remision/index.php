@@ -75,7 +75,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             $filtrosGuias = [
                 // ── Documento ──
                 ['tab' => $tG, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
-                ['tab' => $tG, 'key' => 'estado',     'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                ['tab' => $tG, 'key' => 'estado',     'label' => 'Estado SRI',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
                     ['v' => 'borrador',   'l' => 'Borrador'],
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
@@ -141,7 +141,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { key: 'fecha',         label: 'Fecha' },
                                 { key: 'cliente',       label: 'Destinatario' },
                                 { key: 'transportista', label: 'Transportista' },
-                                { key: 'estado',        label: 'Estado' },
+                                { key: 'estado',        label: 'Estado SRI' },
                             ],
                             onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
                             onOpen: (row, fm) => {
@@ -168,7 +168,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                     'motivo_traslado'         => 'Motivo',
                     'fecha_inicio_transporte' => 'F. Inicio',
                     'usuario_nombre'          => 'Usuario',
-                    'estado'                  => 'Estado',
+                    'estado'                  => 'Estado SRI',
                     'estado_correo'           => 'Correo',
                 ];
                 ?>
@@ -234,7 +234,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                             Usuario <i class="bi <?= $ordenCol === 'usuario_nombre' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th class="text-center gr-sortable-header" data-sort="estado" data-col="estado">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                            Estado SRI <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th class="text-center pe-3 gr-sortable-header" data-sort="estado_correo" data-col="estado_correo">
                             Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>

@@ -996,6 +996,12 @@
                 if (d.stock_actual_general !== undefined) {
                     document.getElementById('prod_stock_actual').value = parseFloat(d.stock_actual_general).toFixed(2);
                 }
+                // El servidor recalculó el costo con el método de costeo de la configuración
+                // de facturación: se muestra el nuevo y se refresca el listado.
+                if (d.costo_recalculado && String(document.getElementById('prod_id')?.value) === String(id)) {
+                    document.getElementById('prod_costo_producto').value = parseFloat(d.costo_producto || 0).toFixed(6);
+                    if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+                }
 
 
 

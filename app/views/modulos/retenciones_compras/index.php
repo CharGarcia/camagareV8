@@ -119,7 +119,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ['tab' => $tR, 'key' => 'fecha',         'label' => 'Fecha de emisión',   'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
                 ['tab' => $tR, 'key' => 'serie',         'label' => 'Serie',              'icon' => 'bi-upc-scan',       'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => $opcionesSerie],
                 ['tab' => $tR, 'key' => 'secuencial',    'label' => 'Secuencial',         'icon' => 'bi-123',            'type' => 'text',       'grupo' => 'Documento', 'col' => 3, 'placeholder' => 'Sin ceros'],
-                ['tab' => $tR, 'key' => 'estado',        'label' => 'Estado',             'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
+                ['tab' => $tR, 'key' => 'estado',        'label' => 'Estado SRI',             'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 4, 'options' => [
                     ['v' => 'borrador',      'l' => 'Borrador'],
                     ['v' => 'pendiente',     'l' => 'Pendiente'],
                     ['v' => 'autorizada',    'l' => 'Autorizada'],
@@ -186,7 +186,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { key: 'numero',      label: 'Retención', class: 'font-monospace fw-semibold' },
                                 { key: 'fecha',       label: 'Fecha' },
                                 { key: 'proveedor',   label: 'Proveedor' },
-                                { key: 'estado',      label: 'Estado' },
+                                { key: 'estado',      label: 'Estado SRI' },
                             ],
                             onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.secuencial }),
                             onOpen: (row, fm) => {
@@ -215,7 +215,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'num_doc_sustento'     => 'Doc. Sustento',
                     'periodo_fiscal'       => 'Período',
                     'total_retenido'       => 'Total Ret.',
-                    'estado'               => 'Estado',
+                    'estado'               => 'Estado SRI',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -277,7 +277,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
                         </th>
                         <th class="text-center pe-3 sortable-header" role="button" onclick="window.RET_ordenar('estado')" data-col="estado" style="width:110px;">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
+                            Estado SRI <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up text-muted' ?> ms-1 small"></i>
                         </th>
                     </tr>
                 </thead>

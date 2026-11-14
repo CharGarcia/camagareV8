@@ -821,7 +821,7 @@ class LiquidacionCompraController extends BaseModuloController
                             <th style="width:9%" class="r">Total</th>
                             <th style="width:8%" class="r">Saldo</th>
                             <th style="width:7%">Usuario</th>
-                            <th style="width:8%">Estado</th>
+                            <th style="width:8%">Estado SRI</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -875,7 +875,7 @@ class LiquidacionCompraController extends BaseModuloController
             }
 
             $headers = ['Nº Liquidación', 'Fecha', 'Proveedor', 'Identificación', 'Subtotal',
-                        'Descuento', 'Total', 'Saldo', 'Usuario', 'Observaciones', 'Estado'];
+                        'Descuento', 'Total', 'Saldo', 'Usuario', 'Observaciones', 'Estado SRI'];
 
             $exportData = [];
             foreach ($rows as $r) {

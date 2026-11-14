@@ -132,7 +132,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             $filtrosNotasDebito = [
                 // ── Documento ──
                 ['tab' => $tN, 'key' => 'fecha',      'label' => 'Fecha de emisión', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Documento', 'col' => 6, 'atajos' => true],
-                ['tab' => $tN, 'key' => 'estado',     'label' => 'Estado',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
+                ['tab' => $tN, 'key' => 'estado',     'label' => 'Estado SRI',           'icon' => 'bi-flag',           'type' => 'select',     'grupo' => 'Documento', 'col' => 3, 'options' => [
                     ['v' => 'borrador',   'l' => 'Borrador'],
                     ['v' => 'autorizado', 'l' => 'Autorizado'],
                     ['v' => 'anulado',    'l' => 'Anulado'],
@@ -196,7 +196,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 { key: 'fecha',          label: 'Fecha' },
                                 { key: 'doc_modificado', label: 'Doc. modificado', class: 'font-monospace' },
                                 { key: 'cliente',        label: 'Cliente' },
-                                { key: 'estado',         label: 'Estado' },
+                                { key: 'estado',         label: 'Estado SRI' },
                             ],
                             onSelect: (row, fm) => fm.aplicarFiltro({ key: 'numero', value: row.numero }),
                             onOpen: (row, fm) => {
@@ -224,7 +224,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     'importe_total'       => 'Total',
                     'usuario_nombre'      => 'Usuario',
                     'estado_correo'       => 'Correo',
-                    'estado'              => 'Estado',
+                    'estado'              => 'Estado SRI',
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
@@ -280,7 +280,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             Correo <i class="bi <?= $ordenCol === 'estado_correo' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                         <th class="text-center pe-3 sortable-header" role="button" onclick="window.ND_ordenar('estado')" data-col="estado">
-                            Estado <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
+                            Estado SRI <i class="bi <?= $ordenCol === 'estado' ? ($ordenDir === 'ASC' ? 'bi-sort-alpha-down text-primary' : 'bi-sort-alpha-up text-primary') : 'bi-arrow-down-up small text-muted' ?> ms-1"></i>
                         </th>
                     </tr>
                 </thead>

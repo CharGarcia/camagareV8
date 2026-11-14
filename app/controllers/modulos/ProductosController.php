@@ -412,6 +412,15 @@ class ProductosController extends BaseModuloController
         try {
             if ($id <= 0) throw new Exception('ID no válido');
 
+            // Si trabaja con inventario, el costo se recalcula con el método de costeo de la
+            // configuración de facturación. Un fallo aquí no debe impedir abrir la ficha.
+            $recalculo = ['actualizado' => false, 'metodo' => null];
+            try {
+                $recalculo = $this->service->recalcularCostoAlAbrir($id, $idEmpresa, (int) $_SESSION['id_usuario']);
+            } catch (\Throwable $e) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'recalcularCostoAlAbrir']);
+            }
+
             $repo = new ProductoRepository();
             $producto = $repo->getDetalleCompleto($id, $idEmpresa);
 
@@ -434,6 +443,8 @@ class ProductosController extends BaseModuloController
                     'componentes' => $producto['componentes'] ?? [],
                     'variantes' => $producto['variantes'] ?? [],
                     'costo_producto' => $producto['costo_producto'] ?? 0,
+                    'costo_recalculado' => !empty($recalculo['actualizado']),
+                    'metodo_costeo' => $recalculo['metodo'] ?? null,
                     'stock_actual_general' => $producto['stock_actual_general'] ?? 0,
                     'stock_minimo' => $producto['stock_minimo'] ?? 0,
                     'stock_maximo' => $producto['stock_maximo'] ?? 0,

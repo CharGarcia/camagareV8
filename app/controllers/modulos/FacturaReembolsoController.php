@@ -260,7 +260,7 @@ class FacturaReembolsoController extends BaseModuloController
         $empresa       = $empresaModel->getPorId($idEmpresa);
         $nombreEmpresa = $empresa['nombre'] ?? '';
 
-        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Terceros', 'Base Reembolso', 'IVA Reembolso', 'Total', 'Estado'];
+        $headers    = ['Número', 'Fecha Emisión', 'Cliente', 'Identificación', 'Terceros', 'Base Reembolso', 'IVA Reembolso', 'Total', 'Estado SRI'];
         $exportData = [];
         foreach ($rows as $r) {
             $numero = ($r['establecimiento'] ?? '') . '-' . ($r['punto_emision'] ?? '') . '-' . ($r['secuencial'] ?? '');
@@ -332,7 +332,7 @@ class FacturaReembolsoController extends BaseModuloController
                             <th style="width: 12%">Identificación</th>
                             <th style="width: 8%">Terceros</th>
                             <th style="width: 14%" class="text-end">Total</th>
-                            <th style="width: 12%">Estado</th>
+                            <th style="width: 12%">Estado SRI</th>
                         </tr>
                     </thead>
                     <tbody>

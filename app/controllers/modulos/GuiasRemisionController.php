@@ -558,7 +558,7 @@ class GuiasRemisionController extends BaseModuloController
 
             $datosCabecera = [
                 'Fecha de emisión'         => $fechaEmision,
-                'Estado'                   => ucfirst(str_replace('_', ' ', (string)($cabecera['estado'] ?? ''))),
+                'Estado SRI'                   => ucfirst(str_replace('_', ' ', (string)($cabecera['estado'] ?? ''))),
                 'Destinatario'             => (string)($cabecera['cliente_nombre'] ?? ''),
                 'Identificación destinatario' => (string)($cabecera['cliente_ruc'] ?? ''),
                 'Dirección de partida'     => (string)($cabecera['direccion_partida'] ?? ''),

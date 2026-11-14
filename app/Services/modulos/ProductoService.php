@@ -549,6 +549,85 @@ class ProductoService
     }
 
     /**
+     * Al abrir la ficha de un producto: si trabaja con inventario, recalcula y guarda su costo con
+     * el método de costeo de la configuración de facturación (Empresa → Facturación, establecimiento
+     * principal). No hace nada si el producto no es inventariable, es un servicio, la facturación no
+     * afecta al inventario o no tiene entradas en el Kardex. Solo escribe (y audita) si el costo cambió.
+     *
+     * @return array{actualizado: bool, costo: ?float, metodo: ?string}
+     */
+    public function recalcularCostoAlAbrir(int $id, int $idEmpresa, int $idUsuario): array
+    {
+        $sinCambio = ['actualizado' => false, 'costo' => null, 'metodo' => null];
+
+        $prod = $this->repository->getDatosMovimientoInventario($id, $idEmpresa);
+        if (!$prod || !\App\Helpers\Booleano::es($prod['inventariable'] ?? false)
+            || (string) ($prod['tipo_produccion'] ?? '') === '02') {
+            return $sinCambio;
+        }
+
+        $empRepo = new \App\repositories\modulos\EmpresaRepository();
+        $est     = $empRepo->getEstablecimientos($idEmpresa)[0] ?? null;
+        $config  = $est ? $empRepo->getEstablecimientoConfig((int) $est['id']) : null;
+        if (!$config || !\App\Helpers\Booleano::es($config['facturacion_inventario'] ?? false)) {
+            return $sinCambio;
+        }
+        $metodo = in_array($config['metodo_costeo'] ?? '', ['fifo', 'lifo'], true) ? $config['metodo_costeo'] : 'promedio';
+
+        $this->repository->beginTransaction();
+        try {
+            $this->repository->lockCosto($id, $idEmpresa);
+            $costoAntes = $this->repository->getCostoGuardado($id, $idEmpresa);
+            $costo      = $this->calcularCostoPorMetodo($id, $idEmpresa, $metodo);
+
+            if ($costoAntes === null || $costo === null || abs($costoAntes - $costo) <= 0.000001) {
+                $this->repository->rollBack();
+                return ['actualizado' => false, 'costo' => $costoAntes, 'metodo' => $metodo];
+            }
+
+            $this->repository->actualizarCosto($id, $idEmpresa, $costo, $idUsuario);
+            $this->logService->registrar(
+                $idUsuario,
+                $idEmpresa,
+                'actualizar',
+                'productos',
+                $id,
+                ['costo_producto' => $costoAntes],
+                ['costo_producto' => $costo, 'origen' => 'recalculo_al_abrir', 'metodo_costeo' => $metodo]
+            );
+            $this->repository->commit();
+            return ['actualizado' => true, 'costo' => $costo, 'metodo' => $metodo];
+        } catch (Exception $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+    }
+
+    /**
+     * Costo del producto (todas las bodegas) según el método de costeo. null = sin entradas.
+     * - promedio: promedio ponderado de las entradas del Kardex.
+     * - fifo: costo de la entrada más antigua, igual que la salida por venta
+     *   (InventarioService::costoFIFO), pero sobre todas las bodegas.
+     * - lifo: costo de la entrada más reciente con costo.
+     */
+    private function calcularCostoPorMetodo(int $id, int $idEmpresa, string $metodo): ?float
+    {
+        if ($metodo === 'promedio') {
+            return $this->repository->calcularCostoPromedioKardex($id, $idEmpresa);
+        }
+
+        $entradas = $this->repository->getCapasCostoKardex($id, $idEmpresa)['entradas'];
+        if (!$entradas) return null;
+
+        if ($metodo === 'fifo') {
+            return round((float) $entradas[0]['costo_unitario'], 6);
+        }
+
+        $conCosto = array_values(array_filter($entradas, fn($e) => (float) $e['costo_unitario'] > 0));
+        return $conCosto ? round((float) end($conCosto)['costo_unitario'], 6) : null;
+    }
+
+    /**
      * Recalcula el costo de todos los productos inventariables de la empresa
      * (respetando "registros propios" cuando el usuario no tiene acceso total).
      */
