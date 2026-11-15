@@ -456,8 +456,8 @@ class CotizadorPlanesService
 
     /**
      * Vendedor al que queda atada la cotización (obligatorio).
-     *  - Niveles 2 y 3 ($eligeVendedor): el que eligieron, si existe en la empresa.
-     *  - Nivel 1: siempre el suyo (el vinculado a su usuario). Al editar una que ya
+     *  - Nivel 3 ($eligeVendedor): el que eligió, si existe en la empresa.
+     *  - Niveles 1 y 2: siempre el suyo (el vinculado a su usuario). Al editar una que ya
      *    tiene vendedor, se conserva el que tenía (no se la reasigna a sí mismo).
      */
     private function resolverVendedor(int $idEmpresa, int $idUsuario, ?int $pedido, bool $eligeVendedor, ?array $existente): int

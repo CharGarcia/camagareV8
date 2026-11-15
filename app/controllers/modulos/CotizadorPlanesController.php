@@ -49,6 +49,12 @@ class CotizadorPlanesController extends BaseModuloController
         return (int) ($_SESSION['nivel'] ?? 1) >= self::NIVEL_CONFIGURACION;
     }
 
+    /** Solo el superadministrador (nivel 3) cambia el vendedor de una cotización; los demás cotizan a nombre propio. */
+    private function cambiaVendedor(): bool
+    {
+        return (int) ($_SESSION['nivel'] ?? 1) >= 3;
+    }
+
     private function idUsuarioFiltro(): ?int
     {
         return empty($this->getPermisos()['todo']) ? $this->idUsuario() : null;
@@ -126,6 +132,7 @@ class CotizadorPlanesController extends BaseModuloController
             'ordenParam'  => OrdenListado::aCadena($orden),
             'vistaConfig' => $prefsVista,
             'vendedores'  => $disponible ? $this->service->getVendedores($this->idEmpresa()) : [],
+            'cambiaVendedor' => $this->cambiaVendedor(),
             'vendedorPropio' => $disponible ? $this->service->vendedorDelUsuario($this->idEmpresa(), $this->idUsuario()) : null,
             'puedeProforma' => !empty(\App\Helpers\Permisos::porRuta('modulos/proformas')['crear']),
             'fullWidth'   => true,
@@ -296,8 +303,8 @@ class CotizadorPlanesController extends BaseModuloController
             $this->requireCrear();
         }
         try {
-            // Nivel 1: la cotización queda atada a su propio vendedor; 2 y 3 lo eligen.
-            $res = $this->service->guardar($this->idEmpresa(), $d, $this->idUsuario(), $this->esAdministrador());
+            // Niveles 1 y 2: la cotización queda atada a su propio vendedor; solo el nivel 3 lo cambia.
+            $res = $this->service->guardar($this->idEmpresa(), $d, $this->idUsuario(), $this->cambiaVendedor());
             $this->json([
                 'ok'  => true,
                 'id'  => $res['id'],

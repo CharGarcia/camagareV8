@@ -18,6 +18,7 @@
  * @var string $ordenParam
  * @var array  $vistaConfig
  * @var array  $vendedores
+ * @var bool   $cambiaVendedor  solo nivel 3: puede cambiar el vendedor de la cotización
  * @var ?array $vendedorPropio  vendedor vinculado al usuario (id, nombre) o null
  * @var bool   $puedeProforma
  */
@@ -244,15 +245,15 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                             </div>
                             <div class="col-md-4">
                                 <label class="form-label small fw-bold mb-1">Vendedor *</label>
-                                <?php // Toda cotización va atada a un vendedor. Nivel 1: el suyo, fijo; 2 y 3 lo eligen. ?>
+                                <?php // Toda cotización va atada a un vendedor: el del usuario, puesto y fijo; solo el nivel 3 lo cambia. ?>
                                 <select class="form-select form-select-sm cp-editable" id="cp_id_vendedor"
-                                        data-propio="<?= (int) ($vendedorPropio['id'] ?? 0) ?>" data-fijo="<?= $esAdmin ? '0' : '1' ?>">
-                                    <option value=""><?= (!$esAdmin && !$vendedorPropio) ? 'Su usuario no está vinculado a un vendedor' : '— Elija el vendedor —' ?></option>
+                                        data-propio="<?= (int) ($vendedorPropio['id'] ?? 0) ?>" data-fijo="<?= $cambiaVendedor ? '0' : '1' ?>">
+                                    <option value=""><?= (!$cambiaVendedor && !$vendedorPropio) ? 'Su usuario no está vinculado a un vendedor' : '— Elija el vendedor —' ?></option>
                                     <?php foreach ($vendedores as $v): ?>
                                         <option value="<?= (int) $v['id'] ?>"><?= $e($v['nombre']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
-                                <?php if (!$esAdmin): ?>
+                                <?php if (!$cambiaVendedor): ?>
                                     <div class="small text-muted">Las cotizaciones quedan a nombre de su vendedor.</div>
                                 <?php endif; ?>
                             </div>
