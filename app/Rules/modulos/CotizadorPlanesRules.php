@@ -17,6 +17,7 @@ class CotizadorPlanesRules
     {
         $pct = [
             'recargo_mensual_pct'           => 'El recargo del plan mensual',
+            'recargo_semestral_pct'         => 'El recargo del plan semestral',
             'descuento_establecimiento_pct' => 'El descuento por establecimiento adicional',
             'descuento_vendedor_max_pct'    => 'El descuento máximo del vendedor',
         ];
@@ -90,8 +91,8 @@ class CotizadorPlanesRules
         if ($tel !== '' && !preg_match('/^[0-9+()\-\s]{6,30}$/', $tel)) {
             throw new \InvalidArgumentException('El teléfono solo puede tener números, espacios y los signos + ( ) -.');
         }
-        if (!in_array($d['modalidad'] ?? '', ['anual', 'mensual'], true)) {
-            throw new \InvalidArgumentException('Elija la modalidad: anual o mensual.');
+        if (!in_array($d['modalidad'] ?? '', ['anual', 'semestral', 'mensual'], true)) {
+            throw new \InvalidArgumentException('Elija la modalidad: anual, semestral o mensual.');
         }
         $usuarios = (int) ($d['usuarios'] ?? 0);
         if ($usuarios < 1 || $usuarios > self::MAX_USUARIOS) {
@@ -144,9 +145,9 @@ class CotizadorPlanesRules
         if (trim((string) ($cot['correo'] ?? '')) === '') {
             throw new \InvalidArgumentException('Escriba el correo del cliente: hace falta para registrarlo y enviarle la proforma.');
         }
-        $campo = ($cot['modalidad'] ?? 'anual') === 'mensual' ? 'id_producto_resumen_mensual' : 'id_producto_resumen_anual';
+        $txt = in_array($cot['modalidad'] ?? '', ['semestral', 'mensual'], true) ? $cot['modalidad'] : 'anual';
+        $campo = 'id_producto_resumen_' . $txt;
         if (empty($config[$campo])) {
-            $txt = ($cot['modalidad'] ?? 'anual') === 'mensual' ? 'mensual' : 'anual';
             throw new \InvalidArgumentException("Falta configurar el producto del plan {$txt} (engranaje → Parámetros). Es la línea que va en la proforma.");
         }
     }

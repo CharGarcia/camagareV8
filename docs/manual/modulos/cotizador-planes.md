@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
-etiquetas: cotizador, cotizar, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.2
+etiquetas: cotizador, cotizar, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
+version: 1.3
 orden: 0
 estado: activo
 ---
@@ -26,10 +26,10 @@ hacer el seguimiento.
   los que necesita para funcionar: por ejemplo, al agregar *Facturas de Venta*
   se agregan *Clientes*, *Productos* y la configuración de la empresa.
 - Mientras arma la cotización, ve en todo momento el precio **anual**, el
-  **mensual**, el **pago único** (implementación y otros servicios) y los
+  **semestral**, el **mensual**, el **pago único** (implementación y otros servicios) y los
   usuarios incluidos.
 - Con un clic genera la **proforma**: una sola línea resumen (por ejemplo,
-  *Plan anual CaMaGaRe*) y todo el detalle del plan en el **anexo de
+  *Plan anual CaMaGaRe*, *Plan semestral* o *Plan mensual*) y todo el detalle del plan en el **anexo de
   condiciones**.
 
 ## Requisitos previos
@@ -49,9 +49,9 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
    nombre de un módulo se abren sus demás opciones (dependencias, base o
    adicional, por defecto). Los servicios (implementación, migración,
    capacitación…) se agregan con **Agregar servicio**.
-2. **Parámetros**: recargo del plan mensual, descuento por establecimiento
-   adicional, usuarios incluidos, precio del usuario adicional y los
-   **productos** de la línea resumen (plan anual y plan mensual). Esos
+2. **Parámetros**: recargo del plan semestral y del mensual, descuento por
+   establecimiento adicional, usuarios incluidos, precio del usuario adicional
+   y los **productos** de la línea resumen (plan anual, semestral y mensual). Esos
    productos deben existir en *Productos* con su IVA.
 
 Para generar la proforma hace falta además una **serie con secuencial de
@@ -72,7 +72,7 @@ Proformas** y permiso de **crear en Proformas**.
    quitan solos cuando quita el módulo que los necesita. Con **Agregar
    establecimiento** suma otro local.
 4. Pestaña **Resumen**: indique los **usuarios** que necesita el RUC, la
-   **modalidad** que irá en la proforma (anual o mensual) y, si la
+   **modalidad** que irá en la proforma (anual, semestral o mensual) y, si la
    configuración lo permite, el **descuento comercial**. La tabla muestra el
    valor de cada establecimiento, cuál es el principal y los totales.
 5. Pulse **Guardar**. Puede volver a abrirla y cambiarla mientras esté en
@@ -104,7 +104,7 @@ Proformas** y permiso de **crear en Proformas**.
 | Observaciones | No | Se agregan a las observaciones de la proforma. |
 | Establecimiento (código y nombre) | Sí | Cada local del RUC que contrata el sistema (001, 002…). |
 | Usuarios del RUC | Sí | Cuántas personas usarán el sistema en total. |
-| Modalidad | Sí | Anual o mensual: lo que irá en la proforma. La pantalla muestra ambas. |
+| Modalidad | Sí | Anual, semestral o mensual: lo que irá en la proforma. La pantalla muestra las tres. |
 | Descuento comercial | No | Solo si la configuración lo permite y hasta el máximo fijado. |
 
 ## Cómo se calcula el precio
@@ -112,8 +112,9 @@ Proformas** y permiso de **crear en Proformas**.
 | Regla | Valor inicial (configurable) |
 |---|---|
 | Unidad de cobro | Cada establecimiento contrata sus módulos |
+| Plan semestral | Precio anual ÷ 2 + 10 % |
 | Plan mensual | Precio anual ÷ 12 + 20 % |
-| Establecimientos adicionales (solo plan anual) | 20 % de descuento en los módulos **base** |
+| Establecimientos adicionales (solo plan anual; no en semestral ni mensual) | 20 % de descuento en los módulos **base** |
 | Módulos adicionales (marcados así en el catálogo) | Precio completo en cada establecimiento |
 | Establecimiento principal | El de módulos base más caros; paga completo |
 | Usuarios incluidos | 3 por establecimiento, sumados y compartidos en el RUC |
@@ -126,7 +127,8 @@ de cada línea.
 
 *Ejemplo:* un RUC con dos locales que llevan módulos base de $1.000 cada uno
 paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
-**$200 al mes** ($2.400 en el año).
+**$200 al mes** ($2.400 en el año). En plan semestral: (1.000 + 1.000) ÷ 2 × 1,10 =
+**$1.100 por semestre** ($2.200 en el año).
 
 ## Permisos
 
@@ -171,7 +173,10 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 
 - **«Catálogo de precios vacío»**: un administrador debe cargar los módulos y
   sus precios con el botón **Configuración**.
-- **«Falta configurar el producto del plan anual (o mensual)»**: elija en
+- **«El módulo aún no está instalado»**: falta ejecutar en la base los SQL
+  `database/2026-11-13_cotizador_planes.sql` y
+  `database/2026-11-15_cotizador_planes_semestral.sql`.
+- **«Falta configurar el producto del plan anual (semestral o mensual)»**: elija en
   Configuración → Parámetros el producto que va en la proforma.
 - **«Escriba el correo del cliente»**: el correo es obligatorio para registrar
   al cliente y enviarle la proforma.
@@ -189,3 +194,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
   generación de la proforma enlazada al CRM.
 - **1.1** — El catálogo de precios lista todos los módulos del menú (los que faltan, «Sin cargar» a $0) y el precio se escribe directo en la tabla. El botón Configuración pasa junto a PDF y Excel, y el de crear se llama «Nueva».
 - **1.2** — PDF de la cotización con logo y diseño de los documentos del sistema. Al consultar el SRI se llena también «Obligado a llevar contabilidad».
+- **1.3** — Plan **semestral**: anual ÷ 2 + 10 % (configurable), sin descuento por establecimiento adicional (solo el anual lo tiene). Se ve en pantalla, listado, PDF, proforma y configuración (recargo y producto propio).

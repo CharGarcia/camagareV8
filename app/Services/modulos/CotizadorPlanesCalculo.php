@@ -18,6 +18,8 @@ namespace App\Services\modulos;
  *  - ANUAL: los demás establecimientos llevan descuento_establecimiento_pct sobre
  *    su valor base; los ítems sin ese descuento (adicionales) van completos.
  *  - MENSUAL: todo a precio completo: anual ÷ 12 × (1 + recargo_mensual_pct).
+ *  - SEMESTRAL: todo a precio completo: anual ÷ 2 × (1 + recargo_semestral_pct).
+ *    El descuento por establecimiento adicional es solo del plan anual.
  *  - Usuarios incluidos = usuarios_por_establecimiento × establecimientos
  *    (compartidos a nivel de RUC); los que pasan se cobran a precio_usuario_adicional_anual.
  *  - Descuento del vendedor: % sobre lo recurrente de cada modalidad. Los
@@ -28,6 +30,7 @@ final class CotizadorPlanesCalculo
     /** Parámetros por defecto (los mismos valores iniciales del SQL). */
     public const PARAMETROS_DEFECTO = [
         'recargo_mensual_pct'            => 20.0,
+        'recargo_semestral_pct'          => 10.0,
         'descuento_establecimiento_pct'  => 20.0,
         'usuarios_por_establecimiento'   => 3,
         'precio_usuario_adicional_anual' => 20.0,
@@ -46,6 +49,7 @@ final class CotizadorPlanesCalculo
     {
         $p = self::normalizarParametros($parametros);
         $factorMensual = 1 + $p['recargo_mensual_pct'] / 100;
+        $factorSemestral = 1 + $p['recargo_semestral_pct'] / 100;
         $descEst = $p['descuento_establecimiento_pct'] / 100;
 
         // 1) Sumas por establecimiento.
@@ -80,18 +84,20 @@ final class CotizadorPlanesCalculo
 
         // 3) Anual y mensual por establecimiento.
         $brutoAnual = 0.0; $descuentoEstablecimientos = 0.0; $recurrenteAnual = 0.0;
-        $recurrenteMensual = 0.0; $totalUnico = 0.0;
+        $recurrenteMensual = 0.0; $recurrenteSemestral = 0.0; $totalUnico = 0.0;
         foreach ($filas as &$f) {
             $f['es_principal'] = ($f['indice'] === $idxPrincipal);
             $f['descuento_establecimiento'] = $f['es_principal'] ? 0.0 : self::r2($f['base'] * $descEst);
             $f['bruto_anual'] = self::r2($f['base'] + $f['adicional']);
             $f['anual']       = self::r2($f['bruto_anual'] - $f['descuento_establecimiento']);
             $f['mensual']     = self::r2($f['bruto_anual'] / 12 * $factorMensual);
+            $f['semestral']   = self::r2($f['bruto_anual'] / 2 * $factorSemestral);
 
             $brutoAnual                = self::r2($brutoAnual + $f['bruto_anual']);
             $descuentoEstablecimientos = self::r2($descuentoEstablecimientos + $f['descuento_establecimiento']);
             $recurrenteAnual           = self::r2($recurrenteAnual + $f['anual']);
             $recurrenteMensual         = self::r2($recurrenteMensual + $f['mensual']);
+            $recurrenteSemestral       = self::r2($recurrenteSemestral + $f['semestral']);
             $totalUnico                = self::r2($totalUnico + $f['unico']);
         }
         unset($f);
@@ -103,15 +109,19 @@ final class CotizadorPlanesCalculo
         $adicionales = max(0, $usuarios - $incluidos);
         $usuariosAnual   = self::r2($adicionales * $p['precio_usuario_adicional_anual']);
         $usuariosMensual = self::r2($adicionales * $p['precio_usuario_adicional_anual'] / 12 * $factorMensual);
+        $usuariosSemestral = self::r2($adicionales * $p['precio_usuario_adicional_anual'] / 2 * $factorSemestral);
 
         // 5) Descuento del vendedor y totales.
         $pctV = $p['permitir_descuento_vendedor'] ? max(0.0, min($descuentoVendedorPct, $p['descuento_vendedor_max_pct'])) : 0.0;
         $subAnual   = self::r2($recurrenteAnual + $usuariosAnual);
         $subMensual = self::r2($recurrenteMensual + $usuariosMensual);
+        $subSemestral = self::r2($recurrenteSemestral + $usuariosSemestral);
         $descVAnual   = self::r2($subAnual * $pctV / 100);
         $descVMensual = self::r2($subMensual * $pctV / 100);
+        $descVSemestral = self::r2($subSemestral * $pctV / 100);
         $totalAnual   = self::r2($subAnual - $descVAnual);
         $totalMensual = self::r2($subMensual - $descVMensual);
+        $totalSemestral = self::r2($subSemestral - $descVSemestral);
 
         return [
             'parametros'               => $p,
@@ -123,13 +133,19 @@ final class CotizadorPlanesCalculo
             'usuarios_adicionales'     => $adicionales,
             'usuarios_anual'           => $usuariosAnual,
             'usuarios_mensual'         => $usuariosMensual,
+            'usuarios_semestral'       => $usuariosSemestral,
             'subtotal_anual'           => $subAnual,
             'subtotal_mensual'         => $subMensual,
+            'subtotal_semestral'       => $subSemestral,
             'descuento_vendedor_pct'   => $pctV,
             'descuento_vendedor_anual' => $descVAnual,
             'descuento_vendedor_mensual' => $descVMensual,
+            'descuento_vendedor_semestral' => $descVSemestral,
             'total_anual'              => $totalAnual,
             'total_mensual'            => $totalMensual,
+            'total_semestral'          => $totalSemestral,
+            'dos_semestres'            => self::r2($totalSemestral * 2),
+            'ahorro_anual_vs_semestral' => self::r2($totalSemestral * 2 - $totalAnual),
             'doce_mensualidades'       => self::r2($totalMensual * 12),
             'ahorro_anual'             => self::r2($totalMensual * 12 - $totalAnual),
             'total_unico'              => $totalUnico,
@@ -142,6 +158,7 @@ final class CotizadorPlanesCalculo
         $d = self::PARAMETROS_DEFECTO;
         return [
             'recargo_mensual_pct'            => max(0.0, (float) ($p['recargo_mensual_pct'] ?? $d['recargo_mensual_pct'])),
+            'recargo_semestral_pct'          => max(0.0, (float) ($p['recargo_semestral_pct'] ?? $d['recargo_semestral_pct'])),
             'descuento_establecimiento_pct'  => min(100.0, max(0.0, (float) ($p['descuento_establecimiento_pct'] ?? $d['descuento_establecimiento_pct']))),
             'usuarios_por_establecimiento'   => max(0, (int) ($p['usuarios_por_establecimiento'] ?? $d['usuarios_por_establecimiento'])),
             'precio_usuario_adicional_anual' => max(0.0, (float) ($p['precio_usuario_adicional_anual'] ?? $d['precio_usuario_adicional_anual'])),

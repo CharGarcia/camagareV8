@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.1** (14-11-2026). El historial está al final.
+Versión actual: **0.2** (15-11-2026). El historial está al final.
 
 ---
 
@@ -92,9 +92,10 @@ Duración sugerida: **4 sesiones de 2 horas**. La dirección puede ajustarlo (P-
 
 | Regla | Valor |
 |---|---|
+| Plan semestral | Precio anual ÷ 2 × 1,10 |
 | Plan mensual | Precio anual ÷ 12 × 1,20 |
 | Establecimiento principal | El de módulos base más caros; paga completo |
-| Establecimientos adicionales | 20 % de descuento en módulos base, **solo en plan anual** |
+| Establecimientos adicionales | 20 % de descuento en módulos base, **solo en plan anual** (no en semestral ni mensual) |
 | Módulos adicionales | Precio completo en cada establecimiento |
 | Usuarios incluidos | 3 por establecimiento, compartidos en el RUC |
 | Usuario adicional | $20 al año ($2 al mes) |
@@ -131,7 +132,7 @@ Un local con módulos base de **$1.000** y **Migración de datos** de **$150** (
 | 4 | **$1.000** | **$100** | $1.200 | $200 | **$150** | La migración se cobra una sola vez, aparte del plan. |
 
 > **Errores frecuentes al cotizar:**
-> - Dar el 20 % de descuento por establecimiento en el plan **mensual** (solo es anual).
+> - Dar el 20 % de descuento por establecimiento en el plan **semestral o mensual** (solo es anual).
 > - Descontar un **módulo adicional** (va siempre completo).
 > - Tomar como principal al **primer** local y no al **más caro**.
 > - Contar los usuarios **por local** en vez de por RUC.
@@ -205,9 +206,9 @@ la tabla, para el capacitador.
 | 1 | ¿Cuál es la misión de CaMaGaRe? (en sus palabras) |
 | 2 | Nombre las tres personas que suelen intervenir en una venta y qué le importa a cada una. |
 | 3 | ¿Cuál es la pregunta de descubrimiento más importante y por qué? |
-| 4 | ¿Cómo se calcula el precio mensual a partir del anual? |
+| 4 | ¿Cómo se calculan el precio semestral y el mensual a partir del anual? |
 | 5 | Un RUC con 2 locales y 8 usuarios: ¿cuántos usuarios adicionales paga? |
-| 6 | ¿El descuento por establecimiento adicional aplica en el plan mensual? |
+| 6 | ¿El descuento por establecimiento adicional aplica en el plan semestral o en el mensual? |
 | 7 | ¿Qué establecimiento es el principal cuando tienen planes distintos? |
 | 8 | Nombre 3 cosas que **no** cubre la membresía. |
 | 9 | ¿Puede una empresa de un solo usuario usar la app en iPhone? ¿Qué alternativa tiene? |
@@ -220,7 +221,7 @@ la tabla, para el capacitador.
 1. Simplificar la gestión de las empresas ecuatorianas con un sistema en la nube que integra facturación, contabilidad, inventario, nómina e impuestos, para que sus dueños se dediquen a crecer y no a trámites.
 2. Dueño (control y que no lo multen), contador (información completa y a tiempo), personal operativo (rapidez y no hacer doble trabajo).
 3. «Si pudiera resolver un solo problema este mes, ¿cuál sería?»: la demo empieza por ahí.
-4. Anual ÷ 12 × 1,20.
+4. Semestral: anual ÷ 2 × 1,10. Mensual: anual ÷ 12 × 1,20.
 5. 2 (8 − 6 incluidos).
 6. No, solo en el plan anual.
 7. El de módulos base más caros.
@@ -261,4 +262,5 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.2 | 15-11-2026 | Plan semestral en las reglas, errores frecuentes y evaluación. |
 | 0.1 | 14-11-2026 | Primera versión: programa de 4 sesiones, guion de demo de 20 minutos, 4 ejercicios del Cotizador con respuestas verificadas, juego de roles de objeciones, CRM diario, reglas, evaluación y lista de verificación. |

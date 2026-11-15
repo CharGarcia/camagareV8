@@ -178,7 +178,7 @@ class CotizadorPlanesPdfService
         $datos = [
             ['Fecha',            $fecha],
             ['Válida hasta',     $valida],
-            ['Modalidad',        ($c['modalidad'] ?? 'anual') === 'mensual' ? 'Mensual' : 'Anual'],
+            ['Modalidad',        ['semestral' => 'Semestral', 'mensual' => 'Mensual'][$c['modalidad'] ?? ''] ?? 'Anual'],
             ['Establecimientos', (string) count($c['establecimientos'] ?? [])],
             ['Usuarios',         (int) $calc['usuarios'] . ' (' . (int) $calc['usuarios_incluidos'] . ' incluidos)'],
             ['Vendedor',         (string) ($c['vendedor'] ?? '')],
@@ -304,11 +304,12 @@ class CotizadorPlanesPdfService
         $nota = !empty($f['descuento_establecimiento'])
             ? 'Incluye descuento por establecimiento adicional de $ ' . number_format((float) $f['descuento_establecimiento'], 2, '.', ',') . ' (plan anual)'
             : '';
-        $pdf->Cell($this->contentW - 66, 6, $nota, 0, 0, 'L');
-        $pdf->SetFont('helvetica', 'B', 8.5);
+        $pdf->Cell($this->contentW - 100, 6, $nota, 0, 0, 'L');
+        $pdf->SetFont('helvetica', 'B', 8);
         $pdf->SetTextColor(...self::COLOR);
-        $pdf->Cell(66, 6, 'Anual $ ' . number_format((float) ($f['anual'] ?? 0), 2, '.', ',')
-            . '   ·   Mensual $ ' . number_format((float) ($f['mensual'] ?? 0), 2, '.', ','), 0, 1, 'R');
+        $pdf->Cell(100, 6, 'Anual $ ' . number_format((float) ($f['anual'] ?? 0), 2, '.', ',')
+            . '  ·  Semestral $ ' . number_format((float) ($f['semestral'] ?? 0), 2, '.', ',')
+            . '  ·  Mensual $ ' . number_format((float) ($f['mensual'] ?? 0), 2, '.', ','), 0, 1, 'R');
         $pdf->SetTextColor(0, 0, 0);
         return $y + 7;
     }
@@ -322,33 +323,36 @@ class CotizadorPlanesPdfService
 
         $filas = [];
         foreach (($calc['establecimientos'] ?? []) as $f) {
-            $filas[] = ['Establecimiento ' . $f['codigo'] . (($f['nombre'] ?? '') !== '' ? ' — ' . $f['nombre'] : ''), $f['anual'], $f['mensual']];
+            $filas[] = ['Establecimiento ' . $f['codigo'] . (($f['nombre'] ?? '') !== '' ? ' — ' . $f['nombre'] : ''), $f['anual'], $f['semestral'], $f['mensual']];
         }
         if ((int) $calc['usuarios_adicionales'] > 0) {
-            $filas[] = ['Usuarios adicionales (' . (int) $calc['usuarios_adicionales'] . ')', $calc['usuarios_anual'], $calc['usuarios_mensual']];
+            $filas[] = ['Usuarios adicionales (' . (int) $calc['usuarios_adicionales'] . ')', $calc['usuarios_anual'], $calc['usuarios_semestral'], $calc['usuarios_mensual']];
         }
         if ((float) $calc['descuento_vendedor_pct'] > 0) {
             $pct = rtrim(rtrim(number_format((float) $calc['descuento_vendedor_pct'], 2, '.', ''), '0'), '.');
-            $filas[] = ['Descuento comercial (' . $pct . ' %)', -$calc['descuento_vendedor_anual'], -$calc['descuento_vendedor_mensual']];
+            $filas[] = ['Descuento comercial (' . $pct . ' %)', -$calc['descuento_vendedor_anual'], -$calc['descuento_vendedor_semestral'], -$calc['descuento_vendedor_mensual']];
         }
 
-        $wDesc = $this->contentW - 70;
+        $wCol = 34;
+        $wDesc = $this->contentW - 3 * $wCol;
         $pdf->SetXY($mL, $y);
         $pdf->SetFont('helvetica', 'B', 7.5);
         $pdf->SetFillColor(...self::COLOR);
         $pdf->SetTextColor(255, 255, 255);
         $pdf->SetDrawColor(...self::COLOR);
         $pdf->Cell($wDesc, 6.5, 'Concepto', 1, 0, 'C', true);
-        $pdf->Cell(35, 6.5, 'Plan anual', 1, 0, 'C', true);
-        $pdf->Cell(35, 6.5, 'Plan mensual', 1, 1, 'C', true);
+        $pdf->Cell($wCol, 6.5, 'Plan anual', 1, 0, 'C', true);
+        $pdf->Cell($wCol, 6.5, 'Plan semestral', 1, 0, 'C', true);
+        $pdf->Cell($wCol, 6.5, 'Plan mensual', 1, 1, 'C', true);
         $pdf->SetFont('helvetica', '', 8);
         $pdf->SetTextColor(30, 30, 30);
         $pdf->SetDrawColor(220, 226, 234);
-        foreach ($filas as [$txt, $a, $m]) {
+        foreach ($filas as [$txt, $a, $sem, $m]) {
             $pdf->SetX($mL);
             $pdf->Cell($wDesc, 5.5, $txt, 'B', 0, 'L');
-            $pdf->Cell(35, 5.5, $this->money((float) $a), 'B', 0, 'R');
-            $pdf->Cell(35, 5.5, $this->money((float) $m), 'B', 1, 'R');
+            $pdf->Cell($wCol, 5.5, $this->money((float) $a), 'B', 0, 'R');
+            $pdf->Cell($wCol, 5.5, $this->money((float) $sem), 'B', 0, 'R');
+            $pdf->Cell($wCol, 5.5, $this->money((float) $m), 'B', 1, 'R');
         }
 
         $pdf->SetX($mL);
@@ -356,14 +360,16 @@ class CotizadorPlanesPdfService
         $pdf->SetFillColor(...self::COLOR_SUA);
         $pdf->SetTextColor(...self::COLOR);
         $pdf->Cell($wDesc, 7, 'TOTAL', 0, 0, 'R', true);
-        $pdf->Cell(35, 7, $this->money((float) $calc['total_anual']) . ' / año', 0, 0, 'R', true);
-        $pdf->Cell(35, 7, $this->money((float) $calc['total_mensual']) . ' / mes', 0, 1, 'R', true);
+        $pdf->Cell($wCol, 7, $this->money((float) $calc['total_anual']) . ' / año', 0, 0, 'R', true);
+        $pdf->Cell($wCol, 7, $this->money((float) $calc['total_semestral']) . ' / sem.', 0, 0, 'R', true);
+        $pdf->Cell($wCol, 7, $this->money((float) $calc['total_mensual']) . ' / mes', 0, 1, 'R', true);
 
         $pdf->SetX($mL);
         $pdf->SetFont('helvetica', '', 8);
         $pdf->SetTextColor(...self::GRIS_TXT);
         $txtAhorro = (float) $calc['ahorro_anual'] > 0
-            ? 'Pagando anual ahorra ' . $this->money((float) $calc['ahorro_anual']) . ' frente a 12 mensualidades (' . $this->money((float) $calc['doce_mensualidades']) . ').'
+            ? 'En el año: 2 semestres = ' . $this->money((float) $calc['dos_semestres']) . ' y 12 mensualidades = ' . $this->money((float) $calc['doce_mensualidades'])
+              . '. Pagando anual ahorra hasta ' . $this->money((float) $calc['ahorro_anual']) . '.'
             : '';
         $pdf->Cell($this->contentW, 5, $txtAhorro, 0, 1, 'R');
 
@@ -375,7 +381,7 @@ class CotizadorPlanesPdfService
         }
         $pdf->SetTextColor(0, 0, 0);
 
-        $modalidad = ($c['modalidad'] ?? 'anual') === 'mensual' ? 'mensual' : 'anual';
+        $modalidad = in_array($c['modalidad'] ?? '', ['semestral', 'mensual'], true) ? $c['modalidad'] : 'anual';
         $pdf->SetX($mL);
         $pdf->SetFont('helvetica', 'B', 8.5);
         $pdf->Cell($this->contentW, 6, 'Modalidad propuesta: plan ' . $modalidad . '.', 0, 1, 'L');
@@ -389,7 +395,7 @@ class CotizadorPlanesPdfService
         $pct = fn($v) => rtrim(rtrim(number_format((float) $v, 2, '.', ''), '0'), '.') . ' %';
         $notas = [
             'Valores sin IVA.',
-            'El plan mensual cuesta ' . $pct($p['recargo_mensual_pct'] ?? 0) . ' más que el anual.',
+            'El plan semestral cuesta ' . $pct($p['recargo_semestral_pct'] ?? 0) . ' más que el anual y el mensual ' . $pct($p['recargo_mensual_pct'] ?? 0) . ' más.',
             'Los establecimientos adicionales del mismo RUC tienen ' . $pct($p['descuento_establecimiento_pct'] ?? 0)
                 . ' de descuento en sus módulos base, solo en plan anual; el establecimiento con los módulos base de mayor valor paga el precio completo.',
             'Incluye ' . (int) ($p['usuarios_por_establecimiento'] ?? 0) . ' usuarios por establecimiento, compartidos en el RUC. Usuario adicional: '

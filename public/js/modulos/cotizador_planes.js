@@ -229,12 +229,14 @@
         }));
         $('cpTotAnual').textContent = money(estado.total_anual);
         $('cpTotMensual').textContent = money(estado.total_mensual);
+        $('cpTotSemestral').textContent = money(estado.total_semestral);
+        $('cpTotSemestralNota').textContent = 'por semestre';
         $('cpTotUnico').textContent = money(estado.total_unico);
         $('cpTotUsuarios').textContent = estado.usuarios;
         $('cpTotAnualNota').textContent = 'al año';
         $('cpTotMensualNota').textContent = 'al mes';
         $('cpTotUsuariosNota').textContent = '';
-        $('cpResumenFilas').innerHTML = '<tr><td colspan="7" class="text-muted">Los valores por establecimiento están en el anexo de condiciones de la proforma.</td></tr>';
+        $('cpResumenFilas').innerHTML = '<tr><td colspan="8" class="text-muted">Los valores por establecimiento están en el anexo de condiciones de la proforma.</td></tr>';
         $('cpResumenPie').innerHTML = '';
         pintarEstablecimientos({ establecimientos: est });
     }
@@ -288,7 +290,7 @@
                     <input type="text" class="form-control form-control-sm flex-grow-1" style="min-width:180px;max-width:360px;" maxlength="300" placeholder="Nombre del local" value="${esc(e.nombre)}" ${ed ? '' : 'disabled'}
                         onchange="CP_estCampo(${i}, 'nombre', this.value)">
                     ${principal}
-                    <span class="ms-auto small">${f.anual !== undefined ? `<strong>${money(f.anual)}</strong>/año · ${money(f.mensual)}/mes` : ''}</span>
+                    <span class="ms-auto small">${f.anual !== undefined ? `<strong>${money(f.anual)}</strong>/año · ${money(f.semestral)}/semestre · ${money(f.mensual)}/mes` : ''}</span>
                     ${ed && establecimientos.length > 1 ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Quitar establecimiento" onclick="CP_quitarEst(${i})"><i class="bi bi-trash3"></i></button>` : ''}
                 </div>
                 <div class="p-2">
@@ -368,6 +370,8 @@
         const p = c.parametros || {};
         $('cpTotAnual').textContent = money(c.total_anual);
         $('cpTotMensual').textContent = money(c.total_mensual);
+        $('cpTotSemestral').textContent = money(c.total_semestral);
+        $('cpTotSemestralNota').textContent = `${money(c.dos_semestres)} en el año`;
         $('cpTotUnico').textContent = money(c.total_unico);
         $('cpTotUsuarios').textContent = c.usuarios;
         $('cpTotAnualNota').textContent = c.ahorro_anual > 0 ? `ahorra ${money(c.ahorro_anual)} vs. mensual` : 'al año';
@@ -379,18 +383,18 @@
             <td>${esc(f.codigo)} ${esc(f.nombre || '')}${f.es_principal && c.establecimientos.length > 1 ? ' <span class="badge bg-primary bg-opacity-10 text-primary">Principal</span>' : ''}</td>
             <td class="text-end">${money(f.base)}</td><td class="text-end">${money(f.adicional)}</td>
             <td class="text-end">${f.descuento_establecimiento > 0 ? '−' + money(f.descuento_establecimiento) : '—'}</td>
-            <td class="text-end">${money(f.anual)}</td><td class="text-end">${money(f.mensual)}</td><td class="text-end">${money(f.unico)}</td></tr>`).join('')
-            || '<tr><td colspan="7" class="text-muted">Sin establecimientos.</td></tr>';
+            <td class="text-end">${money(f.anual)}</td><td class="text-end">${money(f.semestral)}</td><td class="text-end">${money(f.mensual)}</td><td class="text-end">${money(f.unico)}</td></tr>`).join('')
+            || '<tr><td colspan="8" class="text-muted">Sin establecimientos.</td></tr>';
         let pie = '';
         if (c.usuarios_adicionales > 0) {
-            pie += `<tr><td colspan="4">Usuarios adicionales (${c.usuarios_adicionales})</td><td class="text-end">${money(c.usuarios_anual)}</td><td class="text-end">${money(c.usuarios_mensual)}</td><td></td></tr>`;
+            pie += `<tr><td colspan="4">Usuarios adicionales (${c.usuarios_adicionales})</td><td class="text-end">${money(c.usuarios_anual)}</td><td class="text-end">${money(c.usuarios_semestral)}</td><td class="text-end">${money(c.usuarios_mensual)}</td><td></td></tr>`;
         }
         if (c.descuento_vendedor_pct > 0) {
-            pie += `<tr><td colspan="4">Descuento comercial (${pct(c.descuento_vendedor_pct)})</td><td class="text-end">−${money(c.descuento_vendedor_anual)}</td><td class="text-end">−${money(c.descuento_vendedor_mensual)}</td><td></td></tr>`;
+            pie += `<tr><td colspan="4">Descuento comercial (${pct(c.descuento_vendedor_pct)})</td><td class="text-end">−${money(c.descuento_vendedor_anual)}</td><td class="text-end">−${money(c.descuento_vendedor_semestral)}</td><td class="text-end">−${money(c.descuento_vendedor_mensual)}</td><td></td></tr>`;
         }
-        pie += `<tr class="table-light"><td colspan="4">Total</td><td class="text-end">${money(c.total_anual)}</td><td class="text-end">${money(c.total_mensual)}</td><td class="text-end">${money(c.total_unico)}</td></tr>`;
+        pie += `<tr class="table-light"><td colspan="4">Total</td><td class="text-end">${money(c.total_anual)}</td><td class="text-end">${money(c.total_semestral)}</td><td class="text-end">${money(c.total_mensual)}</td><td class="text-end">${money(c.total_unico)}</td></tr>`;
         $('cpResumenPie').innerHTML = pie;
-        $('cpResumenNota').innerHTML = `Valores sin IVA. Mensual = anual ÷ 12 × ${(1 + (p.recargo_mensual_pct || 0) / 100).toFixed(2)}. `
+        $('cpResumenNota').innerHTML = `Valores sin IVA. Semestral = anual ÷ 2 × ${(1 + (p.recargo_semestral_pct || 0) / 100).toFixed(2)}. Mensual = anual ÷ 12 × ${(1 + (p.recargo_mensual_pct || 0) / 100).toFixed(2)}. `
             + `Descuento por establecimiento adicional: ${pct(p.descuento_establecimiento_pct)} sobre los módulos base, solo en plan anual; el de plan base más caro paga completo.`;
     }
 
@@ -581,13 +585,16 @@
         const j = await getJson(`${URL}/getConfigAjax`);
         if (!j.ok) return alerta('error', 'Configuración', j.error);
         const c = j.config;
-        ['recargo_mensual_pct', 'descuento_establecimiento_pct', 'usuarios_por_establecimiento', 'precio_usuario_adicional_anual', 'descuento_vendedor_max_pct', 'dias_vigencia']
+        ['recargo_mensual_pct', 'recargo_semestral_pct', 'descuento_establecimiento_pct', 'usuarios_por_establecimiento', 'precio_usuario_adicional_anual', 'descuento_vendedor_max_pct', 'dias_vigencia']
             .forEach((k) => { $('cfg_' + k).value = c[k]; });
         $('cfg_permitir_descuento_vendedor').checked = !!c.permitir_descuento_vendedor;
         $('cfg_id_producto_resumen_anual').value = c.id_producto_resumen_anual || '';
         $('cfg_producto_anual_txt').value = c.producto_resumen_anual || '';
         $('cfg_id_producto_resumen_mensual').value = c.id_producto_resumen_mensual || '';
         $('cfg_producto_mensual_txt').value = c.producto_resumen_mensual || '';
+        $('cfg_id_producto_resumen_semestral').value = c.id_producto_resumen_semestral || '';
+        $('cfg_producto_semestral_txt').value = c.producto_resumen_semestral || '';
+        if (c.producto_resumen_semestral) productosMapa[c.producto_resumen_semestral] = c.id_producto_resumen_semestral;
         if (c.producto_resumen_anual) productosMapa[c.producto_resumen_anual] = c.id_producto_resumen_anual;
         if (c.producto_resumen_mensual) productosMapa[c.producto_resumen_mensual] = c.id_producto_resumen_mensual;
         cfgItems = j.items || [];
@@ -823,7 +830,7 @@
             }).join('');
         }, 250);
     }
-    [['cfg_producto_anual_txt', 'cfg_id_producto_resumen_anual'], ['cfg_producto_mensual_txt', 'cfg_id_producto_resumen_mensual'], ['it_producto_txt', 'it_id_producto']]
+    [['cfg_producto_anual_txt', 'cfg_id_producto_resumen_anual'], ['cfg_producto_semestral_txt', 'cfg_id_producto_resumen_semestral'], ['cfg_producto_mensual_txt', 'cfg_id_producto_resumen_mensual'], ['it_producto_txt', 'it_id_producto']]
         .forEach(([txt, hid]) => {
             $(txt).addEventListener('input', (ev) => {
                 const v = ev.target.value.trim();
@@ -838,11 +845,13 @@
         guardandoParam = true;
         try {
             const d = {};
-            ['recargo_mensual_pct', 'descuento_establecimiento_pct', 'usuarios_por_establecimiento', 'precio_usuario_adicional_anual', 'descuento_vendedor_max_pct', 'dias_vigencia']
+            ['recargo_mensual_pct', 'recargo_semestral_pct', 'descuento_establecimiento_pct', 'usuarios_por_establecimiento', 'precio_usuario_adicional_anual', 'descuento_vendedor_max_pct', 'dias_vigencia']
                 .forEach((k) => { d[k] = $('cfg_' + k).value; });
             d.permitir_descuento_vendedor = $('cfg_permitir_descuento_vendedor').checked;
             d.id_producto_resumen_anual = $('cfg_producto_anual_txt').value.trim() ? (parseInt($('cfg_id_producto_resumen_anual').value || 0, 10) || 0) : 0;
             d.id_producto_resumen_mensual = $('cfg_producto_mensual_txt').value.trim() ? (parseInt($('cfg_id_producto_resumen_mensual').value || 0, 10) || 0) : 0;
+            d.id_producto_resumen_semestral = $('cfg_producto_semestral_txt').value.trim() ? (parseInt($('cfg_id_producto_resumen_semestral').value || 0, 10) || 0) : 0;
+            if ($('cfg_producto_semestral_txt').value.trim() && !d.id_producto_resumen_semestral) return alerta('warning', 'Producto no encontrado', 'Elija el producto del plan semestral de la lista.');
             if ($('cfg_producto_anual_txt').value.trim() && !d.id_producto_resumen_anual) return alerta('warning', 'Producto no encontrado', 'Elija el producto del plan anual de la lista.');
             if ($('cfg_producto_mensual_txt').value.trim() && !d.id_producto_resumen_mensual) return alerta('warning', 'Producto no encontrado', 'Elija el producto del plan mensual de la lista.');
             const j = await postJson(`${URL}/guardarConfigAjax`, d);

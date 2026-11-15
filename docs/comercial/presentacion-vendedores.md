@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.17** (14-11-2026). El historial de cambios está al final.
+Versión actual: **0.18** (15-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -511,9 +511,10 @@ Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
 |---|---|
 | Unidad de cobro | **Por establecimiento.** Cada local del RUC contrata sus módulos; puede ser un negocio distinto (p. ej. 001 ferretería, 002 restaurante). |
 | Tipos de módulo | **Módulos base** (entran en el descuento por establecimiento) y **módulos adicionales** (por ejemplo, de una industria: van a precio completo). Cada módulo lo marca así el catálogo. |
+| Plan semestral | **Precio anual ÷ 2 × 1,10** (10 % de recargo). |
 | Plan mensual | **Precio anual ÷ 12 × 1,20** (20 % de recargo). Solo se cargan precios anuales. |
 | Establecimiento principal | El de **módulos base más caros**. Paga completo. |
-| Establecimientos adicionales | **20 % de descuento** en sus módulos base, **solo en plan anual**. En mensual todos pagan completo. |
+| Establecimientos adicionales | **20 % de descuento** en sus módulos base, **solo en plan anual**. En semestral y mensual todos pagan completo. |
 | Módulos adicionales | Precio completo en **cada** establecimiento que los use. |
 | Usuarios incluidos | **3 por establecimiento**, sumados y **compartidos en el RUC** (un usuario en dos locales ocupa un solo cupo). |
 | Usuario adicional | **$20 al año** ($2 al mes). |
@@ -527,13 +528,13 @@ Todos los precios son **sin IVA**.
 Un RUC con 3 locales, cada uno con $1.000 al año en módulos base; el segundo
 local además es restaurante ($300 al año, módulo adicional); 10 usuarios.
 
-| | Anual | Mensual |
-|---|---|---|
-| 001 (principal) | $1.000 | $100 |
-| 002 (con restaurante) | $800 + $300 = $1.100 | $130 |
-| 003 | $800 | $100 |
-| Usuarios: 10 − 9 incluidos = 1 adicional | $20 | $2 |
-| **Total** | **$2.920 al año** | **$332 al mes** ($3.984 en 12 meses) |
+| | Anual | Semestral | Mensual |
+|---|---|---|---|
+| 001 (principal) | $1.000 | $550 | $100 |
+| 002 (con restaurante) | $800 + $300 = $1.100 | $715 | $130 |
+| 003 | $800 | $550 | $100 |
+| Usuarios: 10 − 9 incluidos = 1 adicional | $20 | $11 | $2 |
+| **Total** | **$2.920 al año** | **$1.826 por semestre** ($3.652 en el año) | **$332 al mes** ($3.984 en 12 meses) |
 
 **Argumento de venta:** *«pagando anual ahorra en el plan y, si tiene más
 locales, cada uno le sale con 20 % de descuento».* En el ejemplo, pagar anual
@@ -680,7 +681,8 @@ combinaciones típicas. El precio de cada una igual lo calcula el cotizador.
 | ¿Necesito firma electrónica? | Sí, para emitir comprobantes electrónicos. Si no tiene, también se la vendemos. |
 | ¿Puedo probar antes de emitir documentos reales? | Sí, en el **ambiente de pruebas**, sin validez tributaria. |
 | ¿Cuánto cuesta? | Depende de sus locales, módulos y usuarios. Se lo calculo al momento con el Cotizador. |
-| ¿Por qué el plan mensual cuesta más? | El mensual tiene un 20 % de recargo frente al anual; pagando anual ahorra, y sus otros locales tienen 20 % de descuento. |
+| ¿Por qué el plan mensual cuesta más? | El semestral tiene un 10 % de recargo frente al anual y el mensual un 20 %; pagando anual ahorra, y sus otros locales tienen 20 % de descuento. |
+| ¿Puedo pagar cada seis meses? | Sí, con el **plan semestral**: anual ÷ 2 + 10 %. El descuento por locales adicionales es solo del plan anual. |
 | Tengo varios locales con el mismo RUC, ¿pago por cada uno? | Sí, cada establecimiento contrata sus módulos. En plan anual, los adicionales tienen 20 % de descuento y los usuarios se comparten. |
 | ¿Puedo cargar mis clientes y productos que ya tengo? | Sí, por Excel, y los saldos iniciales de cartera, bancos e inventario. |
 | ¿Hace mis declaraciones? | Prepara la información (ATS, IVA, retenciones, renta), pero las declaraciones son responsabilidad del cliente o de su contador. |
@@ -797,6 +799,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.18 | 15-11-2026 | Plan **semestral** (anual ÷ 2 + 10 %, sin descuento por establecimiento): reglas, ejemplo y preguntas frecuentes |
 | 0.17 | 14-11-2026 | Nuevas secciones 7 (qué cubre la membresía), 8 (responsabilidades, desde el contrato y el acuerdo de datos), 9 (preguntas frecuentes y objeciones) y 10 (proceso de venta). Pendientes P-28 a P-31 |
 | 0.16 | 13-11-2026 | Revisión completa: sección 6 reescrita con las reglas aprobadas y un ejemplo; referencias corregidas; lista única de pendientes; historial al final |
 | 0.15 | 13-11-2026 | Nueva sección 5 «Cómo funciona el sistema» (acceso, ciclo del cliente, soporte, pagos y vencimiento). Sección 3: aviso de firma por caducar y ambiente de pruebas |

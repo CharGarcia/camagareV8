@@ -73,7 +73,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     ['v' => 'borrador', 'l' => 'Borrador'], ['v' => 'proforma', 'l' => 'Proforma generada'], ['v' => 'anulada', 'l' => 'Anulada'],
                 ]],
                 ['tab' => $tCP, 'key' => 'modalidad','label' => 'Modalidad',    'icon' => 'bi-calendar3', 'type' => 'select', 'grupo' => 'Estado', 'col' => 6, 'options' => [
-                    ['v' => 'anual', 'l' => 'Anual'], ['v' => 'mensual', 'l' => 'Mensual'],
+                    ['v' => 'anual', 'l' => 'Anual'], ['v' => 'semestral', 'l' => 'Semestral'], ['v' => 'mensual', 'l' => 'Mensual'],
                 ]],
                 ['tab' => $tCP, 'key' => 'total_anual', 'label' => 'Total anual', 'icon' => 'bi-cash-stack', 'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
                 ['tab' => $tCP, 'key' => 'usuarios',    'label' => 'Usuarios',    'icon' => 'bi-people',     'type' => 'number_range', 'grupo' => 'Valores', 'col' => 6],
@@ -102,7 +102,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas([
                     'numero' => 'N.º', 'fecha' => 'Fecha', 'identificacion' => 'RUC / cédula', 'razon_social' => 'Razón social',
                     'establecimientos' => 'Establec.', 'usuarios' => 'Usuarios', 'modalidad' => 'Modalidad',
-                    'total_anual' => 'Anual', 'total_mensual' => 'Mensual', 'total_unico' => 'Pago único',
+                    'total_anual' => 'Anual', 'total_semestral' => 'Semestral', 'total_mensual' => 'Mensual', 'total_unico' => 'Pago único',
                     'vendedor' => 'Vendedor', 'estado' => 'Estado',
                 ], $vistaConfig ?? [], $rutaModulo) ?>
                 <a id="btnPdfCP" href="<?= $urlCP ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam) ?>" class="btn btn-outline-danger" title="Descargar PDF">
@@ -136,7 +136,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                             ['numero', 'N.º', 'ps-3'], ['fecha', 'Fecha', ''], ['identificacion', 'RUC / cédula', ''],
                             ['razon_social', 'Razón social', ''], ['establecimientos', 'Establec.', 'text-center'],
                             ['usuarios', 'Usuarios', 'text-center'], ['modalidad', 'Modalidad', ''],
-                            ['total_anual', 'Anual', 'text-end'], ['total_mensual', 'Mensual', 'text-end'],
+                            ['total_anual', 'Anual', 'text-end'], ['total_semestral', 'Semestral', 'text-end'], ['total_mensual', 'Mensual', 'text-end'],
                             ['total_unico', 'Pago único', 'text-end'], ['vendedor', 'Vendedor', ''], ['estado', 'Estado', 'text-center pe-3'],
                         ];
                         foreach ($cols as [$k, $t, $cls]): ?>
@@ -170,6 +170,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <!-- Totales en vivo: visibles en todas las pestañas -->
                 <div class="d-flex flex-wrap gap-2 px-3 pt-2 align-items-stretch">
                     <div class="cp-total-box"><div class="etiqueta">Plan anual</div><div class="valor text-primary" id="cpTotAnual">$0.00</div><div class="small text-muted" id="cpTotAnualNota"></div></div>
+                    <div class="cp-total-box"><div class="etiqueta">Plan semestral</div><div class="valor" id="cpTotSemestral">$0.00</div><div class="small text-muted" id="cpTotSemestralNota"></div></div>
                     <div class="cp-total-box"><div class="etiqueta">Plan mensual</div><div class="valor" id="cpTotMensual">$0.00</div><div class="small text-muted" id="cpTotMensualNota"></div></div>
                     <div class="cp-total-box"><div class="etiqueta">Pago único</div><div class="valor" id="cpTotUnico">$0.00</div><div class="small text-muted">implementación y servicios</div></div>
                     <div class="cp-total-box"><div class="etiqueta">Usuarios</div><div class="valor" id="cpTotUsuarios">0</div><div class="small text-muted" id="cpTotUsuariosNota"></div></div>
@@ -277,6 +278,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                 <label class="form-label small fw-bold mb-1">Modalidad para la proforma</label>
                                 <select class="form-select form-select-sm cp-editable" id="cp_modalidad">
                                     <option value="anual">Anual</option>
+                                    <option value="semestral">Semestral</option>
                                     <option value="mensual">Mensual</option>
                                 </select>
                             </div>
@@ -289,7 +291,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered small mb-1">
                                 <thead class="table-light">
-                                    <tr><th>Establecimiento</th><th class="text-end">Base</th><th class="text-end">Adicionales</th><th class="text-end">Desc. establ.</th><th class="text-end">Anual</th><th class="text-end">Mensual</th><th class="text-end">Pago único</th></tr>
+                                    <tr><th>Establecimiento</th><th class="text-end">Base</th><th class="text-end">Adicionales</th><th class="text-end">Desc. establ.</th><th class="text-end">Anual</th><th class="text-end">Semestral</th><th class="text-end">Mensual</th><th class="text-end">Pago único</th></tr>
                                 </thead>
                                 <tbody id="cpResumenFilas"></tbody>
                                 <tfoot id="cpResumenPie" class="fw-semibold"></tfoot>
@@ -447,6 +449,11 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                 <div class="small text-muted">Mensual = anual ÷ 12 × (1 + recargo).</div>
                             </div>
                             <div class="col-md-3">
+                                <label class="form-label small fw-bold mb-1">Recargo del plan semestral (%)</label>
+                                <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm" id="cfg_recargo_semestral_pct">
+                                <div class="small text-muted">Semestral = anual ÷ 2 × (1 + recargo).</div>
+                            </div>
+                            <div class="col-md-3">
                                 <label class="form-label small fw-bold mb-1">Descuento por establecimiento adicional (%)</label>
                                 <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm" id="cfg_descuento_establecimiento_pct">
                                 <div class="small text-muted">Solo plan anual y solo módulos base.</div>
@@ -474,12 +481,17 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                 <label class="form-label small fw-bold mb-1">Días de vigencia de la proforma</label>
                                 <input type="number" min="1" max="3650" step="1" class="form-control form-control-sm" id="cfg_dias_vigencia">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label small fw-bold mb-1">Producto de la línea «plan anual» *</label>
                                 <input type="text" class="form-control form-control-sm" id="cfg_producto_anual_txt" list="cfgProductosLista" placeholder="Ej.: Plan anual CaMaGaRe">
                                 <input type="hidden" id="cfg_id_producto_resumen_anual">
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
+                                <label class="form-label small fw-bold mb-1">Producto de la línea «plan semestral» *</label>
+                                <input type="text" class="form-control form-control-sm" id="cfg_producto_semestral_txt" list="cfgProductosLista" placeholder="Ej.: Plan semestral CaMaGaRe">
+                                <input type="hidden" id="cfg_id_producto_resumen_semestral">
+                            </div>
+                            <div class="col-md-4">
                                 <label class="form-label small fw-bold mb-1">Producto de la línea «plan mensual» *</label>
                                 <input type="text" class="form-control form-control-sm" id="cfg_producto_mensual_txt" list="cfgProductosLista" placeholder="Ej.: Plan mensual CaMaGaRe">
                                 <input type="hidden" id="cfg_id_producto_resumen_mensual">

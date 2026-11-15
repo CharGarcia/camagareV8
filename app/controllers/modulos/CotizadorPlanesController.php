@@ -161,7 +161,7 @@ class CotizadorPlanesController extends BaseModuloController
     public static function filasHtml(array $rows): string
     {
         if ($rows === []) {
-            return '<tr><td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-calculator fs-3 d-block mb-2"></i>No hay cotizaciones.</td></tr>';
+            return '<tr><td colspan="13" class="text-center py-5 text-muted"><i class="bi bi-calculator fs-3 d-block mb-2"></i>No hay cotizaciones.</td></tr>';
         }
         $e = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $m = fn($v) => '$' . number_format((float) $v, 2);
@@ -184,6 +184,7 @@ class CotizadorPlanesController extends BaseModuloController
                 . '<td data-col="usuarios" class="text-center">' . (int) $r['usuarios'] . '</td>'
                 . '<td data-col="modalidad" class="text-capitalize">' . $e($r['modalidad']) . '</td>'
                 . '<td data-col="total_anual" class="text-end">' . $m($r['total_anual']) . '</td>'
+                . '<td data-col="total_semestral" class="text-end">' . $m($r['total_semestral'] ?? 0) . '</td>'
                 . '<td data-col="total_mensual" class="text-end">' . $m($r['total_mensual']) . '</td>'
                 . '<td data-col="total_unico" class="text-end">' . $m($r['total_unico']) . '</td>'
                 . '<td data-col="vendedor" class="small cp-celda" style="max-width:160px;">' . $e($r['vendedor'] ?? '') . '</td>'
@@ -207,6 +208,7 @@ class CotizadorPlanesController extends BaseModuloController
             'items'     => $this->service->getCatalogo($this->idEmpresa(), true),
             'parametros'=> [
                 'recargo_mensual_pct'            => $cfg['recargo_mensual_pct'],
+                'recargo_semestral_pct'          => $cfg['recargo_semestral_pct'],
                 'descuento_establecimiento_pct'  => $cfg['descuento_establecimiento_pct'],
                 'usuarios_por_establecimiento'   => $cfg['usuarios_por_establecimiento'],
                 'precio_usuario_adicional_anual' => $cfg['precio_usuario_adicional_anual'],
@@ -442,7 +444,7 @@ class CotizadorPlanesController extends BaseModuloController
         return $this->service->getListado($this->idEmpresa(), trim((string) ($_GET['b'] ?? '')), 1, 0, $orden, $this->idUsuarioFiltro())['rows'];
     }
 
-    private const COLUMNAS_EXPORT = ['N.º', 'Fecha', 'RUC / cédula', 'Razón social', 'Establec.', 'Usuarios', 'Modalidad', 'Anual', 'Mensual', 'Pago único', 'Vendedor', 'Estado'];
+    private const COLUMNAS_EXPORT = ['N.º', 'Fecha', 'RUC / cédula', 'Razón social', 'Establec.', 'Usuarios', 'Modalidad', 'Anual', 'Semestral', 'Mensual', 'Pago único', 'Vendedor', 'Estado'];
 
     private function filaExport(array $r): array
     {
@@ -455,6 +457,7 @@ class CotizadorPlanesController extends BaseModuloController
             (int) $r['usuarios'],
             ucfirst((string) $r['modalidad']),
             (float) $r['total_anual'],
+            (float) ($r['total_semestral'] ?? 0),
             (float) $r['total_mensual'],
             (float) $r['total_unico'],
             (string) ($r['vendedor'] ?? ''),
@@ -478,7 +481,7 @@ class CotizadorPlanesController extends BaseModuloController
         $this->requireDisponible();
         $empresa = (new \App\models\Empresa())->getPorId($this->idEmpresa());
         $e = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
-        $anchos = [5, 8, 11, 22, 6, 6, 7, 8, 8, 7, 7, 5];
+        $anchos = [5, 7, 10, 20, 6, 6, 7, 7, 7, 7, 7, 6, 5];
         $html = '<style>table{width:100%;border-collapse:collapse;font-family:Arial;font-size:7pt}th{background:#f2f2f2;border:1px solid #ccc;padding:3px;text-align:left}'
               . 'td{border:1px solid #ccc;padding:3px}h1{font-size:12pt;text-align:center;margin:0}h2{font-size:9pt;text-align:center;color:#666;margin:4px 0 10px}</style>'
               . '<page backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm"><h1>' . $e($empresa['nombre'] ?? '') . '</h1><h2>COTIZADOR DE PLANES</h2><table><thead><tr>';

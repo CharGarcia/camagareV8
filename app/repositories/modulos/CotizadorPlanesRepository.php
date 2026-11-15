@@ -26,6 +26,7 @@ class CotizadorPlanesRepository extends BaseRepository
         'modalidad'        => 'c.modalidad',
         'total_anual'      => 'c.total_anual',
         'total_mensual'    => 'c.total_mensual',
+        'total_semestral'  => 'c.total_semestral',
         'total_unico'      => 'c.total_unico',
         'vendedor'         => 'u.nombre',
         'estado'           => 'c.estado',
@@ -37,10 +38,14 @@ class CotizadorPlanesRepository extends BaseRepository
         parent::__construct('cotizaciones_planes');
     }
 
-    /** ¿Ya se ejecutó el SQL del módulo? Sin las tablas la pantalla avisa en vez de fallar. */
+    /**
+     * ¿Ya se ejecutaron los SQL del módulo? Sin ellos la pantalla avisa en vez de fallar:
+     * 2026-11-13_cotizador_planes.sql (tablas) y 2026-11-15_cotizador_planes_semestral.sql.
+     */
     public function disponible(): bool
     {
-        return $this->tablaExiste('cotizaciones_planes') && $this->tablaExiste('cotizador_planes_items');
+        return $this->tablaExiste('cotizaciones_planes') && $this->tablaExiste('cotizador_planes_items')
+            && $this->columnaExiste('cotizaciones_planes', 'total_semestral');
     }
 
     // ── Configuración ────────────────────────────────────────────────────────
@@ -57,6 +62,8 @@ class CotizadorPlanesRepository extends BaseRepository
         $actual = $this->getConfig($idEmpresa);
         $params = [
             ':rec'  => $d['recargo_mensual_pct'],
+            ':recs' => $d['recargo_semestral_pct'],
+            ':prs'  => $d['id_producto_resumen_semestral'] ?: null,
             ':dest' => $d['descuento_establecimiento_pct'],
             ':upe'  => $d['usuarios_por_establecimiento'],
             ':pua'  => $d['precio_usuario_adicional_anual'],
@@ -71,10 +78,11 @@ class CotizadorPlanesRepository extends BaseRepository
         if ($actual) {
             $this->db->prepare(
                 "UPDATE cotizador_planes_config SET
-                    recargo_mensual_pct = :rec, descuento_establecimiento_pct = :dest,
+                    recargo_mensual_pct = :rec, recargo_semestral_pct = :recs, descuento_establecimiento_pct = :dest,
                     usuarios_por_establecimiento = :upe, precio_usuario_adicional_anual = :pua,
                     permitir_descuento_vendedor = :pdv, descuento_vendedor_max_pct = :dvm,
                     id_producto_resumen_anual = :pra, id_producto_resumen_mensual = :prm,
+                    id_producto_resumen_semestral = :prs,
                     dias_vigencia = :dv, updated_at = NOW(), updated_by = :u
                   WHERE id_empresa = :e AND eliminado = false"
             )->execute($params);
@@ -82,10 +90,11 @@ class CotizadorPlanesRepository extends BaseRepository
         }
         $st = $this->db->prepare(
             "INSERT INTO cotizador_planes_config
-                (id_empresa, recargo_mensual_pct, descuento_establecimiento_pct, usuarios_por_establecimiento,
+                (id_empresa, recargo_mensual_pct, recargo_semestral_pct, descuento_establecimiento_pct, usuarios_por_establecimiento,
                  precio_usuario_adicional_anual, permitir_descuento_vendedor, descuento_vendedor_max_pct,
-                 id_producto_resumen_anual, id_producto_resumen_mensual, dias_vigencia, created_by, updated_by)
-             VALUES (:e, :rec, :dest, :upe, :pua, :pdv, :dvm, :pra, :prm, :dv, :u, :u) RETURNING id"
+                 id_producto_resumen_anual, id_producto_resumen_mensual, id_producto_resumen_semestral,
+                 dias_vigencia, created_by, updated_by)
+             VALUES (:e, :rec, :recs, :dest, :upe, :pua, :pdv, :dvm, :pra, :prm, :prs, :dv, :u, :u) RETURNING id"
         );
         $st->execute($params);
         return (int) $st->fetchColumn();
@@ -316,7 +325,7 @@ class CotizadorPlanesRepository extends BaseRepository
             'texto'    => ['ruc' => 'c.identificacion', 'cliente' => 'c.razon_social', 'vendedor' => 'u.nombre'],
             'exacto'   => ['estado' => 'c.estado', 'modalidad' => 'c.modalidad', 'usuario' => 'c.created_by'],
             'fecha'    => ['fecha' => 'c.fecha', 'registro' => 'c.created_at'],
-            'numerico' => ['numero' => 'c.numero', 'total_anual' => 'c.total_anual', 'total_mensual' => 'c.total_mensual', 'usuarios' => 'c.usuarios'],
+            'numerico' => ['numero' => 'c.numero', 'total_anual' => 'c.total_anual', 'total_semestral' => 'c.total_semestral', 'total_mensual' => 'c.total_mensual', 'usuarios' => 'c.usuarios'],
         ]);
 
         $st = $this->db->prepare("SELECT COUNT(*) FROM cotizaciones_planes c {$joins} {$where}");
@@ -386,7 +395,7 @@ class CotizadorPlanesRepository extends BaseRepository
     private const CAMPOS_CABECERA = [
         'fecha', 'identificacion', 'razon_social', 'nombre_comercial', 'tipo_contribuyente', 'obligado_contabilidad',
         'correo', 'telefono', 'direccion', 'cod_prov', 'cod_ciudad', 'contacto_nombre', 'usuarios', 'modalidad',
-        'descuento_vendedor_pct', 'total_anual', 'total_mensual', 'total_unico', 'parametros', 'observaciones', 'id_vendedor',
+        'descuento_vendedor_pct', 'total_anual', 'total_semestral', 'total_mensual', 'total_unico', 'parametros', 'observaciones', 'id_vendedor',
     ];
 
     private function paramsCabecera(array $d): array

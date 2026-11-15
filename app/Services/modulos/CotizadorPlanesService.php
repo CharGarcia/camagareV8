@@ -46,8 +46,9 @@ class CotizadorPlanesService
         $p = CotizadorPlanesCalculo::normalizarParametros($row);
         $p['id_producto_resumen_anual']   = (int) ($row['id_producto_resumen_anual'] ?? 0) ?: null;
         $p['id_producto_resumen_mensual'] = (int) ($row['id_producto_resumen_mensual'] ?? 0) ?: null;
+        $p['id_producto_resumen_semestral'] = (int) ($row['id_producto_resumen_semestral'] ?? 0) ?: null;
         $p['dias_vigencia']               = (int) ($row['dias_vigencia'] ?? 15) ?: 15;
-        foreach (['anual', 'mensual'] as $m) {
+        foreach (['anual', 'semestral', 'mensual'] as $m) {
             $idP = $p['id_producto_resumen_' . $m];
             $prod = $idP ? $this->repo->getProductoConTarifa($idP, $idEmpresa) : null;
             $p['producto_resumen_' . $m] = $prod ? trim(($prod['codigo'] ?? '') . ' - ' . ($prod['nombre'] ?? ''), ' -') : '';
@@ -60,11 +61,12 @@ class CotizadorPlanesService
         $nuevo = CotizadorPlanesCalculo::normalizarParametros($d) + [
             'id_producto_resumen_anual'   => (int) ($d['id_producto_resumen_anual'] ?? 0) ?: null,
             'id_producto_resumen_mensual' => (int) ($d['id_producto_resumen_mensual'] ?? 0) ?: null,
+            'id_producto_resumen_semestral' => (int) ($d['id_producto_resumen_semestral'] ?? 0) ?: null,
             'dias_vigencia'               => (int) ($d['dias_vigencia'] ?? 15),
         ];
         // Los valores crudos se validan antes de normalizar (para no corregir en silencio un 150 %).
         $this->rules->validarConfig($d + $nuevo);
-        foreach (['id_producto_resumen_anual', 'id_producto_resumen_mensual'] as $c) {
+        foreach (['id_producto_resumen_anual', 'id_producto_resumen_semestral', 'id_producto_resumen_mensual'] as $c) {
             if ($nuevo[$c] && !$this->repo->getProductoConTarifa($nuevo[$c], $idEmpresa)) {
                 throw new \InvalidArgumentException('El producto elegido para la línea resumen no existe en esta empresa.');
             }
@@ -337,7 +339,8 @@ class CotizadorPlanesService
             'cod_ciudad'         => mb_substr(trim((string) ($d['cod_ciudad'] ?? '')), 0, 10),
             'contacto_nombre'    => mb_substr(trim((string) ($d['contacto_nombre'] ?? '')), 0, 200),
             'usuarios'           => (int) ($d['usuarios'] ?? 0),
-            'modalidad'          => ($d['modalidad'] ?? 'anual') === 'mensual' ? 'mensual' : 'anual',
+            // Sin valor = anual; un valor desconocido pasa tal cual para que las Rules lo rechacen.
+            'modalidad'          => trim((string) ($d['modalidad'] ?? '')) !== '' ? trim((string) $d['modalidad']) : 'anual',
             'descuento_vendedor_pct' => round((float) ($d['descuento_vendedor_pct'] ?? 0), 2),
             'observaciones'      => trim((string) ($d['observaciones'] ?? '')),
             'id_vendedor'        => (int) ($d['id_vendedor'] ?? 0) ?: null,
@@ -360,6 +363,7 @@ class CotizadorPlanesService
         $calc = CotizadorPlanesCalculo::calcular($config, $est, $cab['usuarios'], $cab['descuento_vendedor_pct']);
         $cab['total_anual']   = $calc['total_anual'];
         $cab['total_mensual'] = $calc['total_mensual'];
+        $cab['total_semestral'] = $calc['total_semestral'];
         $cab['total_unico']   = $calc['total_unico'];
         $cab['parametros']    = $calc['parametros'];
 
@@ -553,7 +557,7 @@ class CotizadorPlanesService
         }
 
         // Producto de la línea resumen (con su IVA).
-        $campoProd = $cot['modalidad'] === 'mensual' ? 'id_producto_resumen_mensual' : 'id_producto_resumen_anual';
+        $campoProd = 'id_producto_resumen_' . self::modalidad($cot);
         $prodResumen = $this->repo->getProductoConTarifa((int) $config[$campoProd], $idEmpresa);
         if (!$prodResumen) {
             throw new \InvalidArgumentException('El producto configurado para la línea resumen ya no existe. Revíselo en el engranaje → Parámetros.');
@@ -675,7 +679,7 @@ class CotizadorPlanesService
             $idContacto = (int) $res['id'];
         }
 
-        $valor = $cot['modalidad'] === 'mensual' ? $calc['total_mensual'] : $calc['total_anual'];
+        $valor = $calc['total_' . self::modalidad($cot)];
         $op = $this->repo->getOportunidadAbierta($idEmpresa, (int) ($cot['id_oportunidad'] ?? 0));
         if ($op && ($op['estado'] ?? '') === 'abierta' && empty($op['id_proforma'])) {
             return [$idContacto, (int) $op['id'], null];
@@ -717,7 +721,7 @@ class CotizadorPlanesService
             ];
         };
 
-        $mensual = $cot['modalidad'] === 'mensual';
+        $mod = self::modalidad($cot);
         $nEst = count($cot['establecimientos']);
         $detalles = [];
         // Línea resumen: lo recurrente (módulos + usuarios adicionales) con el descuento del vendedor aparte.
@@ -725,8 +729,8 @@ class CotizadorPlanesService
             $prodResumen,
             (string) $prodResumen['nombre'],
             1,
-            $mensual ? $calc['subtotal_mensual'] : $calc['subtotal_anual'],
-            $mensual ? $calc['descuento_vendedor_mensual'] : $calc['descuento_vendedor_anual'],
+            $calc['subtotal_' . $mod],
+            $calc['descuento_vendedor_' . $mod],
             'RUC ' . $cot['identificacion'] . ' · ' . $nEst . ' establecimiento' . ($nEst === 1 ? '' : 's')
                 . ' · ' . (int) $cot['usuarios'] . ' usuario' . ((int) $cot['usuarios'] === 1 ? '' : 's') . ' · detalle en el anexo de condiciones',
             null
@@ -749,9 +753,11 @@ class CotizadorPlanesService
         }
 
         $obs = 'Cotización N.º ' . $cot['numero'] . ' (Cotizador de Planes). ';
-        $obs .= $mensual
-            ? 'Plan mensual: $' . $this->m($calc['total_mensual']) . ' al mes. Pagando anual serían $' . $this->m($calc['total_anual']) . ' al año.'
-            : 'Plan anual: $' . $this->m($calc['total_anual']) . ' al año (en 12 mensualidades serían $' . $this->m($calc['doce_mensualidades']) . ').';
+        $obs .= match ($mod) {
+            'mensual'   => 'Plan mensual: $' . $this->m($calc['total_mensual']) . ' al mes. Pagando anual serían $' . $this->m($calc['total_anual']) . ' al año.',
+            'semestral' => 'Plan semestral: $' . $this->m($calc['total_semestral']) . ' cada semestre. Pagando anual serían $' . $this->m($calc['total_anual']) . ' al año.',
+            default     => 'Plan anual: $' . $this->m($calc['total_anual']) . ' al año (en 12 mensualidades serían $' . $this->m($calc['doce_mensualidades']) . ').',
+        };
         if (trim((string) $cot['observaciones']) !== '') {
             $obs .= ' ' . trim((string) $cot['observaciones']);
         }
@@ -785,10 +791,10 @@ class CotizadorPlanesService
     {
         $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
         $p = $calc['parametros'];
-        $mensual = $cot['modalidad'] === 'mensual';
+        $mod = self::modalidad($cot);
         $out = '<h2>Detalle del plan</h2>';
         $out .= '<p><strong>' . $h($cot['razon_social']) . '</strong> — RUC ' . $h($cot['identificacion']) . '<br>'
-              . 'Modalidad: <strong>' . ($mensual ? 'mensual' : 'anual') . '</strong> · Usuarios: <strong>' . (int) $calc['usuarios']
+              . 'Modalidad: <strong>' . $mod . '</strong> · Usuarios: <strong>' . (int) $calc['usuarios']
               . '</strong> (' . (int) $calc['usuarios_incluidos'] . ' incluidos, compartidos entre los establecimientos'
               . ($calc['usuarios_adicionales'] > 0 ? '; ' . (int) $calc['usuarios_adicionales'] . ' adicionales' : '') . ')</p>';
 
@@ -812,15 +818,18 @@ class CotizadorPlanesService
                 $out .= '<p>Servicios de una sola vez: ' . $h(implode(', ', array_column($uni, 'nombre'))) . '</p>';
             }
             $out .= '<p>Valor del establecimiento: '
-                  . ($mensual
-                      ? '$' . $this->m($f['mensual'] ?? 0) . ' al mes'
-                      : '$' . $this->m($f['anual'] ?? 0) . ' al año'
-                        . (!empty($f['descuento_establecimiento']) ? ' (incluye ' . $this->pct($p['descuento_establecimiento_pct']) . ' de descuento por establecimiento adicional)' : ''))
+                  . match ($mod) {
+                      'mensual'   => '$' . $this->m($f['mensual'] ?? 0) . ' al mes',
+                      'semestral' => '$' . $this->m($f['semestral'] ?? 0) . ' por semestre',
+                      default     => '$' . $this->m($f['anual'] ?? 0) . ' al año'
+                        . (!empty($f['descuento_establecimiento']) ? ' (incluye ' . $this->pct($p['descuento_establecimiento_pct']) . ' de descuento por establecimiento adicional)' : ''),
+                  }
                   . '</p>';
         }
 
         $out .= '<h3>Resumen</h3><ul>';
         $out .= '<li>Plan anual: <strong>$' . $this->m($calc['total_anual']) . '</strong> al año</li>';
+        $out .= '<li>Plan semestral: <strong>$' . $this->m($calc['total_semestral']) . '</strong> por semestre ($' . $this->m($calc['dos_semestres']) . ' en el año)</li>';
         $out .= '<li>Plan mensual: <strong>$' . $this->m($calc['total_mensual']) . '</strong> al mes ($' . $this->m($calc['doce_mensualidades']) . ' en 12 meses)</li>';
         if ($calc['ahorro_anual'] > 0) {
             $out .= '<li>Ahorro pagando anual: $' . $this->m($calc['ahorro_anual']) . '</li>';
@@ -835,10 +844,17 @@ class CotizadorPlanesService
             $out .= '<li>Servicios de una sola vez: $' . $this->m($calc['total_unico']) . '</li>';
         }
         $out .= '</ul>';
-        $out .= '<p>Valores sin IVA. El plan mensual cuesta ' . $this->pct($p['recargo_mensual_pct']) . ' más que el anual. '
+        $out .= '<p>Valores sin IVA. El plan semestral cuesta ' . $this->pct($p['recargo_semestral_pct']) . ' más que el anual y el mensual '
+              . $this->pct($p['recargo_mensual_pct']) . ' más. '
               . 'El descuento por establecimiento adicional (' . $this->pct($p['descuento_establecimiento_pct']) . ') aplica solo en el plan anual; '
               . 'el establecimiento con el plan base de mayor valor paga el precio completo.</p>';
         return $out;
+    }
+
+    /** Modalidad de la cotización: anual | semestral | mensual. */
+    private static function modalidad(array $cot): string
+    {
+        return in_array($cot['modalidad'] ?? '', ['semestral', 'mensual'], true) ? $cot['modalidad'] : 'anual';
     }
 
     private function m($v): string

@@ -120,5 +120,21 @@ igual('anual = solo usuarios: 3 × 20 = 60', 60.0, $r['total_anual']);
 $r = C::calcular($P, [['codigo' => '001', 'items' => []]], 2);
 igual('establecimiento sin módulos: anual 0', 0.0, $r['total_anual']);
 
+echo "11) Plan semestral: anual ÷ 2 × 1,10, sin descuento por establecimiento\n";
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$base(1000)]]], 3);
+igual('semestral = 1.000 ÷ 2 × 1,10 = 550', 550.0, $r['total_semestral']);
+igual('dos semestres = 1.100', 1100.0, $r['dos_semestres']);
+igual('ahorro anual vs semestral = 100', 100.0, $r['ahorro_anual_vs_semestral']);
+$r = C::calcular($P, [
+    ['codigo' => '001', 'items' => [$base(1000)]],
+    ['codigo' => '002', 'items' => [$base(1000), $extra(300)]],
+], 8);
+igual('2 locales: semestral sin 20 % = (1.000 + 1.300) ÷ 2 × 1,10 = 1.265', 1265.0, $r['semestral_sin_usuarios'] ?? round(($r['total_semestral'] - $r['usuarios_semestral']), 2));
+igual('usuarios: 2 adicionales × 20 ÷ 2 × 1,10 = 22', 22.0, $r['usuarios_semestral']);
+igual('total semestral = 1.287', 1287.0, $r['total_semestral']);
+$P4 = ['recargo_semestral_pct' => 0, 'permitir_descuento_vendedor' => true, 'descuento_vendedor_max_pct' => 10] + $P;
+$r = C::calcular($P4, [['codigo' => '001', 'items' => [$base(1000)]]], 3, 10);
+igual('recargo 0 % y descuento comercial 10 %: 500 − 50 = 450', 450.0, $r['total_semestral']);
+
 echo PHP_EOL . ($fallos === 0 ? "TODO OK" : "FALLARON {$fallos} casos") . PHP_EOL;
 exit($fallos === 0 ? 0 : 1);
