@@ -50,7 +50,8 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
    adicional, por defecto). Los servicios (implementación, migración,
    capacitación…) se agregan con **Agregar servicio**.
 2. **Paquetes** (opcional): combinaciones listas de módulos, por ejemplo
-   *Emprendedor*. Con **Nuevo paquete** se elige el nombre, los módulos y un
+   *Emprendedor*. Con **Nuevo paquete** se elige el nombre, se **marcan las
+   casillas** de sus módulos (hay un buscador arriba de la lista) y se pone un
    **% de descuento**. El paquete vale la **suma de sus módulos menos ese %**,
    así que si cambia el precio de un módulo, el paquete se actualiza solo. La
    tabla muestra la suma, el descuento y el valor del paquete al año.

@@ -478,9 +478,12 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                         <input type="text" class="form-control form-control-sm" id="pq_descripcion" maxlength="500" placeholder="Para quién es este paquete">
                                     </div>
                                     <div class="col-md-8">
-                                        <label class="form-label small fw-bold mb-1">Módulos del paquete *</label>
-                                        <select class="form-select form-select-sm" id="pq_items" multiple size="10"></select>
-                                        <div class="small text-muted">Ctrl/Cmd + clic para elegir varios. Solo aparecen los módulos ya cargados en el catálogo. Los que estos requieren entran solos al cotizar.</div>
+                                        <div class="d-flex align-items-end gap-2 mb-1">
+                                            <label class="form-label small fw-bold mb-0 flex-grow-1">Módulos del paquete * <span class="fw-normal text-muted" id="pq_contador"></span></label>
+                                            <input type="search" class="form-control form-control-sm" id="pq_buscar" placeholder="Buscar módulo…" style="width:200px;">
+                                        </div>
+                                        <div class="border rounded-2" id="pq_items" style="max-height:260px;overflow:auto;"></div>
+                                        <div class="small text-muted mt-1">Marque los módulos del paquete. Solo aparecen los ya cargados en el catálogo; los que estos requieren entran solos al cotizar.</div>
                                     </div>
                                     <div class="col-md-4">
                                         <div class="border rounded-3 p-2 small bg-light">

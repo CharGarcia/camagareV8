@@ -672,7 +672,8 @@
     }
 
     function actualizarValorPaquete() {
-        const ids = Array.from($('pq_items').selectedOptions).map((o) => Number(o.value));
+        const ids = idsPaqueteMarcados();
+        $('pq_contador').textContent = ids.length ? `(${ids.length} marcados)` : '';
         const v = valorPaquete(ids, parseFloat($('pq_descuento_pct').value || 0));
         $('pq_suma').textContent = money(v.suma);
         $('pq_desc').textContent = '−' + money(v.desc);
@@ -690,8 +691,16 @@
         const sel = new Set((p.items || []).map(Number));
         const grupos = {};
         cfgItems.forEach((it) => { (grupos[it.tipo === 'servicio' ? 'Servicios' : (it.grupo || 'Otros')] ||= []).push(it); });
-        $('pq_items').innerHTML = Object.keys(grupos).sort().map((g) => `<optgroup label="${esc(g)}">` + grupos[g].map((it) =>
-            `<option value="${it.id}" ${sel.has(it.id) ? 'selected' : ''}>${esc(it.nombre)} — ${money(it.precio_anual)}${it.cobro === 'unico' ? ' (único)' : ''}${it.estado !== 'activo' ? ' (inactivo)' : ''}</option>`).join('') + '</optgroup>').join('');
+        // Una fila con casilla por módulo, agrupadas por área (sin Ctrl + clic).
+        $('pq_items').innerHTML = Object.keys(grupos).sort().map((g) =>
+            `<div class="pq-grupo"><div class="px-2 py-1 bg-light border-bottom small fw-semibold text-secondary">${esc(g)}</div>`
+            + grupos[g].map((it) => `<label class="pq-fila d-flex align-items-center gap-2 px-2 py-1 border-bottom small mb-0" role="button" data-texto="${esc((g + ' ' + it.nombre).toLowerCase())}">
+                    <input type="checkbox" class="form-check-input mt-0 pq-check" value="${it.id}" ${sel.has(it.id) ? 'checked' : ''}>
+                    <span class="flex-grow-1">${esc(it.nombre)}${it.cobro === 'unico' ? ' <span class="text-muted">(pago único)</span>' : ''}${it.estado !== 'activo' ? ' <span class="text-muted">(inactivo)</span>' : ''}</span>
+                    <span class="text-muted">${money(it.precio_anual)}</span>
+                </label>`).join('')
+            + '</div>').join('');
+        $('pq_buscar').value = '';
         $('cfgBtnEliminarPaquete').classList.toggle('d-none', !p.id);
         actualizarValorPaquete();
         $('pq_nombre').focus();
@@ -706,6 +715,22 @@
     });
     $('cfgBtnCancelarPaquete').addEventListener('click', () => $('cfgPaqEditor').classList.add('d-none'));
     $('pq_items').addEventListener('change', actualizarValorPaquete);
+    function idsPaqueteMarcados() {
+        return Array.from($('pq_items').querySelectorAll('.pq-check:checked')).map((c) => Number(c.value));
+    }
+    // Buscador de la lista: oculta las filas (y los grupos vacíos) que no coinciden; no desmarca nada.
+    $('pq_buscar').addEventListener('input', () => {
+        const q = ($('pq_buscar').value || '').toLowerCase().trim();
+        $('pq_items').querySelectorAll('.pq-grupo').forEach((g) => {
+            let visibles = 0;
+            g.querySelectorAll('.pq-fila').forEach((f) => {
+                const ver = !q || f.dataset.texto.includes(q);
+                f.classList.toggle('d-none', !ver);
+                if (ver) visibles++;
+            });
+            g.classList.toggle('d-none', visibles === 0);
+        });
+    });
     $('pq_descuento_pct').addEventListener('input', actualizarValorPaquete);
 
     let guardandoPaquete = false;
@@ -720,7 +745,7 @@
                 descuento_pct: $('pq_descuento_pct').value,
                 orden: parseInt($('pq_orden').value || 0, 10) || 0,
                 estado: $('pq_activo').checked ? 'activo' : 'inactivo',
-                items: Array.from($('pq_items').selectedOptions).map((o) => parseInt(o.value, 10)),
+                items: idsPaqueteMarcados(),
             });
             if (!j.ok) return alerta('warning', 'No se guardó', j.error);
             await cargarConfig();
