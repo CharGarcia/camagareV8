@@ -239,6 +239,10 @@ class CotizadorPlanesPdfService
         if ($variosLocales && !empty($f['es_principal'])) {
             $titulo .= '  (PRINCIPAL)';
         }
+        if (($e['paquete_nombre'] ?? '') !== '') {
+            $titulo .= '  ·  PAQUETE ' . mb_strtoupper((string) $e['paquete_nombre'])
+                . ((float) ($e['paquete_descuento_pct'] ?? 0) > 0 ? ' (-' . $this->pct((float) $e['paquete_descuento_pct']) . ')' : '');
+        }
         $y = $this->tituloSeccion($titulo, $y, 20);
 
         $cols = [
@@ -273,7 +277,7 @@ class CotizadorPlanesPdfService
         $n = 0;
         foreach (($e['items'] ?? []) as $it) {
             $n++;
-            $nombre = (string) $it['nombre'] . (!empty($it['por_dependencia']) ? ' (incluido)' : '');
+            $nombre = (string) $it['nombre'] . (!empty($it['de_paquete']) ? ' (paquete)' : '') . (!empty($it['por_dependencia']) ? ' (incluido)' : '');
             $hFila = max(5.5, $pdf->getNumLines($nombre, $cols[2]['w'] - 2) * 4.2 + 1.3);
             if ($y + $hFila > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
                 $pdf->AddPage();
@@ -282,12 +286,16 @@ class CotizadorPlanesPdfService
             $fill = $n % 2 === 0;
             $pdf->SetFillColor(248, 250, 252);
             $precio = (float) $it['precio_anual'];
+            $pctPaq = (!empty($it['de_paquete']) && ($it['cobro'] ?? '') !== 'unico') ? (float) ($it['descuento_paquete_pct'] ?? 0) : 0.0;
+            if ($pctPaq > 0) {
+                $precio = round($precio - round($precio * $pctPaq / 100, 2), 2);
+            }
             $vals = [
                 (string) $n,
                 ($it['cobro'] ?? '') === 'unico' ? 'Servicios' : (string) ($it['grupo'] ?? ''),
                 $nombre,
                 ($it['cobro'] ?? '') === 'unico' ? 'Una sola vez' : 'Cada periodo',
-                $precio > 0 ? '$ ' . number_format($precio, 2, '.', ',') : 'Incluido',
+                $precio > 0 ? '$ ' . number_format($precio, 2, '.', ',') . ($pctPaq > 0 ? ' (-' . $this->pct($pctPaq) . ')' : '') : 'Incluido',
             ];
             $x = $mL;
             foreach ($cols as $k => $c) {
@@ -297,21 +305,30 @@ class CotizadorPlanesPdfService
             $y += $hFila;
         }
 
-        // Valor del establecimiento.
+        // Valor del establecimiento (una línea) y, debajo, los descuentos que tuvo.
         $pdf->SetXY($mL, $y + 1);
-        $pdf->SetFont('helvetica', '', 8);
-        $pdf->SetTextColor(...self::GRIS_TXT);
-        $nota = !empty($f['descuento_establecimiento'])
-            ? 'Incluye descuento por establecimiento adicional de $ ' . number_format((float) $f['descuento_establecimiento'], 2, '.', ',') . ' (plan anual)'
-            : '';
-        $pdf->Cell($this->contentW - 100, 6, $nota, 0, 0, 'L');
         $pdf->SetFont('helvetica', 'B', 8);
         $pdf->SetTextColor(...self::COLOR);
-        $pdf->Cell(100, 6, 'Anual $ ' . number_format((float) ($f['anual'] ?? 0), 2, '.', ',')
+        $pdf->Cell($this->contentW, 5, 'Anual $ ' . number_format((float) ($f['anual'] ?? 0), 2, '.', ',')
             . '  ·  Semestral $ ' . number_format((float) ($f['semestral'] ?? 0), 2, '.', ',')
             . '  ·  Mensual $ ' . number_format((float) ($f['mensual'] ?? 0), 2, '.', ','), 0, 1, 'R');
+        $notas = [];
+        if (!empty($f['descuento_paquete'])) {
+            $notas[] = 'Descuento del paquete: $ ' . number_format((float) $f['descuento_paquete'], 2, '.', ',');
+        }
+        if (!empty($f['descuento_establecimiento'])) {
+            $notas[] = 'Descuento por establecimiento adicional: $ ' . number_format((float) $f['descuento_establecimiento'], 2, '.', ',') . ' (plan anual)';
+        }
+        $altoNotas = 0;
+        if ($notas) {
+            $pdf->SetX($mL);
+            $pdf->SetFont('helvetica', '', 7.5);
+            $pdf->SetTextColor(...self::GRIS_TXT);
+            $pdf->Cell($this->contentW, 4, implode('  ·  ', $notas), 0, 1, 'R');
+            $altoNotas = 4;
+        }
         $pdf->SetTextColor(0, 0, 0);
-        return $y + 7;
+        return $y + 7 + $altoNotas;
     }
 
     /** Resumen: anual vs. mensual, usuarios, descuento y pago único. */
@@ -455,6 +472,11 @@ class CotizadorPlanesPdfService
         $pdf->Cell($this->contentW - 3, 6, $titulo, 0, 1, 'L');
         $pdf->SetTextColor(0, 0, 0);
         return $y + 7;
+    }
+
+    private function pct(float $v): string
+    {
+        return rtrim(rtrim(number_format($v, 2, '.', ''), '0'), '.') . ' %';
     }
 
     private function money(float $v): string

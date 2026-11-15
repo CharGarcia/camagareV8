@@ -336,6 +336,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
             <div class="modal-body">
                 <ul class="nav nav-tabs mb-3" role="tablist">
                     <li class="nav-item"><a class="nav-link active small" data-bs-toggle="tab" href="#cfg-tab-catalogo">Catálogo de precios</a></li>
+                    <li class="nav-item"><a class="nav-link small" data-bs-toggle="tab" href="#cfg-tab-paquetes">Paquetes</a></li>
                     <li class="nav-item"><a class="nav-link small" data-bs-toggle="tab" href="#cfg-tab-parametros">Parámetros</a></li>
                 </ul>
                 <div class="tab-content">
@@ -435,6 +436,75 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                             <table class="table table-sm table-hover mb-0" id="cfgItems">
                                 <thead class="table-light" style="position:sticky;top:0;z-index:1;">
                                     <tr><th>Grupo</th><th>Nombre</th><th>Se cobra</th><th class="text-end" style="width:130px;">Precio anual</th><th class="text-center">Desc. establ.</th><th class="text-center">Por defecto</th><th>Requiere</th><th class="text-center">Estado</th><th class="text-center" style="width:80px;"></th></tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="cfg-tab-paquetes">
+                        <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                            <div class="small text-muted flex-grow-1">
+                                Un paquete agrupa módulos del catálogo y vale la <strong>suma de sus módulos menos su % de descuento</strong>.
+                                Al cotizar, el vendedor elige el paquete del establecimiento: sus módulos quedan fijos y puede agregar otros sueltos.
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="cfgBtnNuevoPaquete"><i class="bi bi-plus-lg"></i> Nuevo paquete</button>
+                        </div>
+
+                        <div class="card border-primary border-opacity-25 mb-2 d-none" id="cfgPaqEditor">
+                            <div class="card-body py-2">
+                                <input type="hidden" id="pq_id">
+                                <div class="row g-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-bold mb-1">Nombre *</label>
+                                        <input type="text" class="form-control form-control-sm" id="pq_nombre" maxlength="100" placeholder="Ej.: Emprendedor">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small fw-bold mb-1">Descuento (%)</label>
+                                        <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm text-end" id="pq_descuento_pct" value="0">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label class="form-label small fw-bold mb-1">Orden</label>
+                                        <input type="number" step="1" class="form-control form-control-sm" id="pq_orden" value="0">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check form-switch small mt-4">
+                                            <input class="form-check-input" type="checkbox" id="pq_activo" checked>
+                                            <label class="form-check-label" for="pq_activo">Activo (se ofrece al cotizar)</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label small fw-bold mb-1">Descripción</label>
+                                        <input type="text" class="form-control form-control-sm" id="pq_descripcion" maxlength="500" placeholder="Para quién es este paquete">
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label small fw-bold mb-1">Módulos del paquete *</label>
+                                        <select class="form-select form-select-sm" id="pq_items" multiple size="10"></select>
+                                        <div class="small text-muted">Ctrl/Cmd + clic para elegir varios. Solo aparecen los módulos ya cargados en el catálogo. Los que estos requieren entran solos al cotizar.</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="border rounded-3 p-2 small bg-light">
+                                            <div class="d-flex justify-content-between"><span>Suma de módulos</span><strong id="pq_suma">$0.00</strong></div>
+                                            <div class="d-flex justify-content-between"><span>Descuento</span><strong id="pq_desc">−$0.00</strong></div>
+                                            <div class="d-flex justify-content-between border-top mt-1 pt-1"><span>Paquete al año</span><strong class="text-primary" id="pq_total">$0.00</strong></div>
+                                            <div class="text-muted mt-1">Los pagos únicos del paquete no llevan el descuento.</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-12 d-flex justify-content-between">
+                                        <button type="button" class="btn btn-outline-danger btn-sm d-none" id="cfgBtnEliminarPaquete"><i class="bi bi-trash3"></i> Eliminar paquete</button>
+                                        <div class="ms-auto d-flex gap-2">
+                                            <button type="button" class="btn btn-secondary btn-sm" id="cfgBtnCancelarPaquete">Cancelar</button>
+                                            <button type="button" class="btn btn-primary btn-sm" id="cfgBtnGuardarPaquete"><i class="bi bi-check2-circle"></i> Guardar paquete</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-responsive" style="max-height:52vh;">
+                            <table class="table table-sm table-hover mb-0" id="cfgPaquetes">
+                                <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                                    <tr><th>Paquete</th><th>Módulos</th><th class="text-end">Suma</th><th class="text-end">Descuento</th><th class="text-end">Paquete al año</th><th class="text-center">Estado</th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>

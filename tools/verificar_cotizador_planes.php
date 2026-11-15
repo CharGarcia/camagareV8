@@ -136,5 +136,20 @@ $P4 = ['recargo_semestral_pct' => 0, 'permitir_descuento_vendedor' => true, 'des
 $r = C::calcular($P4, [['codigo' => '001', 'items' => [$base(1000)]]], 3, 10);
 igual('recargo 0 % y descuento comercial 10 %: 500 − 50 = 450', 450.0, $r['total_semestral']);
 
+echo "12) Paquetes: % del paquete sobre sus módulos recurrentes\n";
+$paq = fn(float $v, float $pct, bool $baseOk = true, string $cobro = 'recurrente') => ['nombre' => 'Paq', 'precio_anual' => $v, 'cobro' => $cobro, 'aplica_descuento_establecimiento' => $baseOk, 'de_paquete' => true, 'descuento_paquete_pct' => $pct];
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$paq(600, 15), $paq(400, 15), $extra(300)]]], 3);
+igual('Emprendedor −15 %: (600 + 400) × 0,85 + 300 suelto = 1.150', 1150.0, $r['total_anual']);
+igual('descuento de paquetes = 150', 150.0, $r['descuento_paquetes']);
+igual('mensual = 1.150 ÷ 12 × 1,20 = 115', 115.0, $r['total_mensual']);
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$paq(1000, 10)]], ['codigo' => '002', 'items' => [$paq(1000, 10)]]], 6);
+igual('2 locales con paquete −10 %: 900 + 900 × 0,80 = 1.620', 1620.0, $r['total_anual']);
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$paq(100, 50, false, 'unico'), $paq(1000, 0)]]], 3);
+igual('el % del paquete no toca los pagos únicos', 100.0, $r['total_unico']);
+igual('paquete con 0 % no rebaja nada', 1000.0, $r['total_anual']);
+$noPaq = ['nombre' => 'X', 'precio_anual' => 1000, 'cobro' => 'recurrente', 'aplica_descuento_establecimiento' => true, 'de_paquete' => false, 'descuento_paquete_pct' => 15];
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$noPaq]]], 3);
+igual('un ítem suelto no recibe el % aunque traiga el dato', 1000.0, $r['total_anual']);
+
 echo PHP_EOL . ($fallos === 0 ? "TODO OK" : "FALLARON {$fallos} casos") . PHP_EOL;
 exit($fallos === 0 ? 0 : 1);

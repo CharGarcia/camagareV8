@@ -11,6 +11,8 @@
     const $ = (id) => document.getElementById(id);
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const money = (v) => '$' + Number(v || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Redondeo a 2 decimales del sistema (app.js); igual al del servidor (CotizadorPlanesCalculo::r2).
+    const r2 = (v) => (typeof window.CMG_r2 === 'function' ? window.CMG_r2(v) : Number(Number(v).toFixed(2)));
     const pct = (v) => Number(v || 0).toLocaleString('es-EC', { maximumFractionDigits: 2 }) + ' %';
 
     async function getJson(url) {
@@ -66,6 +68,8 @@
 
     let catalogo = [];        // ítems activos
     let catalogoPorId = {};
+    let paquetes = [];        // paquetes activos
+    let paquetesPorId = {};
     let parametros = {};
     let estado = null;        // estado de la cotización abierta
     let establecimientos = []; // [{codigo, nombre, direccion, elegidos:[ids]}]
@@ -83,6 +87,9 @@
         parametros = j.parametros || {};
         catalogoPorId = {};
         catalogo.forEach((it) => { catalogoPorId[it.id] = it; });
+        paquetes = j.paquetes || [];
+        paquetesPorId = {};
+        paquetes.forEach((p) => { paquetesPorId[p.id] = p; });
     }
 
     function editable() {
@@ -105,7 +112,7 @@
         CAMPOS.forEach((c) => { d[c] = $('cp_' + c)?.value ?? ''; });
         d.usuarios = parseInt(d.usuarios || 0, 10) || 0;
         d.descuento_vendedor_pct = parseFloat(d.descuento_vendedor_pct || 0) || 0;
-        d.establecimientos = establecimientos.map((e) => ({ codigo: e.codigo, nombre: e.nombre, direccion: e.direccion, elegidos: e.elegidos.slice() }));
+        d.establecimientos = establecimientos.map((e) => ({ codigo: e.codigo, nombre: e.nombre, direccion: e.direccion, id_paquete: e.id_paquete || null, elegidos: e.elegidos.slice() }));
         if (!d.id) d.token_guardado = tokenGuardado;
         return d;
     }
@@ -158,7 +165,7 @@
     function nuevoEstablecimiento(codigo, nombre, direccion) {
         // Los ítems «por defecto» entran solos en cada establecimiento nuevo.
         const defecto = catalogo.filter((it) => it.por_defecto).map((it) => it.id);
-        return { codigo, nombre: nombre || '', direccion: direccion || '', elegidos: defecto };
+        return { codigo, nombre: nombre || '', direccion: direccion || '', id_paquete: null, elegidos: defecto };
     }
 
     function siguienteCodigo() {
@@ -201,7 +208,7 @@
         $('cp_id').value = estado.id;
         tokenGuardado = '';
         llenarFormulario(estado);
-        establecimientos = (estado.establecimientos || []).map((e) => ({ codigo: e.codigo, nombre: e.nombre || '', direccion: e.direccion || '', elegidos: (e.elegidos || []).map(Number) }));
+        establecimientos = (estado.establecimientos || []).map((e) => ({ codigo: e.codigo, nombre: e.nombre || '', direccion: e.direccion || '', id_paquete: e.id_paquete || null, elegidos: (e.elegidos || []).map(Number) }));
         $('cpSriInfo').innerHTML = '';
         aviso();
         if (estado.estado === 'proforma') {
@@ -225,6 +232,7 @@
     function mostrarGuardada() {
         const est = (estado.establecimientos || []).map((e) => ({
             codigo: e.codigo, nombre: e.nombre, direccion: e.direccion, es_principal: e.es_principal,
+            paquete_nombre: e.paquete_nombre, paquete_descuento_pct: e.paquete_descuento_pct,
             items: (e.items || []).map((it) => ({ ...it, requerido_por: [] })),
         }));
         $('cpTotAnual').textContent = money(estado.total_anual);
@@ -260,6 +268,19 @@
         return html;
     }
 
+    /** Selector del paquete del establecimiento (o su nombre si la cotización está cerrada). */
+    function selectorPaquete(e, f, i, ed) {
+        const pctTxt = (p) => Number(p) > 0 ? ` (−${pct(p)})` : '';
+        if (!ed) {
+            const nom = f.paquete_nombre || '';
+            return nom ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Paquete ${esc(nom)}${esc(pctTxt(f.paquete_descuento_pct))}</span>` : '';
+        }
+        if (!paquetes.length && !e.id_paquete) return '';
+        const opts = ['<option value="">Sin paquete (módulos sueltos)</option>']
+            .concat(paquetes.map((p) => `<option value="${p.id}" ${Number(e.id_paquete) === p.id ? 'selected' : ''}>${esc(p.nombre)}${esc(pctTxt(p.descuento_pct))}</option>`));
+        return `<select class="form-select form-select-sm" style="width:220px;" title="Paquete del establecimiento" onchange="CP_estCampo(${i}, 'id_paquete', this.value)">${opts.join('')}</select>`;
+    }
+
     /** Pinta los bloques. Con calc: usa los ítems ya resueltos por el servidor (con dependencias). */
     function pintarEstablecimientos(calc) {
         const cont = $('cpEstablecimientos');
@@ -272,14 +293,21 @@
                 ? '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 ms-2" title="Plan base de mayor valor: paga completo">Principal</span>' : '';
             const filasItems = items.length ? items.map((it) => {
                 const dep = !!it.por_dependencia;
+                const dePaq = !!it.de_paquete;
                 const quien = dep && it.requerido_por?.length ? `requerido por ${it.requerido_por.join(', ')}` : (dep ? 'requerido' : '');
-                const quitar = ed && !dep
+                // Los módulos del paquete no se quitan (solo cambiando o quitando el paquete).
+                const quitar = ed && !dep && !dePaq
                     ? `<button type="button" class="btn btn-link btn-sm text-danger p-0" title="Quitar" onclick="CP_quitarItem(${i}, ${Number(it.id_item)})"><i class="bi bi-x-circle"></i></button>` : '';
+                const pctPaq = dePaq && it.cobro !== 'unico' ? Number(it.descuento_paquete_pct || 0) : 0;
+                const precio = pctPaq > 0
+                    ? `<span class="text-muted text-decoration-line-through small me-1">${money(it.precio_anual)}</span>${money(r2(Number(it.precio_anual) - r2(Number(it.precio_anual) * pctPaq / 100)))}`
+                    : money(it.precio_anual);
                 return `<tr class="${dep ? 'cp-dep' : ''}">
                     <td>${dep ? '<i class="bi bi-link-45deg me-1" title="Entró porque otro módulo lo necesita"></i>' : ''}${esc(it.nombre)}
+                        ${dePaq ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-1">Paquete</span>' : ''}
                         ${quien ? `<span class="small text-muted ms-1">(${esc(quien)})</span>` : ''}</td>
                     <td class="small text-muted">${esc(it.cobro === 'unico' ? 'Pago único' : (it.grupo || ''))}</td>
-                    <td class="text-end" style="width:110px;">${money(it.precio_anual)}${it.cobro === 'unico' ? '' : '<span class="text-muted small">/año</span>'}</td>
+                    <td class="text-end" style="width:150px;">${precio}${it.cobro === 'unico' ? '' : '<span class="text-muted small">/año</span>'}</td>
                     <td class="text-center" style="width:32px;">${quitar}</td></tr>`;
             }).join('') : '<tr><td colspan="4" class="text-muted small">Sin módulos. Agregue al menos uno.</td></tr>';
             return `<div class="cp-est">
@@ -289,6 +317,7 @@
                         onchange="CP_estCampo(${i}, 'codigo', this.value)" title="Código del establecimiento (001, 002…)">
                     <input type="text" class="form-control form-control-sm flex-grow-1" style="min-width:180px;max-width:360px;" maxlength="300" placeholder="Nombre del local" value="${esc(e.nombre)}" ${ed ? '' : 'disabled'}
                         onchange="CP_estCampo(${i}, 'nombre', this.value)">
+                    ${selectorPaquete(e, f, i, ed)}
                     ${principal}
                     <span class="ms-auto small">${f.anual !== undefined ? `<strong>${money(f.anual)}</strong>/año · ${money(f.semestral)}/semestre · ${money(f.mensual)}/mes` : ''}</span>
                     ${ed && establecimientos.length > 1 ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Quitar establecimiento" onclick="CP_quitarEst(${i})"><i class="bi bi-trash3"></i></button>` : ''}
@@ -303,6 +332,9 @@
     window.CP_estCampo = function (i, campo, valor) {
         if (campo === 'codigo') {
             valor = String(valor || '').replace(/\D/g, '').padStart(3, '0').slice(-3);
+        }
+        if (campo === 'id_paquete') {
+            valor = parseInt(valor || 0, 10) || null;
         }
         establecimientos[i][campo] = valor;
         marcarSucio();
@@ -354,7 +386,9 @@
             // El servidor devuelve los ítems realmente elegidos (sin los inactivos).
             (ultimoCalculo.establecimientos || []).forEach((f, i) => {
                 if (establecimientos[i]) {
-                    establecimientos[i].elegidos = (f.items || []).filter((it) => !it.por_dependencia).map((it) => Number(it.id_item));
+                    // Solo los sueltos: los del paquete y las dependencias los pone el servidor.
+                    establecimientos[i].elegidos = (f.elegidos || []).map(Number);
+                    establecimientos[i].id_paquete = f.id_paquete || null;
                 }
             });
             pintarCalculo(ultimoCalculo);
@@ -446,7 +480,8 @@
         if (!usar) return;
         // Conserva los módulos ya elegidos en el primer establecimiento como punto de partida.
         const plantilla = establecimientos[0]?.elegidos?.slice() || catalogo.filter((it) => it.por_defecto).map((it) => it.id);
-        establecimientos = abiertos.map((x) => ({ codigo: x.codigo, nombre: x.nombre || '', direccion: x.direccion || '', elegidos: plantilla.slice() }));
+        const paqPlantilla = establecimientos[0]?.id_paquete || null;
+        establecimientos = abiertos.map((x) => ({ codigo: x.codigo, nombre: x.nombre || '', direccion: x.direccion || '', id_paquete: paqPlantilla, elegidos: plantilla.slice() }));
     }
 
     // ── Guardar / eliminar / proforma ──────────────────────────────────────
@@ -574,6 +609,7 @@
     let cfgModal = null;
     let cfgItems = [];
     let cfgSubmodulos = [];
+    let cfgPaquetes = [];
     let productosMapa = {}; // texto del datalist → id
 
     window.CP_abrirConfig = async function () {
@@ -598,10 +634,115 @@
         if (c.producto_resumen_anual) productosMapa[c.producto_resumen_anual] = c.id_producto_resumen_anual;
         if (c.producto_resumen_mensual) productosMapa[c.producto_resumen_mensual] = c.id_producto_resumen_mensual;
         cfgItems = j.items || [];
+        cfgPaquetes = j.paquetes || [];
         cfgSubmodulos = j.submodulos || [];
         pintarCfgItems();
+        pintarCfgPaquetes();
         $('cfgEditor').classList.add('d-none');
+        $('cfgPaqEditor').classList.add('d-none');
     }
+
+    // ── Paquetes (configuración) ───────────────────────────────────────────
+    /** Suma anual de los módulos de un paquete y su valor con el descuento (los únicos no se descuentan). */
+    function valorPaquete(ids, pctDesc) {
+        let suma = 0, desc = 0;
+        ids.forEach((id) => {
+            const it = cfgItems.find((x) => x.id === Number(id));
+            if (!it) return;
+            const precio = Number(it.precio_anual || 0);
+            suma += precio;
+            if (it.cobro !== 'unico') desc = r2(desc + r2(precio * Number(pctDesc || 0) / 100));
+        });
+        return { suma: r2(suma), desc, total: r2(suma - desc) };
+    }
+
+    function pintarCfgPaquetes() {
+        $('cfgPaquetes').querySelector('tbody').innerHTML = cfgPaquetes.map((p) => {
+            const v = valorPaquete(p.items || [], p.descuento_pct);
+            const nombres = (p.items || []).map((id) => cfgItems.find((x) => x.id === Number(id))?.nombre).filter(Boolean);
+            return `<tr role="button" onclick="CP_editarPaquete(${p.id})">
+                <td class="fw-medium">${esc(p.nombre)}${p.descripcion ? `<div class="small text-muted">${esc(p.descripcion)}</div>` : ''}</td>
+                <td class="small cp-celda" style="max-width:260px;" title="${esc(nombres.join(', '))}">${nombres.length} · ${esc(nombres.join(', '))}</td>
+                <td class="text-end">${money(v.suma)}</td>
+                <td class="text-end">${Number(p.descuento_pct) > 0 ? '−' + pct(p.descuento_pct) : '—'}</td>
+                <td class="text-end fw-semibold">${money(v.total)}</td>
+                <td class="text-center">${p.estado === 'activo' ? '<span class="badge bg-success bg-opacity-10 text-success">Activo</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>'}</td>
+            </tr>`;
+        }).join('') || '<tr><td colspan="6" class="text-muted text-center py-3">Aún no hay paquetes. Cree uno con «Nuevo paquete» (p. ej. Emprendedor).</td></tr>';
+    }
+
+    function actualizarValorPaquete() {
+        const ids = Array.from($('pq_items').selectedOptions).map((o) => Number(o.value));
+        const v = valorPaquete(ids, parseFloat($('pq_descuento_pct').value || 0));
+        $('pq_suma').textContent = money(v.suma);
+        $('pq_desc').textContent = '−' + money(v.desc);
+        $('pq_total').textContent = money(v.total);
+    }
+
+    function abrirEditorPaquete(p) {
+        $('cfgPaqEditor').classList.remove('d-none');
+        $('pq_id').value = p.id || '';
+        $('pq_nombre').value = p.nombre || '';
+        $('pq_descuento_pct').value = p.descuento_pct ?? 0;
+        $('pq_orden').value = p.orden || 0;
+        $('pq_activo').checked = (p.estado || 'activo') === 'activo';
+        $('pq_descripcion').value = p.descripcion || '';
+        const sel = new Set((p.items || []).map(Number));
+        const grupos = {};
+        cfgItems.forEach((it) => { (grupos[it.tipo === 'servicio' ? 'Servicios' : (it.grupo || 'Otros')] ||= []).push(it); });
+        $('pq_items').innerHTML = Object.keys(grupos).sort().map((g) => `<optgroup label="${esc(g)}">` + grupos[g].map((it) =>
+            `<option value="${it.id}" ${sel.has(it.id) ? 'selected' : ''}>${esc(it.nombre)} — ${money(it.precio_anual)}${it.cobro === 'unico' ? ' (único)' : ''}${it.estado !== 'activo' ? ' (inactivo)' : ''}</option>`).join('') + '</optgroup>').join('');
+        $('cfgBtnEliminarPaquete').classList.toggle('d-none', !p.id);
+        actualizarValorPaquete();
+        $('pq_nombre').focus();
+    }
+    window.CP_editarPaquete = function (id) {
+        const p = cfgPaquetes.find((x) => Number(x.id) === Number(id));
+        if (p) abrirEditorPaquete(p);
+    };
+    $('cfgBtnNuevoPaquete').addEventListener('click', () => {
+        if (!cfgItems.length) return alerta('info', 'Catálogo vacío', 'Primero cargue módulos con su precio en la pestaña Catálogo de precios.');
+        abrirEditorPaquete({ estado: 'activo', descuento_pct: 0, items: [] });
+    });
+    $('cfgBtnCancelarPaquete').addEventListener('click', () => $('cfgPaqEditor').classList.add('d-none'));
+    $('pq_items').addEventListener('change', actualizarValorPaquete);
+    $('pq_descuento_pct').addEventListener('input', actualizarValorPaquete);
+
+    let guardandoPaquete = false;
+    $('cfgBtnGuardarPaquete').addEventListener('click', async () => {
+        if (guardandoPaquete) return;
+        guardandoPaquete = true;
+        try {
+            const j = await postJson(`${URL}/guardarPaqueteAjax`, {
+                id: parseInt($('pq_id').value || 0, 10) || 0,
+                nombre: $('pq_nombre').value,
+                descripcion: $('pq_descripcion').value,
+                descuento_pct: $('pq_descuento_pct').value,
+                orden: parseInt($('pq_orden').value || 0, 10) || 0,
+                estado: $('pq_activo').checked ? 'activo' : 'inactivo',
+                items: Array.from($('pq_items').selectedOptions).map((o) => parseInt(o.value, 10)),
+            });
+            if (!j.ok) return alerta('warning', 'No se guardó', j.error);
+            await cargarConfig();
+            bootstrap.Tab.getOrCreateInstance(document.querySelector('a[href="#cfg-tab-paquetes"]')).show();
+        } catch (e) {
+            alerta('error', 'Error de conexión', 'No se pudo guardar el paquete.');
+        } finally {
+            guardandoPaquete = false;
+        }
+    });
+    $('cfgBtnEliminarPaquete').addEventListener('click', async () => {
+        const id = parseInt($('pq_id').value || 0, 10);
+        if (!id) return;
+        if (window.Swal) {
+            const r = await Swal.fire({ icon: 'warning', title: '¿Eliminar este paquete?', text: 'Las cotizaciones ya hechas conservan su paquete. Si solo quiere dejar de ofrecerlo, márquelo inactivo.', showCancelButton: true, confirmButtonText: 'Eliminar', cancelButtonText: 'Cancelar', confirmButtonColor: '#d33', reverseButtons: true });
+            if (!r.isConfirmed) return;
+        }
+        const j = await postJson(`${URL}/eliminarPaqueteAjax`, { id });
+        if (!j.ok) return alerta('warning', 'No se eliminó', j.error);
+        await cargarConfig();
+        bootstrap.Tab.getOrCreateInstance(document.querySelector('a[href="#cfg-tab-paquetes"]')).show();
+    });
 
     /** Ítems cargados + submódulos del menú que aún no están en el catálogo (a $0, «Sin cargar»). */
     function filasCatalogo() {
@@ -718,11 +859,11 @@
         }
     }
     window.CP_precioCatalogo = function (k, el) {
-        guardarFila(k, Math.round(parseFloat(el.value || 0) * 100) / 100);
+        guardarFila(k, r2(parseFloat(el.value || 0)));
     };
     window.CP_cargarItem = function (k) {
         const el = $('cfgItems').querySelector(`input[data-k="${k}"]`);
-        guardarFila(k, el ? Math.round(parseFloat(el.value || 0) * 100) / 100 : 0);
+        guardarFila(k, el ? r2(parseFloat(el.value || 0)) : 0);
     };
     $('cfgFiltro').addEventListener('input', pintarCfgItems);
 

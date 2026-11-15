@@ -40,12 +40,15 @@ class CotizadorPlanesRepository extends BaseRepository
 
     /**
      * ¿Ya se ejecutaron los SQL del módulo? Sin ellos la pantalla avisa en vez de fallar:
-     * 2026-11-13_cotizador_planes.sql (tablas) y 2026-11-15_cotizador_planes_semestral.sql.
+     * 2026-11-13_cotizador_planes.sql (tablas), 2026-11-15_cotizador_planes_semestral.sql y
+     * 2026-11-15_cotizador_planes_paquetes.sql.
      */
     public function disponible(): bool
     {
         return $this->tablaExiste('cotizaciones_planes') && $this->tablaExiste('cotizador_planes_items')
-            && $this->columnaExiste('cotizaciones_planes', 'total_semestral');
+            && $this->columnaExiste('cotizaciones_planes', 'total_semestral')
+            && $this->tablaExiste('cotizador_planes_paquetes')
+            && $this->columnaExiste('cotizaciones_planes_detalle', 'de_paquete');
     }
 
     // ── Configuración ────────────────────────────────────────────────────────
@@ -184,6 +187,11 @@ class CotizadorPlanesRepository extends BaseRepository
             "UPDATE cotizador_planes_items SET eliminado = true, deleted_at = NOW(), deleted_by = :u
               WHERE id = :id AND id_empresa = :e AND eliminado = false"
         )->execute([':id' => $id, ':e' => $idEmpresa, ':u' => $idUsuario]);
+        // Sale también de los paquetes que lo tenían.
+        $this->db->prepare(
+            "UPDATE cotizador_planes_paquetes_items SET eliminado = true, deleted_at = NOW(), deleted_by = :u
+              WHERE id_empresa = :e AND id_item = :id AND eliminado = false"
+        )->execute([':id' => $id, ':e' => $idEmpresa, ':u' => $idUsuario]);
         // Sus dependencias (en ambos sentidos) dejan de valer.
         $this->db->prepare(
             "UPDATE cotizador_planes_items_dependencias SET eliminado = true, deleted_at = NOW(), deleted_by = :u
@@ -226,6 +234,90 @@ class CotizadorPlanesRepository extends BaseRepository
                 $st->execute([':e' => $idEmpresa, ':i' => $idItem, ':r' => $r, ':u' => $idUsuario]);
             }
         }
+    }
+
+    // ── Paquetes ─────────────────────────────────────────────────────────────
+
+    /** Paquetes de la empresa con la lista de ids de sus ítems (solo ítems vigentes). */
+    public function getPaquetes(int $idEmpresa, bool $soloActivos = false): array
+    {
+        $st = $this->db->prepare(
+            "SELECT p.*,
+                    COALESCE(ARRAY_TO_JSON(ARRAY_AGG(pi.id_item ORDER BY pi.id_item)
+                             FILTER (WHERE pi.id IS NOT NULL AND i.id IS NOT NULL)), '[]') AS items_json
+               FROM cotizador_planes_paquetes p
+               LEFT JOIN cotizador_planes_paquetes_items pi
+                      ON pi.id_paquete = p.id AND pi.id_empresa = p.id_empresa AND pi.eliminado = false
+               LEFT JOIN cotizador_planes_items i ON i.id = pi.id_item AND i.eliminado = false
+              WHERE p.id_empresa = :e AND p.eliminado = false"
+            . ($soloActivos ? " AND p.estado = 'activo'" : '') . "
+              GROUP BY p.id
+              ORDER BY p.orden, p.nombre, p.id"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $r['items'] = array_map('intval', json_decode((string) $r['items_json'], true) ?: []);
+            unset($r['items_json']);
+            $out[] = $r;
+        }
+        return $out;
+    }
+
+    public function getPaquete(int $id, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT * FROM cotizador_planes_paquetes WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    public function insertPaquete(int $idEmpresa, array $d, int $idUsuario): int
+    {
+        $st = $this->db->prepare(
+            "INSERT INTO cotizador_planes_paquetes (id_empresa, nombre, descripcion, descuento_pct, orden, estado, created_by, updated_by)
+             VALUES (:e, :n, :d, :p, :o, :s, :u, :u) RETURNING id"
+        );
+        $st->execute([':e' => $idEmpresa, ':n' => $d['nombre'], ':d' => $d['descripcion'] ?: null, ':p' => $d['descuento_pct'],
+            ':o' => $d['orden'], ':s' => $d['estado'], ':u' => $idUsuario]);
+        return (int) $st->fetchColumn();
+    }
+
+    public function updatePaquete(int $id, int $idEmpresa, array $d, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE cotizador_planes_paquetes SET nombre = :n, descripcion = :d, descuento_pct = :p, orden = :o, estado = :s,
+                    updated_at = NOW(), updated_by = :u
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        )->execute([':id' => $id, ':e' => $idEmpresa, ':n' => $d['nombre'], ':d' => $d['descripcion'] ?: null,
+            ':p' => $d['descuento_pct'], ':o' => $d['orden'], ':s' => $d['estado'], ':u' => $idUsuario]);
+    }
+
+    /** Reemplaza los ítems del paquete (eliminación lógica de los anteriores). */
+    public function reemplazarItemsPaquete(int $idEmpresa, int $idPaquete, array $items, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE cotizador_planes_paquetes_items SET eliminado = true, deleted_at = NOW(), deleted_by = :u
+              WHERE id_empresa = :e AND id_paquete = :p AND eliminado = false"
+        )->execute([':e' => $idEmpresa, ':p' => $idPaquete, ':u' => $idUsuario]);
+        $st = $this->db->prepare(
+            "INSERT INTO cotizador_planes_paquetes_items (id_empresa, id_paquete, id_item, created_by, updated_by)
+             VALUES (:e, :p, :i, :u, :u)"
+        );
+        foreach (array_unique(array_map('intval', $items)) as $i) {
+            if ($i > 0) $st->execute([':e' => $idEmpresa, ':p' => $idPaquete, ':i' => $i, ':u' => $idUsuario]);
+        }
+    }
+
+    public function eliminarPaquete(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $this->db->prepare(
+            "UPDATE cotizador_planes_paquetes SET eliminado = true, deleted_at = NOW(), deleted_by = :u
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        )->execute([':id' => $id, ':e' => $idEmpresa, ':u' => $idUsuario]);
+        $this->db->prepare(
+            "UPDATE cotizador_planes_paquetes_items SET eliminado = true, deleted_at = NOW(), deleted_by = :u
+              WHERE id_paquete = :id AND id_empresa = :e AND eliminado = false"
+        )->execute([':id' => $id, ':e' => $idEmpresa, ':u' => $idUsuario]);
     }
 
     // ── Productos (línea resumen y servicios de la proforma) ─────────────────
@@ -451,14 +543,18 @@ class CotizadorPlanesRepository extends BaseRepository
     {
         $st = $this->db->prepare(
             "INSERT INTO cotizaciones_planes_establecimientos
-                (id_empresa, id_cotizacion, codigo, nombre, direccion, es_principal, orden, created_by, updated_by)
-             VALUES (:e, :c, :cod, :nom, :dir, :pri, :o, :u, :u) RETURNING id"
+                (id_empresa, id_cotizacion, codigo, nombre, direccion, es_principal, orden,
+                 id_paquete, paquete_nombre, paquete_descuento_pct, created_by, updated_by)
+             VALUES (:e, :c, :cod, :nom, :dir, :pri, :o, :paq, :paqn, :paqp, :u, :u) RETURNING id"
         );
         $st->execute([
             ':e' => $idEmpresa, ':c' => $idCotizacion, ':cod' => $e['codigo'],
             ':nom' => ($e['nombre'] ?? '') !== '' ? $e['nombre'] : null,
             ':dir' => ($e['direccion'] ?? '') !== '' ? $e['direccion'] : null,
             ':pri' => !empty($e['es_principal']) ? 'true' : 'false', ':o' => $orden, ':u' => $idUsuario,
+            ':paq' => !empty($e['id_paquete']) ? (int) $e['id_paquete'] : null,
+            ':paqn' => ($e['paquete_nombre'] ?? '') !== '' ? $e['paquete_nombre'] : null,
+            ':paqp' => (float) ($e['paquete_descuento_pct'] ?? 0),
         ]);
         return (int) $st->fetchColumn();
     }
@@ -468,8 +564,9 @@ class CotizadorPlanesRepository extends BaseRepository
         $this->db->prepare(
             "INSERT INTO cotizaciones_planes_detalle
                 (id_empresa, id_cotizacion, id_establecimiento, id_item, nombre, grupo, tipo, cobro, precio_anual,
-                 aplica_descuento_establecimiento, por_dependencia, id_producto, orden, created_by, updated_by)
-             VALUES (:e, :c, :est, :item, :nom, :grupo, :tipo, :cobro, :precio, :ade, :dep, :prod, :o, :u, :u)"
+                 aplica_descuento_establecimiento, por_dependencia, id_producto, orden,
+                 de_paquete, descuento_paquete_pct, created_by, updated_by)
+             VALUES (:e, :c, :est, :item, :nom, :grupo, :tipo, :cobro, :precio, :ade, :dep, :prod, :o, :dpq, :dpp, :u, :u)"
         )->execute([
             ':e' => $idEmpresa, ':c' => $idCotizacion, ':est' => $idEstablecimiento, ':item' => (int) $it['id_item'],
             ':nom' => $it['nombre'], ':grupo' => ($it['grupo'] ?? '') !== '' ? $it['grupo'] : null,
@@ -478,6 +575,8 @@ class CotizadorPlanesRepository extends BaseRepository
             ':dep' => !empty($it['por_dependencia']) ? 'true' : 'false',
             ':prod' => !empty($it['id_producto']) ? (int) $it['id_producto'] : null,
             ':o' => $orden, ':u' => $idUsuario,
+            ':dpq' => !empty($it['de_paquete']) ? 'true' : 'false',
+            ':dpp' => (float) ($it['descuento_paquete_pct'] ?? 0),
         ]);
     }
 

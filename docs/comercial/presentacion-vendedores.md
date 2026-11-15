@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.18** (15-11-2026). El historial de cambios está al final.
+Versión actual: **0.19** (15-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -577,10 +577,22 @@ catálogo, en la práctica van **incluidos**.
 | Sin dependencias | Servicio externo, Cotización de publicidad, Firmas electrónicas (reventa) |
 | **En todos los planes** *(propuesta)* | Chat de soporte, IA de soporte, manual en línea, Automatizaciones, Videollamadas, app móvil (según los módulos contratados) |
 
-### 6.5 Paquetes de referencia *(opcional — por decidir si se usan)*
+### 6.5 Paquetes ✅ (ya existen en el Cotizador)
 
-Para que el vendedor no arme cada cotización desde cero, se podrían definir
-combinaciones típicas. El precio de cada una igual lo calcula el cotizador.
+Para no armar cada cotización desde cero, el administrador define **paquetes**
+en *Cotizador → Configuración → Paquetes*:
+
+- Un paquete agrupa módulos y vale la **suma de sus módulos menos su % de
+  descuento** (p. ej. *Emprendedor −15 %*).
+- Al cotizar, el vendedor elige **un paquete por establecimiento**: sus módulos
+  quedan fijos y puede **agregar módulos sueltos** a su precio normal.
+- En plan anual, el descuento por establecimiento adicional se aplica después,
+  sobre el valor del paquete.
+
+*Ejemplo ilustrativo:* paquete con Facturas ($600) y Proformas ($400) al 15 % →
+$850 al año, en vez de $1.000.
+
+**Paquetes sugeridos** (nombres, módulos y % por definir — P-17):
 
 | Paquete | Para quién | Módulos principales |
 |---|---|---|
@@ -765,7 +777,7 @@ actualiza su sección y se tacha aquí.
 | P-14 | Validar la tabla de **dependencias** (qué módulo trae a cuál). | 6.4 |
 | P-15 | ¿Qué módulos son **base** y cuáles **adicionales** (con o sin descuento por establecimiento)? | 6.2 |
 | P-16 | ¿Automatizaciones y Videollamadas van en todos los planes o se venden aparte? ¿Contabilidad e Impuestos se venden juntos? ¿Retenciones de venta van con Facturación o con Tesorería? | 6.4 |
-| P-17 | ¿Se usan **paquetes de referencia**? Si sí, sus nombres y el del estudio contable. | 6.5 |
+| P-17 | Paquetes ya disponibles en el Cotizador: definir **nombres, módulos y % de descuento** de cada uno (p. ej. Emprendedor) y cargarlos. | 6.5 |
 | P-18 | ¿El **vendedor puede dar descuento comercial**? ¿Hasta qué %? | 6.2 |
 | P-19 | **Control de cupos** de usuarios por RUC: hoy no es automático; ¿quién lo controla? | 6.2 |
 
@@ -799,6 +811,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.19 | 15-11-2026 | **Paquetes** en el Cotizador (suma de módulos menos % propio; módulos fijos y sueltos aparte): sección 6.5 y P-17 |
 | 0.18 | 15-11-2026 | Plan **semestral** (anual ÷ 2 + 10 %, sin descuento por establecimiento): reglas, ejemplo y preguntas frecuentes |
 | 0.17 | 14-11-2026 | Nuevas secciones 7 (qué cubre la membresía), 8 (responsabilidades, desde el contrato y el acuerdo de datos), 9 (preguntas frecuentes y objeciones) y 10 (proceso de venta). Pendientes P-28 a P-31 |
 | 0.16 | 13-11-2026 | Revisión completa: sección 6 reescrita con las reglas aprobadas y un ejemplo; referencias corregidas; lista única de pendientes; historial al final |

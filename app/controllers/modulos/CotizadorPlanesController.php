@@ -206,6 +206,7 @@ class CotizadorPlanesController extends BaseModuloController
         $this->json([
             'ok'        => true,
             'items'     => $this->service->getCatalogo($this->idEmpresa(), true),
+            'paquetes'  => $this->service->getPaquetes($this->idEmpresa(), true),
             'parametros'=> [
                 'recargo_mensual_pct'            => $cfg['recargo_mensual_pct'],
                 'recargo_semestral_pct'          => $cfg['recargo_semestral_pct'],
@@ -386,6 +387,7 @@ class CotizadorPlanesController extends BaseModuloController
             'ok'         => true,
             'config'     => $this->service->getConfig($this->idEmpresa()),
             'items'      => $this->service->getCatalogo($this->idEmpresa(), false),
+            'paquetes'   => $this->service->getPaquetes($this->idEmpresa(), false),
             'submodulos' => $this->service->getSubmodulosMenu(),
         ]);
     }
@@ -424,6 +426,32 @@ class CotizadorPlanesController extends BaseModuloController
         try {
             $this->service->eliminarItem((int) ($this->cuerpo()['id'] ?? 0), $this->idEmpresa(), $this->idUsuario());
             $this->json(['ok' => true, 'msg' => 'Ítem eliminado del catálogo.']);
+        } catch (\Throwable $e) {
+            $this->errorJson($e);
+        }
+    }
+
+    public function guardarPaqueteAjax(): void
+    {
+        $this->requireLeer();
+        $this->requireAdministrador();
+        $this->requireDisponible();
+        try {
+            $id = $this->service->guardarPaquete($this->idEmpresa(), $this->cuerpo(), $this->idUsuario());
+            $this->json(['ok' => true, 'id' => $id, 'msg' => 'Paquete guardado.']);
+        } catch (\Throwable $e) {
+            $this->errorJson($e);
+        }
+    }
+
+    public function eliminarPaqueteAjax(): void
+    {
+        $this->requireLeer();
+        $this->requireAdministrador();
+        $this->requireDisponible();
+        try {
+            $this->service->eliminarPaquete((int) ($this->cuerpo()['id'] ?? 0), $this->idEmpresa(), $this->idUsuario());
+            $this->json(['ok' => true, 'msg' => 'Paquete eliminado.']);
         } catch (\Throwable $e) {
             $this->errorJson($e);
         }

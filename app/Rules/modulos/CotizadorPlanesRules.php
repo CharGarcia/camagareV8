@@ -67,6 +67,27 @@ class CotizadorPlanesRules
         }
     }
 
+    public function validarPaquete(array $d): void
+    {
+        $nombre = trim((string) ($d['nombre'] ?? ''));
+        if ($nombre === '') {
+            throw new \InvalidArgumentException('El nombre del paquete es obligatorio.');
+        }
+        if (mb_strlen($nombre) > 100) {
+            throw new \InvalidArgumentException('El nombre del paquete no puede superar 100 caracteres.');
+        }
+        $pct = $d['descuento_pct'] ?? 0;
+        if (!is_numeric($pct) || (float) $pct < 0 || (float) $pct > 100) {
+            throw new \InvalidArgumentException('El descuento del paquete debe estar entre 0 y 100 %.');
+        }
+        if (empty($d['items'])) {
+            throw new \InvalidArgumentException('Elija al menos un módulo para el paquete.');
+        }
+        if (!in_array($d['estado'] ?? '', ['activo', 'inactivo'], true)) {
+            throw new \InvalidArgumentException('Estado no válido.');
+        }
+    }
+
     /**
      * Cotización a guardar (ya con los establecimientos resueltos por el Service).
      * $parametros: configuración vigente (permite o no el descuento del vendedor y su tope).

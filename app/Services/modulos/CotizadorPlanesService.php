@@ -180,6 +180,72 @@ class CotizadorPlanesService
         }
     }
 
+    // ── Paquetes ─────────────────────────────────────────────────────────────
+
+    public function getPaquetes(int $idEmpresa, bool $soloActivos = false): array
+    {
+        return array_map(function ($p) {
+            $p['id'] = (int) $p['id'];
+            $p['descuento_pct'] = (float) $p['descuento_pct'];
+            return $p;
+        }, $this->repo->getPaquetes($idEmpresa, $soloActivos));
+    }
+
+    public function guardarPaquete(int $idEmpresa, array $d, int $idUsuario): int
+    {
+        $id = (int) ($d['id'] ?? 0);
+        $paq = [
+            'nombre'        => trim((string) ($d['nombre'] ?? '')),
+            'descripcion'   => trim((string) ($d['descripcion'] ?? '')),
+            'descuento_pct' => $d['descuento_pct'] ?? 0,
+            'orden'         => (int) ($d['orden'] ?? 0),
+            'estado'        => ($d['estado'] ?? 'activo') === 'inactivo' ? 'inactivo' : 'activo',
+            'items'         => array_values(array_unique(array_filter(array_map('intval', (array) ($d['items'] ?? []))))),
+        ];
+        $this->rules->validarPaquete($paq);
+        $paq['descuento_pct'] = round((float) $paq['descuento_pct'], 2);
+        foreach ($paq['items'] as $idI) {
+            if (!$this->repo->getItem($idI, $idEmpresa)) {
+                throw new \InvalidArgumentException('Uno de los módulos elegidos ya no está en el catálogo.');
+            }
+        }
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            if ($id > 0) {
+                $antes = $this->repo->getPaquete($id, $idEmpresa);
+                if (!$antes) throw new \InvalidArgumentException('El paquete ya no existe.');
+                $this->repo->updatePaquete($id, $idEmpresa, $paq, $idUsuario);
+                $this->log->registrar($idUsuario, $idEmpresa, 'actualizar', 'cotizador_planes_paquetes', $id, $antes, $paq);
+            } else {
+                $id = $this->repo->insertPaquete($idEmpresa, $paq, $idUsuario);
+                $this->log->registrar($idUsuario, $idEmpresa, 'crear', 'cotizador_planes_paquetes', $id, null, $paq);
+            }
+            $this->repo->reemplazarItemsPaquete($idEmpresa, $id, $paq['items'], $idUsuario);
+            $db->commit();
+            return $id;
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
+    public function eliminarPaquete(int $id, int $idEmpresa, int $idUsuario): void
+    {
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $antes = $this->repo->getPaquete($id, $idEmpresa);
+            if (!$antes) throw new \InvalidArgumentException('El paquete ya no existe.');
+            $this->repo->eliminarPaquete($id, $idEmpresa, $idUsuario);
+            $this->log->registrar($idUsuario, $idEmpresa, 'eliminar', 'cotizador_planes_paquetes', $id, $antes, null);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            throw $e;
+        }
+    }
+
     // ── Cálculo ──────────────────────────────────────────────────────────────
 
     /**
@@ -196,13 +262,35 @@ class CotizadorPlanesService
         foreach ($this->getCatalogo($idEmpresa, true) as $it) {
             $catalogo[$it['id']] = $it;
         }
+        $paquetes = [];
+        foreach ($this->getPaquetes($idEmpresa, true) as $p) {
+            $paquetes[$p['id']] = $p;
+        }
         $avisos = [];
         $out = [];
         foreach (array_values($entrada) as $i => $e) {
             $elegidos = array_values(array_unique(array_map('intval', (array) ($e['elegidos'] ?? []))));
             $orden = []; // id_item => por_dependencia
             $pendientes = [];
+
+            // Paquete del establecimiento: sus ítems entran primero, fijos y con el % del paquete.
+            $idPaq = (int) ($e['id_paquete'] ?? 0);
+            $paq = null; $delPaquete = [];
+            if ($idPaq > 0) {
+                $paq = $paquetes[$idPaq] ?? null;
+                if (!$paq) {
+                    $avisos['p' . $idPaq] = 'Se quitó un paquete que ya no está activo.';
+                } else {
+                    foreach ($paq['items'] as $idI) {
+                        if (!isset($catalogo[$idI])) continue; // ítem inactivo: el paquete sigue sin él
+                        $delPaquete[$idI] = true;
+                        $orden[$idI] = false;
+                        $pendientes[] = $idI;
+                    }
+                }
+            }
             foreach ($elegidos as $idI) {
+                if (isset($delPaquete[$idI])) continue; // ya viene en el paquete
                 if (!isset($catalogo[$idI])) {
                     $avisos['x' . $idI] = 'Se quitó un ítem que ya no está activo en el catálogo de precios.';
                     continue;
@@ -232,6 +320,8 @@ class CotizadorPlanesService
                     'aplica_descuento_establecimiento' => (bool) $c['aplica_descuento_establecimiento'],
                     'por_dependencia' => $porDep,
                     'id_producto'  => $c['id_producto'] ?? null,
+                    'de_paquete'   => isset($delPaquete[$idI]),
+                    'descuento_paquete_pct' => isset($delPaquete[$idI]) ? (float) $paq['descuento_pct'] : 0.0,
                     'requerido_por' => [],
                 ];
             }
@@ -247,7 +337,11 @@ class CotizadorPlanesService
                 'codigo'    => str_pad(preg_replace('/\D/', '', (string) ($e['codigo'] ?? '')) ?: (string) ($i + 1), 3, '0', STR_PAD_LEFT),
                 'nombre'    => trim((string) ($e['nombre'] ?? '')),
                 'direccion' => trim((string) ($e['direccion'] ?? '')),
-                'elegidos'  => array_keys(array_filter($orden, fn($d) => !$d)),
+                'id_paquete'            => $paq ? (int) $paq['id'] : null,
+                'paquete_nombre'        => $paq ? (string) $paq['nombre'] : '',
+                'paquete_descuento_pct' => $paq ? (float) $paq['descuento_pct'] : 0.0,
+                // Elegidos SUELTOS (sin los del paquete ni las dependencias).
+                'elegidos'  => array_values(array_filter(array_keys(array_filter($orden, fn($d) => !$d)), fn($id) => !isset($delPaquete[$id]))),
                 'items'     => $items,
             ];
         }
@@ -262,6 +356,10 @@ class CotizadorPlanesService
         $calc = CotizadorPlanesCalculo::calcular($config, $est, max(1, (int) ($d['usuarios'] ?? 1)), (float) ($d['descuento_vendedor_pct'] ?? 0));
         foreach ($est as $i => $e) {
             $calc['establecimientos'][$i]['items'] = $e['items'];
+            $calc['establecimientos'][$i]['id_paquete'] = $e['id_paquete'];
+            $calc['establecimientos'][$i]['paquete_nombre'] = $e['paquete_nombre'];
+            $calc['establecimientos'][$i]['paquete_descuento_pct'] = $e['paquete_descuento_pct'];
+            $calc['establecimientos'][$i]['elegidos'] = $e['elegidos'];
             $calc['establecimientos'][$i]['direccion'] = $e['direccion'];
         }
         $calc['avisos'] = $avisos;
@@ -286,6 +384,8 @@ class CotizadorPlanesService
             $d['precio_anual'] = (float) $d['precio_anual'];
             $d['aplica_descuento_establecimiento'] = $this->bool($d['aplica_descuento_establecimiento']);
             $d['por_dependencia'] = $this->bool($d['por_dependencia']);
+            $d['de_paquete'] = $this->bool($d['de_paquete'] ?? false);
+            $d['descuento_paquete_pct'] = (float) ($d['descuento_paquete_pct'] ?? 0);
             $porEst[(int) $d['id_establecimiento']][] = $d;
         }
         $c['establecimientos'] = [];
@@ -296,7 +396,10 @@ class CotizadorPlanesService
                 'nombre'    => $e['nombre'] ?? '',
                 'direccion' => $e['direccion'] ?? '',
                 'es_principal' => $this->bool($e['es_principal']),
-                'elegidos'  => array_values(array_map(fn($x) => (int) $x['id_item'], array_filter($items, fn($x) => !$x['por_dependencia']))),
+                'id_paquete'            => (int) ($e['id_paquete'] ?? 0) ?: null,
+                'paquete_nombre'        => (string) ($e['paquete_nombre'] ?? ''),
+                'paquete_descuento_pct' => (float) ($e['paquete_descuento_pct'] ?? 0),
+                'elegidos'  => array_values(array_map(fn($x) => (int) $x['id_item'], array_filter($items, fn($x) => !$x['por_dependencia'] && !$x['de_paquete']))),
                 'items'     => $items,
             ];
         }
@@ -803,6 +906,12 @@ class CotizadorPlanesService
             $titulo = 'Establecimiento ' . $e['codigo'] . ($e['nombre'] !== '' ? ' — ' . $e['nombre'] : '');
             if (!empty($f['es_principal']) && count($cot['establecimientos']) > 1) $titulo .= ' (principal)';
             $out .= '<h3>' . $h($titulo) . '</h3>';
+            if (($e['paquete_nombre'] ?? '') !== '') {
+                $paqueteItems = array_column(array_filter($e['items'], fn($it) => !empty($it['de_paquete'])), 'nombre');
+                $out .= '<p>Paquete <strong>' . $h($e['paquete_nombre']) . '</strong>'
+                      . ((float) ($e['paquete_descuento_pct'] ?? 0) > 0 ? ' (' . $this->pct((float) $e['paquete_descuento_pct']) . ' de descuento)' : '')
+                      . ': ' . $h(implode(', ', $paqueteItems)) . '</p>';
+            }
             $rec = array_filter($e['items'], fn($it) => ($it['cobro'] ?? '') !== 'unico');
             $uni = array_filter($e['items'], fn($it) => ($it['cobro'] ?? '') === 'unico');
             if ($rec) {

@@ -22,6 +22,9 @@ namespace App\Services\modulos;
  *    El descuento por establecimiento adicional es solo del plan anual.
  *  - Usuarios incluidos = usuarios_por_establecimiento × establecimientos
  *    (compartidos a nivel de RUC); los que pasan se cobran a precio_usuario_adicional_anual.
+ *  - Paquetes: los ítems recurrentes que entraron por un paquete valen su precio
+ *    × (1 − descuento_paquete_pct). Va antes que todo lo demás: el descuento por
+ *    establecimiento adicional se calcula sobre ese valor ya rebajado.
  *  - Descuento del vendedor: % sobre lo recurrente de cada modalidad. Los
  *    servicios únicos no se descuentan.
  */
@@ -55,9 +58,15 @@ final class CotizadorPlanesCalculo
         // 1) Sumas por establecimiento.
         $filas = [];
         foreach (array_values($establecimientos) as $i => $e) {
-            $base = 0.0; $adicional = 0.0; $unico = 0.0;
+            $base = 0.0; $adicional = 0.0; $unico = 0.0; $descPaquete = 0.0;
             foreach (($e['items'] ?? []) as $it) {
                 $precio = max(0.0, (float) ($it['precio_anual'] ?? 0));
+                $pctPaq = min(100.0, max(0.0, (float) ($it['descuento_paquete_pct'] ?? 0)));
+                if (($it['cobro'] ?? 'recurrente') !== 'unico' && $pctPaq > 0 && self::bool($it['de_paquete'] ?? false)) {
+                    $rebaja = self::r2($precio * $pctPaq / 100);
+                    $descPaquete = self::r2($descPaquete + $rebaja);
+                    $precio = self::r2($precio - $rebaja);
+                }
                 if (($it['cobro'] ?? 'recurrente') === 'unico') {
                     $unico = self::r2($unico + $precio);
                 } elseif (self::bool($it['aplica_descuento_establecimiento'] ?? true)) {
@@ -73,6 +82,7 @@ final class CotizadorPlanesCalculo
                 'base'      => $base,
                 'adicional' => $adicional,
                 'unico'     => $unico,
+                'descuento_paquete' => $descPaquete,
             ];
         }
 
@@ -83,7 +93,7 @@ final class CotizadorPlanesCalculo
         }
 
         // 3) Anual y mensual por establecimiento.
-        $brutoAnual = 0.0; $descuentoEstablecimientos = 0.0; $recurrenteAnual = 0.0;
+        $brutoAnual = 0.0; $descuentoEstablecimientos = 0.0; $recurrenteAnual = 0.0; $descuentoPaquetes = 0.0;
         $recurrenteMensual = 0.0; $recurrenteSemestral = 0.0; $totalUnico = 0.0;
         foreach ($filas as &$f) {
             $f['es_principal'] = ($f['indice'] === $idxPrincipal);
@@ -99,6 +109,7 @@ final class CotizadorPlanesCalculo
             $recurrenteMensual         = self::r2($recurrenteMensual + $f['mensual']);
             $recurrenteSemestral       = self::r2($recurrenteSemestral + $f['semestral']);
             $totalUnico                = self::r2($totalUnico + $f['unico']);
+            $descuentoPaquetes         = self::r2($descuentoPaquetes + $f['descuento_paquete']);
         }
         unset($f);
 
@@ -128,6 +139,7 @@ final class CotizadorPlanesCalculo
             'establecimientos'         => $filas,
             'bruto_anual'              => $brutoAnual,
             'descuento_establecimientos' => $descuentoEstablecimientos,
+            'descuento_paquetes'       => $descuentoPaquetes,
             'usuarios'                 => $usuarios,
             'usuarios_incluidos'       => $incluidos,
             'usuarios_adicionales'     => $adicionales,
