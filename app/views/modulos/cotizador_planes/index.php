@@ -394,10 +394,6 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                             <label class="form-check-label" for="it_aplica_descuento_establecimiento" title="Módulo base: en los establecimientos adicionales lleva el descuento (solo plan anual). Apagado: módulo adicional a precio completo en cada establecimiento.">Entra en el descuento por establecimiento adicional</label>
                                         </div>
                                         <div class="form-check form-switch small">
-                                            <input class="form-check-input" type="checkbox" id="it_por_defecto">
-                                            <label class="form-check-label" for="it_por_defecto">Por defecto en cada establecimiento nuevo</label>
-                                        </div>
-                                        <div class="form-check form-switch small">
                                             <input class="form-check-input" type="checkbox" id="it_activo" checked>
                                             <label class="form-check-label" for="it_activo">Activo (se ofrece al cotizar)</label>
                                         </div>
@@ -437,7 +433,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <div class="table-responsive" style="max-height:52vh;">
                             <table class="table table-sm table-hover mb-0" id="cfgItems">
                                 <thead class="table-light" style="position:sticky;top:0;z-index:1;">
-                                    <tr><th>Grupo</th><th>Nombre</th><th>Se cobra</th><th class="text-end" style="width:130px;">Precio anual</th><th class="text-center">Desc. establ.</th><th class="text-center">Por defecto</th><th>Requiere</th><th class="text-center">Estado</th><th class="text-center" style="width:80px;"></th></tr>
+                                    <tr><th>Grupo</th><th>Nombre</th><th>Se cobra</th><th class="text-end" style="width:130px;">Precio anual</th><th class="text-center">Desc. establ.</th><th>Requiere</th><th class="text-center">Estado</th><th class="text-center" style="width:80px;"></th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>

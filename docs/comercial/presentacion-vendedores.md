@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.20** (15-11-2026). El historial de cambios está al final.
+Versión actual: **0.21** (15-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -515,7 +515,7 @@ Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
 | Módulos adicionales | Precio completo en **cada** establecimiento que los use. |
 | Usuarios incluidos | **3 por establecimiento**, sumados y **compartidos en el RUC** (un usuario en dos locales ocupa un solo cupo). |
 | Usuario adicional | **$20 al año** ($2 al mes). |
-| Servicios de una sola vez | Implementación, migración, etc. Se cobran una vez; sin recargo ni descuentos. **Implementación** entra por defecto (valor inicial $0). |
+| Servicios de una sola vez | Implementación, migración, etc. Se cobran una vez; sin recargo ni descuentos. **Implementación** se agrega como cualquier otro ítem (valor inicial $0). |
 | Descuento comercial del vendedor | Solo si la configuración lo permite y hasta el tope fijado. |
 
 Todos los precios son **sin IVA**.
@@ -809,6 +809,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.21 | 15-11-2026 | Cotización nueva sin módulos puestos: el vendedor agrega el paquete y/o los módulos (Implementación ya no entra sola) |
 | 0.20 | 15-11-2026 | P-20 resuelto: los 7 módulos que faltaban ya tienen manual de usuario; se quita la nota interna de la sección 4 |
 | 0.19 | 15-11-2026 | **Paquetes** en el Cotizador (suma de módulos menos % propio; módulos fijos y sueltos aparte): sección 6.5 y P-17 |
 | 0.18 | 15-11-2026 | Plan **semestral** (anual ÷ 2 + 10 %, sin descuento por establecimiento): reglas, ejemplo y preguntas frecuentes |

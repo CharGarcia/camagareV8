@@ -163,9 +163,8 @@
     }
 
     function nuevoEstablecimiento(codigo, nombre, direccion) {
-        // Los ítems «por defecto» entran solos en cada establecimiento nuevo.
-        const defecto = catalogo.filter((it) => it.por_defecto).map((it) => it.id);
-        return { codigo, nombre: nombre || '', direccion: direccion || '', id_paquete: null, elegidos: defecto };
+        // Un establecimiento nuevo empieza vacío: el vendedor elige el paquete y/o los módulos.
+        return { codigo, nombre: nombre || '', direccion: direccion || '', id_paquete: null, elegidos: [] };
     }
 
     function siguienteCodigo() {
@@ -309,7 +308,7 @@
                     <td class="small text-muted">${esc(it.cobro === 'unico' ? 'Pago único' : (it.grupo || ''))}</td>
                     <td class="text-end" style="width:150px;">${precio}${it.cobro === 'unico' ? '' : '<span class="text-muted small">/año</span>'}</td>
                     <td class="text-center" style="width:32px;">${quitar}</td></tr>`;
-            }).join('') : '<tr><td colspan="4" class="text-muted small">Sin módulos. Agregue al menos uno.</td></tr>';
+            }).join('') : '<tr><td colspan="4" class="text-muted small">Sin módulos todavía: elija un paquete y/o agregue módulos sueltos.</td></tr>';
             return `<div class="cp-est">
                 <div class="cp-est-head d-flex flex-wrap gap-2 align-items-center">
                     <span class="fw-semibold small"><i class="bi bi-shop me-1"></i>Establecimiento</span>
@@ -479,7 +478,7 @@
         }
         if (!usar) return;
         // Conserva los módulos ya elegidos en el primer establecimiento como punto de partida.
-        const plantilla = establecimientos[0]?.elegidos?.slice() || catalogo.filter((it) => it.por_defecto).map((it) => it.id);
+        const plantilla = establecimientos[0]?.elegidos?.slice() || [];
         const paqPlantilla = establecimientos[0]?.id_paquete || null;
         establecimientos = abiertos.map((x) => ({ codigo: x.codigo, nombre: x.nombre || '', direccion: x.direccion || '', id_paquete: paqPlantilla, elegidos: plantilla.slice() }));
     }
@@ -836,12 +835,11 @@
                 <td><input type="number" min="0" step="0.01" class="form-control form-control-sm text-end py-0" style="height:24px;"
                         data-k="${it._k}" value="${Number(it.precio_anual || 0).toFixed(2)}" onchange="CP_precioCatalogo('${it._k}', this)"></td>
                 <td class="text-center small">${it.cobro === 'unico' ? '—' : (it.aplica_descuento_establecimiento ? 'Base' : 'Adicional')}</td>
-                <td class="text-center">${it.por_defecto ? '<i class="bi bi-check-lg text-success"></i>' : ''}</td>
                 <td class="small cp-celda" style="max-width:200px;" title="${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}">${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}</td>
                 <td class="text-center">${estado}</td>
                 <td class="text-center">${accion}</td>
             </tr>`;
-        }).join('') || '<tr><td colspan="9" class="text-muted text-center py-3">No hay módulos con ese filtro.</td></tr>';
+        }).join('') || '<tr><td colspan="8" class="text-muted text-center py-3">No hay módulos con ese filtro.</td></tr>';
 
         if (caja) caja.scrollTop = scroll;
         if (foco) {
@@ -920,7 +918,6 @@
         $('it_precio_anual').value = it.precio_anual ?? 0;
         $('it_cobro').value = it.cobro || 'recurrente';
         $('it_aplica_descuento_establecimiento').checked = it.aplica_descuento_establecimiento !== false;
-        $('it_por_defecto').checked = !!it.por_defecto;
         $('it_activo').checked = (it.estado || 'activo') === 'activo';
         $('it_orden').value = it.orden || 0;
         $('it_descripcion').value = it.descripcion || '';
@@ -974,7 +971,7 @@
                 precio_anual: $('it_precio_anual').value,
                 cobro: $('it_cobro').value,
                 aplica_descuento_establecimiento: $('it_aplica_descuento_establecimiento').checked,
-                por_defecto: $('it_por_defecto').checked,
+                por_defecto: false,
                 estado: $('it_activo').checked ? 'activo' : 'inactivo',
                 orden: parseInt($('it_orden').value || 0, 10) || 0,
                 id_producto: prodTxt ? (productosMapa[prodTxt] || parseInt($('it_id_producto').value || 0, 10) || 0) : 0,

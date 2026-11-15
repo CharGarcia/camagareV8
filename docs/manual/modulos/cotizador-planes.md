@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, paquetes, paquete, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.4
+version: 1.5
 orden: 0
 estado: activo
 ---
@@ -46,8 +46,8 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
    dicen *Sin cargar* todavía no se ofrecen al cotizar: se cargan al escribir
    su precio o con el botón **Cargar** (también a $0, para los módulos que van
    incluidos). El filtro **Mostrar** separa cargados y sin cargar. Al pulsar el
-   nombre de un módulo se abren sus demás opciones (dependencias, base o
-   adicional, por defecto). Los servicios (implementación, migración,
+   nombre de un módulo se abren sus demás opciones (dependencias y si es base
+   o adicional). Los servicios (implementación, migración,
    capacitación…) se agregan con **Agregar servicio**.
 2. **Paquetes** (opcional): combinaciones listas de módulos, por ejemplo
    *Emprendedor*. Con **Nuevo paquete** se elige el nombre, se **marcan las
@@ -163,8 +163,9 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
   dos veces **Generar proforma** no crea dos proformas.
 - Un ítem del catálogo que se inactiva deja de ofrecerse y se quita de los
   borradores al volver a calcularlos (el sistema avisa).
-- Los ítems **por defecto** (por ejemplo *Implementación* a $0) entran solos
-  en cada establecimiento nuevo; el vendedor puede quitarlos.
+- Una cotización nueva **no trae módulos puestos**: cada establecimiento
+  empieza vacío y el vendedor elige el paquete y/o agrega los módulos sueltos
+  (y servicios como *Implementación*). Las dependencias sí entran solas.
 - **Paquetes**: un paquete por establecimiento. El % del paquete se aplica solo
   a sus módulos **recurrentes** (los pagos únicos del paquete van completos) y
   se aplica **antes** que el descuento por establecimiento adicional. Los
@@ -213,3 +214,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.2** — PDF de la cotización con logo y diseño de los documentos del sistema. Al consultar el SRI se llena también «Obligado a llevar contabilidad».
 - **1.3** — Plan **semestral**: anual ÷ 2 + 10 % (configurable), sin descuento por establecimiento adicional (solo el anual lo tiene). Se ve en pantalla, listado, PDF, proforma y configuración (recargo y producto propio).
 - **1.4** — **Paquetes** (p. ej. Emprendedor): módulos agrupados con un % de descuento propio, configurables en Configuración → Paquetes. Al cotizar se elige un paquete por establecimiento; sus módulos quedan fijos y se pueden sumar módulos sueltos. Se ven en pantalla, PDF y anexo de la proforma.
+- **1.5** — Una cotización nueva ya no trae módulos asignados: cada establecimiento empieza vacío y el vendedor agrega el paquete y/o los módulos. Se quita la opción «Por defecto» del catálogo.
