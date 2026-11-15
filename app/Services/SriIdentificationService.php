@@ -230,11 +230,28 @@ class SriIdentificationService
             'telefono' => '',
             'mail' => '',
             'tipo' => $this->mapearTipoContribuyente($tipoContribuyente),
+            // «Obligado a llevar contabilidad» tal como lo informe el SRI (SI / NO); '' si la
+            // respuesta no lo trae. Lo usa el Cotizador de Planes; los demás no lo leen.
+            'obligado_contabilidad' => $this->siNo($datosContribuyente['obligadoLlevarContabilidad'] ?? $datosContribuyente['obligadoContabilidad'] ?? ''),
             // Todos los establecimientos que reporta el SRI (abiertos y cerrados). Lo usa el
             // Cotizador de Planes para precargar los locales del RUC; los demás llamadores
             // no lo leen.
             'establecimientos' => $this->listarEstablecimientos($establecimientos),
         ];
+    }
+
+    /** 'SI' / 'NO' a partir de lo que devuelva el SRI (texto o booleano); '' si no se sabe. */
+    private function siNo($v): string
+    {
+        if (is_bool($v)) {
+            return $v ? 'SI' : 'NO';
+        }
+        $t = strtoupper(trim((string) $v));
+        return match ($t) {
+            'SI', 'SÍ', 'S', 'TRUE', '1' => 'SI',
+            'NO', 'N', 'FALSE', '0'      => 'NO',
+            default                      => '',
+        };
     }
 
     /**

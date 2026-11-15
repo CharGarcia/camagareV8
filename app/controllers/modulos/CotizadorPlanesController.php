@@ -229,6 +229,45 @@ class CotizadorPlanesController extends BaseModuloController
         $this->json(['ok' => true, 'data' => $c]);
     }
 
+    /**
+     * PDF de la cotización (botón PDF de la barra superior del modal).
+     * Se abre con CMG_pdfDocumento(): ante un error responde JSON {ok:false, mensaje}.
+     */
+    public function pdf(): void
+    {
+        $this->requireLeer();
+        $this->requireDisponible();
+        $id = (int) ($_GET['id'] ?? 0);
+        $this->fichaPropia($id); // registros propios (§6)
+        try {
+            $datos = $this->service->getDatosPdf($id, $this->idEmpresa());
+            if (!$datos) {
+                throw new \InvalidArgumentException('La cotización ya no existe.');
+            }
+            // Empresa con el logo de su establecimiento (la cotización no tiene serie).
+            $empresaModel = new \App\models\Empresa();
+            $empresa = $empresaModel->getPorId($this->idEmpresa()) ?? [];
+            $establecimientos = $empresaModel->getEstablecimientos($this->idEmpresa());
+            if (!empty($establecimientos[0]['logo_ruta'])) {
+                $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
+            }
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+            (new \App\Services\modulos\CotizadorPlanesPdfService())
+                ->generar($datos['cot'], $datos['calc'], $empresa, $datos['dias_vigencia'], 'I');
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                http_response_code(500);
+                header('Content-Type: application/json');
+            }
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo generar el PDF: ' . $e->getMessage()], JSON_UNESCAPED_UNICODE);
+        }
+        exit;
+    }
+
     /** Precio en vivo: no guarda nada. */
     public function calcularAjax(): void
     {

@@ -303,6 +303,21 @@ class CotizadorPlanesService
         return $c;
     }
 
+    /**
+     * Datos para el PDF de la cotización: la ficha y su cálculo con lo GUARDADO
+     * (precios y parámetros copiados), igual que la proforma.
+     * @return array{cot: array, calc: array, dias_vigencia: int}|null
+     */
+    public function getDatosPdf(int $id, int $idEmpresa): ?array
+    {
+        $cot = $this->getFicha($id, $idEmpresa);
+        if (!$cot) return null;
+        $config = $this->getConfig($idEmpresa);
+        $params = $cot['parametros'] ?: $config;
+        $calc = CotizadorPlanesCalculo::calcular($params, $cot['establecimientos'], (int) $cot['usuarios'], (float) $cot['descuento_vendedor_pct']);
+        return ['cot' => $cot, 'calc' => $calc, 'dias_vigencia' => (int) $config['dias_vigencia']];
+    }
+
     /** Datos de la cabecera normalizados desde la petición. */
     private function normalizarCabecera(array $d): array
     {
@@ -481,6 +496,13 @@ class CotizadorPlanesService
                 'razon_social'       => $d['nombre'] ?? ($cliente['nombre'] ?? ''),
                 'nombre_comercial'   => $d['nombre_comercial'] ?? '',
                 'tipo_contribuyente' => $tipo,
+                // Lo que informe el SRI; si no lo trae, toda sociedad está obligada a llevar
+                // contabilidad (LRTI art. 19). Persona natural sin dato: lo elige el vendedor.
+                'obligado_contabilidad' => match ((string) ($d['obligado_contabilidad'] ?? '')) {
+                    'SI' => '1',
+                    'NO' => '0',
+                    default => $tipo === 'sociedad' ? '1' : '',
+                },
                 'direccion'          => $d['direccion'] ?? ($cliente['direccion'] ?? ''),
                 'cod_prov'           => $d['cod_prov'] ?? '',
                 'cod_ciudad'         => $d['cod_ciudad'] ?? '',

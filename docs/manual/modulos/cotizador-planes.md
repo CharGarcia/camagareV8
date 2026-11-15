@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.1
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -62,8 +62,10 @@ Proformas** y permiso de **crear en Proformas**.
 1. Pulse **Nueva cotización**.
 2. Pestaña **Cliente**: escriba el RUC o la cédula y pulse **Consultar SRI**. Si
    el RUC tiene varios establecimientos abiertos, el sistema ofrece cargarlos.
-   Complete el **correo** (obligatorio para la proforma), el teléfono y la
-   persona de contacto.
+   También se llenan solos el **tipo de contribuyente** y, si el SRI lo informa,
+   si está **obligado a llevar contabilidad** (toda sociedad lo está; para una
+   persona natural sin ese dato, elíjalo a mano). Complete el **correo**
+   (obligatorio para la proforma), el teléfono y la persona de contacto.
 3. Pestaña **Establecimientos y módulos**: en cada establecimiento elija los
    módulos y servicios con la lista **Agregar módulo o servicio…**. Los módulos
    que entran solos se ven con el ícono de enlace y la nota *requerido por…*; se
@@ -75,6 +77,11 @@ Proformas** y permiso de **crear en Proformas**.
    valor de cada establecimiento, cuál es el principal y los totales.
 5. Pulse **Guardar**. Puede volver a abrirla y cambiarla mientras esté en
    *Borrador*.
+   - Con el botón **PDF** (barra superior de la ventana) se obtiene la
+     cotización en PDF, con el logo y el diseño de los demás documentos:
+     cliente, establecimientos con sus módulos, resumen anual y mensual, pago
+     único y condiciones. Si hay cambios sin guardar, primero se guardan. Al
+     pulsarlo pregunta si imprimir, descargar o ver.
 6. Pulse **Generar proforma** y elija la serie. El sistema:
    - registra al cliente en *Clientes* si todavía no existe;
    - crea el contacto y una **oportunidad** en el CRM, a su cargo;
@@ -181,3 +188,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
   cálculo anual y mensual en vivo, consulta del RUC con sus establecimientos y
   generación de la proforma enlazada al CRM.
 - **1.1** — El catálogo de precios lista todos los módulos del menú (los que faltan, «Sin cargar» a $0) y el precio se escribe directo en la tabla. El botón Configuración pasa junto a PDF y Excel, y el de crear se llama «Nueva».
+- **1.2** — PDF de la cotización con logo y diseño de los documentos del sistema. Al consultar el SRI se llena también «Obligado a llevar contabilidad».

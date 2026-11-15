@@ -409,6 +409,8 @@
             if (!j.ok) { $('cpSriInfo').innerHTML = `<span class="text-danger">${esc(j.error)}</span>`; return; }
             const d = j.data;
             ['razon_social', 'nombre_comercial', 'tipo_contribuyente', 'direccion', 'cod_prov', 'cod_ciudad'].forEach((k) => { if (d[k]) $('cp_' + k).value = d[k]; });
+            // Obligado a llevar contabilidad: '1' / '0' según el SRI (o sociedad); vacío = lo elige el vendedor.
+            if (d.obligado_contabilidad === '1' || d.obligado_contabilidad === '0') $('cp_obligado_contabilidad').value = d.obligado_contabilidad;
             if (d.correo && !$('cp_correo').value) $('cp_correo').value = d.correo;
             if (d.telefono && !$('cp_telefono').value) $('cp_telefono').value = d.telefono;
             const abiertos = (d.establecimientos || []).filter((x) => x.estado === 'ABIERTO' && x.codigo);
@@ -473,6 +475,27 @@
         }
     }
     $('cpBtnGuardar')?.addEventListener('click', () => guardar(false));
+
+    // PDF: sale de lo guardado; si hay cambios sin guardar (o es nueva), primero se guarda.
+    let generandoPdf = false;
+    $('cpBtnPdf')?.addEventListener('click', async () => {
+        if (generandoPdf) return;
+        generandoPdf = true;
+        try {
+            let id = parseInt($('cp_id').value || 0, 10);
+            if (editable() && (!id || sucio)) {
+                if (!(estado ? CFG.perm.actualizar : CFG.perm.crear)) {
+                    return alerta('info', 'Guarde primero', 'Guarde la cotización para generar su PDF.');
+                }
+                id = await guardar(true);
+                if (!id) return;
+            }
+            if (!id) return alerta('info', 'Guarde primero', 'Guarde la cotización para generar su PDF.');
+            window.CMG_pdfDocumento(`${URL}/pdf?id=${id}`);
+        } finally {
+            generandoPdf = false;
+        }
+    });
 
     $('cpBtnEliminar')?.addEventListener('click', async () => {
         const id = parseInt($('cp_id').value || 0, 10);

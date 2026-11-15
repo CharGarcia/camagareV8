@@ -161,6 +161,10 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
             </div>
             <div class="modal-body p-0">
                 <input type="hidden" id="cp_id" value="">
+                <!-- Barra de acciones del documento -->
+                <div class="d-flex gap-1 align-items-center flex-wrap px-3 py-2 border-bottom">
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="cpBtnPdf" title="PDF de la cotización"><i class="bi bi-file-earmark-pdf"></i></button>
+                </div>
                 <div id="cpAviso" class="alert d-none mx-3 mt-2 mb-0 py-2 small"></div>
 
                 <!-- Totales en vivo: visibles en todas las pestañas -->
