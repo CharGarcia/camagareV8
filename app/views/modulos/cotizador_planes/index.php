@@ -376,74 +376,10 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     <div class="tab-pane fade" id="cfg-tab-paquetes">
                         <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
                             <div class="small text-muted flex-grow-1">
-                                Un paquete agrupa módulos del catálogo y vale la <strong>suma de sus módulos menos su % de descuento</strong>.
-                                Al cotizar, el vendedor elige el paquete del establecimiento: sus módulos quedan fijos y puede agregar otros sueltos.
+                                Un paquete agrupa módulos del catálogo y se cobra con un <strong>precio fijo</strong> (sus módulos van incluidos) o con la <strong>suma de sus módulos menos un %</strong>.
+                                Al cotizar, el vendedor elige el paquete del establecimiento: sus módulos quedan fijos y puede agregar otros sueltos. Haga clic en un paquete para ver su detalle.
                             </div>
                             <button type="button" class="btn btn-outline-primary btn-sm" id="cfgBtnNuevoPaquete"><i class="bi bi-plus-lg"></i> Nuevo paquete</button>
-                        </div>
-
-                        <div class="card border-primary border-opacity-25 mb-2 d-none" id="cfgPaqEditor">
-                            <div class="card-body py-2">
-                                <input type="hidden" id="pq_id">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">Nombre *</label>
-                                        <input type="text" class="form-control form-control-sm" id="pq_nombre" maxlength="100" placeholder="Ej.: Emprendedor">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small fw-bold mb-1">Cómo se cobra</label>
-                                        <select class="form-select form-select-sm" id="pq_tipo_precio">
-                                            <option value="fijo">Precio fijo</option>
-                                            <option value="descuento">Suma de módulos − %</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-2" id="pq_wrap_precio">
-                                        <label class="form-label small fw-bold mb-1">Precio anual *</label>
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end" id="pq_precio_anual" value="0">
-                                    </div>
-                                    <div class="col-md-2 d-none" id="pq_wrap_descuento">
-                                        <label class="form-label small fw-bold mb-1">Descuento (%)</label>
-                                        <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm text-end" id="pq_descuento_pct" value="0">
-                                    </div>
-                                    <div class="col-md-1">
-                                        <label class="form-label small fw-bold mb-1">Orden</label>
-                                        <input type="number" step="1" class="form-control form-control-sm" id="pq_orden" value="0">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <div class="form-check form-switch small mt-4">
-                                            <input class="form-check-input" type="checkbox" id="pq_activo" checked>
-                                            <label class="form-check-label" for="pq_activo">Activo (se ofrece al cotizar)</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label small fw-bold mb-1">Descripción</label>
-                                        <input type="text" class="form-control form-control-sm" id="pq_descripcion" maxlength="500" placeholder="Para quién es este paquete">
-                                    </div>
-                                    <div class="col-md-8">
-                                        <div class="d-flex align-items-end gap-2 mb-1">
-                                            <label class="form-label small fw-bold mb-0 flex-grow-1">Módulos del paquete * <span class="fw-normal text-muted" id="pq_contador"></span></label>
-                                            <input type="search" class="form-control form-control-sm" id="pq_buscar" placeholder="Buscar módulo…" style="width:200px;">
-                                        </div>
-                                        <div class="border rounded-2" id="pq_items" style="max-height:260px;overflow:auto;"></div>
-                                        <div class="small text-muted mt-1">Marque los módulos del paquete. Solo aparecen los ya cargados en el catálogo; los que estos requieren entran solos al cotizar.</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="border rounded-3 p-2 small bg-light">
-                                            <div class="d-flex justify-content-between"><span>Suma de módulos</span><strong id="pq_suma">$0.00</strong></div>
-                                            <div class="d-flex justify-content-between"><span id="pq_desc_lbl">Descuento</span><strong id="pq_desc">−$0.00</strong></div>
-                                            <div class="d-flex justify-content-between border-top mt-1 pt-1"><span>Paquete al año</span><strong class="text-primary" id="pq_total">$0.00</strong></div>
-                                            <div class="text-muted mt-1" id="pq_nota">Los pagos únicos del paquete no llevan el descuento.</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-12 d-flex justify-content-between">
-                                        <button type="button" class="btn btn-outline-danger btn-sm d-none" id="cfgBtnEliminarPaquete"><i class="bi bi-trash3"></i> Eliminar paquete</button>
-                                        <div class="ms-auto d-flex gap-2">
-                                            <button type="button" class="btn btn-secondary btn-sm" id="cfgBtnCancelarPaquete">Cancelar</button>
-                                            <button type="button" class="btn btn-primary btn-sm" id="cfgBtnGuardarPaquete"><i class="bi bi-check2-circle"></i> Guardar paquete</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
                         </div>
 
                         <div class="table-responsive" style="max-height:52vh;">
@@ -522,6 +458,77 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     </div>
                 </div>
                 <datalist id="cfgProductosLista"></datalist>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detalle de un paquete (se abre sobre la configuración) -->
+<div class="modal fade" id="modalCPPaquete" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-box-seam text-info me-2"></i><span id="pq_titulo">Paquete</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="pq_id">
+                <div class="row g-3">
+                    <div class="col-md-8">
+                        <label class="form-label small fw-bold mb-1">Nombre *</label>
+                        <input type="text" class="form-control form-control-sm" id="pq_nombre" maxlength="100" placeholder="Ej.: Emprendedor">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">Cómo se cobra</label>
+                        <select class="form-select form-select-sm" id="pq_tipo_precio">
+                            <option value="fijo">Precio fijo</option>
+                            <option value="descuento">Suma de módulos − %</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="pq_wrap_precio">
+                        <label class="form-label small fw-bold mb-1">Precio anual *</label>
+                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end" id="pq_precio_anual" value="0">
+                    </div>
+                    <div class="col-md-4 d-none" id="pq_wrap_descuento">
+                        <label class="form-label small fw-bold mb-1">Descuento (%)</label>
+                        <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm text-end" id="pq_descuento_pct" value="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">Orden</label>
+                        <input type="number" step="1" class="form-control form-control-sm" id="pq_orden" value="0">
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-check form-switch small mt-4">
+                            <input class="form-check-input" type="checkbox" id="pq_activo" checked>
+                            <label class="form-check-label" for="pq_activo">Activo (se ofrece al cotizar)</label>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Descripción</label>
+                        <input type="text" class="form-control form-control-sm" id="pq_descripcion" maxlength="500" placeholder="Para quién es este paquete">
+                    </div>
+                    <div class="col-md-8">
+                        <div class="d-flex align-items-end gap-2 mb-1">
+                            <label class="form-label small fw-bold mb-0 flex-grow-1">Módulos del paquete * <span class="fw-normal text-muted" id="pq_contador"></span></label>
+                            <input type="search" class="form-control form-control-sm" id="pq_buscar" placeholder="Buscar módulo…" style="width:200px;">
+                        </div>
+                        <div class="border rounded-2" id="pq_items" style="max-height:300px;overflow:auto;"></div>
+                        <div class="small text-muted mt-1">Marque los módulos del paquete. Solo aparecen los ya cargados en el catálogo; los que estos requieren entran solos al cotizar.</div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="border rounded-3 p-2 small bg-light">
+                            <div class="d-flex justify-content-between"><span>Suma de módulos</span><strong id="pq_suma">$0.00</strong></div>
+                            <div class="d-flex justify-content-between"><span id="pq_desc_lbl">Descuento</span><strong id="pq_desc">−$0.00</strong></div>
+                            <div class="d-flex justify-content-between border-top mt-1 pt-1"><span>Paquete al año</span><strong class="text-primary" id="pq_total">$0.00</strong></div>
+                            <div class="text-muted mt-1" id="pq_nota">Los pagos únicos del paquete no llevan el descuento.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-danger btn-sm d-none me-auto" id="cfgBtnEliminarPaquete"><i class="bi bi-trash3"></i> Eliminar paquete</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="cfgBtnGuardarPaquete"><i class="bi bi-check2-circle"></i> Guardar</button>
             </div>
         </div>
     </div>

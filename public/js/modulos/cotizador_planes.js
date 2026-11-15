@@ -612,6 +612,21 @@
     // ═════════════════════════ Configuración (niveles 2 y 3) ═════════════════════════
     const cfgEl = $('modalCPConfig');
     if (!cfgEl) return;
+
+    /**
+     * Modal de detalle que se abre ENCIMA de la Configuración. Todos los .modal
+     * comparten z-index (app.css), así que este y su fondo se suben un nivel.
+     */
+    function modalSobreConfig(id, idFoco) {
+        const el = $(id);
+        el.addEventListener('show.bs.modal', () => el.style.setProperty('z-index', '5070', 'important'));
+        el.addEventListener('shown.bs.modal', () => {
+            const fondos = document.querySelectorAll('.modal-backdrop');
+            if (fondos.length > 1) fondos[fondos.length - 1].style.setProperty('z-index', '5065', 'important');
+            $(idFoco)?.focus();
+        });
+        return bootstrap.Modal.getOrCreateInstance(el);
+    }
     let cfgModal = null;
     let cfgItems = [];
     let cfgSubmodulos = [];
@@ -644,7 +659,6 @@
         cfgSubmodulos = j.submodulos || [];
         pintarCfgItems();
         pintarCfgPaquetes();
-        $('cfgPaqEditor').classList.add('d-none');
     }
 
     // ── Lista con casillas (paquetes y «Requiere») ─────────────────────────
@@ -737,8 +751,11 @@
         $('pq_total').textContent = money(v.total);
     }
 
+    // El detalle del paquete es un modal propio, encima de la Configuración.
+    const modalPaquete = modalSobreConfig('modalCPPaquete', 'pq_nombre');
+
     function abrirEditorPaquete(p) {
-        $('cfgPaqEditor').classList.remove('d-none');
+        $('pq_titulo').textContent = p.id ? `Paquete ${p.nombre || ''}` : 'Nuevo paquete';
         $('pq_id').value = p.id || '';
         $('pq_nombre').value = p.nombre || '';
         $('pq_tipo_precio').value = p.tipo_precio === 'fijo' ? 'fijo' : 'descuento';
@@ -752,7 +769,7 @@
         $('pq_buscar').value = '';
         $('cfgBtnEliminarPaquete').classList.toggle('d-none', !p.id);
         actualizarValorPaquete();
-        $('pq_nombre').focus();
+        modalPaquete.show();
     }
     window.CP_editarPaquete = function (id) {
         const p = cfgPaquetes.find((x) => Number(x.id) === Number(id));
@@ -762,7 +779,6 @@
         if (!cfgItems.length) return alerta('info', 'Catálogo vacío', 'Primero cargue módulos con su precio en la pestaña Catálogo de precios.');
         abrirEditorPaquete({ estado: 'activo', tipo_precio: 'fijo', descuento_pct: 0, precio_anual: 0, items: [] });
     });
-    $('cfgBtnCancelarPaquete').addEventListener('click', () => $('cfgPaqEditor').classList.add('d-none'));
     $('pq_items').addEventListener('change', actualizarValorPaquete);
     $('pq_buscar').addEventListener('input', () => filtrarCasillas($('pq_items'), $('pq_buscar').value));
     $('pq_descuento_pct').addEventListener('input', actualizarValorPaquete);
@@ -786,6 +802,7 @@
                 items: idsMarcados($('pq_items')),
             });
             if (!j.ok) return alerta('warning', 'No se guardó', j.error);
+            modalPaquete.hide();
             await cargarConfig();
             bootstrap.Tab.getOrCreateInstance(document.querySelector('a[href="#cfg-tab-paquetes"]')).show();
         } catch (e) {
@@ -803,6 +820,7 @@
         }
         const j = await postJson(`${URL}/eliminarPaqueteAjax`, { id });
         if (!j.ok) return alerta('warning', 'No se eliminó', j.error);
+        modalPaquete.hide();
         await cargarConfig();
         bootstrap.Tab.getOrCreateInstance(document.querySelector('a[href="#cfg-tab-paquetes"]')).show();
     });
@@ -936,17 +954,7 @@
     });
 
     // El detalle del ítem es un modal propio, encima de la Configuración.
-    const modalItemEl = $('modalCPItem');
-    const modalItem = modalItemEl ? bootstrap.Modal.getOrCreateInstance(modalItemEl) : null;
-    if (modalItemEl) {
-        // Todos los .modal comparten z-index (app.css): este y su fondo se suben un nivel.
-        modalItemEl.addEventListener('show.bs.modal', () => modalItemEl.style.setProperty('z-index', '5070', 'important'));
-        modalItemEl.addEventListener('shown.bs.modal', () => {
-            const fondos = document.querySelectorAll('.modal-backdrop');
-            if (fondos.length > 1) fondos[fondos.length - 1].style.setProperty('z-index', '5065', 'important');
-            $('it_nombre').focus();
-        });
-    }
+    const modalItem = modalSobreConfig('modalCPItem', 'it_nombre');
 
     function abrirEditor(it) {
         $('it_titulo').textContent = it.id ? (it.nombre || 'Detalle del módulo') : (it.tipo === 'servicio' ? 'Nuevo servicio' : `Cargar módulo: ${it.nombre || ''}`);

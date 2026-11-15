@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, paquetes, paquete, precio fijo del paquete, modulo incluido, incluido, sin costo, modulo gratis, dependencia sin costo, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.7
+version: 1.8
 orden: 0
 estado: activo
 ---
@@ -55,7 +55,9 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
    cobra; si el cliente lleva Facturas, Clientes entra incluido. Los servicios (implementación, migración,
    capacitación…) se agregan con **Agregar servicio**.
 2. **Paquetes** (opcional): combinaciones listas de módulos, por ejemplo
-   *Emprendedor*. Con **Nuevo paquete** se elige el nombre, se **marcan las
+   *Emprendedor*. Con **Nuevo paquete**, o con clic en un paquete de la lista,
+   se abre una ventana con su detalle (encima de la Configuración): se elige el
+   nombre, se **marcan las
    casillas** de sus módulos (hay un buscador arriba de la lista) y se elige
    **cómo se cobra**:
    - **Precio fijo**: se escribe el precio anual del paquete y sus módulos van
@@ -241,3 +243,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.5** — Una cotización nueva ya no trae módulos asignados: cada establecimiento empieza vacío y el vendedor agrega el paquete y/o los módulos. Se quita la opción «Por defecto» del catálogo.
 - **1.6** — Módulos **incluidos**: casilla «Sin costo cuando lo requiere otro módulo» en el catálogo. Paquetes de **precio fijo** (sus módulos van incluidos) además de los de suma − %. Se ve en pantalla, PDF y anexo.
 - **1.7** — El detalle de un módulo del catálogo se abre en su propia ventana al hacer clic en la fila, en lugar de desplegarse dentro de la Configuración.
+- **1.8** — El detalle de un paquete también se abre en su propia ventana.
