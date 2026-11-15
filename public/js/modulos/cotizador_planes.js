@@ -642,6 +642,48 @@
         $('cfgPaqEditor').classList.add('d-none');
     }
 
+    // ── Lista con casillas (paquetes y «Requiere») ─────────────────────────
+    /**
+     * Pinta en `cont` una fila con casilla por ítem, agrupadas por área, para elegir
+     * varios sin Ctrl + clic. `marcados`: ids ya elegidos. `excluir`: id que no se ofrece.
+     */
+    function pintarCasillas(cont, marcados, excluir) {
+        const sel = new Set((marcados || []).map(Number));
+        const grupos = {};
+        cfgItems.forEach((it) => {
+            if (excluir && it.id === Number(excluir)) return;
+            (grupos[it.tipo === 'servicio' ? 'Servicios' : (it.grupo || 'Otros')] ||= []).push(it);
+        });
+        cont.innerHTML = Object.keys(grupos).sort().map((g) =>
+            `<div class="cas-grupo"><div class="px-2 py-1 bg-light border-bottom small fw-semibold text-secondary">${esc(g)}</div>`
+            + grupos[g].map((it) => `<label class="cas-fila d-flex align-items-center gap-2 px-2 py-1 border-bottom small mb-0" role="button" data-texto="${esc((g + ' ' + it.nombre).toLowerCase())}">
+                    <input type="checkbox" class="form-check-input mt-0 cas-check" value="${it.id}" ${sel.has(it.id) ? 'checked' : ''}>
+                    <span class="flex-grow-1">${esc(it.nombre)}${it.cobro === 'unico' ? ' <span class="text-muted">(pago único)</span>' : ''}${it.estado !== 'activo' ? ' <span class="text-muted">(inactivo)</span>' : ''}</span>
+                    <span class="text-muted">${money(it.precio_anual)}</span>
+                </label>`).join('')
+            + '</div>').join('') || '<div class="small text-muted p-2">No hay otros módulos cargados.</div>';
+    }
+    function idsMarcados(cont) {
+        return Array.from(cont.querySelectorAll('.cas-check:checked')).map((c) => Number(c.value));
+    }
+    /** Buscador de una lista con casillas: oculta filas y grupos que no coinciden; no desmarca nada. */
+    function filtrarCasillas(cont, texto) {
+        const q = (texto || '').toLowerCase().trim();
+        cont.querySelectorAll('.cas-grupo').forEach((g) => {
+            let visibles = 0;
+            g.querySelectorAll('.cas-fila').forEach((f) => {
+                const ver = !q || f.dataset.texto.includes(q);
+                f.classList.toggle('d-none', !ver);
+                if (ver) visibles++;
+            });
+            g.classList.toggle('d-none', visibles === 0);
+        });
+    }
+    function contarCasillas(cont, etiqueta) {
+        const n = idsMarcados(cont).length;
+        etiqueta.textContent = n ? `(${n} marcados)` : '';
+    }
+
     // ── Paquetes (configuración) ───────────────────────────────────────────
     /** Suma anual de los módulos de un paquete y su valor con el descuento (los únicos no se descuentan). */
     function valorPaquete(ids, pctDesc) {
@@ -672,8 +714,8 @@
     }
 
     function actualizarValorPaquete() {
-        const ids = idsPaqueteMarcados();
-        $('pq_contador').textContent = ids.length ? `(${ids.length} marcados)` : '';
+        const ids = idsMarcados($('pq_items'));
+        contarCasillas($('pq_items'), $('pq_contador'));
         const v = valorPaquete(ids, parseFloat($('pq_descuento_pct').value || 0));
         $('pq_suma').textContent = money(v.suma);
         $('pq_desc').textContent = '−' + money(v.desc);
@@ -688,18 +730,8 @@
         $('pq_orden').value = p.orden || 0;
         $('pq_activo').checked = (p.estado || 'activo') === 'activo';
         $('pq_descripcion').value = p.descripcion || '';
-        const sel = new Set((p.items || []).map(Number));
-        const grupos = {};
-        cfgItems.forEach((it) => { (grupos[it.tipo === 'servicio' ? 'Servicios' : (it.grupo || 'Otros')] ||= []).push(it); });
         // Una fila con casilla por módulo, agrupadas por área (sin Ctrl + clic).
-        $('pq_items').innerHTML = Object.keys(grupos).sort().map((g) =>
-            `<div class="pq-grupo"><div class="px-2 py-1 bg-light border-bottom small fw-semibold text-secondary">${esc(g)}</div>`
-            + grupos[g].map((it) => `<label class="pq-fila d-flex align-items-center gap-2 px-2 py-1 border-bottom small mb-0" role="button" data-texto="${esc((g + ' ' + it.nombre).toLowerCase())}">
-                    <input type="checkbox" class="form-check-input mt-0 pq-check" value="${it.id}" ${sel.has(it.id) ? 'checked' : ''}>
-                    <span class="flex-grow-1">${esc(it.nombre)}${it.cobro === 'unico' ? ' <span class="text-muted">(pago único)</span>' : ''}${it.estado !== 'activo' ? ' <span class="text-muted">(inactivo)</span>' : ''}</span>
-                    <span class="text-muted">${money(it.precio_anual)}</span>
-                </label>`).join('')
-            + '</div>').join('');
+        pintarCasillas($('pq_items'), p.items || []);
         $('pq_buscar').value = '';
         $('cfgBtnEliminarPaquete').classList.toggle('d-none', !p.id);
         actualizarValorPaquete();
@@ -715,22 +747,7 @@
     });
     $('cfgBtnCancelarPaquete').addEventListener('click', () => $('cfgPaqEditor').classList.add('d-none'));
     $('pq_items').addEventListener('change', actualizarValorPaquete);
-    function idsPaqueteMarcados() {
-        return Array.from($('pq_items').querySelectorAll('.pq-check:checked')).map((c) => Number(c.value));
-    }
-    // Buscador de la lista: oculta las filas (y los grupos vacíos) que no coinciden; no desmarca nada.
-    $('pq_buscar').addEventListener('input', () => {
-        const q = ($('pq_buscar').value || '').toLowerCase().trim();
-        $('pq_items').querySelectorAll('.pq-grupo').forEach((g) => {
-            let visibles = 0;
-            g.querySelectorAll('.pq-fila').forEach((f) => {
-                const ver = !q || f.dataset.texto.includes(q);
-                f.classList.toggle('d-none', !ver);
-                if (ver) visibles++;
-            });
-            g.classList.toggle('d-none', visibles === 0);
-        });
-    });
+    $('pq_buscar').addEventListener('input', () => filtrarCasillas($('pq_items'), $('pq_buscar').value));
     $('pq_descuento_pct').addEventListener('input', actualizarValorPaquete);
 
     let guardandoPaquete = false;
@@ -745,7 +762,7 @@
                 descuento_pct: $('pq_descuento_pct').value,
                 orden: parseInt($('pq_orden').value || 0, 10) || 0,
                 estado: $('pq_activo').checked ? 'activo' : 'inactivo',
-                items: idsPaqueteMarcados(),
+                items: idsMarcados($('pq_items')),
             });
             if (!j.ok) return alerta('warning', 'No se guardó', j.error);
             await cargarConfig();
@@ -911,9 +928,9 @@
         $('it_producto_txt').value = it.producto_nombre || '';
         if (it.producto_nombre) productosMapa[it.producto_nombre] = it.id_producto;
         $('it_origen').textContent = it.tipo === 'modulo' ? `Submódulo del menú: ${it.ruta || ''}` : 'Servicio (concepto libre)';
-        const req = new Set((it.requiere || []).map(Number));
-        $('it_requiere').innerHTML = cfgItems.filter((x) => x.id !== it.id).map((x) =>
-            `<option value="${x.id}" ${req.has(x.id) ? 'selected' : ''}>${esc((x.grupo ? x.grupo + ' · ' : '') + x.nombre)}</option>`).join('');
+        pintarCasillas($('it_requiere'), it.requiere || [], it.id);
+        $('it_requiere_buscar').value = '';
+        contarCasillas($('it_requiere'), $('it_requiere_contador'));
         $('cfgBtnEliminarItem').classList.toggle('d-none', !it.id);
         actualizarEditorCobro();
         $('it_nombre').focus();
@@ -925,6 +942,8 @@
         $('it_producto_wrap').classList.toggle('d-none', !unico);
     }
     $('it_cobro').addEventListener('change', actualizarEditorCobro);
+    $('it_requiere').addEventListener('change', () => contarCasillas($('it_requiere'), $('it_requiere_contador')));
+    $('it_requiere_buscar').addEventListener('input', () => filtrarCasillas($('it_requiere'), $('it_requiere_buscar').value));
 
     window.CP_editarItem = function (k) {
         const it = filaPorClave(k);
@@ -959,7 +978,7 @@
                 estado: $('it_activo').checked ? 'activo' : 'inactivo',
                 orden: parseInt($('it_orden').value || 0, 10) || 0,
                 id_producto: prodTxt ? (productosMapa[prodTxt] || parseInt($('it_id_producto').value || 0, 10) || 0) : 0,
-                requiere: Array.from($('it_requiere').selectedOptions).map((o) => parseInt(o.value, 10)),
+                requiere: idsMarcados($('it_requiere')),
             };
             const j = await postJson(`${URL}/guardarItemAjax`, d);
             if (!j.ok) return alerta('warning', 'No se guardó', j.error);

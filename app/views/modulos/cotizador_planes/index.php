@@ -403,9 +403,11 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                         </div>
                                     </div>
                                     <div class="col-md-5">
-                                        <label class="form-label small fw-bold mb-1">Requiere (entran solos al agregarlo)</label>
-                                        <select class="form-select form-select-sm" id="it_requiere" multiple size="5"></select>
-                                        <div class="small text-muted">Ctrl/Cmd + clic para elegir varios.</div>
+                                        <div class="d-flex align-items-end gap-2 mb-1">
+                                            <label class="form-label small fw-bold mb-0 flex-grow-1">Requiere <span class="fw-normal text-muted">(entran solos al agregarlo)</span> <span class="fw-normal text-muted" id="it_requiere_contador"></span></label>
+                                            <input type="search" class="form-control form-control-sm" id="it_requiere_buscar" placeholder="Buscar…" style="width:150px;">
+                                        </div>
+                                        <div class="border rounded-2" id="it_requiere" style="max-height:170px;overflow:auto;"></div>
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label small fw-bold mb-1">Orden</label>
