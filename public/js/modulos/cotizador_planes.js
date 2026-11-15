@@ -629,7 +629,10 @@
             if (fondos.length > 1) fondos[fondos.length - 1].style.setProperty('z-index', '5065', 'important');
             $(idFoco)?.focus();
         });
-        return bootstrap.Modal.getOrCreateInstance(el);
+        // Este archivo carga ANTES que Bootstrap (el layout lo incluye al final):
+        // la instancia se pide recién al abrir/cerrar, nunca al cargar la página.
+        const inst = () => bootstrap.Modal.getOrCreateInstance(el);
+        return { show: () => inst().show(), hide: () => inst().hide() };
     }
     let cfgModal = null;
     let cfgItems = [];
