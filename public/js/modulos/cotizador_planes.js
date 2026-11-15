@@ -644,7 +644,6 @@
         cfgSubmodulos = j.submodulos || [];
         pintarCfgItems();
         pintarCfgPaquetes();
-        $('cfgEditor').classList.add('d-none');
         $('cfgPaqEditor').classList.add('d-none');
     }
 
@@ -851,9 +850,9 @@
             const accion = it._virtual
                 ? `<button type="button" class="btn btn-outline-primary btn-sm py-0" onclick="CP_cargarItem('${it._k}')" title="Cargar al catálogo con el precio escrito">Cargar</button>`
                 : `<button type="button" class="btn btn-link btn-sm p-0" onclick="CP_editarItem('${it._k}')" title="Editar"><i class="bi bi-pencil-square"></i></button>`;
-            return `<tr class="${it._virtual ? 'text-muted' : ''}">
+            return `<tr class="${it._virtual ? 'text-muted' : ''}" role="button" data-k="${it._k}" title="Clic para ver el detalle">
                 <td class="small">${esc(it.tipo === 'servicio' ? 'Servicios' : (it.grupo || ''))}</td>
-                <td><a href="#" class="text-reset" onclick="CP_editarItem('${it._k}');return false;">${esc(it.nombre)}</a></td>
+                <td class="fw-medium">${esc(it.nombre)}</td>
                 <td class="small">${it.cobro === 'unico' ? 'Una vez' : 'Cada periodo'}</td>
                 <td><input type="number" min="0" step="0.01" class="form-control form-control-sm text-end py-0" style="height:24px;"
                         data-k="${it._k}" value="${Number(it.precio_anual || 0).toFixed(2)}" onchange="CP_precioCatalogo('${it._k}', this)"></td>
@@ -930,9 +929,27 @@
         guardarFila(k, el ? r2(parseFloat(el.value || 0)) : 0);
     };
     $('cfgFiltro').addEventListener('input', pintarCfgItems);
+    $('cfgItems').querySelector('tbody').addEventListener('click', (ev) => {
+        if (ev.target.closest('input, button, a, select')) return; // precio en línea y botones siguen igual
+        const tr = ev.target.closest('tr[data-k]');
+        if (tr) window.CP_editarItem(tr.dataset.k);
+    });
+
+    // El detalle del ítem es un modal propio, encima de la Configuración.
+    const modalItemEl = $('modalCPItem');
+    const modalItem = modalItemEl ? bootstrap.Modal.getOrCreateInstance(modalItemEl) : null;
+    if (modalItemEl) {
+        // Todos los .modal comparten z-index (app.css): este y su fondo se suben un nivel.
+        modalItemEl.addEventListener('show.bs.modal', () => modalItemEl.style.setProperty('z-index', '5070', 'important'));
+        modalItemEl.addEventListener('shown.bs.modal', () => {
+            const fondos = document.querySelectorAll('.modal-backdrop');
+            if (fondos.length > 1) fondos[fondos.length - 1].style.setProperty('z-index', '5065', 'important');
+            $('it_nombre').focus();
+        });
+    }
 
     function abrirEditor(it) {
-        $('cfgEditor').classList.remove('d-none');
+        $('it_titulo').textContent = it.id ? (it.nombre || 'Detalle del módulo') : (it.tipo === 'servicio' ? 'Nuevo servicio' : `Cargar módulo: ${it.nombre || ''}`);
         $('it_id').value = it.id || '';
         $('it_tipo').value = it.tipo;
         $('it_id_submodulo').value = it.id_submodulo || '';
@@ -955,7 +972,7 @@
         contarCasillas($('it_requiere'), $('it_requiere_contador'));
         $('cfgBtnEliminarItem').classList.toggle('d-none', !it.id);
         actualizarEditorCobro();
-        $('it_nombre').focus();
+        modalItem.show();
     }
     function actualizarEditorCobro() {
         const unico = $('it_cobro').value === 'unico';
@@ -977,7 +994,6 @@
     $('cfgBtnAgregarServicio').addEventListener('click', () => {
         abrirEditor({ tipo: 'servicio', nombre: '', grupo: 'Servicios', precio_anual: 0, cobro: 'unico', aplica_descuento_establecimiento: false, estado: 'activo' });
     });
-    $('cfgBtnCancelarItem').addEventListener('click', () => $('cfgEditor').classList.add('d-none'));
 
     let guardandoItem = false;
     $('cfgBtnGuardarItem').addEventListener('click', async () => {
@@ -1005,6 +1021,7 @@
             };
             const j = await postJson(`${URL}/guardarItemAjax`, d);
             if (!j.ok) return alerta('warning', 'No se guardó', j.error);
+            modalItem.hide();
             await cargarConfig();
         } catch (e) {
             alerta('error', 'Error de conexión', 'No se pudo guardar el ítem.');
@@ -1021,6 +1038,7 @@
         }
         const j = await postJson(`${URL}/eliminarItemAjax`, { id });
         if (!j.ok) return alerta('warning', 'No se quitó', j.error);
+        modalItem.hide();
         await cargarConfig();
     });
 

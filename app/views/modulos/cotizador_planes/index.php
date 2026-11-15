@@ -360,78 +360,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <div class="small text-muted mb-2">
                             Aquí están todos los módulos del menú. Escriba el <strong>precio anual</strong> directo en la tabla y se guarda solo.
                             Los que dicen <em>Sin cargar</em> todavía no se ofrecen al cotizar: se cargan al escribir su precio o con <strong>Cargar</strong> (también a $0, para los que van incluidos).
-                            Para dependencias y demás opciones, pulse el nombre del módulo.
-                        </div>
-
-                        <!-- Editor de ítem -->
-                        <div class="card border-primary border-opacity-25 mb-2 d-none" id="cfgEditor">
-                            <div class="card-body py-2">
-                                <input type="hidden" id="it_id"><input type="hidden" id="it_tipo"><input type="hidden" id="it_id_submodulo"><input type="hidden" id="it_ruta">
-                                <div class="row g-2">
-                                    <div class="col-md-4">
-                                        <label class="form-label small fw-bold mb-1">Nombre *</label>
-                                        <input type="text" class="form-control form-control-sm" id="it_nombre" maxlength="150">
-                                        <div class="small text-muted" id="it_origen"></div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label small fw-bold mb-1">Grupo</label>
-                                        <input type="text" class="form-control form-control-sm" id="it_grupo" maxlength="100" placeholder="Ventas, Compras…">
-                                    </div>
-                                    <div class="col-md-2">
-                                        <label class="form-label small fw-bold mb-1">Precio anual ($) *</label>
-                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end" id="it_precio_anual" value="0">
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label small fw-bold mb-1">Se cobra</label>
-                                        <select class="form-select form-select-sm" id="it_cobro">
-                                            <option value="recurrente">Cada periodo (anual / mensual)</option>
-                                            <option value="unico">Una sola vez</option>
-                                        </select>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="form-check form-switch small mt-1">
-                                            <input class="form-check-input" type="checkbox" id="it_aplica_descuento_establecimiento" checked>
-                                            <label class="form-check-label" for="it_aplica_descuento_establecimiento" title="Módulo base: en los establecimientos adicionales lleva el descuento (solo plan anual). Apagado: módulo adicional a precio completo en cada establecimiento.">Entra en el descuento por establecimiento adicional</label>
-                                        </div>
-                                        <div class="form-check form-switch small">
-                                            <input class="form-check-input" type="checkbox" id="it_sin_costo_dependencia">
-                                            <label class="form-check-label" for="it_sin_costo_dependencia" title="Si se vende solo, se cobra su precio. Si otro módulo de la cotización lo requiere (p. ej. Clientes al elegir Facturas), va incluido a $0.">Sin costo cuando lo requiere otro módulo</label>
-                                        </div>
-                                        <div class="form-check form-switch small">
-                                            <input class="form-check-input" type="checkbox" id="it_activo" checked>
-                                            <label class="form-check-label" for="it_activo">Activo (se ofrece al cotizar)</label>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-5">
-                                        <div class="d-flex align-items-end gap-2 mb-1">
-                                            <label class="form-label small fw-bold mb-0 flex-grow-1">Requiere <span class="fw-normal text-muted">(entran solos al agregarlo)</span> <span class="fw-normal text-muted" id="it_requiere_contador"></span></label>
-                                            <input type="search" class="form-control form-control-sm" id="it_requiere_buscar" placeholder="Buscar…" style="width:150px;">
-                                        </div>
-                                        <div class="border rounded-2" id="it_requiere" style="max-height:170px;overflow:auto;"></div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label small fw-bold mb-1">Orden</label>
-                                        <input type="number" step="1" class="form-control form-control-sm" id="it_orden" value="0">
-                                        <div id="it_producto_wrap" class="mt-2">
-                                            <label class="form-label small fw-bold mb-1">Producto en la proforma</label>
-                                            <input type="text" class="form-control form-control-sm" id="it_producto_txt" list="cfgProductosLista" placeholder="Opcional: buscar producto">
-                                            <input type="hidden" id="it_id_producto">
-                                            <div class="small text-muted">Solo pagos únicos. Sin producto, la línea toma el IVA del plan.</div>
-                                        </div>
-                                    </div>
-                                    <div class="col-12">
-                                        <label class="form-label small fw-bold mb-1">Descripción</label>
-                                        <input type="text" class="form-control form-control-sm" id="it_descripcion" maxlength="500">
-                                    </div>
-                                    <div class="col-12 d-flex justify-content-between">
-                                        <button type="button" class="btn btn-outline-danger btn-sm d-none" id="cfgBtnEliminarItem"><i class="bi bi-trash3"></i> Eliminar del catálogo</button>
-                                        <div class="ms-auto d-flex gap-2">
-                                            <button type="button" class="btn btn-secondary btn-sm" id="cfgBtnCancelarItem">Cancelar</button>
-                                            <button type="button" class="btn btn-primary btn-sm" id="cfgBtnGuardarItem"><i class="bi bi-check2-circle"></i> Guardar ítem</button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            Para dependencias y demás opciones, haga clic en la fila del módulo.
                         </div>
 
                         <div class="table-responsive" style="max-height:52vh;">
@@ -593,6 +522,85 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     </div>
                 </div>
                 <datalist id="cfgProductosLista"></datalist>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Detalle de un módulo/servicio del catálogo (se abre sobre la configuración) -->
+<div class="modal fade" id="modalCPItem" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-puzzle text-primary me-2"></i><span id="it_titulo">Detalle del módulo</span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="it_id"><input type="hidden" id="it_tipo"><input type="hidden" id="it_id_submodulo"><input type="hidden" id="it_ruta">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1">Nombre *</label>
+                        <input type="text" class="form-control form-control-sm" id="it_nombre" maxlength="150">
+                        <div class="small text-muted" id="it_origen"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-bold mb-1">Grupo</label>
+                        <input type="text" class="form-control form-control-sm" id="it_grupo" maxlength="100" placeholder="Ventas, Compras…">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">Precio anual ($) *</label>
+                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end" id="it_precio_anual" value="0">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">Se cobra</label>
+                        <select class="form-select form-select-sm" id="it_cobro">
+                            <option value="recurrente">Cada periodo (anual / mensual)</option>
+                            <option value="unico">Una sola vez</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label small fw-bold mb-1">Orden</label>
+                        <input type="number" step="1" class="form-control form-control-sm" id="it_orden" value="0">
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-check form-switch small mt-1">
+                            <input class="form-check-input" type="checkbox" id="it_aplica_descuento_establecimiento" checked>
+                            <label class="form-check-label" for="it_aplica_descuento_establecimiento" title="Módulo base: en los establecimientos adicionales lleva el descuento (solo plan anual). Apagado: módulo adicional a precio completo en cada establecimiento.">Entra en el descuento por establecimiento adicional</label>
+                        </div>
+                        <div class="form-check form-switch small">
+                            <input class="form-check-input" type="checkbox" id="it_sin_costo_dependencia">
+                            <label class="form-check-label" for="it_sin_costo_dependencia" title="Si se vende solo, se cobra su precio. Si otro módulo de la cotización lo requiere (p. ej. Clientes al elegir Facturas), va incluido a $0.">Sin costo cuando lo requiere otro módulo</label>
+                        </div>
+                        <div class="form-check form-switch small">
+                            <input class="form-check-input" type="checkbox" id="it_activo" checked>
+                            <label class="form-check-label" for="it_activo">Activo (se ofrece al cotizar)</label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-end gap-2 mb-1">
+                            <label class="form-label small fw-bold mb-0 flex-grow-1">Requiere <span class="fw-normal text-muted">(entran solos al agregarlo)</span> <span class="fw-normal text-muted" id="it_requiere_contador"></span></label>
+                            <input type="search" class="form-control form-control-sm" id="it_requiere_buscar" placeholder="Buscar…" style="width:150px;">
+                        </div>
+                        <div class="border rounded-2" id="it_requiere" style="max-height:220px;overflow:auto;"></div>
+                    </div>
+                    <div class="col-md-6" id="it_producto_wrap">
+                        <div>
+                            <label class="form-label small fw-bold mb-1">Producto en la proforma</label>
+                            <input type="text" class="form-control form-control-sm" id="it_producto_txt" list="cfgProductosLista" placeholder="Opcional: buscar producto">
+                            <input type="hidden" id="it_id_producto">
+                            <div class="small text-muted">Solo pagos únicos. Sin producto, la línea toma el IVA del plan.</div>
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label small fw-bold mb-1">Descripción</label>
+                        <input type="text" class="form-control form-control-sm" id="it_descripcion" maxlength="500">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-danger btn-sm d-none me-auto" id="cfgBtnEliminarItem"><i class="bi bi-trash3"></i> Eliminar del catálogo</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="cfgBtnGuardarItem"><i class="bi bi-check2-circle"></i> Guardar</button>
             </div>
         </div>
     </div>
