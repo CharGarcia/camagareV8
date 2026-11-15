@@ -5,7 +5,7 @@ categoria: Configuración
 tipo: guia
 visibilidad: superadmin
 etiquetas: deploy, desplegar, subir cambios al servidor, publicar en produccion, actualizar servidor, deploy.ps1, powershell, git pull, git push, claude code, cambios de claude, nada nuevo que subir, abortado, solo deploy, otra computadora, pc nueva, acceso directo en el escritorio, deploy camagare
-version: 1.1
+version: 1.2
 orden: 90
 estado: activo
 ---
@@ -22,8 +22,8 @@ el acceso directo **«Deploy CaMaGaRe»** del escritorio.
 |---|---|
 | **1/5 Cambios locales** | Si hay archivos modificados, los muestra, pide un mensaje y hace el commit (la carpeta `web` se excluye siempre: es otro repositorio). |
 | **2/5 Sincronizar** | `git pull --rebase origin main`: trae lo que esté en GitHub (incluido lo que subió Claude) y pone encima tu commit. |
-| **3/5 Revisión** | Si no hay nada nuevo que subir, se detiene. Si el cambio trae SQL, pregunta si ya se aplicó en producción (**el SQL va primero**); avisa también si cambió `composer.lock` o el manual. |
-| **4/5 Push** | `git push origin main`. |
+| **3/5 Revisión** | Si no tienes cambios propios que subir, consulta por SSH la versión del servidor: si producción ya está al día con `main`, termina (*«Nada que hacer»*); si está atrasada (por ejemplo, Claude subió cambios), sigue con lo que llegó de `main` y, en el paso 4, pregunta si desplegarlo. Si el cambio trae SQL, pregunta si ya se aplicó en producción (**el SQL va primero**); avisa también si cambió `composer.lock` o el manual. |
+| **4/5 Push** | `git push origin main` (se salta si no hay cambios tuyos; antes pregunta *«¿Desplegar en producción lo que llegó de main?»*). |
 | **5/5 Deploy** | Por SSH: `git pull` en el servidor y recarga de Apache. |
 
 ## Cómo se ejecuta
@@ -42,11 +42,9 @@ Al terminar, si el cambio tocó `docs/manual/`, pulsar **Sincronizar** en
 ## Cambios hechos con Claude
 
 - **Claude en la nube** (claude.ai/code): sube los cambios **directo a `main`**
-  en GitHub. Para tenerlos:
-  - en la PC: `git pull origin main`;
-  - en producción: `.\tools\deploy.ps1 -SoloDeploy`. Si además tienes cambios
-    propios sin subir, usa el flujo normal: el paso 2 trae lo de Claude y el
-    paso 5 despliega todo junto.
+  en GitHub. Para tenerlos basta con el **acceso directo** (flujo normal): el
+  paso 2 los trae a la PC y el script los despliega en producción, tengas o no
+  cambios propios. Si traen SQL, lo pide primero.
 - **Claude Code instalado en la PC** trabajando sobre la carpeta del proyecto:
   los cambios quedan como archivos modificados y los toma el paso 1.
 - Si Claude entrega un **SQL**, se ejecuta primero en la base de producción
@@ -70,9 +68,10 @@ Al terminar, si el cambio tocó `docs/manual/`, pulsar **Sincronizar** en
 
 ## Errores frecuentes
 
-- **«ABORTADO: no hay nada nuevo que subir ni desplegar»**: no hay cambios
-  locales nuevos. Si lo que quieres desplegar ya está en `main` (por ejemplo,
-  lo subió Claude), usa `.\tools\deploy.ps1 -SoloDeploy`.
+- **«Nada que hacer»**: no hay cambios tuyos y producción ya tiene lo último
+  de `main`. No es un error.
+- **«no pude consultar la version del servidor por SSH»**: revisar la conexión
+  o la llave SSH; mientras tanto, `.\tools\deploy.ps1 -SoloDeploy`.
 - **«hay un rebase a medias»**: terminarlo (`git rebase --continue`) o
   cancelarlo (`git rebase --abort`) y relanzar.
 - **«You have not concluded your merge (MERGE_HEAD exists)»** al hacer
@@ -87,6 +86,10 @@ Al terminar, si el cambio tocó `docs/manual/`, pulsar **Sincronizar** en
 
 ## Historial de cambios
 
+- **1.2** — Sin cambios propios, el flujo normal ya no se detiene: si
+  producción está atrasada respecto a `main` (cambios de Claude en la nube),
+  revisa SQL y manual y ofrece desplegar sin push. Ya no hace falta
+  `-SoloDeploy` para los cambios de Claude.
 - **1.1** — El script vuelve a la versión de 5 pasos, sin fusionar ramas
   `claude/*`. Claude en la nube sube directo a `main`; se despliega con
   `-SoloDeploy`. Nuevos errores frecuentes: merge a medias y Vim.

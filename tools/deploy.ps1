@@ -5,6 +5,9 @@
 .DESCRIPTION
     Ejecuta en orden: commit, pull --rebase, revision de lo que trae el cambio,
     push y despliegue por SSH (git pull + reload de Apache).
+    Si no hay cambios locales que subir pero produccion esta atrasada respecto a
+    main (p. ej. cambios subidos desde una sesion de Claude en la nube), lo
+    avisa, revisa lo pendiente (SQL, docs) y ofrece desplegarlo sin push.
     Se detiene en cuanto un paso falla e indica si el push llego a hacerse.
 
     El commit va ANTES del rebase a proposito: git se niega a rebasar con el
@@ -97,7 +100,27 @@ if ($LASTEXITCODE -ne 0) {
 # ---------------------------------------------------------------- 3. revision
 Paso '3/5' 'Revisando que trae el cambio...'
 $arch = git diff --name-only origin/main HEAD
-if (-not $arch) { Abortar 'no hay nada nuevo que subir ni desplegar.' }
+$sinPush = $false
+if (-not $arch) {
+    # Nada propio que subir. Produccion esta al dia con main? (los cambios pueden
+    # venir de la nube: el pull de arriba ya los trajo a esta PC).
+    $srvHead = (ssh $SRV "cd $RUTA_REMOTA && git rev-parse HEAD" | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $srvHead) { Abortar 'no pude consultar la version del servidor por SSH.' }
+    $mainHead = (git rev-parse origin/main | Out-String).Trim()
+    if ($srvHead -eq $mainHead) {
+        Write-Host "`nNo hay cambios tuyos que subir y produccion ya esta al dia con main. Nada que hacer.`n" -ForegroundColor Green
+        exit 0
+    }
+    $sinPush = $true
+    Write-Host '  No hay cambios tuyos que subir, pero produccion esta atrasada respecto a main.' -ForegroundColor Yellow
+    $arch = git diff --name-only $srvHead $mainHead 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        Aviso 'no pude comparar con la version del servidor: revisa a mano si lo que llega trae SQL.'
+        $arch = @()
+    } else {
+        Write-Host "  Archivos que llegan a produccion: $(@($arch).Count)" -ForegroundColor DarkGray
+    }
+}
 
 $sql  = @($arch | Where-Object { $_ -match '\.sql$' })
 $lock = @($arch | Where-Object { $_ -match 'composer\.lock$' })
@@ -119,9 +142,15 @@ if (-not $sql.Count -and -not $lock.Count -and -not $doc.Count) {
 }
 
 # ---------------------------------------------------------------- 4. push
-Paso '4/5' 'Push a origin/main...'
-git push origin main
-if ($LASTEXITCODE -ne 0) { Abortar 'fallo el push. Nada se desplego.' }
+if ($sinPush) {
+    $r = Read-Host "`nDesplegar en produccion lo que llego de main? (S/n)"
+    if ($r -and $r -ne 's' -and $r -ne 'S') { Abortar 'cancelado por el usuario. Nada se desplego.' }
+    Paso '4/5' 'Push: no hace falta (no hay cambios tuyos).'
+} else {
+    Paso '4/5' 'Push a origin/main...'
+    git push origin main
+    if ($LASTEXITCODE -ne 0) { Abortar 'fallo el push. Nada se desplego.' }
+}
 
 # ---------------------------------------------------------------- 5. deploy
 Paso '5/5' "Desplegando en produccion ($SRV)..."
