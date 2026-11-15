@@ -203,11 +203,19 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                 <!-- Tab: Documentos Ignorados -->
                 <div class="tab-pane fade" id="tab-ignorados" role="tabpanel" aria-labelledby="tab-ignorados-btn">
                     <div class="row mb-3 align-items-end">
-                        <div class="col-md-5">
+                        <div class="col-md-4">
                             <label class="form-label fw-bold small text-muted">Clave de Acceso a Ignorar</label>
                             <input type="text" id="ignorado_clave_input" class="form-control form-control-sm" maxlength="49" placeholder="49 dígitos...">
                         </div>
-                        <div class="col-md-5">
+                        <div class="col-md-3">
+                            <label class="form-label fw-bold small text-muted">No descargar en</label>
+                            <select id="ignorado_alcance_input" class="form-select form-select-sm"
+                                    title="Todos los establecimientos del RUC, o solo en este (para registrarlo en otro establecimiento)">
+                                <option value="0" selected>Todos los establecimientos</option>
+                                <option value="1">Solo este establecimiento</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
                             <label class="form-label fw-bold small text-muted">Observaciones (Opcional)</label>
                             <input type="text" id="ignorado_obs_input" class="form-control form-control-sm" placeholder="Ej: Error en el SRI, Duplicado, etc.">
                         </div>
@@ -225,6 +233,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     <th class="ps-3 py-2 small fw-bold">Fecha Doc.</th>
                                     <th class="py-2 small fw-bold">Clave de Acceso</th>
                                     <th class="py-2 small fw-bold">Emisor / Proveedor</th>
+                                    <th class="py-2 small fw-bold">Alcance</th>
                                     <th class="py-2 small fw-bold">Observaciones</th>
                                     <th class="py-2 small fw-bold">Fecha Registro</th>
                                     <th class="py-2 small fw-bold text-center" style="width: 50px;"></th>
@@ -232,7 +241,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                             </thead>
                             <tbody id="tbodyIgnorados">
                                 <tr>
-                                    <td colspan="4" class="text-center py-4 text-muted">Cargando lista negra...</td>
+                                    <td colspan="7" class="text-center py-4 text-muted">Cargando lista negra...</td>
                                 </tr>
                             </tbody>
                         </table>

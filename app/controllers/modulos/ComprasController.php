@@ -1471,11 +1471,20 @@ class ComprasController extends BaseModuloController
                 $invSrv->revertirMovimientosPorReferencia('nota_credito_compra', (int)$det['id'], $idEmpresa, $idUsuario);
             }
 
-            // 2. Eliminar la compra (lógico)
-            $this->service->eliminar($id, $idUsuario, $idEmpresa);
+            // 2. Eliminar la compra (lógico) y, si se pidió, agregarla a «Documentos para no
+            //    descargar» de Descargas SRI (misma transacción; ver ComprasService::eliminar).
+            $this->service->eliminar(
+                $id, $idUsuario, $idEmpresa,
+                trim((string) ($_POST['no_descargar'] ?? '')) ?: null,
+                mb_substr(trim((string) ($_POST['observacion_no_descargar'] ?? '')), 0, 500)
+            );
+            $aviso = $this->service->getAvisoNoDescargar();
 
             $db->commit();
-            echo json_encode(['ok' => true, 'mensaje' => 'Compra eliminada correctamente.']);
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Compra eliminada correctamente.' . ($aviso ? ' ' . $aviso : ''),
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             if ($db->inTransaction()) $db->rollBack();

@@ -1636,11 +1636,51 @@ class ComprasService
         );
     }
 
-    public function eliminar(int $id, int $idUsuario, int $idEmpresa): bool
+    /** Aviso del último eliminar() sobre «Documentos para no descargar» (null = no aplicó). */
+    private ?string $avisoNoDescargar = null;
+
+    public function getAvisoNoDescargar(): ?string
     {
+        return $this->avisoNoDescargar;
+    }
+
+    /** ¿El número de autorización es una clave de acceso electrónica (49 dígitos)? */
+    public static function esClaveElectronica(?string $autorizacion): bool
+    {
+        return (bool) preg_match('/^\d{49}$/', trim((string) $autorizacion));
+    }
+
+    /**
+     * Elimina la compra. Si es un comprobante electrónico y viene $motivoNoDescargar
+     * (DocumentoIgnoradoRepository::MOTIVO_*), en la MISMA transacción la agrega a
+     * «Documentos para no descargar» de Descargas SRI, para que la próxima descarga
+     * no la vuelva a registrar:
+     *  - ANULADO_SRI          → bloqueo para todos los establecimientos del RUC.
+     *  - OTRO_ESTABLECIMIENTO → bloqueo solo en este establecimiento (otro del mismo
+     *                           RUC sí podrá descargarla o cargar su XML).
+     */
+    public function eliminar(
+        int $id,
+        int $idUsuario,
+        int $idEmpresa,
+        ?string $motivoNoDescargar = null,
+        string $observacionNoDescargar = ''
+    ): bool {
+        $this->avisoNoDescargar = null;
         $compra = $this->repository->getPorId($id, $idEmpresa);
         if (!$compra) {
             throw new \Exception('Compra no encontrada.');
+        }
+
+        $motivosValidos = [
+            \App\repositories\modulos\DocumentoIgnoradoRepository::MOTIVO_ANULADO_SRI,
+            \App\repositories\modulos\DocumentoIgnoradoRepository::MOTIVO_OTRO_ESTABLECIMIENTO,
+        ];
+        if ($motivoNoDescargar !== null && $motivoNoDescargar !== '' && !in_array($motivoNoDescargar, $motivosValidos, true)) {
+            throw new \Exception('Motivo de «no descargar» no válido.');
+        }
+        if ($motivoNoDescargar === '') {
+            $motivoNoDescargar = null;
         }
 
         // Validar periodo contable antes de eliminar
@@ -1686,12 +1726,93 @@ class ComprasService
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
             $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'compras', $id);
 
+            if ($motivoNoDescargar !== null && self::esClaveElectronica($compra['numero_autorizacion'] ?? '')) {
+                $this->avisoNoDescargar = $this->registrarNoDescargar(
+                    $compra, $motivoNoDescargar, trim($observacionNoDescargar), $idEmpresa, $idUsuario
+                );
+            }
+
             if ($managed) $db->commit();
             return true;
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
+            $this->avisoNoDescargar = null;
             throw $e;
         }
+    }
+
+    /**
+     * Agrega la clave de la compra eliminada a «Documentos para no descargar» con el
+     * alcance que corresponde al motivo. No duplica: si ya está bloqueada con igual o
+     * mayor alcance no hace nada; si estaba solo para este establecimiento y ahora es
+     * ANULADO_SRI, la amplía a todo el RUC. Devuelve el aviso para el usuario.
+     */
+    private function registrarNoDescargar(array $compra, string $motivo, string $observacion, int $idEmpresa, int $idUsuario): string
+    {
+        $repo   = new \App\repositories\modulos\DocumentoIgnoradoRepository();
+        $clave  = trim((string) $compra['numero_autorizacion']);
+        $todoRuc = $motivo === \App\repositories\modulos\DocumentoIgnoradoRepository::MOTIVO_ANULADO_SRI;
+        $avisoOk = $todoRuc
+            ? 'Se agregó a «Documentos para no descargar»: no se volverá a descargar en ningún establecimiento.'
+            : 'Se agregó a «Documentos para no descargar» solo en este establecimiento: ya puede descargarlo o cargar su XML en el otro.';
+
+        $numero = trim(implode('-', array_filter([
+            $compra['establecimiento_prov'] ?? '', $compra['punto_emision_prov'] ?? '', $compra['secuencial_prov'] ?? '',
+        ], static fn($v) => (string) $v !== '')));
+        $texto = 'Eliminado desde Compras'
+            . (($compra['tipo_comprobante_nombre'] ?? '') !== '' || $numero !== ''
+                ? ' (' . trim(($compra['tipo_comprobante_nombre'] ?? '') . ' ' . $numero) . ')' : '')
+            . ': ' . ($todoRuc ? 'anulado en el SRI o emitido por error' : 'se registrará en otro establecimiento')
+            . ($observacion !== '' ? '. ' . $observacion : '');
+
+        $propia = $repo->getVigente($clave, $idEmpresa);
+        if ($propia) {
+            $soloEst = in_array($propia['solo_establecimiento'], [true, 't', 'true', 1, '1'], true);
+            if ($todoRuc && $soloEst) {
+                $repo->ampliarATodoElRuc((int) $propia['id'], $motivo, $texto, $idUsuario);
+                $this->logService->registrar(
+                    $idUsuario, $idEmpresa, 'ACTUALIZAR', 'documentos_ignorados_sri', (int) $propia['id'],
+                    ['solo_establecimiento' => true], ['solo_establecimiento' => false, 'motivo' => $motivo, 'id_compra' => (int) $compra['id']]
+                );
+                return $avisoOk;
+            }
+            return 'El documento ya estaba en «Documentos para no descargar».';
+        }
+
+        $idsGrupo = $this->empresaRepo()->getIdsEmpresaMismoRuc($idEmpresa);
+        if (!in_array($idEmpresa, $idsGrupo, true)) {
+            $idsGrupo[] = $idEmpresa;
+        }
+        // Otro establecimiento del RUC ya la bloqueó para todos: no hace falta otra fila.
+        if ($repo->existeClaveEnGrupo($clave, $idsGrupo, $idEmpresa)) {
+            return 'El documento ya estaba en «Documentos para no descargar» para todos los establecimientos.';
+        }
+
+        $idFila = $repo->insertar([
+            'id_empresa'           => $idEmpresa,
+            'clave_acceso'         => $clave,
+            'nombre_proveedor'     => $compra['proveedor_nombre'] ?? '',
+            'fecha_documento'      => $compra['fecha_emision'] ?? '',
+            'observaciones'        => $texto,
+            'solo_establecimiento' => !$todoRuc,
+            'motivo'               => $motivo,
+            'id_usuario'           => $idUsuario,
+        ]);
+        $this->logService->registrar(
+            $idUsuario, $idEmpresa, 'CREAR', 'documentos_ignorados_sri', $idFila, null,
+            [
+                'clave_acceso'         => $clave,
+                'motivo'               => $motivo,
+                'solo_establecimiento' => !$todoRuc,
+                'id_compra'            => (int) $compra['id'],
+                'observaciones'        => $texto,
+            ]
+        );
+        if (!$repo->tieneAlcance() && !$todoRuc) {
+            // SQL de alcance aún no aplicado: la fila bloquea a todo el RUC.
+            return 'Se agregó a «Documentos para no descargar» (para todos los establecimientos: falta actualizar la base de datos para limitarlo a este).';
+        }
+        return $avisoOk;
     }
 
     private function getSustentoIdByCodigo(string $codigo): ?int

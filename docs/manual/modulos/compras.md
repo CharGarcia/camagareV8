@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado
-version: 2.47
+etiquetas: compras, compra, eliminar compra, eliminar factura electronica, se vuelve a descargar, no volver a descargar, documentos para no descargar, factura anulada en el sri, emitida por error, mover a otro establecimiento, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado
+version: 2.48
 orden: 20
 estado: activo
 ---
@@ -368,6 +368,34 @@ Reabra el período si realmente necesita eliminarla.
 Si en su empresa quedaron asientos huérfanos de antes de este cambio, la
 **Auditoría Contable** los detecta como *huérfano* y los anula, de uno en uno o en
 lote (ver [Auditoría Contable](auditoria-contable)).
+
+## Eliminar un comprobante electrónico: que no se vuelva a descargar
+
+Si la compra es un **comprobante electrónico** (su número de autorización es una
+clave de acceso de 49 dígitos), al pulsar **Eliminar** el sistema avisa que la
+próxima descarga del SRI, manual o automática, lo volvería a registrar. Por eso
+pregunta **por qué lo elimina**:
+
+| Opción | Cuándo usarla | Qué pasa |
+|---|---|---|
+| **Fue anulado en el SRI o lo emitieron por error** | El proveedor anuló el comprobante en el SRI o se lo emitió a la empresa por equivocación. | Se agrega a *Documentos para no descargar* para **todos los establecimientos** de la empresa (mismo RUC): no vuelve a entrar en ninguno. |
+| **Lo voy a registrar en otro establecimiento** | El comprobante entró en un establecimiento y corresponde a otro de la misma empresa. | Se agrega a *Documentos para no descargar* **solo en este establecimiento**. El otro sí puede descargarlo o cargar su XML. |
+| **Solo eliminar** | Quiere borrarlo para volver a descargarlo, por ejemplo después de corregir algo. | No se agrega a la lista: la próxima descarga lo vuelve a registrar. |
+
+También puede escribir una **observación** (opcional), que se guarda en la lista
+junto con el tipo y número del comprobante.
+
+**Para mover una compra a otro establecimiento:**
+1. En el establecimiento donde entró, elimínela con *Lo voy a registrar en otro establecimiento*.
+2. Cambie al otro establecimiento y descárguela desde **Descargas SRI** o cargue su XML.
+
+Agregar a la lista y eliminar la compra se hacen juntos: si la eliminación no se
+puede hacer (periodo cerrado, retención asociada), el documento tampoco se
+agrega. Si luego necesita volver a descargarlo, quítelo de la pestaña
+*Documentos para no descargar* de [Descargas del SRI](descargas-sri).
+
+Las compras físicas (con autorización que no es una clave de 49 dígitos) se
+eliminan con el aviso de siempre.
 
 ## Notas de crédito y débito de compra
 
@@ -880,6 +908,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.48** — Al **eliminar un comprobante electrónico** se pregunta el motivo: *anulado en el SRI o emitido por error* (no se vuelve a descargar en ningún establecimiento), *lo voy a registrar en otro establecimiento* (no se vuelve a descargar solo en este) o *solo eliminar*. Las dos primeras lo agregan a *Documentos para no descargar* de Descargas SRI. Requiere `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Eliminar un comprobante electrónico: que no se vuelva a descargar*.
 - **2.47** — Bajo el buscador del proveedor aparece una **línea con sus datos** (identificación, dirección, teléfono y correo), como la del cliente en Facturas de Venta, con el enlace **Editar** que abre la ficha del proveedor sin salir de la compra. La dirección y el correo largos se recortan con «…» y se ven completos al dejar el puntero encima. Ver *Datos del proveedor bajo el buscador*.
 - **2.46** — Nueva pestaña **Información** en la ventana de la compra (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, sus acciones registradas y los movimientos de inventario que generó. Ver la guía *Pestaña Información*.
 - **2.45** — Pestaña **Pagos**: registrar un pago pide **confirmar monto y forma de pago** (también al pulsar Enter), el monto queda vacío después de cada pago y las **observaciones** usan el mismo formato que Egresos (*Pago factura de compra 42869; Pagado con …*). Antes decían *Pago de Compra #…*.

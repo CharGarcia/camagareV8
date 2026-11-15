@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
-etiquetas: descargas sri, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional, pdf, ride, leer pdf, cargar pdf, registrar desde pdf, comprobante sin xml, inteligencia artificial
-version: 1.16
+etiquetas: descargas sri, documentos para no descargar, lista negra, ignorar documento, no volver a descargar, documento anulado, factura anulada en el sri, emitida por error, otro establecimiento, alcance, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional, pdf, ride, leer pdf, cargar pdf, registrar desde pdf, comprobante sin xml, inteligencia artificial
+version: 1.17
 orden: 50
 estado: activo
 ---
@@ -29,6 +29,33 @@ escribir nada.
 El sistema evita registrar dos veces el mismo comprobante, aunque se descargue
 varias veces o dos personas lo hagan a la vez. Si un documento ya existe, no se
 duplica.
+
+## Documentos para no descargar
+
+En esta pestaña se ponen los comprobantes que la descarga **no debe registrar**,
+aunque el SRI los siga entregando: un documento anulado, uno emitido a la empresa
+por error, o uno que se registró en otro establecimiento. Aplica a la descarga
+manual, a la automática, a la carga de XML y a la lectura desde PDF.
+
+Cada documento tiene un **alcance**:
+
+- **Todos los establecimientos**: no se descarga en ningún establecimiento de la
+  empresa (mismo RUC).
+- **Solo {establecimiento}**: no se descarga solo en ese establecimiento; los
+  demás del mismo RUC sí pueden descargarlo. Sirve para registrar en otro
+  establecimiento un comprobante que entró en el que no correspondía.
+
+**Cómo se agregan:**
+- **Desde Compras, al eliminar un comprobante electrónico**: el sistema pregunta
+  el motivo y lo agrega con el alcance que corresponde (ver *Eliminar un
+  comprobante electrónico* en [Compras](compras)). Es la forma más habitual.
+- **A mano en esta pestaña**: se pega la clave de acceso de 49 dígitos, se elige
+  **No descargar en** (*Todos los establecimientos* o *Solo este establecimiento*)
+  y, si quiere, se escribe una observación.
+
+Si una clave que estaba *solo para este establecimiento* se vuelve a agregar para
+*todos*, el alcance se amplía; no se duplica. Para volver a descargar un
+documento, quítelo de la lista con la papelera.
 
 ## Después de descargar
 
@@ -328,6 +355,13 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.17** — *Documentos para no descargar* tiene **alcance**: *todos los
+  establecimientos* del RUC (como antes) o *solo este establecimiento*, para
+  registrar el comprobante en otro. Nueva columna **Alcance** y selector **No
+  descargar en** al agregar a mano. Al eliminar un comprobante electrónico en
+  **Compras** el sistema pregunta el motivo y lo agrega solo. Requiere
+  `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Documentos
+  para no descargar*.
 - **1.16** — Nueva pestaña **Desde PDF**: lee con inteligencia artificial el PDF
   (RIDE) de una factura, liquidación de compra, nota de crédito, nota de débito
   o comprobante de retención; el usuario revisa y corrige los datos y, al

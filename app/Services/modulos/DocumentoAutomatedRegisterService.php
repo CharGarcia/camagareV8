@@ -132,8 +132,9 @@ class DocumentoAutomatedRegisterService
             $rucEmisor   = trim((string) $it->ruc);
 
             // 0. Verificar si el documento está en la lista de ignorados (a nivel de RUC:
-            // un establecimiento hermano que ya lo marcó como ignorado también lo excluye aquí)
-            if ($this->ignoradoRepo->existeClaveEnGrupo($claveAcceso, $this->getIdsEmpresaMismoRuc($idEmpresa))) {
+            // un establecimiento hermano que ya lo marcó como ignorado para todo el RUC también lo
+            // excluye aquí; uno marcado «solo ese establecimiento» excluye solo allá)
+            if ($this->ignoradoRepo->existeClaveEnGrupo($claveAcceso, $this->getIdsEmpresaMismoRuc($idEmpresa), $idEmpresa)) {
                 return [
                     'ok' => false,
                     'error' => "Documento ignorado por el usuario (Lista Negra).",

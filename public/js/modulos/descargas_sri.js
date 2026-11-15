@@ -347,15 +347,21 @@ function listarDocumentosIgnorados() {
     .then(data => {
         if (data.ok) {
             if (data.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted">No hay documentos en la lista negra.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-muted">No hay documentos en la lista negra.</td></tr>';
                 return;
             }
+            // Alcance: todo el RUC, o solo el establecimiento que lo registró (p. ej. una
+            // compra eliminada para registrarla en otro establecimiento).
+            const esSolo = v => v === true || v === 't' || v === 'true' || v === 1 || v === '1';
             tbody.innerHTML = data.data.map(d => `
                 <tr>
-                    <td class="ps-3 py-2 small">${d.fecha_documento || '---'}</td>
-                    <td class="py-2 small font-monospace" style="font-size: 0.7rem;">${d.clave_acceso}</td>
-                    <td class="py-2 small fw-bold">${d.nombre_proveedor || '---'}</td>
-                    <td class="py-2 small text-muted">${d.observaciones || '---'}</td>
+                    <td class="ps-3 py-2 small">${escHtml(d.fecha_documento || '---')}</td>
+                    <td class="py-2 small font-monospace" style="font-size: 0.7rem;">${escHtml(d.clave_acceso)}</td>
+                    <td class="py-2 small fw-bold">${escHtml(d.nombre_proveedor || '---')}</td>
+                    <td class="py-2 small">${esSolo(d.solo_establecimiento)
+                        ? `<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" title="Los demás establecimientos del RUC sí pueden descargarlo">Solo ${escHtml(d.empresa_nombre || 'este establecimiento')}</span>`
+                        : '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Todos los establecimientos</span>'}</td>
+                    <td class="py-2 small text-muted">${escHtml(d.observaciones || '---')}</td>
                     <td class="py-2 small">${d.created_at}</td>
                     <td class="py-2 text-center">
                         <button type="button" class="btn btn-link btn-xs text-danger p-0" onclick="eliminarDocumentoIgnorado(${d.id})" title="Eliminar de la lista">
@@ -368,7 +374,7 @@ function listarDocumentosIgnorados() {
     })
     .catch(err => {
         console.error(err);
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error al cargar la lista.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center py-4 text-danger">Error al cargar la lista.</td></tr>';
     });
 }
 
@@ -427,6 +433,7 @@ function agregarDocumentoIgnorado() {
     formData.append('observaciones', obs);
     formData.append('nombre_proveedor', inputClave.dataset.nombreAuto || '');
     formData.append('fecha_documento', inputClave.dataset.fechaAuto || '');
+    formData.append('solo_establecimiento', document.getElementById('ignorado_alcance_input')?.value || '0');
 
     fetch(`${BASE_URL}/modulos/descargas_sri/agregarDocumentoIgnoradoAjax`, {
         method: 'POST',

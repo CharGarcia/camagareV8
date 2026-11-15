@@ -2635,34 +2635,109 @@ window.CMG_guardar = async function() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 
-window.CMG_eliminar = async function() {
-    const confirm = await Swal.fire({
+// Comprobante electrónico = número de autorización de 49 dígitos (clave de acceso). Al
+// eliminarlo se pregunta el motivo para dejarlo en «Documentos para no descargar» de
+// Descargas SRI; si no, la próxima descarga del SRI lo volvería a registrar.
+// (El servidor vuelve a comprobar la clave guardada: ComprasService::eliminar.)
+function mcDialogoEliminarElectronico() {
+    return Swal.fire({
         title: '¿Eliminar esta compra?',
-        text: "Esta acción no se puede deshacer.",
         icon: 'warning',
+        width: 560,
+        html: `
+            <div class="text-start small">
+                <div class="alert alert-warning py-2 px-3 mb-3 small">
+                    <i class="bi bi-cloud-download me-1"></i>
+                    Es un <strong>documento electrónico del SRI</strong>. Si lo elimina sin más,
+                    la próxima descarga del SRI lo volverá a registrar.
+                </div>
+                <div class="fw-semibold mb-2">¿Por qué lo elimina?</div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="mcNoDescargar" id="mcNoDesc1" value="ANULADO_SRI" checked>
+                    <label class="form-check-label" for="mcNoDesc1">
+                        <strong>Fue anulado en el SRI o lo emitieron por error.</strong><br>
+                        <span class="text-muted">No se volverá a descargar en ningún establecimiento de la empresa.</span>
+                    </label>
+                </div>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="radio" name="mcNoDescargar" id="mcNoDesc2" value="OTRO_ESTABLECIMIENTO">
+                    <label class="form-check-label" for="mcNoDesc2">
+                        <strong>Lo voy a registrar en otro establecimiento.</strong><br>
+                        <span class="text-muted">No se volverá a descargar aquí; el otro establecimiento sí podrá descargarlo o cargar su XML.</span>
+                    </label>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="radio" name="mcNoDescargar" id="mcNoDesc3" value="">
+                    <label class="form-check-label" for="mcNoDesc3">
+                        <strong>Solo eliminar.</strong><br>
+                        <span class="text-muted">Se podrá volver a descargar (p. ej. para cargarlo de nuevo corregido).</span>
+                    </label>
+                </div>
+                <label class="form-label small mb-1 d-block" for="mcNoDescObs">Observación (opcional)</label>
+                <input type="text" id="mcNoDescObs" class="form-control form-control-sm" maxlength="500"
+                       placeholder="Ej.: anulada por el proveedor el 10-11-2026">
+                <div class="text-muted mt-2" style="font-size:.75rem;">Esta acción no se puede deshacer.</div>
+            </div>`,
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
         confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar'
+        cancelButtonText: 'Cancelar',
+        focusConfirm: false,
+        preConfirm: () => ({
+            motivo: (document.querySelector('input[name="mcNoDescargar"]:checked') || {}).value || '',
+            obs: (document.getElementById('mcNoDescObs').value || '').trim()
+        })
     });
+}
+
+let mcEliminando = false;
+
+window.CMG_eliminar = async function() {
+    if (mcEliminando) return;
+    const autorizacion = (document.getElementById('mcAutorizacion')?.value || '').trim();
+    const esElectronico = /^\d{49}$/.test(autorizacion);
+
+    const confirm = esElectronico
+        ? await mcDialogoEliminarElectronico()
+        : await Swal.fire({
+            title: '¿Eliminar esta compra?',
+            text: "Esta acción no se puede deshacer.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            cancelButtonColor: '#3085d6',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar'
+        });
 
     if (!confirm.isConfirmed) return;
 
     const id = document.getElementById('modalCompra').dataset.id;
     const fd = new FormData(); fd.append('id', id);
-    const res  = await fetch(`${window.CMG_urlBase}/eliminarAjax`, { 
-        method:'POST', 
-        body: fd,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-    });
-    const data = await res.json();
-    if (data.ok) { 
-        Swal.fire('Eliminado', data.mensaje, 'success');
-        bootstrap.Modal.getInstance(document.getElementById('modalCompra')).hide(); 
-        CMG_fetchSearch(1); 
-    } else {
-        Swal.fire('Error', data.mensaje, 'error');
+    if (esElectronico && confirm.value && confirm.value.motivo) {
+        fd.append('no_descargar', confirm.value.motivo);
+        fd.append('observacion_no_descargar', confirm.value.obs || '');
+    }
+    mcEliminando = true;
+    try {
+        const res  = await fetch(`${window.CMG_urlBase}/eliminarAjax`, { 
+            method:'POST', 
+            body: fd,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+        const data = await res.json();
+        if (data.ok) {
+            Swal.fire('Eliminado', data.mensaje, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modalCompra')).hide();
+            CMG_fetchSearch(1);
+        } else {
+            Swal.fire('Error', data.mensaje, 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error', 'Error de conexión al eliminar la compra.', 'error');
+    } finally {
+        mcEliminando = false;
     }
 };
 

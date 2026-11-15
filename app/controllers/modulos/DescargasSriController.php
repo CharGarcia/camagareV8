@@ -524,26 +524,55 @@ class DescargasSriController extends BaseModuloController
             return;
         }
 
+        // Alcance: false = todos los establecimientos del RUC; true = solo este.
+        $soloEst = ($_POST['solo_establecimiento'] ?? '0') === '1';
+
         $repo = new DocumentoIgnoradoRepository();
         $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
         $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
         $idsGrupo = (new EmpresaRepository())->getIdsEmpresaMismoRuc($idEmpresa);
+        $log = new \App\Services\LogSistemaService();
 
-        if ($repo->existeClaveEnGrupo($clave, $idsGrupo)) {
+        $propia = $repo->getVigente($clave, $idEmpresa);
+        if ($propia) {
+            $propiaSolo = in_array($propia['solo_establecimiento'], [true, 't', 'true', 1, '1'], true);
+            if (!$soloEst && $propiaSolo && $repo->tieneAlcance()) {
+                $repo->ampliarATodoElRuc((int) $propia['id'], 'MANUAL', $obs !== '' ? $obs : null, $idUsuario);
+                $log->registrar($idUsuario, $idEmpresa, 'ACTUALIZAR', 'documentos_ignorados_sri', (int) $propia['id'],
+                    ['solo_establecimiento' => true], ['solo_establecimiento' => false]);
+                echo json_encode(['ok' => true, 'mensaje' => 'La clave ya estaba solo para este establecimiento; ahora aplica a todos.']);
+                exit;
+            }
             echo json_encode(['ok' => false, 'error' => 'Esta clave ya se encuentra en la lista de ignorados.']);
             return;
         }
+        // Otro establecimiento del RUC ya la bloqueó para todos.
+        if ($repo->existeClaveEnGrupo($clave, $idsGrupo, $idEmpresa)) {
+            echo json_encode(['ok' => false, 'error' => 'Esta clave ya se encuentra en la lista de ignorados (para todos los establecimientos).']);
+            return;
+        }
 
-        $res = $repo->insertar([
-            'id_empresa'       => $idEmpresa,
-            'clave_acceso'     => $clave,
-            'nombre_proveedor' => $np,
-            'fecha_documento'  => $fd,
-            'observaciones'    => $obs,
-            'id_usuario'       => $idUsuario
-        ]);
+        try {
+            $idFila = $repo->insertar([
+                'id_empresa'           => $idEmpresa,
+                'clave_acceso'         => $clave,
+                'nombre_proveedor'     => $np,
+                'fecha_documento'      => $fd,
+                'observaciones'        => $obs,
+                'solo_establecimiento' => $soloEst,
+                'id_usuario'           => $idUsuario
+            ]);
+            $log->registrar($idUsuario, $idEmpresa, 'CREAR', 'documentos_ignorados_sri', $idFila, null,
+                ['clave_acceso' => $clave, 'solo_establecimiento' => $soloEst, 'observaciones' => $obs]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'Error al guardar.']);
+            exit;
+        }
 
-        echo json_encode(['ok' => $res, 'mensaje' => $res ? 'Documento añadido a la lista negra.' : 'Error al guardar.']);
+        echo json_encode(['ok' => true, 'mensaje' => $soloEst
+            ? 'Documento añadido a la lista negra solo para este establecimiento.'
+            : 'Documento añadido a la lista negra.']);
         exit;
     }
 
