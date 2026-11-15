@@ -804,6 +804,7 @@ actualiza su sección y se tacha aquí.
 | P-29 | Confirmar **costos de terceros** que paga el cliente: comisiones de pasarelas de pago y costos de WhatsApp de Meta. | 7.2 |
 | P-30 | ¿Se ofrecen **desarrollos a la medida**? ¿Cómo se cobran? | 7.2 |
 | P-31 | ¿Hay una **empresa de demostración** para las demos de los vendedores? ¿Con qué usuario? | 10 |
+| P-32 | Activar en los usuarios del cliente los módulos vendidos (propuesta en `docs/diseno/cotizador-planes-fase1.md` §7.1, aplazada). | 5.2 |
 
 ---
 

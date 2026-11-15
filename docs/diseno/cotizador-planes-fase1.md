@@ -118,3 +118,25 @@ El número de la cotización se toma con `pg_advisory_xact_lock` (§8).
 - Crear las suscripciones y dar de alta las empresas al ganar.
 - App móvil.
 - Control automático de cupos de usuarios por RUC.
+
+### 7.1 Propuesta pendiente: «Activar módulos» en los usuarios del cliente
+
+Pedido del usuario (15-11-2026), aplazado para después. Propuesta presentada:
+
+- Botón **«Activar módulos»** en una cotización aceptada; **solo nivel 3**, porque
+  escribe permisos en las empresas del cliente.
+- Por cada establecimiento cotizado se elige la **empresa del sistema** que le
+  corresponde (sugerencia: mismo RUC y código de establecimiento).
+- Se marcan los **usuarios** de esa empresa (por defecto todos, salvo superadmin).
+- Se aplican en `modulos_asignados` los submódulos vendidos (ítems tipo módulo con
+  `id_submodulo`, incluidos los del paquete y sus dependencias), con
+  **previsualización** y en una sola transacción, con auditoría. Solo **agrega**;
+  nunca quita permisos.
+- Reutilizar la lógica de *Asignación de submódulos* / `ComboSubmodulo::aplicarAUsuario()`.
+
+Decisiones abiertas (sin responder):
+1. Permisos que se otorgan: ¿elegibles en cada activación (sugerido: V/C/M/E sí,
+   Acceso total no), siempre todo con Acceso total, o siempre sin Acceso total?
+2. ¿Se habilita con la **proforma aprobada** (sugerido) o apenas existe la proforma?
+3. Si el usuario ya tenía el submódulo con otros permisos: ¿se respeta con opción
+   «Sobrescribir» (sugerido) o se sobrescribe siempre?
