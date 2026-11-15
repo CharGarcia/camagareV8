@@ -25,6 +25,11 @@ namespace App\Services\modulos;
  *  - Paquetes: los ítems recurrentes que entraron por un paquete valen su precio
  *    × (1 − descuento_paquete_pct). Va antes que todo lo demás: el descuento por
  *    establecimiento adicional se calcula sobre ese valor ya rebajado.
+ *  - Paquete de PRECIO FIJO (paquete_tipo_precio = 'fijo'): su precio_anual se
+ *    suma como valor base del establecimiento (lleva el descuento por
+ *    establecimiento adicional) y sus módulos recurrentes van incluidos a $0.
+ *  - Ítem 'incluido' (de un paquete de precio fijo, o módulo «sin costo cuando
+ *    lo requiere otro» que otro módulo arrastró): vale $0.
  *  - Descuento del vendedor: % sobre lo recurrente de cada modalidad. Los
  *    servicios únicos no se descuentan.
  */
@@ -59,7 +64,11 @@ final class CotizadorPlanesCalculo
         $filas = [];
         foreach (array_values($establecimientos) as $i => $e) {
             $base = 0.0; $adicional = 0.0; $unico = 0.0; $descPaquete = 0.0;
+            $paqFijo = ($e['paquete_tipo_precio'] ?? 'descuento') === 'fijo';
+            $paquetePrecio = $paqFijo ? self::r2(max(0.0, (float) ($e['paquete_precio_anual'] ?? 0))) : 0.0;
+            $base = $paquetePrecio;
             foreach (($e['items'] ?? []) as $it) {
+                if (self::bool($it['incluido'] ?? false)) continue; // va a $0
                 $precio = max(0.0, (float) ($it['precio_anual'] ?? 0));
                 $pctPaq = min(100.0, max(0.0, (float) ($it['descuento_paquete_pct'] ?? 0)));
                 if (($it['cobro'] ?? 'recurrente') !== 'unico' && $pctPaq > 0 && self::bool($it['de_paquete'] ?? false)) {
@@ -83,6 +92,7 @@ final class CotizadorPlanesCalculo
                 'adicional' => $adicional,
                 'unico'     => $unico,
                 'descuento_paquete' => $descPaquete,
+                'paquete_precio'    => $paquetePrecio,
             ];
         }
 

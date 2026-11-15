@@ -76,9 +76,20 @@ class CotizadorPlanesRules
         if (mb_strlen($nombre) > 100) {
             throw new \InvalidArgumentException('El nombre del paquete no puede superar 100 caracteres.');
         }
-        $pct = $d['descuento_pct'] ?? 0;
-        if (!is_numeric($pct) || (float) $pct < 0 || (float) $pct > 100) {
-            throw new \InvalidArgumentException('El descuento del paquete debe estar entre 0 y 100 %.');
+        $tipo = $d['tipo_precio'] ?? 'descuento';
+        if (!in_array($tipo, ['descuento', 'fijo'], true)) {
+            throw new \InvalidArgumentException('Elija cómo se cobra el paquete: precio fijo o suma de módulos con descuento.');
+        }
+        if ($tipo === 'fijo') {
+            $precio = $d['precio_anual'] ?? null;
+            if (!is_numeric($precio) || (float) $precio <= 0 || (float) $precio > 9999999) {
+                throw new \InvalidArgumentException('Escriba el precio anual del paquete (mayor que cero).');
+            }
+        } else {
+            $pct = $d['descuento_pct'] ?? 0;
+            if (!is_numeric($pct) || (float) $pct < 0 || (float) $pct > 100) {
+                throw new \InvalidArgumentException('El descuento del paquete debe estar entre 0 y 100 %.');
+            }
         }
         if (empty($d['items'])) {
             throw new \InvalidArgumentException('Elija al menos un módulo para el paquete.');

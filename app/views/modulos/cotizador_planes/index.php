@@ -394,6 +394,10 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                             <label class="form-check-label" for="it_aplica_descuento_establecimiento" title="Módulo base: en los establecimientos adicionales lleva el descuento (solo plan anual). Apagado: módulo adicional a precio completo en cada establecimiento.">Entra en el descuento por establecimiento adicional</label>
                                         </div>
                                         <div class="form-check form-switch small">
+                                            <input class="form-check-input" type="checkbox" id="it_sin_costo_dependencia">
+                                            <label class="form-check-label" for="it_sin_costo_dependencia" title="Si se vende solo, se cobra su precio. Si otro módulo de la cotización lo requiere (p. ej. Clientes al elegir Facturas), va incluido a $0.">Sin costo cuando lo requiere otro módulo</label>
+                                        </div>
+                                        <div class="form-check form-switch small">
                                             <input class="form-check-input" type="checkbox" id="it_activo" checked>
                                             <label class="form-check-label" for="it_activo">Activo (se ofrece al cotizar)</label>
                                         </div>
@@ -433,7 +437,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <div class="table-responsive" style="max-height:52vh;">
                             <table class="table table-sm table-hover mb-0" id="cfgItems">
                                 <thead class="table-light" style="position:sticky;top:0;z-index:1;">
-                                    <tr><th>Grupo</th><th>Nombre</th><th>Se cobra</th><th class="text-end" style="width:130px;">Precio anual</th><th class="text-center">Desc. establ.</th><th>Requiere</th><th class="text-center">Estado</th><th class="text-center" style="width:80px;"></th></tr>
+                                    <tr><th>Grupo</th><th>Nombre</th><th>Se cobra</th><th class="text-end" style="width:130px;">Precio anual</th><th class="text-center">Desc. establ.</th><th class="text-center" title="Sin costo cuando lo requiere otro módulo">Incluido al requerirse</th><th>Requiere</th><th class="text-center">Estado</th><th class="text-center" style="width:80px;"></th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>
@@ -458,14 +462,25 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                         <input type="text" class="form-control form-control-sm" id="pq_nombre" maxlength="100" placeholder="Ej.: Emprendedor">
                                     </div>
                                     <div class="col-md-2">
+                                        <label class="form-label small fw-bold mb-1">Cómo se cobra</label>
+                                        <select class="form-select form-select-sm" id="pq_tipo_precio">
+                                            <option value="fijo">Precio fijo</option>
+                                            <option value="descuento">Suma de módulos − %</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2" id="pq_wrap_precio">
+                                        <label class="form-label small fw-bold mb-1">Precio anual *</label>
+                                        <input type="number" min="0" step="0.01" class="form-control form-control-sm text-end" id="pq_precio_anual" value="0">
+                                    </div>
+                                    <div class="col-md-2 d-none" id="pq_wrap_descuento">
                                         <label class="form-label small fw-bold mb-1">Descuento (%)</label>
                                         <input type="number" min="0" max="100" step="0.01" class="form-control form-control-sm text-end" id="pq_descuento_pct" value="0">
                                     </div>
-                                    <div class="col-md-2">
+                                    <div class="col-md-1">
                                         <label class="form-label small fw-bold mb-1">Orden</label>
                                         <input type="number" step="1" class="form-control form-control-sm" id="pq_orden" value="0">
                                     </div>
-                                    <div class="col-md-4">
+                                    <div class="col-md-3">
                                         <div class="form-check form-switch small mt-4">
                                             <input class="form-check-input" type="checkbox" id="pq_activo" checked>
                                             <label class="form-check-label" for="pq_activo">Activo (se ofrece al cotizar)</label>
@@ -486,9 +501,9 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                     <div class="col-md-4">
                                         <div class="border rounded-3 p-2 small bg-light">
                                             <div class="d-flex justify-content-between"><span>Suma de módulos</span><strong id="pq_suma">$0.00</strong></div>
-                                            <div class="d-flex justify-content-between"><span>Descuento</span><strong id="pq_desc">−$0.00</strong></div>
+                                            <div class="d-flex justify-content-between"><span id="pq_desc_lbl">Descuento</span><strong id="pq_desc">−$0.00</strong></div>
                                             <div class="d-flex justify-content-between border-top mt-1 pt-1"><span>Paquete al año</span><strong class="text-primary" id="pq_total">$0.00</strong></div>
-                                            <div class="text-muted mt-1">Los pagos únicos del paquete no llevan el descuento.</div>
+                                            <div class="text-muted mt-1" id="pq_nota">Los pagos únicos del paquete no llevan el descuento.</div>
                                         </div>
                                     </div>
                                     <div class="col-12 d-flex justify-content-between">
@@ -505,7 +520,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <div class="table-responsive" style="max-height:52vh;">
                             <table class="table table-sm table-hover mb-0" id="cfgPaquetes">
                                 <thead class="table-light" style="position:sticky;top:0;z-index:1;">
-                                    <tr><th>Paquete</th><th>Módulos</th><th class="text-end">Suma</th><th class="text-end">Descuento</th><th class="text-end">Paquete al año</th><th class="text-center">Estado</th></tr>
+                                    <tr><th>Paquete</th><th>Módulos</th><th class="text-end">Suma</th><th class="text-end">Precio</th><th class="text-end">Paquete al año</th><th class="text-center">Estado</th></tr>
                                 </thead>
                                 <tbody></tbody>
                             </table>

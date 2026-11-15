@@ -97,6 +97,7 @@ class CotizadorPlanesService
             $it['precio_anual'] = (float) $it['precio_anual'];
             $it['aplica_descuento_establecimiento'] = $this->bool($it['aplica_descuento_establecimiento']);
             $it['por_defecto'] = $this->bool($it['por_defecto']);
+            $it['sin_costo_dependencia'] = $this->bool($it['sin_costo_dependencia'] ?? false);
             $it['requiere'] = $deps[$it['id']] ?? [];
         }
         unset($it);
@@ -116,7 +117,8 @@ class CotizadorPlanesService
             'precio_anual' => is_numeric($d['precio_anual'] ?? null) ? round((float) $d['precio_anual'], 2) : ($d['precio_anual'] ?? null),
             'cobro'        => (string) ($d['cobro'] ?? 'recurrente'),
             'aplica_descuento_establecimiento' => $this->bool($d['aplica_descuento_establecimiento'] ?? false),
-            'por_defecto'  => $this->bool($d['por_defecto'] ?? false),
+            'por_defecto'  => false, // ya no se usa: la cotización nueva empieza vacía
+            'sin_costo_dependencia' => $this->bool($d['sin_costo_dependencia'] ?? false),
             'id_producto'  => (int) ($d['id_producto'] ?? 0) ?: null,
             'orden'        => (int) ($d['orden'] ?? 0),
             'estado'       => ($d['estado'] ?? 'activo') === 'inactivo' ? 'inactivo' : 'activo',
@@ -187,6 +189,8 @@ class CotizadorPlanesService
         return array_map(function ($p) {
             $p['id'] = (int) $p['id'];
             $p['descuento_pct'] = (float) $p['descuento_pct'];
+            $p['tipo_precio'] = ($p['tipo_precio'] ?? 'descuento') === 'fijo' ? 'fijo' : 'descuento';
+            $p['precio_anual'] = (float) ($p['precio_anual'] ?? 0);
             return $p;
         }, $this->repo->getPaquetes($idEmpresa, $soloActivos));
     }
@@ -197,13 +201,18 @@ class CotizadorPlanesService
         $paq = [
             'nombre'        => trim((string) ($d['nombre'] ?? '')),
             'descripcion'   => trim((string) ($d['descripcion'] ?? '')),
+            'tipo_precio'   => (string) ($d['tipo_precio'] ?? 'descuento'),
             'descuento_pct' => $d['descuento_pct'] ?? 0,
+            'precio_anual'  => $d['precio_anual'] ?? 0,
             'orden'         => (int) ($d['orden'] ?? 0),
             'estado'        => ($d['estado'] ?? 'activo') === 'inactivo' ? 'inactivo' : 'activo',
             'items'         => array_values(array_unique(array_filter(array_map('intval', (array) ($d['items'] ?? []))))),
         ];
         $this->rules->validarPaquete($paq);
-        $paq['descuento_pct'] = round((float) $paq['descuento_pct'], 2);
+        // Cada tipo usa solo su valor: fijo → precio_anual; descuento → descuento_pct.
+        $fijo = $paq['tipo_precio'] === 'fijo';
+        $paq['descuento_pct'] = $fijo ? 0.0 : round((float) $paq['descuento_pct'], 2);
+        $paq['precio_anual']  = $fijo ? round((float) $paq['precio_anual'], 2) : 0.0;
         foreach ($paq['items'] as $idI) {
             if (!$this->repo->getItem($idI, $idEmpresa)) {
                 throw new \InvalidArgumentException('Uno de los módulos elegidos ya no está en el catálogo.');
@@ -275,12 +284,13 @@ class CotizadorPlanesService
 
             // Paquete del establecimiento: sus ítems entran primero, fijos y con el % del paquete.
             $idPaq = (int) ($e['id_paquete'] ?? 0);
-            $paq = null; $delPaquete = [];
+            $paq = null; $delPaquete = []; $paqFijo = false;
             if ($idPaq > 0) {
                 $paq = $paquetes[$idPaq] ?? null;
                 if (!$paq) {
                     $avisos['p' . $idPaq] = 'Se quitó un paquete que ya no está activo.';
                 } else {
+                    $paqFijo = $paq['tipo_precio'] === 'fijo';
                     foreach ($paq['items'] as $idI) {
                         if (!isset($catalogo[$idI])) continue; // ítem inactivo: el paquete sigue sin él
                         $delPaquete[$idI] = true;
@@ -321,7 +331,8 @@ class CotizadorPlanesService
                     'por_dependencia' => $porDep,
                     'id_producto'  => $c['id_producto'] ?? null,
                     'de_paquete'   => isset($delPaquete[$idI]),
-                    'descuento_paquete_pct' => isset($delPaquete[$idI]) ? (float) $paq['descuento_pct'] : 0.0,
+                    'descuento_paquete_pct' => isset($delPaquete[$idI]) && !$paqFijo ? (float) $paq['descuento_pct'] : 0.0,
+                    'incluido'     => false,
                     'requerido_por' => [],
                 ];
             }
@@ -332,6 +343,13 @@ class CotizadorPlanesService
                     if (isset($idx[$req])) $items[$idx[$req]]['requerido_por'][] = $it['nombre'];
                 }
             }
+            // Van a $0: los módulos recurrentes de un paquete de precio fijo, y los
+            // marcados «sin costo cuando lo requiere otro» que otro módulo de aquí requiere.
+            foreach ($items as &$it) {
+                $it['incluido'] = ($it['de_paquete'] && $paqFijo && $it['cobro'] !== 'unico')
+                    || (!empty($catalogo[$it['id_item']]['sin_costo_dependencia']) && !empty($it['requerido_por']));
+            }
+            unset($it);
             usort($items, fn($a, $b) => [$a['cobro'] === 'unico', $a['grupo'], $a['nombre']] <=> [$b['cobro'] === 'unico', $b['grupo'], $b['nombre']]);
             $out[] = [
                 'codigo'    => str_pad(preg_replace('/\D/', '', (string) ($e['codigo'] ?? '')) ?: (string) ($i + 1), 3, '0', STR_PAD_LEFT),
@@ -339,7 +357,9 @@ class CotizadorPlanesService
                 'direccion' => trim((string) ($e['direccion'] ?? '')),
                 'id_paquete'            => $paq ? (int) $paq['id'] : null,
                 'paquete_nombre'        => $paq ? (string) $paq['nombre'] : '',
-                'paquete_descuento_pct' => $paq ? (float) $paq['descuento_pct'] : 0.0,
+                'paquete_descuento_pct' => $paq && !$paqFijo ? (float) $paq['descuento_pct'] : 0.0,
+                'paquete_tipo_precio'   => $paqFijo ? 'fijo' : 'descuento',
+                'paquete_precio_anual'  => $paqFijo ? (float) $paq['precio_anual'] : 0.0,
                 // Elegidos SUELTOS (sin los del paquete ni las dependencias).
                 'elegidos'  => array_values(array_filter(array_keys(array_filter($orden, fn($d) => !$d)), fn($id) => !isset($delPaquete[$id]))),
                 'items'     => $items,
@@ -359,6 +379,7 @@ class CotizadorPlanesService
             $calc['establecimientos'][$i]['id_paquete'] = $e['id_paquete'];
             $calc['establecimientos'][$i]['paquete_nombre'] = $e['paquete_nombre'];
             $calc['establecimientos'][$i]['paquete_descuento_pct'] = $e['paquete_descuento_pct'];
+            $calc['establecimientos'][$i]['paquete_tipo_precio'] = $e['paquete_tipo_precio'];
             $calc['establecimientos'][$i]['elegidos'] = $e['elegidos'];
             $calc['establecimientos'][$i]['direccion'] = $e['direccion'];
         }
@@ -386,6 +407,7 @@ class CotizadorPlanesService
             $d['por_dependencia'] = $this->bool($d['por_dependencia']);
             $d['de_paquete'] = $this->bool($d['de_paquete'] ?? false);
             $d['descuento_paquete_pct'] = (float) ($d['descuento_paquete_pct'] ?? 0);
+            $d['incluido'] = $this->bool($d['incluido'] ?? false);
             $porEst[(int) $d['id_establecimiento']][] = $d;
         }
         $c['establecimientos'] = [];
@@ -399,6 +421,8 @@ class CotizadorPlanesService
                 'id_paquete'            => (int) ($e['id_paquete'] ?? 0) ?: null,
                 'paquete_nombre'        => (string) ($e['paquete_nombre'] ?? ''),
                 'paquete_descuento_pct' => (float) ($e['paquete_descuento_pct'] ?? 0),
+                'paquete_tipo_precio'   => ($e['paquete_tipo_precio'] ?? 'descuento') === 'fijo' ? 'fijo' : 'descuento',
+                'paquete_precio_anual'  => (float) ($e['paquete_precio_anual'] ?? 0),
                 'elegidos'  => array_values(array_map(fn($x) => (int) $x['id_item'], array_filter($items, fn($x) => !$x['por_dependencia'] && !$x['de_paquete']))),
                 'items'     => $items,
             ];
@@ -909,14 +933,16 @@ class CotizadorPlanesService
             if (($e['paquete_nombre'] ?? '') !== '') {
                 $paqueteItems = array_column(array_filter($e['items'], fn($it) => !empty($it['de_paquete'])), 'nombre');
                 $out .= '<p>Paquete <strong>' . $h($e['paquete_nombre']) . '</strong>'
-                      . ((float) ($e['paquete_descuento_pct'] ?? 0) > 0 ? ' (' . $this->pct((float) $e['paquete_descuento_pct']) . ' de descuento)' : '')
+                      . (($e['paquete_tipo_precio'] ?? '') === 'fijo'
+                          ? ' ($' . $this->m((float) $e['paquete_precio_anual']) . ' al año, módulos incluidos)'
+                          : ((float) ($e['paquete_descuento_pct'] ?? 0) > 0 ? ' (' . $this->pct((float) $e['paquete_descuento_pct']) . ' de descuento)' : ''))
                       . ': ' . $h(implode(', ', $paqueteItems)) . '</p>';
             }
             $rec = array_filter($e['items'], fn($it) => ($it['cobro'] ?? '') !== 'unico');
             $uni = array_filter($e['items'], fn($it) => ($it['cobro'] ?? '') === 'unico');
             if ($rec) {
                 $porGrupo = [];
-                foreach ($rec as $it) $porGrupo[$it['grupo'] ?: 'Otros'][] = $it['nombre'];
+                foreach ($rec as $it) $porGrupo[$it['grupo'] ?: 'Otros'][] = $it['nombre'] . (!empty($it['incluido']) ? ' (incluido)' : '');
                 $out .= '<ul>';
                 foreach ($porGrupo as $g => $noms) {
                     $out .= '<li><strong>' . $h($g) . ':</strong> ' . $h(implode(', ', $noms)) . '</li>';

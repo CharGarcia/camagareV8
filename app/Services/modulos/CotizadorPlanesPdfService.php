@@ -241,7 +241,9 @@ class CotizadorPlanesPdfService
         }
         if (($e['paquete_nombre'] ?? '') !== '') {
             $titulo .= '  ·  PAQUETE ' . mb_strtoupper((string) $e['paquete_nombre'])
-                . ((float) ($e['paquete_descuento_pct'] ?? 0) > 0 ? ' (-' . $this->pct((float) $e['paquete_descuento_pct']) . ')' : '');
+                . (($e['paquete_tipo_precio'] ?? '') === 'fijo'
+                    ? ' ($ ' . number_format((float) ($e['paquete_precio_anual'] ?? 0), 2, '.', ',') . ' AL AÑO)'
+                    : ((float) ($e['paquete_descuento_pct'] ?? 0) > 0 ? ' (-' . $this->pct((float) $e['paquete_descuento_pct']) . ')' : ''));
         }
         $y = $this->tituloSeccion($titulo, $y, 20);
 
@@ -277,7 +279,7 @@ class CotizadorPlanesPdfService
         $n = 0;
         foreach (($e['items'] ?? []) as $it) {
             $n++;
-            $nombre = (string) $it['nombre'] . (!empty($it['de_paquete']) ? ' (paquete)' : '') . (!empty($it['por_dependencia']) ? ' (incluido)' : '');
+            $nombre = (string) $it['nombre'] . (!empty($it['de_paquete']) ? ' (paquete)' : '') . (!empty($it['por_dependencia']) ? ' (requerido)' : '');
             $hFila = max(5.5, $pdf->getNumLines($nombre, $cols[2]['w'] - 2) * 4.2 + 1.3);
             if ($y + $hFila > $pdf->getPageHeight() - $pdf->getBreakMargin()) {
                 $pdf->AddPage();
@@ -289,6 +291,9 @@ class CotizadorPlanesPdfService
             $pctPaq = (!empty($it['de_paquete']) && ($it['cobro'] ?? '') !== 'unico') ? (float) ($it['descuento_paquete_pct'] ?? 0) : 0.0;
             if ($pctPaq > 0) {
                 $precio = round($precio - round($precio * $pctPaq / 100, 2), 2);
+            }
+            if (!empty($it['incluido'])) {
+                $precio = 0.0; // incluido en el paquete de precio fijo o en otro módulo
             }
             $vals = [
                 (string) $n,
@@ -313,6 +318,9 @@ class CotizadorPlanesPdfService
             . '  ·  Semestral $ ' . number_format((float) ($f['semestral'] ?? 0), 2, '.', ',')
             . '  ·  Mensual $ ' . number_format((float) ($f['mensual'] ?? 0), 2, '.', ','), 0, 1, 'R');
         $notas = [];
+        if (!empty($f['paquete_precio'])) {
+            $notas[] = 'Paquete ' . (string) ($e['paquete_nombre'] ?? '') . ': $ ' . number_format((float) $f['paquete_precio'], 2, '.', ',') . ' al año';
+        }
         if (!empty($f['descuento_paquete'])) {
             $notas[] = 'Descuento del paquete: $ ' . number_format((float) $f['descuento_paquete'], 2, '.', ',');
         }

@@ -151,5 +151,27 @@ $noPaq = ['nombre' => 'X', 'precio_anual' => 1000, 'cobro' => 'recurrente', 'apl
 $r = C::calcular($P, [['codigo' => '001', 'items' => [$noPaq]]], 3);
 igual('un ítem suelto no recibe el % aunque traiga el dato', 1000.0, $r['total_anual']);
 
+echo "13) Módulos incluidos: van a \$0\n";
+$inc = fn(float $v) => ['nombre' => 'Clientes', 'precio_anual' => $v, 'cobro' => 'recurrente', 'aplica_descuento_establecimiento' => true, 'incluido' => true];
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$base(300), $inc(60), $inc(80)]]], 3);
+igual('Facturas 300 con Clientes y Productos incluidos = 300', 300.0, $r['total_anual']);
+$r = C::calcular($P, [['codigo' => '001', 'items' => [$base(60)]]], 3);
+igual('Clientes solo se cobra: 60', 60.0, $r['total_anual']);
+
+echo "14) Paquete de precio fijo: su precio es el valor base del establecimiento\n";
+$fijoItem = fn(float $v, string $cobro = 'recurrente') => ['nombre' => 'M', 'precio_anual' => $v, 'cobro' => $cobro, 'aplica_descuento_establecimiento' => $cobro !== 'unico', 'de_paquete' => true, 'incluido' => $cobro !== 'unico'];
+$estFijo = fn(string $cod, array $items) => ['codigo' => $cod, 'paquete_tipo_precio' => 'fijo', 'paquete_precio_anual' => 500, 'items' => $items];
+$r = C::calcular($P, [$estFijo('001', [$fijoItem(300), $fijoItem(60), $fijoItem(80), $extra(100)])], 3);
+igual('Emprendedor fijo 500 + módulo suelto 100 = 600', 600.0, $r['total_anual']);
+igual('paquete_precio del establecimiento = 500', 500.0, $r['establecimientos'][0]['paquete_precio']);
+igual('mensual = 600 ÷ 12 × 1,20 = 60', 60.0, $r['total_mensual']);
+$r = C::calcular($P, [$estFijo('001', [$fijoItem(300), $fijoItem(150, 'unico')])], 3);
+igual('el pago único del paquete fijo se cobra aparte: 150', 150.0, $r['total_unico']);
+igual('anual del paquete fijo = 500', 500.0, $r['total_anual']);
+$r = C::calcular($P, [$estFijo('001', [$fijoItem(300)]), $estFijo('002', [$fijoItem(300)])], 6);
+igual('2 locales con paquete fijo 500: 500 + 500 × 0,80 = 900', 900.0, $r['total_anual']);
+$r = C::calcular($P, [['codigo' => '001', 'paquete_tipo_precio' => 'descuento', 'paquete_precio_anual' => 500, 'items' => [$base(1000)]]], 3);
+igual('un paquete por descuento ignora el precio fijo guardado', 1000.0, $r['total_anual']);
+
 echo PHP_EOL . ($fallos === 0 ? "TODO OK" : "FALLARON {$fallos} casos") . PHP_EOL;
 exit($fallos === 0 ? 0 : 1);

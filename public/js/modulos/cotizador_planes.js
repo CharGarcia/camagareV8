@@ -232,6 +232,7 @@
         const est = (estado.establecimientos || []).map((e) => ({
             codigo: e.codigo, nombre: e.nombre, direccion: e.direccion, es_principal: e.es_principal,
             paquete_nombre: e.paquete_nombre, paquete_descuento_pct: e.paquete_descuento_pct,
+            paquete_tipo_precio: e.paquete_tipo_precio, paquete_precio_anual: e.paquete_precio_anual,
             items: (e.items || []).map((it) => ({ ...it, requerido_por: [] })),
         }));
         $('cpTotAnual').textContent = money(estado.total_anual);
@@ -270,13 +271,16 @@
     /** Selector del paquete del establecimiento (o su nombre si la cotización está cerrada). */
     function selectorPaquete(e, f, i, ed) {
         const pctTxt = (p) => Number(p) > 0 ? ` (−${pct(p)})` : '';
+        // Paquete de precio fijo: «($300.00/año)»; por descuento: «(−15 %)».
+        const precioTxt = (x) => x.tipo_precio === 'fijo' || x.paquete_tipo_precio === 'fijo'
+            ? ` (${money(x.precio_anual ?? x.paquete_precio_anual)}/año)` : pctTxt(x.descuento_pct ?? x.paquete_descuento_pct);
         if (!ed) {
             const nom = f.paquete_nombre || '';
-            return nom ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Paquete ${esc(nom)}${esc(pctTxt(f.paquete_descuento_pct))}</span>` : '';
+            return nom ? `<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">Paquete ${esc(nom)}${esc(precioTxt(f))}</span>` : '';
         }
         if (!paquetes.length && !e.id_paquete) return '';
         const opts = ['<option value="">Sin paquete (módulos sueltos)</option>']
-            .concat(paquetes.map((p) => `<option value="${p.id}" ${Number(e.id_paquete) === p.id ? 'selected' : ''}>${esc(p.nombre)}${esc(pctTxt(p.descuento_pct))}</option>`));
+            .concat(paquetes.map((p) => `<option value="${p.id}" ${Number(e.id_paquete) === p.id ? 'selected' : ''}>${esc(p.nombre)}${esc(precioTxt(p))}</option>`));
         return `<select class="form-select form-select-sm" style="width:220px;" title="Paquete del establecimiento" onchange="CP_estCampo(${i}, 'id_paquete', this.value)">${opts.join('')}</select>`;
     }
 
@@ -298,15 +302,17 @@
                 const quitar = ed && !dep && !dePaq
                     ? `<button type="button" class="btn btn-link btn-sm text-danger p-0" title="Quitar" onclick="CP_quitarItem(${i}, ${Number(it.id_item)})"><i class="bi bi-x-circle"></i></button>` : '';
                 const pctPaq = dePaq && it.cobro !== 'unico' ? Number(it.descuento_paquete_pct || 0) : 0;
-                const precio = pctPaq > 0
-                    ? `<span class="text-muted text-decoration-line-through small me-1">${money(it.precio_anual)}</span>${money(r2(Number(it.precio_anual) - r2(Number(it.precio_anual) * pctPaq / 100)))}`
-                    : money(it.precio_anual);
+                const precio = it.incluido
+                    ? `<span class="text-muted text-decoration-line-through small me-1">${money(it.precio_anual)}</span><span class="text-success fw-semibold" title="${dePaq ? 'Va incluido en el precio del paquete' : 'Va incluido porque otro módulo lo requiere'}">Incluido</span>`
+                    : pctPaq > 0
+                        ? `<span class="text-muted text-decoration-line-through small me-1">${money(it.precio_anual)}</span>${money(r2(Number(it.precio_anual) - r2(Number(it.precio_anual) * pctPaq / 100)))}`
+                        : money(it.precio_anual);
                 return `<tr class="${dep ? 'cp-dep' : ''}">
                     <td>${dep ? '<i class="bi bi-link-45deg me-1" title="Entró porque otro módulo lo necesita"></i>' : ''}${esc(it.nombre)}
                         ${dePaq ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 ms-1">Paquete</span>' : ''}
                         ${quien ? `<span class="small text-muted ms-1">(${esc(quien)})</span>` : ''}</td>
                     <td class="small text-muted">${esc(it.cobro === 'unico' ? 'Pago único' : (it.grupo || ''))}</td>
-                    <td class="text-end" style="width:150px;">${precio}${it.cobro === 'unico' ? '' : '<span class="text-muted small">/año</span>'}</td>
+                    <td class="text-end" style="width:170px;">${precio}${it.cobro === 'unico' || it.incluido ? '' : '<span class="text-muted small">/año</span>'}</td>
                     <td class="text-center" style="width:32px;">${quitar}</td></tr>`;
             }).join('') : '<tr><td colspan="4" class="text-muted small">Sin módulos todavía: elija un paquete y/o agregue módulos sueltos.</td></tr>';
             return `<div class="cp-est">
@@ -322,6 +328,7 @@
                     ${ed && establecimientos.length > 1 ? `<button type="button" class="btn btn-outline-danger btn-sm" title="Quitar establecimiento" onclick="CP_quitarEst(${i})"><i class="bi bi-trash3"></i></button>` : ''}
                 </div>
                 <div class="p-2">
+                    ${Number(f.paquete_precio) > 0 ? `<div class="small mb-1"><i class="bi bi-box-seam me-1 text-info"></i>Paquete <strong>${esc(f.paquete_nombre || '')}</strong>: ${money(f.paquete_precio)}/año (sus módulos van incluidos)</div>` : ''}
                     <table class="table table-sm mb-2 cp-items"><tbody>${filasItems}</tbody></table>
                     ${ed ? `<select class="form-select form-select-sm" style="max-width:520px;" onchange="CP_agregarItem(${i}, this.value); this.value='';">${opcionesCatalogo({ elegidos: e.elegidos, items })}</select>` : ''}
                 </div></div>`;
@@ -685,27 +692,30 @@
 
     // ── Paquetes (configuración) ───────────────────────────────────────────
     /** Suma anual de los módulos de un paquete y su valor con el descuento (los únicos no se descuentan). */
-    function valorPaquete(ids, pctDesc) {
-        let suma = 0, desc = 0;
+    function valorPaquete(ids, pctDesc, tipo, precioFijo) {
+        let suma = 0, desc = 0, unico = 0;
         ids.forEach((id) => {
             const it = cfgItems.find((x) => x.id === Number(id));
             if (!it) return;
             const precio = Number(it.precio_anual || 0);
             suma += precio;
-            if (it.cobro !== 'unico') desc = r2(desc + r2(precio * Number(pctDesc || 0) / 100));
+            if (it.cobro === 'unico') unico = r2(unico + precio);
+            else desc = r2(desc + r2(precio * Number(pctDesc || 0) / 100));
         });
+        // Precio fijo: el paquete vale su precio; los pagos únicos del paquete van aparte.
+        if (tipo === 'fijo') return { suma: r2(suma), desc: r2(suma - unico - Number(precioFijo || 0)), total: r2(Number(precioFijo || 0) + unico) };
         return { suma: r2(suma), desc, total: r2(suma - desc) };
     }
 
     function pintarCfgPaquetes() {
         $('cfgPaquetes').querySelector('tbody').innerHTML = cfgPaquetes.map((p) => {
-            const v = valorPaquete(p.items || [], p.descuento_pct);
+            const v = valorPaquete(p.items || [], p.descuento_pct, p.tipo_precio, p.precio_anual);
             const nombres = (p.items || []).map((id) => cfgItems.find((x) => x.id === Number(id))?.nombre).filter(Boolean);
             return `<tr role="button" onclick="CP_editarPaquete(${p.id})">
                 <td class="fw-medium">${esc(p.nombre)}${p.descripcion ? `<div class="small text-muted">${esc(p.descripcion)}</div>` : ''}</td>
                 <td class="small cp-celda" style="max-width:260px;" title="${esc(nombres.join(', '))}">${nombres.length} · ${esc(nombres.join(', '))}</td>
                 <td class="text-end">${money(v.suma)}</td>
-                <td class="text-end">${Number(p.descuento_pct) > 0 ? '−' + pct(p.descuento_pct) : '—'}</td>
+                <td class="text-end">${p.tipo_precio === 'fijo' ? '<span class="badge bg-primary bg-opacity-10 text-primary">Precio fijo</span>' : (Number(p.descuento_pct) > 0 ? '−' + pct(p.descuento_pct) : '—')}</td>
                 <td class="text-end fw-semibold">${money(v.total)}</td>
                 <td class="text-center">${p.estado === 'activo' ? '<span class="badge bg-success bg-opacity-10 text-success">Activo</span>' : '<span class="badge bg-secondary bg-opacity-10 text-secondary">Inactivo</span>'}</td>
             </tr>`;
@@ -715,9 +725,16 @@
     function actualizarValorPaquete() {
         const ids = idsMarcados($('pq_items'));
         contarCasillas($('pq_items'), $('pq_contador'));
-        const v = valorPaquete(ids, parseFloat($('pq_descuento_pct').value || 0));
+        const fijo = $('pq_tipo_precio').value === 'fijo';
+        $('pq_wrap_descuento').classList.toggle('d-none', fijo);
+        $('pq_wrap_precio').classList.toggle('d-none', !fijo);
+        $('pq_nota').textContent = fijo
+            ? 'Los módulos del paquete van incluidos; los pagos únicos del paquete se cobran aparte.'
+            : 'Los pagos únicos del paquete no llevan el descuento.';
+        const v = valorPaquete(ids, parseFloat($('pq_descuento_pct').value || 0), $('pq_tipo_precio').value, parseFloat($('pq_precio_anual').value || 0));
         $('pq_suma').textContent = money(v.suma);
-        $('pq_desc').textContent = '−' + money(v.desc);
+        $('pq_desc_lbl').textContent = fijo ? 'Ahorro frente a la suma' : 'Descuento';
+        $('pq_desc').textContent = (v.desc < 0 ? '+' : '−') + money(Math.abs(v.desc));
         $('pq_total').textContent = money(v.total);
     }
 
@@ -725,7 +742,9 @@
         $('cfgPaqEditor').classList.remove('d-none');
         $('pq_id').value = p.id || '';
         $('pq_nombre').value = p.nombre || '';
+        $('pq_tipo_precio').value = p.tipo_precio === 'fijo' ? 'fijo' : 'descuento';
         $('pq_descuento_pct').value = p.descuento_pct ?? 0;
+        $('pq_precio_anual').value = p.precio_anual ?? 0;
         $('pq_orden').value = p.orden || 0;
         $('pq_activo').checked = (p.estado || 'activo') === 'activo';
         $('pq_descripcion').value = p.descripcion || '';
@@ -742,12 +761,14 @@
     };
     $('cfgBtnNuevoPaquete').addEventListener('click', () => {
         if (!cfgItems.length) return alerta('info', 'Catálogo vacío', 'Primero cargue módulos con su precio en la pestaña Catálogo de precios.');
-        abrirEditorPaquete({ estado: 'activo', descuento_pct: 0, items: [] });
+        abrirEditorPaquete({ estado: 'activo', tipo_precio: 'fijo', descuento_pct: 0, precio_anual: 0, items: [] });
     });
     $('cfgBtnCancelarPaquete').addEventListener('click', () => $('cfgPaqEditor').classList.add('d-none'));
     $('pq_items').addEventListener('change', actualizarValorPaquete);
     $('pq_buscar').addEventListener('input', () => filtrarCasillas($('pq_items'), $('pq_buscar').value));
     $('pq_descuento_pct').addEventListener('input', actualizarValorPaquete);
+    $('pq_precio_anual').addEventListener('input', actualizarValorPaquete);
+    $('pq_tipo_precio').addEventListener('change', actualizarValorPaquete);
 
     let guardandoPaquete = false;
     $('cfgBtnGuardarPaquete').addEventListener('click', async () => {
@@ -758,7 +779,9 @@
                 id: parseInt($('pq_id').value || 0, 10) || 0,
                 nombre: $('pq_nombre').value,
                 descripcion: $('pq_descripcion').value,
+                tipo_precio: $('pq_tipo_precio').value,
                 descuento_pct: $('pq_descuento_pct').value,
+                precio_anual: $('pq_precio_anual').value,
                 orden: parseInt($('pq_orden').value || 0, 10) || 0,
                 estado: $('pq_activo').checked ? 'activo' : 'inactivo',
                 items: idsMarcados($('pq_items')),
@@ -794,7 +817,7 @@
             filas.push({
                 _k: 's' + sm.id_submodulo, _virtual: true, tipo: 'modulo', id_submodulo: sm.id_submodulo, ruta: sm.ruta,
                 nombre: sm.nombre, grupo: sm.grupo, precio_anual: 0, cobro: 'recurrente',
-                aplica_descuento_establecimiento: true, por_defecto: false, estado: 'activo', requiere: [],
+                aplica_descuento_establecimiento: true, por_defecto: false, sin_costo_dependencia: false, estado: 'activo', requiere: [],
             });
         });
         const orden = (x) => [x.tipo === 'servicio' ? 1 : 0, (x.grupo || '').toLowerCase(), (x.nombre || '').toLowerCase()];
@@ -835,11 +858,12 @@
                 <td><input type="number" min="0" step="0.01" class="form-control form-control-sm text-end py-0" style="height:24px;"
                         data-k="${it._k}" value="${Number(it.precio_anual || 0).toFixed(2)}" onchange="CP_precioCatalogo('${it._k}', this)"></td>
                 <td class="text-center small">${it.cobro === 'unico' ? '—' : (it.aplica_descuento_establecimiento ? 'Base' : 'Adicional')}</td>
+                <td class="text-center">${it.sin_costo_dependencia ? '<i class="bi bi-check-lg text-success" title="Sin costo cuando lo requiere otro módulo"></i>' : ''}</td>
                 <td class="small cp-celda" style="max-width:200px;" title="${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}">${esc((it.requiere || []).map((r) => nombres[r] || r).join(', '))}</td>
                 <td class="text-center">${estado}</td>
                 <td class="text-center">${accion}</td>
             </tr>`;
-        }).join('') || '<tr><td colspan="8" class="text-muted text-center py-3">No hay módulos con ese filtro.</td></tr>';
+        }).join('') || '<tr><td colspan="9" class="text-muted text-center py-3">No hay módulos con ese filtro.</td></tr>';
 
         if (caja) caja.scrollTop = scroll;
         if (foco) {
@@ -859,7 +883,7 @@
             id: it._virtual ? 0 : it.id, tipo: it.tipo, id_submodulo: it.id_submodulo || 0, ruta: it.ruta || '',
             nombre: it.nombre, grupo: it.grupo || '', descripcion: it.descripcion || '', precio_anual: it.precio_anual,
             cobro: it.cobro, aplica_descuento_establecimiento: !!it.aplica_descuento_establecimiento,
-            por_defecto: !!it.por_defecto, estado: it.estado || 'activo', orden: it.orden || 0,
+            por_defecto: false, sin_costo_dependencia: !!it.sin_costo_dependencia, estado: it.estado || 'activo', orden: it.orden || 0,
             id_producto: it.id_producto || 0, requiere: (it.requiere || []).map(Number),
         };
         return Object.assign(d, cambios || {});
@@ -918,6 +942,7 @@
         $('it_precio_anual').value = it.precio_anual ?? 0;
         $('it_cobro').value = it.cobro || 'recurrente';
         $('it_aplica_descuento_establecimiento').checked = it.aplica_descuento_establecimiento !== false;
+        $('it_sin_costo_dependencia').checked = !!it.sin_costo_dependencia;
         $('it_activo').checked = (it.estado || 'activo') === 'activo';
         $('it_orden').value = it.orden || 0;
         $('it_descripcion').value = it.descripcion || '';
@@ -972,6 +997,7 @@
                 cobro: $('it_cobro').value,
                 aplica_descuento_establecimiento: $('it_aplica_descuento_establecimiento').checked,
                 por_defecto: false,
+                sin_costo_dependencia: $('it_sin_costo_dependencia').checked,
                 estado: $('it_activo').checked ? 'activo' : 'inactivo',
                 orden: parseInt($('it_orden').value || 0, 10) || 0,
                 id_producto: prodTxt ? (productosMapa[prodTxt] || parseInt($('it_id_producto').value || 0, 10) || 0) : 0,

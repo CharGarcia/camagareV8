@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
-etiquetas: cotizador, cotizar, paquetes, paquete, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.5
+etiquetas: cotizador, cotizar, paquetes, paquete, precio fijo del paquete, modulo incluido, incluido, sin costo, modulo gratis, dependencia sin costo, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
+version: 1.6
 orden: 0
 estado: activo
 ---
@@ -46,15 +46,26 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
    dicen *Sin cargar* todavía no se ofrecen al cotizar: se cargan al escribir
    su precio o con el botón **Cargar** (también a $0, para los módulos que van
    incluidos). El filtro **Mostrar** separa cargados y sin cargar. Al pulsar el
-   nombre de un módulo se abren sus demás opciones (dependencias y si es base
-   o adicional). Los servicios (implementación, migración,
+   nombre de un módulo se abren sus demás opciones: dependencias, si es base
+   o adicional y la casilla **Sin costo cuando lo requiere otro módulo** (la
+   columna *Incluido al requerirse* de la tabla). Con esa casilla, el módulo
+   se cobra a su precio si se vende solo, pero va **incluido a $0** cuando otro
+   módulo de la cotización lo requiere. Ejemplo: Clientes vendido solo se
+   cobra; si el cliente lleva Facturas, Clientes entra incluido. Los servicios (implementación, migración,
    capacitación…) se agregan con **Agregar servicio**.
 2. **Paquetes** (opcional): combinaciones listas de módulos, por ejemplo
    *Emprendedor*. Con **Nuevo paquete** se elige el nombre, se **marcan las
-   casillas** de sus módulos (hay un buscador arriba de la lista) y se pone un
-   **% de descuento**. El paquete vale la **suma de sus módulos menos ese %**,
-   así que si cambia el precio de un módulo, el paquete se actualiza solo. La
-   tabla muestra la suma, el descuento y el valor del paquete al año.
+   casillas** de sus módulos (hay un buscador arriba de la lista) y se elige
+   **cómo se cobra**:
+   - **Precio fijo**: se escribe el precio anual del paquete y sus módulos van
+     **incluidos a $0**. Los pagos únicos que tenga el paquete (p. ej.
+     Implementación) se cobran aparte, a su precio.
+   - **Suma de módulos − %**: el paquete vale la suma de sus módulos menos un
+     % de descuento; si cambia el precio de un módulo, el paquete se actualiza
+     solo.
+
+   La tabla muestra la suma de los módulos, el precio (fijo o %) y el valor
+   del paquete al año.
 3. **Parámetros**: recargo del plan semestral y del mensual, descuento por
    establecimiento adicional, usuarios incluidos, precio del usuario adicional
    y los **productos** de la línea resumen (plan anual, semestral y mensual). Esos
@@ -74,7 +85,8 @@ Proformas** y permiso de **crear en Proformas**.
    (obligatorio para la proforma), el teléfono y la persona de contacto.
 3. Pestaña **Establecimientos y módulos**: en cada establecimiento puede elegir
    un **paquete** en la lista de la cabecera. Sus módulos entran marcados como
-   *Paquete*, con su precio rebajado, y **no se pueden quitar** (para eso se
+   *Paquete*, con su precio rebajado (o *Incluido* si el paquete es de precio
+   fijo), y **no se pueden quitar** (para eso se
    cambia o se quita el paquete). Además, o en lugar del paquete, elija módulos
    y servicios sueltos con la lista **Agregar módulo o servicio…**. Los módulos
    que entran solos se ven con el ícono de enlace y la nota *requerido por…*; se
@@ -166,11 +178,19 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - Una cotización nueva **no trae módulos puestos**: cada establecimiento
   empieza vacío y el vendedor elige el paquete y/o agrega los módulos sueltos
   (y servicios como *Implementación*). Las dependencias sí entran solas.
-- **Paquetes**: un paquete por establecimiento. El % del paquete se aplica solo
+- **Módulos incluidos**: un módulo con la casilla *Sin costo cuando lo requiere
+  otro módulo* va a $0 si otro módulo del mismo establecimiento lo requiere,
+  aunque el vendedor también lo haya elegido suelto. Sin la casilla, una
+  dependencia se cobra a su precio de catálogo.
+- **Paquete de precio fijo**: su precio cuenta como valor **base** del
+  establecimiento (en plan anual lleva el descuento por establecimiento
+  adicional) y sus módulos recurrentes van incluidos. Los módulos que el
+  paquete requiere y no están en él siguen la regla anterior.
+- **Paquetes por %**: un paquete por establecimiento. El % del paquete se aplica solo
   a sus módulos **recurrentes** (los pagos únicos del paquete van completos) y
   se aplica **antes** que el descuento por establecimiento adicional. Los
   módulos que el paquete requiere entran solos a su precio de catálogo. La
-  cotización guarda el nombre y el % del paquete: si después cambian, una
+  cotización guarda el nombre, el % o el precio fijo del paquete: si después cambian, una
   cotización ya hecha no se altera. Un paquete inactivo o eliminado deja de
   ofrecerse y se quita de los borradores al recalcularlos (el sistema avisa).
 
@@ -192,8 +212,11 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
   sus precios con el botón **Configuración**.
 - **«El módulo aún no está instalado»**: falta ejecutar en la base los SQL
   `database/2026-11-13_cotizador_planes.sql`,
-  `database/2026-11-15_cotizador_planes_semestral.sql` y
-  `database/2026-11-15_cotizador_planes_paquetes.sql`, en ese orden.
+  `database/2026-11-15_cotizador_planes_semestral.sql`,
+  `database/2026-11-15_cotizador_planes_paquetes.sql` y
+  `database/2026-11-15_cotizador_planes_precio_incluido.sql`, en ese orden.
+- **«Escriba el precio anual del paquete (mayor que cero)»**: un paquete de
+  precio fijo necesita su precio.
 - **«Falta configurar el producto del plan anual (semestral o mensual)»**: elija en
   Configuración → Parámetros el producto que va en la proforma.
 - **«Escriba el correo del cliente»**: el correo es obligatorio para registrar
@@ -215,3 +238,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.3** — Plan **semestral**: anual ÷ 2 + 10 % (configurable), sin descuento por establecimiento adicional (solo el anual lo tiene). Se ve en pantalla, listado, PDF, proforma y configuración (recargo y producto propio).
 - **1.4** — **Paquetes** (p. ej. Emprendedor): módulos agrupados con un % de descuento propio, configurables en Configuración → Paquetes. Al cotizar se elige un paquete por establecimiento; sus módulos quedan fijos y se pueden sumar módulos sueltos. Se ven en pantalla, PDF y anexo de la proforma.
 - **1.5** — Una cotización nueva ya no trae módulos asignados: cada establecimiento empieza vacío y el vendedor agrega el paquete y/o los módulos. Se quita la opción «Por defecto» del catálogo.
+- **1.6** — Módulos **incluidos**: casilla «Sin costo cuando lo requiere otro módulo» en el catálogo. Paquetes de **precio fijo** (sus módulos van incluidos) además de los de suma − %. Se ve en pantalla, PDF y anexo.

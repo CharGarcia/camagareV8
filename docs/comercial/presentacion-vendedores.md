@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.21** (15-11-2026). El historial de cambios está al final.
+Versión actual: **0.22** (15-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -540,8 +540,10 @@ ahorra **$1.064**.
 ### 6.4 Qué módulos traen consigo a otros *(propuesta — se carga como dependencias en el catálogo)*
 
 El cliente no compra 130 módulos sueltos. Al elegir un módulo principal, el
-cotizador agrega solos los que necesita. Si esos módulos tienen precio $0 en el
-catálogo, en la práctica van **incluidos**.
+cotizador agrega solos los que necesita. Cada módulo tiene su precio cuando se
+vende solo; si en el catálogo tiene marcada la casilla **«Sin costo cuando lo
+requiere otro módulo»**, va **incluido a $0** cuando lo trae otro módulo.
+*Ejemplo:* Clientes vendido solo se cobra; con Facturas, Clientes va incluido.
 
 | Módulo principal | Trae consigo |
 |---|---|
@@ -579,15 +581,19 @@ catálogo, en la práctica van **incluidos**.
 Para no armar cada cotización desde cero, el administrador define **paquetes**
 en *Cotizador → Configuración → Paquetes*:
 
-- Un paquete agrupa módulos y vale la **suma de sus módulos menos su % de
-  descuento** (p. ej. *Emprendedor −15 %*).
+- Un paquete agrupa módulos y se cobra de una de dos formas, a elección del
+  administrador:
+  - **Precio fijo** (p. ej. *Emprendedor $X al año*): sus módulos van
+    incluidos; sus pagos únicos se cobran aparte. Es el más fácil de vender.
+  - **Suma de sus módulos menos su % de descuento** (p. ej. *−15 %*).
 - Al cotizar, el vendedor elige **un paquete por establecimiento**: sus módulos
   quedan fijos y puede **agregar módulos sueltos** a su precio normal.
 - En plan anual, el descuento por establecimiento adicional se aplica después,
   sobre el valor del paquete.
 
-*Ejemplo ilustrativo:* paquete con Facturas ($600) y Proformas ($400) al 15 % →
-$850 al año, en vez de $1.000.
+*Ejemplos ilustrativos:* paquete con Facturas ($600) y Proformas ($400) al
+15 % → $850 al año, en vez de $1.000. El mismo paquete con precio fijo de $800
+→ $800 al año, con Facturas y Proformas incluidos.
 
 **Paquetes sugeridos** (nombres, módulos y % por definir — P-17):
 
@@ -774,7 +780,7 @@ actualiza su sección y se tacha aquí.
 | P-14 | Validar la tabla de **dependencias** (qué módulo trae a cuál). | 6.4 |
 | P-15 | ¿Qué módulos son **base** y cuáles **adicionales** (con o sin descuento por establecimiento)? | 6.2 |
 | P-16 | ¿Automatizaciones y Videollamadas van en todos los planes o se venden aparte? ¿Contabilidad e Impuestos se venden juntos? ¿Retenciones de venta van con Facturación o con Tesorería? | 6.4 |
-| P-17 | Paquetes ya disponibles en el Cotizador: definir **nombres, módulos y % de descuento** de cada uno (p. ej. Emprendedor) y cargarlos. | 6.5 |
+| P-17 | Paquetes ya disponibles en el Cotizador: definir **nombres, módulos y precio fijo o % de descuento** de cada uno (p. ej. Emprendedor) y cargarlos. Marcar qué módulos van **sin costo cuando los requiere otro**. | 6.4, 6.5 |
 | P-18 | ¿El **vendedor puede dar descuento comercial**? ¿Hasta qué %? | 6.2 |
 | P-19 | **Control de cupos** de usuarios por RUC: hoy no es automático; ¿quién lo controla? | 6.2 |
 
@@ -809,6 +815,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.22 | 15-11-2026 | Módulos incluidos (sin costo cuando los requiere otro) y paquetes de precio fijo: secciones 6.4, 6.5 y P-17 |
 | 0.21 | 15-11-2026 | Cotización nueva sin módulos puestos: el vendedor agrega el paquete y/o los módulos (Implementación ya no entra sola) |
 | 0.20 | 15-11-2026 | P-20 resuelto: los 7 módulos que faltaban ya tienen manual de usuario; se quita la nota interna de la sección 4 |
 | 0.19 | 15-11-2026 | **Paquetes** en el Cotizador (suma de módulos menos % propio; módulos fijos y sueltos aparte): sección 6.5 y P-17 |

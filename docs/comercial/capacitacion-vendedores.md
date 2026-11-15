@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.3** (15-11-2026). El historial está al final.
+Versión actual: **0.4** (15-11-2026). El historial está al final.
 
 ---
 
@@ -100,7 +100,8 @@ Duración sugerida: **4 sesiones de 2 horas**. La dirección puede ajustarlo (P-
 | Usuarios incluidos | 3 por establecimiento, compartidos en el RUC |
 | Usuario adicional | $20 al año ($2 al mes) |
 | Servicios de una sola vez | Aparte, sin recargo ni descuentos |
-| Paquetes | Suma de sus módulos menos el % del paquete; sus módulos no se quitan; se pueden sumar módulos sueltos |
+| Paquetes | **Precio fijo** (módulos incluidos) o **suma de sus módulos menos el %**; sus módulos no se quitan; se pueden sumar módulos sueltos |
+| Módulos incluidos | Un módulo con la casilla «sin costo cuando lo requiere otro» se cobra si va solo y va a $0 si lo trae otro módulo (p. ej. Clientes con Facturas) |
 
 ### 4.2 Ejercicios *(precios ilustrativos, no son los reales)*
 
@@ -138,6 +139,7 @@ Un local con módulos base de **$1.000** y **Migración de datos** de **$150** (
 > - Tomar como principal al **primer** local y no al **más caro**.
 > - Contar los usuarios **por local** en vez de por RUC.
 > - Aplicar el % del paquete a módulos **sueltos** o a pagos únicos (solo va a los módulos recurrentes del paquete).
+> - Cobrar dos veces un módulo que va **incluido** (p. ej. Clientes cuando el cliente ya lleva Facturas): el Cotizador lo marca *Incluido*; no lo sume a mano.
 
 ---
 
@@ -264,6 +266,7 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.4 | 15-11-2026 | Paquetes de precio fijo y módulos incluidos en las reglas y errores frecuentes. |
 | 0.3 | 15-11-2026 | Paquetes en las reglas y en los errores frecuentes al cotizar. |
 | 0.2 | 15-11-2026 | Plan semestral en las reglas, errores frecuentes y evaluación. |
 | 0.1 | 14-11-2026 | Primera versión: programa de 4 sesiones, guion de demo de 20 minutos, 4 ejercicios del Cotizador con respuestas verificadas, juego de roles de objeciones, CRM diario, reglas, evaluación y lista de verificación. |
