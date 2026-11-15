@@ -2639,9 +2639,9 @@ window.CMG_guardar = async function() {
 // eliminarlo se pregunta el motivo para dejarlo en «Documentos para no descargar» de
 // Descargas SRI; si no, la próxima descarga del SRI lo volvería a registrar.
 // (El servidor vuelve a comprobar la clave guardada: ComprasService::eliminar.)
-function mcDialogoEliminarElectronico() {
+function mcDialogoEliminarElectronico(titulo) {
     return Swal.fire({
-        title: '¿Eliminar esta compra?',
+        title: titulo,
         icon: 'warning',
         width: 560,
         html: `
@@ -2697,11 +2697,16 @@ window.CMG_eliminar = async function() {
     if (mcEliminando) return;
     const autorizacion = (document.getElementById('mcAutorizacion')?.value || '').trim();
     const esElectronico = /^\d{49}$/.test(autorizacion);
+    // Notas de crédito y débito de compra viven en la misma tabla: el aviso nombra el documento.
+    const tipoDoc = (document.getElementById('mcTipoComprobante')?.value || '').trim();
+    const titulo = tipoDoc === '04' ? '¿Eliminar esta nota de crédito?'
+                 : tipoDoc === '05' ? '¿Eliminar esta nota de débito?'
+                 : '¿Eliminar esta compra?';
 
     const confirm = esElectronico
-        ? await mcDialogoEliminarElectronico()
+        ? await mcDialogoEliminarElectronico(titulo)
         : await Swal.fire({
-            title: '¿Eliminar esta compra?',
+            title: titulo,
             text: "Esta acción no se puede deshacer.",
             icon: 'warning',
             showCancelButton: true,

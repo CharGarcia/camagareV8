@@ -753,8 +753,18 @@ class RetencionesVentasController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            $this->service->eliminar($id, $idEmpresa, $idUsuario);
-            echo json_encode(['ok' => true, 'mensaje' => 'Retención eliminada correctamente.']);
+            // Si se pidió, la deja en «Documentos para no descargar» de Descargas SRI
+            // (misma transacción; ver RetencionVentaService::eliminar).
+            $this->service->eliminar(
+                $id, $idEmpresa, $idUsuario,
+                trim((string) ($_POST['no_descargar'] ?? '')) ?: null,
+                mb_substr(trim((string) ($_POST['observacion_no_descargar'] ?? '')), 0, 500)
+            );
+            $aviso = $this->service->getAvisoNoDescargar();
+            echo json_encode([
+                'ok'      => true,
+                'mensaje' => 'Retención eliminada correctamente.' . ($aviso ? ' ' . $aviso : ''),
+            ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

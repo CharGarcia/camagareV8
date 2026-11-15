@@ -180,12 +180,33 @@ class RetencionVentaService
     // ELIMINAR (lógico)
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function eliminar(int $id, int $idEmpresa, int $idUsuario): void
+    /** Aviso del último eliminar() sobre «Documentos para no descargar» (null = no aplicó). */
+    private ?string $avisoNoDescargar = null;
+
+    public function getAvisoNoDescargar(): ?string
     {
+        return $this->avisoNoDescargar;
+    }
+
+    /**
+     * Elimina la retención recibida. Si es electrónica (clave de 49 dígitos) y viene
+     * $motivoNoDescargar (DocumentoIgnoradoRepository::MOTIVO_*), en la MISMA
+     * transacción la agrega a «Documentos para no descargar» de Descargas SRI
+     * (DocumentoNoDescargarService), para que la próxima descarga no la vuelva a registrar.
+     */
+    public function eliminar(
+        int $id,
+        int $idEmpresa,
+        int $idUsuario,
+        ?string $motivoNoDescargar = null,
+        string $observacionNoDescargar = ''
+    ): void {
+        $this->avisoNoDescargar = null;
         $cabecera = $this->repository->getPorId($id, $idEmpresa);
         if (!$cabecera) {
             throw new \Exception('Retención no encontrada.');
         }
+        $motivoNoDescargar = DocumentoNoDescargarService::normalizarMotivo($motivoNoDescargar);
 
         // Eliminar revierte el asiento de la retención: si su período está cerrado,
         // ese movimiento no puede tocarse.
@@ -214,9 +235,31 @@ class RetencionVentaService
             $decIvaRepo = new \App\repositories\modulos\DeclaracionIvaRepository();
             $decIvaRepo->limpiarCasillerosDocumento($idEmpresa, 'retenciones_ventas', $id);
 
+            if ($motivoNoDescargar !== null && DocumentoNoDescargarService::esClaveElectronica($cabecera['clave_acceso'] ?? '')) {
+                $numero = implode('-', array_filter([
+                    $cabecera['establecimiento'] ?? '', $cabecera['punto_emision'] ?? '', $cabecera['secuencial'] ?? '',
+                ], static fn($v) => (string) $v !== ''));
+                $this->avisoNoDescargar = (new DocumentoNoDescargarService($this->logService))->registrar(
+                    (string) $cabecera['clave_acceso'],
+                    $motivoNoDescargar,
+                    trim($observacionNoDescargar),
+                    [
+                        'modulo'    => 'Retenciones de Ventas',
+                        'documento' => trim('Retención ' . $numero),
+                        'emisor'    => $cabecera['cliente_nombre'] ?? '',
+                        'fecha'     => $cabecera['fecha_emision'] ?? '',
+                        'tabla'     => 'retencion_venta_cabecera',
+                        'id'        => $id,
+                    ],
+                    $idEmpresa,
+                    $idUsuario
+                );
+            }
+
             if ($managed) $db->commit();
         } catch (\Throwable $e) {
             if ($managed && $db->inTransaction()) $db->rollBack();
+            $this->avisoNoDescargar = null;
             throw $e;
         }
     }

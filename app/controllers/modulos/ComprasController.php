@@ -1471,6 +1471,14 @@ class ComprasController extends BaseModuloController
                 $invSrv->revertirMovimientosPorReferencia('nota_credito_compra', (int)$det['id'], $idEmpresa, $idUsuario);
             }
 
+            // Notas de crédito/débito de compra viven en la misma tabla: el mensaje nombra el documento.
+            $tipoDoc = (string) ($this->repository->getPorId($id, $idEmpresa)['tipo_comprobante'] ?? '');
+            $etiqueta = match ($tipoDoc) {
+                '04'    => 'Nota de crédito eliminada',
+                '05'    => 'Nota de débito eliminada',
+                default => 'Compra eliminada',
+            };
+
             // 2. Eliminar la compra (lógico) y, si se pidió, agregarla a «Documentos para no
             //    descargar» de Descargas SRI (misma transacción; ver ComprasService::eliminar).
             $this->service->eliminar(
@@ -1483,7 +1491,7 @@ class ComprasController extends BaseModuloController
             $db->commit();
             echo json_encode([
                 'ok'      => true,
-                'mensaje' => 'Compra eliminada correctamente.' . ($aviso ? ' ' . $aviso : ''),
+                'mensaje' => $etiqueta . ' correctamente.' . ($aviso ? ' ' . $aviso : ''),
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

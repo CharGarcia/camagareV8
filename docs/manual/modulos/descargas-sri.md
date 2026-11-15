@@ -46,9 +46,11 @@ Cada documento tiene un **alcance**:
   establecimiento un comprobante que entró en el que no correspondía.
 
 **Cómo se agregan:**
-- **Desde Compras, al eliminar un comprobante electrónico**: el sistema pregunta
-  el motivo y lo agrega con el alcance que corresponde (ver *Eliminar un
-  comprobante electrónico* en [Compras](compras)). Es la forma más habitual.
+- **Desde Compras o Retenciones de venta, al eliminar un comprobante
+  electrónico**: el sistema pregunta el motivo y lo agrega con el alcance que
+  corresponde (ver *Eliminar un comprobante electrónico* en [Compras](compras) y
+  *Retención electrónica: que no se vuelva a descargar* en
+  [Retenciones de venta](retenciones-ventas)). Es la forma más habitual.
 - **A mano en esta pestaña**: se pega la clave de acceso de 49 dígitos, se elige
   **No descargar en** (*Todos los establecimientos* o *Solo este establecimiento*)
   y, si quiere, se escribe una observación.
@@ -359,7 +361,7 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
   establecimientos* del RUC (como antes) o *solo este establecimiento*, para
   registrar el comprobante en otro. Nueva columna **Alcance** y selector **No
   descargar en** al agregar a mano. Al eliminar un comprobante electrónico en
-  **Compras** el sistema pregunta el motivo y lo agrega solo. Requiere
+  **Compras** o en **Retenciones de venta** el sistema pregunta el motivo y lo agrega solo. Requiere
   `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Documentos
   para no descargar*.
 - **1.16** — Nueva pestaña **Desde PDF**: lee con inteligencia artificial el PDF

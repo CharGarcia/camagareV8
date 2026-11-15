@@ -7,6 +7,8 @@
     let currentSort  = (typeof window.RETV_ordenCol !== 'undefined' && window.RETV_ordenCol) ? window.RETV_ordenCol : 'fecha_emision';
     let currentDir   = (typeof window.RETV_ordenDir !== 'undefined' && window.RETV_ordenDir) ? window.RETV_ordenDir : 'DESC';
     let retvIdActual = 0;
+    let retvClaveActual = '';   // clave de acceso de la retención abierta (49 dígitos = electrónica)
+    let retvEliminando  = false;
     let retvHasXml   = false;
     let comprobantesAutorizados = [];
 
@@ -379,20 +381,97 @@
 
     // ── MODAL — ELIMINAR ─────────────────────────────────────────────────────────
 
-    window.RETV_eliminar = async () => {
-        if (!retvIdActual) return;
-        const ok = await confirmar('¿Eliminar esta retención?', 'Esta acción no se puede deshacer.');
-        if (!ok) return;
+    // Retención electrónica (clave de 49 dígitos): al eliminarla se pregunta el motivo
+    // para dejarla en «Documentos para no descargar» de Descargas SRI; si no, la próxima
+    // descarga la volvería a registrar. El servidor revalida con la clave guardada
+    // (RetencionVentaService::eliminar → DocumentoNoDescargarService).
+    function dialogoEliminarElectronica() {
+        return Swal.fire({
+            title: '¿Eliminar esta retención?',
+            icon: 'warning',
+            width: 560,
+            html: `
+                <div class="text-start small">
+                    <div class="alert alert-warning py-2 px-3 mb-3 small">
+                        <i class="bi bi-cloud-download me-1"></i>
+                        Es un <strong>documento electrónico del SRI</strong>. Si lo elimina sin más,
+                        la próxima descarga del SRI lo volverá a registrar.
+                    </div>
+                    <div class="fw-semibold mb-2">¿Por qué lo elimina?</div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="retvNoDescargar" id="retvNoDesc1" value="ANULADO_SRI" checked>
+                        <label class="form-check-label" for="retvNoDesc1">
+                            <strong>Fue anulada en el SRI o la emitieron por error.</strong><br>
+                            <span class="text-muted">No se volverá a descargar en ningún establecimiento de la empresa.</span>
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="radio" name="retvNoDescargar" id="retvNoDesc2" value="OTRO_ESTABLECIMIENTO">
+                        <label class="form-check-label" for="retvNoDesc2">
+                            <strong>La voy a registrar en otro establecimiento.</strong><br>
+                            <span class="text-muted">No se volverá a descargar aquí; el otro establecimiento sí podrá descargarla o cargar su XML.</span>
+                        </label>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="retvNoDescargar" id="retvNoDesc3" value="">
+                        <label class="form-check-label" for="retvNoDesc3">
+                            <strong>Solo eliminar.</strong><br>
+                            <span class="text-muted">Se podrá volver a descargar (p. ej. para cargarla de nuevo corregida).</span>
+                        </label>
+                    </div>
+                    <label class="form-label small mb-1 d-block" for="retvNoDescObs">Observación (opcional)</label>
+                    <input type="text" id="retvNoDescObs" class="form-control form-control-sm" maxlength="500"
+                           placeholder="Ej.: anulada por el cliente el 10-11-2026">
+                    <div class="text-muted mt-2" style="font-size:.75rem;">Esta acción no se puede deshacer.</div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonColor: '#d33',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            focusConfirm: false,
+            preConfirm: () => ({
+                motivo: (document.querySelector('input[name="retvNoDescargar"]:checked') || {}).value || '',
+                obs: (document.getElementById('retvNoDescObs').value || '').trim()
+            })
+        });
+    }
 
+    window.RETV_eliminar = async () => {
+        if (!retvIdActual || retvEliminando) return;
+        const esElectronica = /^\d{49}$/.test(retvClaveActual) && typeof Swal !== 'undefined';
+
+        let motivo = '', obs = '';
+        if (esElectronica) {
+            const r = await dialogoEliminarElectronica();
+            if (!r.isConfirmed) return;
+            motivo = r.value?.motivo || '';
+            obs    = r.value?.obs || '';
+        } else {
+            const ok = await confirmar('¿Eliminar esta retención?', 'Esta acción no se puede deshacer.');
+            if (!ok) return;
+        }
+
+        const body = new URLSearchParams({ id: String(retvIdActual) });
+        if (motivo) {
+            body.append('no_descargar', motivo);
+            body.append('observacion_no_descargar', obs);
+        }
+
+        retvEliminando = true;
         try {
             const res  = await fetch(`${BASE}/eliminarAjax`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body:    `id=${retvIdActual}`,
+                body:    body.toString(),
             });
             const data = await res.json();
             if (data.ok) {
-                mostrarAlerta(data.mensaje, 'success');
+                // Con el aviso de «no descargar» el mensaje es largo: ventana normal, no toast.
+                if (motivo && typeof Swal !== 'undefined') {
+                    Swal.fire('Eliminada', data.mensaje, 'success');
+                } else {
+                    mostrarAlerta(data.mensaje, 'success');
+                }
                 modalRetV && modalRetV.hide();
                 setTimeout(() => RETV_fetchSearch(1), 400);
             } else {
@@ -400,6 +479,8 @@
             }
         } catch (e) {
             mostrarAlerta('Error al eliminar.', 'danger');
+        } finally {
+            retvEliminando = false;
         }
     };
 
@@ -690,6 +771,7 @@
     function cargarCabecera(cab) {
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val ?? ''; };
 
+        retvClaveActual = String(cab.clave_acceso || '').trim();
         set('retv_id',            cab.id);
         set('retv_id_venta',      cab.id_venta || '');
         set('retv_origen',        cab.origen || 'manual');
@@ -810,6 +892,7 @@
         }
         document.getElementById('retv_id').value = '';
         retvIdActual = 0;
+        retvClaveActual = '';
         lineasData   = [];
         renderLineas();
 

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion de venta, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.16
+etiquetas: retencion de venta, eliminar retencion, retencion anulada en el sri, emitida por error, no volver a descargar, documentos para no descargar, otro establecimiento, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
+version: 1.17
 orden: 40
 estado: activo
 ---
@@ -141,6 +141,26 @@ ya no existiera.
 El asiento no se borra: queda en estado **anulado**, así que el rastro se conserva
 y deja de afectar los reportes.
 
+### Retención electrónica: que no se vuelva a descargar
+
+Si la retención es **electrónica** (tiene clave de acceso de 49 dígitos), al pulsar
+**Eliminar** el sistema avisa que la próxima descarga del SRI, manual o
+automática, la volvería a registrar, y pregunta **por qué la elimina**:
+
+| Opción | Cuándo usarla | Qué pasa |
+|---|---|---|
+| **Fue anulada en el SRI o la emitieron por error** | El cliente anuló la retención en el SRI o se la emitió a la empresa por equivocación. | Se agrega a *Documentos para no descargar* para **todos los establecimientos** de la empresa (mismo RUC). |
+| **La voy a registrar en otro establecimiento** | Entró en un establecimiento y corresponde a otro de la misma empresa. | Se agrega a *Documentos para no descargar* **solo en este establecimiento**. El otro sí puede descargarla o cargar su XML. |
+| **Solo eliminar** | Quiere borrarla para volver a descargarla. | No se agrega a la lista. |
+
+Puede escribir una **observación** (opcional), que se guarda en la lista junto con
+el número de la retención.
+
+Agregar a la lista y eliminar la retención se hacen juntos: si la eliminación no
+se puede hacer (por ejemplo, por un **período contable cerrado**, ver abajo), la
+retención tampoco se agrega. Si luego necesita volver a descargarla, quítela de
+la pestaña *Documentos para no descargar* de [Descargas del SRI](descargas-sri).
+
 ## Períodos contables cerrados
 
 Una retención mueve la cartera de la factura y genera asiento, así que su fecha no
@@ -176,6 +196,7 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.17** — Al **eliminar una retención electrónica** se pregunta el motivo: *anulada en el SRI o emitida por error* (no se vuelve a descargar en ningún establecimiento), *la voy a registrar en otro establecimiento* (no se vuelve a descargar solo en este) o *solo eliminar*. Las dos primeras la agregan a *Documentos para no descargar* de Descargas SRI. Si el período contable de la retención está cerrado, la eliminación se rechaza y no se agrega nada a la lista. Requiere `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Retención electrónica: que no se vuelva a descargar*.
 - **1.16** — Nueva pestaña **Información** en la ventana de la retención (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.15** — El botón **Registrar nuevo cliente** no hacía nada: ahora abre la ficha del cliente y, al guardarlo, queda seleccionado en la retención.
 - **1.14** — La búsqueda libre encuentra la retención por el **número del documento
