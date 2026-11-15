@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.19** (15-11-2026). El historial de cambios está al final.
+Versión actual: **0.20** (15-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -403,9 +403,6 @@ programe. Por ejemplo:
 - avisar por WhatsApp los chats sin leer;
 - recordar a los clientes de car wash su próxima cita o cambio de aceite.
 
-> **Nota interna:** siete módulos de esta sección aún no tienen artículo en
-> el manual de usuario (ver *Pendientes*, punto P-20).
-
 ---
 
 ## 5. Cómo funciona el sistema *(borrador para revisión)*
@@ -784,7 +781,7 @@ actualiza su sección y se tacha aquí.
 ### E. Producto y documentación
 | # | Pendiente | Sección |
 |---|---|---|
-| P-20 | Crear el manual de usuario de 7 módulos: Factura Express por QR, Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas. | 4 |
+| P-20 | ✅ **Resuelto (15-11-2026):** ya existe el manual de usuario de Factura Express por QR (configuración y solicitudes), Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas. | 4 |
 | P-21 | Instalar el Cotizador de Planes (dos SQL), dar permisos y crear los productos «Plan anual» y «Plan mensual». | 6.1 |
 
 ### F. Secciones por escribir
@@ -812,6 +809,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.20 | 15-11-2026 | P-20 resuelto: los 7 módulos que faltaban ya tienen manual de usuario; se quita la nota interna de la sección 4 |
 | 0.19 | 15-11-2026 | **Paquetes** en el Cotizador (suma de módulos menos % propio; módulos fijos y sueltos aparte): sección 6.5 y P-17 |
 | 0.18 | 15-11-2026 | Plan **semestral** (anual ÷ 2 + 10 %, sin descuento por establecimiento): reglas, ejemplo y preguntas frecuentes |
 | 0.17 | 14-11-2026 | Nuevas secciones 7 (qué cubre la membresía), 8 (responsabilidades, desde el contrato y el acuerdo de datos), 9 (preguntas frecuentes y objeciones) y 10 (proceso de venta). Pendientes P-28 a P-31 |
