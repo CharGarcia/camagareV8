@@ -67,6 +67,23 @@ class CotizadorPlanesRules
         }
     }
 
+    /**
+     * Toda cotización va atada a un vendedor del catálogo de la empresa.
+     * $sinVinculo: el usuario (nivel 1) no tiene un vendedor vinculado.
+     */
+    public function validarVendedor(?int $idVendedor, bool $existe, bool $sinVinculo = false): void
+    {
+        if ($sinVinculo) {
+            throw new \InvalidArgumentException('Su usuario no está vinculado a un vendedor. Pida a un administrador que lo vincule en la ficha del vendedor (campo «Usuario del sistema»).');
+        }
+        if (!$idVendedor) {
+            throw new \InvalidArgumentException('Elija el vendedor de la cotización.');
+        }
+        if (!$existe) {
+            throw new \InvalidArgumentException('El vendedor elegido no existe en esta empresa.');
+        }
+    }
+
     public function validarPaquete(array $d): void
     {
         $nombre = trim((string) ($d['nombre'] ?? ''));

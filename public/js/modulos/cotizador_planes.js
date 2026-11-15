@@ -126,6 +126,8 @@
             if (k === 'usuarios') v = c ? c.usuarios : (parametros.usuarios_por_establecimiento || 3);
             if (k === 'modalidad') v = c ? c.modalidad : 'anual';
             if (k === 'descuento_vendedor_pct') v = c ? c.descuento_vendedor_pct : 0;
+            // Nueva (o sin vendedor): se propone el vendedor vinculado al usuario.
+            if (k === 'id_vendedor' && !(c && c.id_vendedor)) v = Number(el.dataset.propio || 0) || '';
             el.value = v ?? '';
         });
     }
@@ -133,6 +135,8 @@
     function aplicarModoLectura() {
         const ed = editable();
         modalEl.querySelectorAll('.cp-editable').forEach((el) => { el.disabled = !ed; });
+        // Nivel 1 no cambia el vendedor: la cotización queda a nombre del suyo (lo fija el servidor).
+        if ($('cp_id_vendedor')?.dataset.fijo === '1') $('cp_id_vendedor').disabled = true;
         $('cpBtnGuardar')?.classList.toggle('d-none', !ed || !(estado ? CFG.perm.actualizar : CFG.perm.crear));
         $('cpBtnProforma')?.classList.toggle('d-none', !ed);
         $('cpBtnEliminar')?.classList.toggle('d-none', !(estado && ed && CFG.perm.eliminar));

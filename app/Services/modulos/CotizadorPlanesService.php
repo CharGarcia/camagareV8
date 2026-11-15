@@ -447,6 +447,33 @@ class CotizadorPlanesService
         return ['cot' => $cot, 'calc' => $calc, 'dias_vigencia' => (int) $config['dias_vigencia']];
     }
 
+    /** Vendedor vinculado al usuario (ficha del vendedor → «Usuario del sistema», o su cédula). */
+    public function vendedorDelUsuario(int $idEmpresa, int $idUsuario): ?array
+    {
+        $v = (new \App\repositories\modulos\VendedorRepository())->getPorUsuario($idEmpresa, $idUsuario);
+        return $v ? ['id' => (int) $v['id'], 'nombre' => (string) $v['nombre']] : null;
+    }
+
+    /**
+     * Vendedor al que queda atada la cotización (obligatorio).
+     *  - Niveles 2 y 3 ($eligeVendedor): el que eligieron, si existe en la empresa.
+     *  - Nivel 1: siempre el suyo (el vinculado a su usuario). Al editar una que ya
+     *    tiene vendedor, se conserva el que tenía (no se la reasigna a sí mismo).
+     */
+    private function resolverVendedor(int $idEmpresa, int $idUsuario, ?int $pedido, bool $eligeVendedor, ?array $existente): int
+    {
+        if (!$eligeVendedor) {
+            $actual = (int) ($existente['id_vendedor'] ?? 0);
+            if ($actual > 0) return $actual;
+            $propio = $this->vendedorDelUsuario($idEmpresa, $idUsuario);
+            $this->rules->validarVendedor($propio['id'] ?? null, $propio !== null, $propio === null);
+            return (int) $propio['id'];
+        }
+        $existe = $pedido ? (new \App\repositories\modulos\CrmCatalogoRepository())->vendedorExiste($pedido, $idEmpresa) : false;
+        $this->rules->validarVendedor($pedido, $existe);
+        return (int) $pedido;
+    }
+
     /** Datos de la cabecera normalizados desde la petición. */
     private function normalizarCabecera(array $d): array
     {
@@ -479,10 +506,12 @@ class CotizadorPlanesService
      * catálogo y de la configuración vigentes. Guardado único (§8) en el alta.
      * @return array{id:int, numero:int, previo:bool}
      */
-    public function guardar(int $idEmpresa, array $d, int $idUsuario): array
+    public function guardar(int $idEmpresa, array $d, int $idUsuario, bool $eligeVendedor = true): array
     {
         $id   = (int) ($d['id'] ?? 0);
         $cab  = $this->normalizarCabecera($d);
+        $cab['id_vendedor'] = $this->resolverVendedor($idEmpresa, $idUsuario, $cab['id_vendedor'], $eligeVendedor,
+            $id > 0 ? $this->repo->getPorId($id, $idEmpresa) : null);
         $config = $this->getConfig($idEmpresa);
         [$est, ] = $this->resolverEstablecimientos($idEmpresa, (array) ($d['establecimientos'] ?? []));
         $this->rules->validarCotizacion($cab + ['establecimientos' => $est], $config);

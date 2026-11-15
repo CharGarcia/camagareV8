@@ -126,6 +126,7 @@ class CotizadorPlanesController extends BaseModuloController
             'ordenParam'  => OrdenListado::aCadena($orden),
             'vistaConfig' => $prefsVista,
             'vendedores'  => $disponible ? $this->service->getVendedores($this->idEmpresa()) : [],
+            'vendedorPropio' => $disponible ? $this->service->vendedorDelUsuario($this->idEmpresa(), $this->idUsuario()) : null,
             'puedeProforma' => !empty(\App\Helpers\Permisos::porRuta('modulos/proformas')['crear']),
             'fullWidth'   => true,
         ]);
@@ -295,7 +296,8 @@ class CotizadorPlanesController extends BaseModuloController
             $this->requireCrear();
         }
         try {
-            $res = $this->service->guardar($this->idEmpresa(), $d, $this->idUsuario());
+            // Nivel 1: la cotización queda atada a su propio vendedor; 2 y 3 lo eligen.
+            $res = $this->service->guardar($this->idEmpresa(), $d, $this->idUsuario(), $this->esAdministrador());
             $this->json([
                 'ok'  => true,
                 'id'  => $res['id'],

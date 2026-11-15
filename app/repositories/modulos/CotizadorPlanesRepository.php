@@ -28,7 +28,7 @@ class CotizadorPlanesRepository extends BaseRepository
         'total_mensual'    => 'c.total_mensual',
         'total_semestral'  => 'c.total_semestral',
         'total_unico'      => 'c.total_unico',
-        'vendedor'         => 'u.nombre',
+        'vendedor'         => 'COALESCE(v.nombre, u.nombre)',
         'estado'           => 'c.estado',
         'created_at'       => 'c.created_at',
     ];
@@ -404,7 +404,9 @@ class CotizadorPlanesRepository extends BaseRepository
         if ($idUsuarioFiltro !== null) {
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
-        $joins = "LEFT JOIN usuarios u ON u.id = c.created_by
+        // Vendedor = el del catálogo atado a la cotización; las antiguas sin vendedor muestran a quien la creó.
+        $joins = "LEFT JOIN vendedores v ON v.id = c.id_vendedor AND v.id_empresa = c.id_empresa
+                  LEFT JOIN usuarios u ON u.id = c.created_by
                   LEFT JOIN LATERAL (
                       SELECT COUNT(*) AS total FROM cotizaciones_planes_establecimientos ce
                        WHERE ce.id_cotizacion = c.id AND ce.eliminado = false
@@ -413,13 +415,13 @@ class CotizadorPlanesRepository extends BaseRepository
         $parsed = FiltrosBusqueda::parsear($buscar);
         if ($parsed['texto_libre'] !== '') {
             $cond = FiltrosBusqueda::condicionTexto(
-                ['c.numero::text', 'c.identificacion', 'c.razon_social', 'c.nombre_comercial', 'c.correo', 'u.nombre'],
+                ['c.numero::text', 'c.identificacion', 'c.razon_social', 'c.nombre_comercial', 'c.correo', 'COALESCE(v.nombre, u.nombre)'],
                 $parsed['texto_libre'], $params, 'cp_b'
             );
             if ($cond !== '') $where .= ' AND ' . $cond;
         }
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto'    => ['ruc' => 'c.identificacion', 'cliente' => 'c.razon_social', 'vendedor' => 'u.nombre'],
+            'texto'    => ['ruc' => 'c.identificacion', 'cliente' => 'c.razon_social', 'vendedor' => 'COALESCE(v.nombre, u.nombre)'],
             'exacto'   => ['estado' => 'c.estado', 'modalidad' => 'c.modalidad', 'usuario' => 'c.created_by'],
             'fecha'    => ['fecha' => 'c.fecha', 'registro' => 'c.created_at'],
             'numerico' => ['numero' => 'c.numero', 'total_anual' => 'c.total_anual', 'total_semestral' => 'c.total_semestral', 'total_mensual' => 'c.total_mensual', 'usuarios' => 'c.usuarios'],
@@ -429,7 +431,7 @@ class CotizadorPlanesRepository extends BaseRepository
         $st->execute($params);
         $total = (int) $st->fetchColumn();
 
-        $sql = "SELECT c.*, u.nombre AS vendedor, n_est.total AS establecimientos
+        $sql = "SELECT c.*, COALESCE(v.nombre, u.nombre) AS vendedor, u.nombre AS creado_por, n_est.total AS establecimientos
                   FROM cotizaciones_planes c {$joins} {$where}
                  {$orderBy}";
         if ($perPage > 0) {
@@ -443,8 +445,9 @@ class CotizadorPlanesRepository extends BaseRepository
     public function getPorId(int $id, int $idEmpresa): ?array
     {
         $st = $this->db->prepare(
-            "SELECT c.*, u.nombre AS vendedor
+            "SELECT c.*, COALESCE(v.nombre, u.nombre) AS vendedor, u.nombre AS creado_por
                FROM cotizaciones_planes c
+               LEFT JOIN vendedores v ON v.id = c.id_vendedor AND v.id_empresa = c.id_empresa
                LEFT JOIN usuarios u ON u.id = c.created_by
               WHERE c.id = :id AND c.id_empresa = :e AND c.eliminado = false"
         );

@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.4** (15-11-2026). El historial está al final.
+Versión actual: **0.5** (15-11-2026). El historial está al final.
 
 ---
 
@@ -169,6 +169,7 @@ Toda venta vive en el **CRM** (menú CRM), junto con el **Cotizador de Planes**.
 
 | Momento | Qué hace el vendedor en el sistema |
 |---|---|
+| Antes de empezar | Confirma que su usuario esté **vinculado a su vendedor** (lo hace el administrador en la ficha del vendedor, campo *Usuario del sistema*): así cada cotización queda a su nombre. Sin ese vínculo no puede guardar cotizaciones. |
 | Conoce a un prospecto | Registra el **contacto** (correo o teléfono es obligatorio). |
 | Hay interés real | Crea la **oportunidad** o deja que la cree el Cotizador al generar la proforma. |
 | Después de cada conversación | Agenda la **siguiente actividad** con fecha (llamar, reunión, enviar correo). |
@@ -266,6 +267,7 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.5 | 15-11-2026 | Cada cotización queda atada al vendedor: vincular el usuario con su ficha de vendedor. |
 | 0.4 | 15-11-2026 | Paquetes de precio fijo y módulos incluidos en las reglas y errores frecuentes. |
 | 0.3 | 15-11-2026 | Paquetes en las reglas y en los errores frecuentes al cotizar. |
 | 0.2 | 15-11-2026 | Plan semestral en las reglas, errores frecuentes y evaluación. |

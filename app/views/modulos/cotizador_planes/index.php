@@ -18,6 +18,7 @@
  * @var string $ordenParam
  * @var array  $vistaConfig
  * @var array  $vendedores
+ * @var ?array $vendedorPropio  vendedor vinculado al usuario (id, nombre) o null
  * @var bool   $puedeProforma
  */
 $base   = BASE_URL;
@@ -242,13 +243,18 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                 <input type="hidden" id="cp_cod_prov"><input type="hidden" id="cp_cod_ciudad">
                             </div>
                             <div class="col-md-4">
-                                <label class="form-label small fw-bold mb-1">Vendedor</label>
-                                <select class="form-select form-select-sm cp-editable" id="cp_id_vendedor">
-                                    <option value="">—</option>
+                                <label class="form-label small fw-bold mb-1">Vendedor *</label>
+                                <?php // Toda cotización va atada a un vendedor. Nivel 1: el suyo, fijo; 2 y 3 lo eligen. ?>
+                                <select class="form-select form-select-sm cp-editable" id="cp_id_vendedor"
+                                        data-propio="<?= (int) ($vendedorPropio['id'] ?? 0) ?>" data-fijo="<?= $esAdmin ? '0' : '1' ?>">
+                                    <option value=""><?= (!$esAdmin && !$vendedorPropio) ? 'Su usuario no está vinculado a un vendedor' : '— Elija el vendedor —' ?></option>
                                     <?php foreach ($vendedores as $v): ?>
                                         <option value="<?= (int) $v['id'] ?>"><?= $e($v['nombre']) ?></option>
                                     <?php endforeach; ?>
                                 </select>
+                                <?php if (!$esAdmin): ?>
+                                    <div class="small text-muted">Las cotizaciones quedan a nombre de su vendedor.</div>
+                                <?php endif; ?>
                             </div>
                             <div class="col-12">
                                 <label class="form-label small fw-bold mb-1">Observaciones <span class="text-muted fw-normal">(van a la proforma)</span></label>

@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, paquetes, paquete, precio fijo del paquete, modulo incluido, incluido, sin costo, modulo gratis, dependencia sin costo, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.8
+version: 1.9
 orden: 0
 estado: activo
 ---
@@ -77,6 +77,10 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
 Para generar la proforma hace falta además una **serie con secuencial de
 Proformas** y permiso de **crear en Proformas**.
 
+Cada usuario que cotiza (nivel 1) debe estar **vinculado a su vendedor**: en
+la ficha del vendedor, campo **Usuario del sistema** (o con la misma cédula en
+el usuario y en el vendedor). Sin ese vínculo no puede guardar cotizaciones.
+
 ## Cómo se usa
 
 1. Pulse **Nueva cotización**.
@@ -124,7 +128,7 @@ Proformas** y permiso de **crear en Proformas**.
 | Persona de contacto | No | Quien decide la compra; es el nombre del contacto en el CRM. |
 | Correo | Para la proforma | Con él se registra al cliente y se le envía la proforma. |
 | Teléfono | No | Para el contacto del CRM. |
-| Vendedor | No | Vendedor del sistema; pasa a la oportunidad y a la proforma. |
+| Vendedor | Sí | Vendedor al que queda atada la cotización; pasa a la oportunidad del CRM y a la proforma, y es el que se ve en el listado y en el PDF. Un usuario de nivel 1 no lo elige: se pone solo el vendedor vinculado a su usuario. Los niveles 2 y 3 lo eligen (se propone el suyo, si lo tienen). |
 | Observaciones | No | Se agregan a las observaciones de la proforma. |
 | Establecimiento (código y nombre) | Sí | Cada local del RUC que contrata el sistema (001, 002…). |
 | Usuarios del RUC | Sí | Cuántas personas usarán el sistema en total. |
@@ -168,6 +172,10 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 
 ## Reglas de negocio
 
+- **Toda cotización tiene vendedor.** Nivel 1: siempre el suyo (si edita una
+  cotización que ya tenía vendedor, se conserva). Niveles 2 y 3: el que elijan,
+  de los vendedores de la empresa. Las cotizaciones anteriores a esta regla que
+  no tenían vendedor muestran en el listado a quien las creó.
 - Un establecimiento debe tener al menos un módulo o servicio.
 - Al volver a guardar un **borrador**, sus precios se actualizan con el
   catálogo vigente. Una cotización que ya generó su proforma **conserva** los
@@ -222,6 +230,9 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
   precio fijo necesita su precio.
 - **«Falta configurar el producto del plan anual (semestral o mensual)»**: elija en
   Configuración → Parámetros el producto que va en la proforma.
+- **«Su usuario no está vinculado a un vendedor»**: un administrador debe abrir
+  la ficha del vendedor y elegir su usuario en **Usuario del sistema**.
+- **«Elija el vendedor de la cotización»**: los niveles 2 y 3 deben elegirlo.
 - **«Escriba el correo del cliente»**: el correo es obligatorio para registrar
   al cliente y enviarle la proforma.
 - **«No hay una serie activa con secuencial de Proformas»**: configure el
@@ -244,3 +255,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.6** — Módulos **incluidos**: casilla «Sin costo cuando lo requiere otro módulo» en el catálogo. Paquetes de **precio fijo** (sus módulos van incluidos) además de los de suma − %. Se ve en pantalla, PDF y anexo.
 - **1.7** — El detalle de un módulo del catálogo se abre en su propia ventana al hacer clic en la fila, en lugar de desplegarse dentro de la Configuración.
 - **1.8** — El detalle de un paquete también se abre en su propia ventana.
+- **1.9** — Toda cotización queda atada a un **vendedor** (obligatorio): nivel 1, el vinculado a su usuario y fijo; niveles 2 y 3 lo eligen. El listado y el PDF muestran ese vendedor.
