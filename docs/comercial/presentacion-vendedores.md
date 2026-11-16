@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.23** (16-11-2026). El historial de cambios está al final.
+Versión actual: **0.24** (16-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -423,7 +423,7 @@ programe. Por ejemplo:
 | 2 | **Aceptación** | Cliente | Aprueba la proforma con el botón del correo. |
 | 3 | **Alta de la empresa** | CaMaGaRe (superadministrador) | Crea la empresa en *Empresas del sistema*. La empresa queda registrada como cliente para facturarle la suscripción. |
 | 4 | **Documentos legales** | Cliente | Recibe por correo el **Contrato de uso** y el **Acuerdo de datos personales (LOPDP)** y los acepta en línea; queda constancia de fecha, hora e IP. |
-| 5 | **Configuración inicial** | CaMaGaRe | Datos de la empresa y logo, establecimientos, puntos de emisión y secuenciales, y la **firma electrónica (.p12)**. |
+| 5 | **Configuración inicial** | CaMaGaRe (o el cliente, si prefiere) | Datos de la empresa y logo, establecimientos, puntos de emisión y secuenciales, y la **firma electrónica (.p12)**. |
 | 6 | **Usuarios y permisos** | CaMaGaRe | Se crean los usuarios y se asigna a cada uno qué puede ver, crear, modificar o eliminar. |
 | 7 | **Carga de datos** | CaMaGaRe (el cliente entrega la información) | Clientes, proveedores y productos por **Excel**; **saldos iniciales** de cartera, bancos e inventario. |
 | 8 | **Capacitación** | CaMaGaRe | Capacitación **en línea**, incluida en la suscripción. |
@@ -436,6 +436,22 @@ programe. Por ejemplo:
 configuramos su empresa y su firma electrónica, creamos sus usuarios, cargamos
 sus clientes y productos, y lo capacitamos en línea.»* El cliente solo entrega
 su información (firma .p12, listados de clientes y productos, saldos).
+
+**Y si el cliente quiere hacerlo él mismo, también puede.** Un administrador de
+su empresa entra a **Configuración → Empresa** y tiene todo en pestañas:
+
+| Pestaña | Qué configura |
+|---|---|
+| General y Emisor | Razón social, RUC, nombre comercial, dirección, contacto y datos de emisión |
+| Firma Electrónica | Sube su archivo **.p12** y su contraseña |
+| Establecimientos | Sus locales, con el **logo** que sale en los documentos |
+| Secuenciales | Puntos de emisión y numeración de cada documento (logo propio por punto, si quiere) |
+| Correo | El correo desde el que se envían sus comprobantes |
+| Decimales, IVA e ICE | Decimales de precios y cantidades, cálculo del IVA e ICE |
+| Facturación e Inventario | Cómo se presentan los ítems en la factura y las reglas del inventario |
+
+Es útil cuando el cliente cambia de logo, renueva su firma electrónica o abre un
+local nuevo: no depende de nosotros.
 
 > **Por definir:** cuánto tiempo toma la puesta en marcha (P-08) y cuántas
 > horas de capacitación en línea se incluyen (P-09).
@@ -715,7 +731,8 @@ en *Cotizador → Configuración → Paquetes*:
 | ¿Qué pasa si me atraso en el pago? | El sistema le avisa antes y después del vencimiento. Si a los **10 días de atraso** el pago sigue pendiente, el servicio se suspende, previo aviso, **sin perder su información**; al pagar se reactiva. |
 | ¿Puedo cancelar? | El contrato rige mientras la suscripción esté activa y cualquiera de las partes puede terminarlo con aviso razonable; usted puede pedir la exportación de su información. |
 | ¿Qué horario tiene el soporte? | De **lunes a viernes**, por el chat del sistema, WhatsApp y llamadas. |
-| ¿Quién me configura el sistema? | Nosotros: configuramos su empresa y su firma electrónica, creamos sus usuarios, cargamos sus clientes y productos, y lo capacitamos en línea. |
+| ¿Quién me configura el sistema? | Nosotros: configuramos su empresa y su firma electrónica, creamos sus usuarios, cargamos sus clientes y productos, y lo capacitamos en línea. Si prefiere, usted también puede hacerlo desde **Configuración → Empresa**. |
+| ¿Puedo cambiar mi logo o mi firma electrónica yo mismo? | Sí. En **Configuración → Empresa**: el logo en la pestaña Establecimientos y la firma (.p12 y contraseña) en la pestaña Firma Electrónica. |
 | ¿Cuánto tarda la puesta en marcha? | *Por definir (P-08).* |
 
 ### 9.2 Objeciones frecuentes
@@ -778,7 +795,7 @@ actualiza su sección y se tacha aquí.
 ### C. Puesta en marcha y soporte
 | # | Pendiente | Sección |
 |---|---|---|
-| P-07 | ✅ **Resuelto (16-11-2026):** la configuración inicial, los usuarios y la carga de datos los hace **CaMaGaRe**. | 5.2 |
+| P-07 | ✅ **Resuelto (16-11-2026):** la configuración inicial, los usuarios y la carga de datos los hace **CaMaGaRe**; el cliente también puede configurar su empresa, firma y logo en Configuración → Empresa. | 5.2 |
 | P-08 | **Tiempo** de la puesta en marcha. | 5.2 |
 | P-09 | ✅ Capacitación **en línea, incluida** (16-11-2026). Falta: **cuántas horas**. | 5.2 |
 | P-10 | ¿*Implementación* sigue en $0 o tiene precio según el tamaño del cliente? | 6.2 |
@@ -827,6 +844,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.24 | 16-11-2026 | El cliente también puede configurar su empresa, firma electrónica, logo y demás en Configuración → Empresa: sección 5.2 y preguntas frecuentes |
 | 0.23 | 16-11-2026 | Puesta en marcha por CaMaGaRe, capacitación en línea incluida, soporte de lunes a viernes (chat, WhatsApp y llamadas) y suspensión a los 10 días de atraso: secciones 1.5, 5.2, 5.3, 5.4, 7, 9 y 10. P-02, P-07 y P-12 resueltos; P-09 y P-11 parciales |
 | 0.22 | 15-11-2026 | Módulos incluidos (sin costo cuando los requiere otro) y paquetes de precio fijo: secciones 6.4, 6.5 y P-17 |
 | 0.21 | 15-11-2026 | Cotización nueva sin módulos puestos: el vendedor agrega el paquete y/o los módulos (Implementación ya no entra sola) |
