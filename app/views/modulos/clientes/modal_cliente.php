@@ -286,6 +286,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 'transacciones' => $cliVerTransacciones ? 'cli-pane-transacciones' : null,
                                 'estado_cuenta' => $cliVerEstadoCuenta ? 'cli-pane-estado-cuenta' : null,
                                 'anticipos'     => $cliVerAnticipos ? 'cli-pane-anticipos' : null,
+                                'vista_documento' => true, // botón «Por documento» (detalle del documento con un clic)
                                 'textos'        => [
                                     'sin_guardar_trx' => 'Guarde el cliente para ver los productos y servicios que se le han vendido.',
                                     'sin_guardar_ec'  => 'Guarde el cliente para ver su estado de cuenta.',

@@ -147,11 +147,20 @@
                     <button type="button" class="btn btn-outline-danger" onclick="window.RCON_exportarPDF()" title="Descargar PDF">
                         <i class="bi bi-file-earmark-pdf"></i> PDF
                     </button>
-                    <button type="button" class="btn btn-outline-success" onclick="window.RCON_exportarExcel()" title="Descargar Excel (una hoja por documento)">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> Excel
-                    </button>
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-success dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"
+                                title="Descargar Excel (una hoja por tipo de documento)">
+                            <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item small" href="#" onclick="event.preventDefault(); window.RCON_exportarExcel('DETALLE');">
+                                <i class="bi bi-list-ul me-2 text-success"></i>Detallado (ítem por ítem)</a></li>
+                            <li><a class="dropdown-item small" href="#" onclick="event.preventDefault(); window.RCON_exportarExcel('DOCUMENTO');">
+                                <i class="bi bi-receipt me-2 text-success"></i>Agrupado por documento</a></li>
+                        </ul>
+                    </div>
                 </div>
-                <small class="text-muted fw-medium">Vista resumida a nivel de cabecera. El Excel incluye el detalle línea por línea de cada documento.</small>
+                <small class="text-muted fw-medium">Vista resumida a nivel de cabecera. El Excel puede salir detallado ítem por ítem o con una fila por documento.</small>
             </div>
         </div>
         <div class="card-body p-0">

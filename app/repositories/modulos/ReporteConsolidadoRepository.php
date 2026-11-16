@@ -76,10 +76,14 @@ class ReporteConsolidadoRepository extends BaseRepository
                               AND {$alias}.tipo_ambiente = '2'";
     }
 
-    /** Código del establecimiento dueño del documento (columna `establecimiento`, para el Excel consolidado). */
+    /**
+     * Columnas comunes de las consultas de detalle (Excel): código del establecimiento dueño
+     * del documento (`establecimiento`, para el Excel consolidado) e id de la cabecera
+     * (`id_documento`, para agrupar las líneas en el Excel "por documento").
+     */
     private function colEst(string $alias): string
     {
-        return "(SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = {$alias}.id_empresa) AS establecimiento";
+        return "(SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = {$alias}.id_empresa) AS establecimiento, {$alias}.id AS id_documento";
     }
 
     /** Tipos de documento del reporte (clave => etiqueta). Siempre se incluyen todos. */
@@ -149,12 +153,19 @@ class ReporteConsolidadoRepository extends BaseRepository
      */
     private function ivaDesgloseJson(string $tablaImpuestos, string $fkCol, string $idLinea): string
     {
+        // iva_desglose: IVA por tarifa; base_desglose: base imponible por tarifa (hoja Resumen del Excel).
         return "COALESCE((SELECT jsonb_object_agg(sub.codigo_porcentaje, sub.valor) FROM (
                     SELECT i.codigo_porcentaje, SUM(i.valor) AS valor
                     FROM $tablaImpuestos i
                     WHERE i.$fkCol = $idLinea AND i.codigo_impuesto = '2'
                     GROUP BY i.codigo_porcentaje
-                ) sub), '{}'::jsonb) AS iva_desglose";
+                ) sub), '{}'::jsonb) AS iva_desglose,
+                COALESCE((SELECT jsonb_object_agg(sub.codigo_porcentaje, sub.base) FROM (
+                    SELECT i.codigo_porcentaje, SUM(i.base_imponible) AS base
+                    FROM $tablaImpuestos i
+                    WHERE i.$fkCol = $idLinea AND i.codigo_impuesto = '2'
+                    GROUP BY i.codigo_porcentaje
+                ) sub), '{}'::jsonb) AS base_desglose";
     }
 
     /** Filtro de fechas sobre una columna de fecha de emisión. */
@@ -651,7 +662,21 @@ class ReporteConsolidadoRepository extends BaseRepository
                                  ) sub), '{}'::jsonb)
                             ELSE '{}'::jsonb
                        END AS iva_desglose,
-                       m.valor AS total_linea, nd.estado
+                       CASE WHEN ROW_NUMBER() OVER (PARTITION BY nd.id ORDER BY m.id) = 1
+                            THEN COALESCE((SELECT jsonb_object_agg(sub.codigo_porcentaje, sub.base) FROM (
+                                    SELECT i.codigo_porcentaje, SUM(i.base_imponible) AS base
+                                    FROM nota_debito_impuestos i
+                                    WHERE i.id_nota_debito = nd.id AND i.codigo_impuesto = '2'
+                                    GROUP BY i.codigo_porcentaje
+                                 ) sub), '{}'::jsonb)
+                            ELSE '{}'::jsonb
+                       END AS base_desglose,
+                       -- La ND de venta guarda el IVA en la cabecera: va en la primera línea, así
+                       -- la suma de las líneas da el total del documento.
+                       m.valor + CASE WHEN ROW_NUMBER() OVER (PARTITION BY nd.id ORDER BY m.id) = 1
+                                      THEN COALESCE((SELECT SUM(i.valor) FROM nota_debito_impuestos i WHERE i.id_nota_debito = nd.id), 0)
+                                      ELSE 0 END AS total_linea,
+                       nd.estado
                 FROM nota_debito_motivos m
                 JOIN nota_debito_cabecera nd ON nd.id = m.id_nota_debito
                 LEFT JOIN clientes cl ON cl.id = nd.id_cliente

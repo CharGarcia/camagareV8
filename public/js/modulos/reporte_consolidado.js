@@ -75,9 +75,11 @@ window.RCON_cambiarMesAnio = function () {
     }
 };
 
-window.RCON_exportarExcel = function () {
-    const params = new URLSearchParams(new FormData(document.getElementById('form-filtros-consolidado'))).toString();
-    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params);
+// modo: 'DETALLE' (una fila por ítem de cada documento) | 'DOCUMENTO' (una fila por documento).
+window.RCON_exportarExcel = function (modo) {
+    const params = new URLSearchParams(new FormData(document.getElementById('form-filtros-consolidado')));
+    params.set('excel_modo', modo === 'DOCUMENTO' ? 'DOCUMENTO' : 'DETALLE');
+    CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/exportExcel?' + params.toString());
 };
 
 window.RCON_exportarPDF = function () {

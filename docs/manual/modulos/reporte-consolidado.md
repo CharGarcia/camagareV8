@@ -1,12 +1,12 @@
 ---
 titulo: Reporte consolidado de transacciones
-resumen: Compras, ventas, retenciones, notas de crédito/débito y liquidaciones en un solo reporte, con Excel detallado por hoja.
+resumen: Compras, ventas, retenciones, notas de crédito/débito y liquidaciones en un solo reporte, con Excel detallado o agrupado por documento y hoja de resumen por tarifa de IVA.
 categoria: Reportes
 ruta_modulo: modulos/reporte_consolidado
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, notas de venta, rise, personalizar columnas, pdf con logo
-version: 1.4
+etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, notas de venta, rise, personalizar columnas, pdf con logo, excel por documento, excel agrupado, excel detallado, resumen por tarifa de iva, base imponible, cuantas facturas
+version: 1.5
 orden: 51
 estado: activo
 ---
@@ -106,7 +106,7 @@ título. Ahí deciden, **para toda la empresa**, qué columnas salen en la
 **pantalla** y en el **PDF** (Tipo, Fecha, Tercero, Identificación, Subtotal,
 IVA, Total, Estado; el Número siempre se muestra) y la orientación del PDF. Si
 la columna Identificación no se muestra en pantalla, la identificación aparece
-debajo del nombre del tercero. El Excel no cambia: es el detalle por hoja. Guía
+debajo del nombre del tercero. El Excel no cambia (ver *Exportar*). Guía
 general: *Personalizar reportes*.
 
 ## Exportar
@@ -116,9 +116,40 @@ general: *Personalizar reportes*.
   y total), indicadores de ventas, compras y neto, y el listado a nivel de
   cabecera (una fila por documento) con las columnas elegidas en Personalizar.
   Incluye todos los documentos del período (sin tope de filas).
-- **Excel**: un libro con **8 hojas**, una por tipo de documento, cada una con el
-  detalle línea por línea (producto, cantidad, impuestos, retenciones, etc.)
-  según lo que tenga esa fuente.
+- **Excel**: el botón Excel abre un menú con dos formas:
+  - **Detallado (ítem por ítem)**: una fila por cada producto o servicio de cada
+    documento (código, descripción, cantidad, precio, descuento, subtotal, IVA de
+    cada tarifa y total). En las retenciones, una fila por cada impuesto retenido.
+  - **Agrupado por documento**: una fila por documento, con la cantidad de
+    ítems, descuento, subtotal, IVA de cada tarifa y total. En las retenciones,
+    una fila por comprobante con la base y el valor retenido de renta, de IVA y
+    de otros impuestos (ISD) por separado.
+
+  En las dos formas hay una hoja por tipo de documento, pero **solo se crean las
+  hojas que tienen documentos** en el período. Al final va siempre la hoja
+  **Resumen**.
+
+## Hoja «Resumen» del Excel
+
+Es la última hoja del Excel (en las dos formas). Muestra una fila por tipo de
+documento — las compras separadas por tipo de comprobante (factura, nota de
+venta, etc.) y las notas de crédito y débito separadas en emitidas (venta) y
+recibidas (compra) — con:
+
+- cantidad de **documentos** e **ítems**;
+- **descuento** y **subtotal**;
+- la **base** de cada tarifa de IVA (0%, 12%, 15%, no objeto, exento…) y, en las
+  tarifas que cobran IVA, el **IVA** de esa tarifa;
+- **total IVA** y **total**.
+
+Debajo van las filas **TOTAL VENTAS** (facturas + recibos) y **TOTAL COMPRAS**
+(compras + liquidaciones) y, si hay retenciones, una sección con las de compra
+(practicadas a proveedores) y las de venta (recibidas de clientes): cantidad de
+comprobantes, líneas, base y valor retenido de renta e IVA, otras retenciones y
+total retenido.
+
+Si a algún documento le falta la tarifa de IVA en sus impuestos, aparece una
+columna *Subtotal sin tarifa de IVA* con la diferencia.
 
 ## Permisos
 
@@ -140,6 +171,7 @@ documentos de toda la empresa a quien tenga acceso al reporte.
 
 ## Historial de cambios
 
+- **1.5** — El Excel se puede bajar **Detallado (ítem por ítem)** o **Agrupado por documento**. Solo se crean las hojas que tienen documentos y se agrega al final la hoja **Resumen** (documentos, ítems, subtotal, base e IVA por tarifa y total por tipo de documento, totales de ventas y compras, y retenciones). Corregido: en el detalle de las notas de débito emitidas, el total de la línea no incluía el IVA.
 - **1.4** — Las **notas de venta** y demás comprobantes de compra (instituciones financieras, servicios básicos, reembolsos…) ahora se incluyen en Compras (antes solo las facturas). Se quitaron las casillas *Documentos a incluir*: siempre van todos los documentos del período. El reporte se consulta solo al pulsar **Mostrar** (antes «Buscar», y cargaba solo). Nuevo botón **Personalizar** para elegir columnas de pantalla y PDF. El PDF usa el diseño estándar con logo, filtros aplicados e indicadores. El Excel de Compras agrega la columna *Tipo Comprobante*.
 
 - **1.3** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).

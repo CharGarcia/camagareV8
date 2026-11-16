@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora
-version: 3.4
+etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver factura, ver documento, detalle de la factura
+version: 3.5
 orden: 10
 estado: activo
 ---
@@ -254,12 +254,18 @@ La pestaña *Transacciones* lista lo que se le ha vendido al cliente a partir de
 **facturas de venta**, **recibos de venta** y **notas de crédito**. Es de solo
 lectura.
 
-Tiene dos vistas:
+Tiene tres vistas:
 
 | Vista | Qué muestra |
 |-------|-------------|
-| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento, subtotal e IVA |
+| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, **Det. Adicional**, cantidad, precio unitario, descuento, subtotal e IVA |
 | Por producto | Una fila por producto o servicio (mismo código y descripción): veces vendido, cantidad total, último precio, fecha de la última venta y total |
+| Por documento | Una fila por factura, recibo o nota de crédito: fecha, tipo, número, cuántos ítems tiene, subtotal, IVA y total del documento. El ícono de comentario junto a los ítems indica que alguno trae detalle adicional |
+
+La columna **Det. Adicional** es el texto propio de cada ítem que se escribió en
+la factura o el recibo (por ejemplo una serie, un lote o una observación). Si es
+largo se recorta con «…»; al pasar el cursor se ve completo. Las notas de
+crédito no tienen detalle adicional por ítem.
 
 Las **notas de crédito** se ven en rojo y **restan** en cantidades y totales,
 porque son devoluciones o descuentos posteriores. No aparecen los documentos en
@@ -278,11 +284,29 @@ de la derecha (al lado se ve cuántas filas está viendo del total).
 La pestaña **solo aparece** si el cliente tiene documentos: a un cliente al que
 todavía no se le ha vendido nada no se le muestra esta pestaña.
 
+### Ver el detalle de un documento
+
+En la vista **Por documento** haga clic en la fila; en la vista **Detalle**, en
+el número del documento. Se abre una ventana de solo lectura, encima de la
+ficha, con:
+
+- los datos del documento: tipo, número, fecha de emisión, autorización (en
+  facturas y notas de crédito) y, en las notas de crédito, la factura que
+  modifican y el motivo;
+- todas sus líneas, cada una con su **Det. Adicional**, y los totales (subtotal
+  sin impuestos, descuento, IVA y total del documento);
+- la **Información adicional** del documento (los campos adicionales que se
+  agregaron al emitirlo);
+- el botón **PDF** del documento.
+
+La ventana respeta los mismos permisos que la pestaña: solo abre documentos que
+usted puede ver en Facturas, Recibos o Notas de Crédito de venta.
+
 ### Buscar en las transacciones
 
 El buscador de la pestaña encuentra por **palabras sueltas**, en cualquier orden
-y sin distinguir tildes ni mayúsculas, en el código, la descripción y el número y
-tipo de documento.
+y sin distinguir tildes ni mayúsculas, en el código, la descripción, el detalle
+adicional y el número y tipo de documento.
 
 También acepta filtros por campo con la sintaxis `clave:valor`:
 
@@ -296,6 +320,11 @@ También acepta filtros por campo con la sintaxis `clave:valor`:
 | `precio:` | `precio:>10` | Precio unitario |
 | `cantidad:` | `cantidad:1..5` | Cantidad |
 | `total:` (o `subtotal:`) | `total:>=100` | Subtotal de la línea |
+| `adicional:` | `adicional:serie` o `-adicional:serie` | Busca solo en el detalle adicional de los ítems; el `-` lo excluye |
+
+En la vista **Por documento** el buscador muestra los documentos que tienen
+alguna línea que coincide; los ítems, el subtotal y el IVA de la fila cuentan
+solo esas líneas, y el total es siempre el del documento completo.
 
 ## Estado de cuenta e historial de cobros
 
@@ -489,6 +518,7 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **3.5** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`). Igual que en la ficha de proveedores.
 - **3.4** — La pestaña **Estado de cuenta** del cliente carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
 - **3.3** — Nueva pestaña **Información** en la ventana del cliente (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **3.2** — Pestaña **General** del modal reordenada: identificación, vendedor y estado en la primera fila; razón social sola; correo y dirección; y provincia, ciudad, teléfono y plazo en la última fila.

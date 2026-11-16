@@ -235,13 +235,18 @@ class ReporteConsolidadoController extends BaseModuloController
         return array_map(fn($c) => (float) ($desglose[$c] ?? 0), $codigos);
     }
 
+    /**
+     * Excel del reporte. `excel_modo=DOCUMENTO` → una fila por documento en cada hoja; si no,
+     * una fila por ítem (detallado). Solo se crean las hojas que tienen documentos y al final
+     * va siempre la hoja «Resumen» (cantidad, bases e IVA por tarifa y totales por tipo).
+     */
     public function exportExcel(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $filtros   = $this->getFiltrosDesdeRequest();
         [$idsEmpresa, $consolidado] = $this->resolverAlcance($idEmpresa, $filtros);
-        $idEmpresa = $idsEmpresa; // alcance del reporte (una empresa o el grupo RUC)
+        $porDocumento = strtoupper((string) ($_REQUEST['excel_modo'] ?? '')) === 'DOCUMENTO';
 
         // Consolidado: cada hoja lleva primero la columna "Estab." con el establecimiento
         // dueño de la línea; sin consolidado, ambas piezas quedan vacías y nada cambia.
@@ -249,116 +254,462 @@ class ReporteConsolidadoController extends BaseModuloController
         $est  = fn (array $r): array => $consolidado ? [(string) ($r['establecimiento'] ?? '')] : [];
 
         try {
-            $empresa       = (new \App\models\Empresa())->getPorId((int) $_SESSION['id_empresa']);
+            $empresa       = (new \App\models\Empresa())->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
             if ($consolidado) {
                 $nombreEmpresa .= ' — ' . $this->describirAlcance($idsEmpresa, true);
             }
 
+            $datos = $this->datosExcel($idsEmpresa, $filtros);
+            $hojas = $porDocumento ? $this->hojasPorDocumento($datos, $hEst, $est) : $this->hojasDetalle($datos, $hEst, $est);
+            $hojas = array_values(array_filter($hojas, static fn (array $h): bool => !empty($h['filas'])));
+            $hojas[] = $this->hojaResumen($datos);
+
             $reportService = new \App\Services\ReportService();
+            $spreadsheet   = null;
+            foreach ($hojas as $h) {
+                if ($spreadsheet === null) {
+                    $spreadsheet = $reportService->construirSpreadsheet($h['cab'], $h['filas'], $h['titulo'], $nombreEmpresa);
+                } else {
+                    $reportService->agregarHoja($spreadsheet, $h['cab'], $h['filas'], $h['titulo']);
+                }
+            }
+            $this->resaltarResumen($spreadsheet);
 
-            $compras     = $this->repository->getDetalleCompras($idEmpresa, $filtros);
-            $codigosIva  = $this->codigosIvaPresentes($compras);
-            $spreadsheet = $reportService->construirSpreadsheet(
-                array_merge($hEst, ['Fecha', 'Tipo Comprobante', 'N° Documento', 'N° Autorización', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    date('d/m/Y', strtotime($r['fecha'])), $r['tipo_comprobante_nombre'] ?? '', $r['numero_documento'], $r['numero_autorizacion'] ?? '',
-                    $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
-                    (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
-                ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $compras),
-                'Compras', $nombreEmpresa
-            );
-
-            $retCompra = $this->repository->getDetalleRetencionesCompra($idEmpresa, $filtros);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Proveedor', 'RUC/Cédula', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['clave_acceso'] ?? '',
-                    $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '',
-                    $r['codigo_impuesto'] ?? '', $r['codigo_retencion'] ?? '', $r['concepto'] ?? '',
-                    (float) $r['base_imponible'], (float) $r['porcentaje'], (float) $r['valor_retenido'],
-                    (float) $r['total_retenido'], $r['estado'] ?? '',
-                ]), $retCompra),
-                'Retenciones Compra'
-            );
-
-            $facturas   = $this->repository->getDetalleFacturasVenta($idEmpresa, $filtros);
-            $codigosIva = $this->codigosIvaPresentes($facturas);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['clave_acceso'] ?? '',
-                    $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
-                    (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
-                ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $facturas),
-                'Facturas Venta'
-            );
-
-            $recibos    = $this->repository->getDetalleRecibosVenta($idEmpresa, $filtros);
-            $codigosIva = $this->codigosIvaPresentes($recibos);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Fecha', 'N° Documento', 'Con Impuestos', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], !empty($r['con_impuestos']) ? 'Sí' : 'No',
-                    $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
-                    (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
-                ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $recibos),
-                'Recibos Venta'
-            );
-
-            $retVenta = $this->repository->getDetalleRetencionesVenta($idEmpresa, $filtros);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Origen']),
-                array_map(fn($r) => array_merge($est($r), [
-                    date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['clave_acceso'] ?? '',
-                    $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '',
-                    $r['codigo_impuesto'] ?? '', $r['codigo_retencion'] ?? '', $r['concepto'] ?? '',
-                    (float) $r['base_imponible'], (float) $r['porcentaje'], (float) $r['valor_retenido'],
-                    (float) $r['total_comprobante'], $r['origen'] ?? '',
-                ]), $retVenta),
-                'Retenciones Venta'
-            );
-
-            $notasCredito = $this->repository->getDetalleNotasCredito($idEmpresa, $filtros);
-            $codigosIva   = $this->codigosIvaPresentes($notasCredito);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Motivo', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    $r['origen'] ?? '', date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'],
-                    $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '', $r['doc_modificado'] ?? '', $r['motivo'] ?? '',
-                    $r['codigo'] ?? '', $r['descripcion'] ?? '', (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['subtotal_linea'],
-                ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $notasCredito),
-                'Notas de Credito'
-            );
-
-            $notasDebito = $this->repository->getDetalleNotasDebito($idEmpresa, $filtros);
-            $codigosIva  = $this->codigosIvaPresentes($notasDebito);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Descripción', 'Cantidad', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    $r['origen'] ?? '', date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'],
-                    $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '', $r['doc_modificado'] ?? '',
-                    $r['descripcion'] ?? '', $r['cantidad'] !== null ? (float) $r['cantidad'] : '', (float) $r['subtotal_linea'],
-                ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $notasDebito),
-                'Notas de Debito'
-            );
-
-            $liquidaciones = $this->repository->getDetalleLiquidaciones($idEmpresa, $filtros);
-            $codigosIva    = $this->codigosIvaPresentes($liquidaciones);
-            $reportService->agregarHoja($spreadsheet,
-                array_merge($hEst, ['Fecha', 'N° Documento', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($codigosIva), ['Total', 'Estado']),
-                array_map(fn($r) => array_merge($est($r), [
-                    date('d/m/Y', strtotime($r['fecha'])), $r['numero_documento'], $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '',
-                    $r['codigo'] ?? '', $r['descripcion'] ?? '', (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
-                ], $this->valoresIva($r, $codigosIva), [(float) $r['total_linea'], $r['estado'] ?? '']), $liquidaciones),
-                'Liquidaciones'
-            );
-
-            $reportService->descargarSpreadsheet($spreadsheet, 'ReporteConsolidado');
+            $reportService->descargarSpreadsheet($spreadsheet, $porDocumento ? 'ReporteConsolidado_PorDocumento' : 'ReporteConsolidado');
             exit;
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo 'Error al generar Excel: ' . $e->getMessage();
         }
+    }
+
+    /** Detalle línea por línea de las 8 fuentes (las retenciones ya separadas por impuesto). */
+    private function datosExcel(array $idsEmpresa, array $filtros): array
+    {
+        $r = $this->repository;
+        return [
+            'compras'       => $r->getDetalleCompras($idsEmpresa, $filtros),
+            'ret_compra'    => $this->separarRetencion($r->getDetalleRetencionesCompra($idsEmpresa, $filtros)),
+            'facturas'      => $r->getDetalleFacturasVenta($idsEmpresa, $filtros),
+            'recibos'       => $r->getDetalleRecibosVenta($idsEmpresa, $filtros),
+            'ret_venta'     => $this->separarRetencion($r->getDetalleRetencionesVenta($idsEmpresa, $filtros)),
+            'nc'            => $r->getDetalleNotasCredito($idsEmpresa, $filtros),
+            'nd'            => $r->getDetalleNotasDebito($idsEmpresa, $filtros),
+            'liquidaciones' => $r->getDetalleLiquidaciones($idsEmpresa, $filtros),
+        ];
+    }
+
+    /** Hojas del Excel detallado: una fila por ítem (o por impuesto, en las retenciones). */
+    private function hojasDetalle(array $d, array $hEst, callable $est): array
+    {
+        $fecha = static fn (array $r): string => date('d/m/Y', strtotime((string) $r['fecha']));
+        $hojas = [];
+
+        $iva = $this->codigosIvaPresentes($d['compras']);
+        $hojas[] = ['titulo' => 'Compras',
+            'cab' => array_merge($hEst, ['Fecha', 'Tipo Comprobante', 'N° Documento', 'N° Autorización', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['tipo_comprobante_nombre'] ?? '', $r['numero_documento'], $r['numero_autorizacion'] ?? '',
+                $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
+                (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [(float) $r['total_linea'], $r['estado'] ?? '']), $d['compras'])];
+
+        $hojas[] = ['titulo' => 'Retenciones Compra',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Proveedor', 'RUC/Cédula', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['clave_acceso'] ?? '',
+                $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '',
+                $r['codigo_impuesto'] ?? '', $r['codigo_retencion'] ?? '', $r['concepto'] ?? '',
+                (float) $r['base_imponible'], (float) $r['porcentaje'], (float) $r['valor_retenido'],
+                (float) $r['total_retenido'], $r['estado'] ?? '',
+            ]), $d['ret_compra'])];
+
+        $iva = $this->codigosIvaPresentes($d['facturas']);
+        $hojas[] = ['titulo' => 'Facturas Venta',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['clave_acceso'] ?? '',
+                $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
+                (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [(float) $r['total_linea'], $r['estado'] ?? '']), $d['facturas'])];
+
+        $iva = $this->codigosIvaPresentes($d['recibos']);
+        $hojas[] = ['titulo' => 'Recibos Venta',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Con Impuestos', 'Cliente', 'Identificación', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], !empty($r['con_impuestos']) ? 'Sí' : 'No',
+                $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['codigo'] ?? '', $r['descripcion'] ?? '',
+                (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [(float) $r['total_linea'], $r['estado'] ?? '']), $d['recibos'])];
+
+        $hojas[] = ['titulo' => 'Retenciones Venta',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Impuesto', 'Cod. Retención', 'Concepto', 'Base Imponible', '%', 'Valor Retenido', 'Total Comprobante', 'Origen']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['clave_acceso'] ?? '',
+                $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '', $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '',
+                $r['codigo_impuesto'] ?? '', $r['codigo_retencion'] ?? '', $r['concepto'] ?? '',
+                (float) $r['base_imponible'], (float) $r['porcentaje'], (float) $r['valor_retenido'],
+                (float) $r['total_comprobante'], $r['origen'] ?? '',
+            ]), $d['ret_venta'])];
+
+        $iva = $this->codigosIvaPresentes($d['nc']);
+        $hojas[] = ['titulo' => 'Notas de Credito',
+            'cab' => array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Motivo', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $r['origen'] ?? '', $fecha($r), $r['numero_documento'],
+                $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '', $r['doc_modificado'] ?? '', $r['motivo'] ?? '',
+                $r['codigo'] ?? '', $r['descripcion'] ?? '', (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [(float) $r['total_linea'], $r['estado'] ?? '']), $d['nc'])];
+
+        $iva = $this->codigosIvaPresentes($d['nd']);
+        $hojas[] = ['titulo' => 'Notas de Debito',
+            'cab' => array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Descripción', 'Cantidad', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $r['origen'] ?? '', $fecha($r), $r['numero_documento'],
+                $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '', $r['doc_modificado'] ?? '',
+                $r['descripcion'] ?? '', $r['cantidad'] !== null ? (float) $r['cantidad'] : '', (float) $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [(float) $r['total_linea'], $r['estado'] ?? '']), $d['nd'])];
+
+        $iva = $this->codigosIvaPresentes($d['liquidaciones']);
+        $hojas[] = ['titulo' => 'Liquidaciones',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Proveedor', 'RUC/Cédula', 'Código', 'Descripción', 'Cantidad', 'Precio Unit.', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '',
+                $r['codigo'] ?? '', $r['descripcion'] ?? '', (float) $r['cantidad'], (float) $r['precio_unitario'], (float) $r['descuento'], (float) $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [(float) $r['total_linea'], $r['estado'] ?? '']), $d['liquidaciones'])];
+
+        return $hojas;
+    }
+
+    /** Campos que se suman al agrupar las líneas de cada fuente en documentos. */
+    private const SUMAR = [
+        'compras'       => ['subtotal_linea', 'total_linea', 'descuento'],
+        'facturas'      => ['subtotal_linea', 'total_linea', 'descuento'],
+        'recibos'       => ['subtotal_linea', 'total_linea', 'descuento'],
+        'liquidaciones' => ['subtotal_linea', 'total_linea', 'descuento'],
+        'nc'            => ['subtotal_linea', 'total_linea'],
+        'nd'            => ['subtotal_linea', 'total_linea'],
+        'ret_compra'    => ['base_renta', 'ret_renta', 'base_iva', 'ret_iva', 'ret_otros'],
+        'ret_venta'     => ['base_renta', 'ret_renta', 'base_iva', 'ret_iva', 'ret_otros'],
+    ];
+
+    /** Las 8 fuentes agrupadas por documento (una fila por documento). */
+    private function agruparTodo(array $d): array
+    {
+        $out = [];
+        foreach (self::SUMAR as $clave => $sumar) {
+            $out[$clave] = $this->agruparPorDocumento($d[$clave], $sumar);
+        }
+        return $out;
+    }
+
+    /** Hojas del Excel «por documento»: una fila por documento, sin el detalle por ítem. */
+    private function hojasPorDocumento(array $d, array $hEst, callable $est): array
+    {
+        $g     = $this->agruparTodo($d);
+        $fecha = static fn (array $r): string => date('d/m/Y', strtotime((string) $r['fecha']));
+        $retHead = ['Base Renta', 'Ret. Renta', 'Base IVA', 'Ret. IVA', 'Otras Ret. (ISD)'];
+        $retVals = static fn (array $r): array => [$r['base_renta'], $r['ret_renta'], $r['base_iva'], $r['ret_iva'], $r['ret_otros']];
+        $hojas   = [];
+
+        $iva = $this->codigosIvaPresentes($g['compras']);
+        $hojas[] = ['titulo' => 'Compras',
+            'cab' => array_merge($hEst, ['Fecha', 'Tipo Comprobante', 'N° Documento', 'N° Autorización', 'Proveedor', 'RUC/Cédula', 'Ítems', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['tipo_comprobante_nombre'] ?? '', $r['numero_documento'], $r['numero_autorizacion'] ?? '',
+                $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '', (int) $r['n_items'], $r['descuento'], $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [$r['total_linea'], $r['estado'] ?? '']), $g['compras'])];
+
+        $hojas[] = ['titulo' => 'Retenciones Compra',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Proveedor', 'RUC/Cédula', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Líneas'], $retHead, ['Total Retenido', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['clave_acceso'] ?? '', $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '',
+                $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '', (int) $r['n_items'],
+            ], $retVals($r), [(float) $r['total_retenido'], $r['estado'] ?? '']), $g['ret_compra'])];
+
+        $iva = $this->codigosIvaPresentes($g['facturas']);
+        $hojas[] = ['titulo' => 'Facturas Venta',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Ítems', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['clave_acceso'] ?? '', $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '',
+                (int) $r['n_items'], $r['descuento'], $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [$r['total_linea'], $r['estado'] ?? '']), $g['facturas'])];
+
+        $iva = $this->codigosIvaPresentes($g['recibos']);
+        $hojas[] = ['titulo' => 'Recibos Venta',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Con Impuestos', 'Cliente', 'Identificación', 'Ítems', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], !empty($r['con_impuestos']) ? 'Sí' : 'No', $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '',
+                (int) $r['n_items'], $r['descuento'], $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [$r['total_linea'], $r['estado'] ?? '']), $g['recibos'])];
+
+        $hojas[] = ['titulo' => 'Retenciones Venta',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Clave Acceso', 'Cliente', 'Identificación', 'Cod. Doc. Sustento', 'N° Doc. Sustento', 'Líneas'], $retHead, ['Total Comprobante', 'Origen']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['clave_acceso'] ?? '', $r['cliente_nombre'] ?? '', $r['cliente_ident'] ?? '',
+                $r['cod_doc_sustento'] ?? '', $r['num_doc_sustento'] ?? '', (int) $r['n_items'],
+            ], $retVals($r), [(float) $r['total_comprobante'], $r['origen'] ?? '']), $g['ret_venta'])];
+
+        $iva = $this->codigosIvaPresentes($g['nc']);
+        $hojas[] = ['titulo' => 'Notas de Credito',
+            'cab' => array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Motivo', 'Ítems', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $r['origen'] ?? '', $fecha($r), $r['numero_documento'], $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '',
+                $r['doc_modificado'] ?? '', $r['motivo'] ?? '', (int) $r['n_items'], $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [$r['total_linea'], $r['estado'] ?? '']), $g['nc'])];
+
+        $iva = $this->codigosIvaPresentes($g['nd']);
+        $hojas[] = ['titulo' => 'Notas de Debito',
+            'cab' => array_merge($hEst, ['Origen', 'Fecha', 'N° Documento', 'Tercero', 'Identificación', 'Doc. Modificado', 'Ítems', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $r['origen'] ?? '', $fecha($r), $r['numero_documento'], $r['tercero_nombre'] ?? '', $r['tercero_ident'] ?? '',
+                $r['doc_modificado'] ?? '', (int) $r['n_items'], $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [$r['total_linea'], $r['estado'] ?? '']), $g['nd'])];
+
+        $iva = $this->codigosIvaPresentes($g['liquidaciones']);
+        $hojas[] = ['titulo' => 'Liquidaciones',
+            'cab' => array_merge($hEst, ['Fecha', 'N° Documento', 'Proveedor', 'RUC/Cédula', 'Ítems', 'Descuento', 'Subtotal'], $this->headersIva($iva), ['Total', 'Estado']),
+            'filas' => array_map(fn ($r) => array_merge($est($r), [
+                $fecha($r), $r['numero_documento'], $r['proveedor_nombre'] ?? '', $r['proveedor_ruc'] ?? '',
+                (int) $r['n_items'], $r['descuento'], $r['subtotal_linea'],
+            ], $this->valoresIva($r, $iva), [$r['total_linea'], $r['estado'] ?? '']), $g['liquidaciones'])];
+
+        return $hojas;
+    }
+
+    /** Rótulos de la hoja Resumen que van resaltados (totales y cabecera de retenciones). */
+    private const RESUMEN_TOTAL_PREFIJO = 'TOTAL ';
+    private const RESUMEN_CAB_RETENCIONES = 'Retenciones';
+
+    /**
+     * Hoja «Resumen»: por cada tipo de documento (y subtipo: compras por tipo de comprobante,
+     * NC/ND emitidas y recibidas) cuántos documentos e ítems hay, descuento, subtotal, base e
+     * IVA de cada tarifa, total IVA y total; luego los totales de ventas y compras, y debajo
+     * las retenciones (renta, IVA y otras) de compra y de venta.
+     */
+    private function hojaResumen(array $d): array
+    {
+        $g = $this->agruparTodo($d);
+
+        // Conjuntos de documentos, en el orden en que se muestran.
+        $conjuntos = [];
+        $porTipo   = [];
+        foreach ($g['compras'] as $r) {
+            $porTipo[(string) ($r['tipo_comprobante_nombre'] ?? 'Compra')][] = $r;
+        }
+        foreach ($porTipo as $tipo => $docs) {
+            $conjuntos['Compras: ' . $tipo] = ['docs' => $docs, 'grupo' => 'compras'];
+        }
+        $conjuntos['Liquidaciones de Compra']        = ['docs' => $g['liquidaciones'], 'grupo' => 'compras'];
+        $conjuntos['Facturas de Venta']              = ['docs' => $g['facturas'], 'grupo' => 'ventas'];
+        $conjuntos['Recibos de Venta']               = ['docs' => $g['recibos'], 'grupo' => 'ventas'];
+        $origen = static fn (array $docs, string $o): array => array_values(array_filter($docs, static fn ($r) => ($r['origen'] ?? '') === $o));
+        $conjuntos['Notas de Crédito emitidas (venta)']  = ['docs' => $origen($g['nc'], 'VENTA'), 'grupo' => null];
+        $conjuntos['Notas de Crédito recibidas (compra)'] = ['docs' => $origen($g['nc'], 'COMPRA'), 'grupo' => null];
+        $conjuntos['Notas de Débito emitidas (venta)']    = ['docs' => $origen($g['nd'], 'VENTA'), 'grupo' => null];
+        $conjuntos['Notas de Débito recibidas (compra)']  = ['docs' => $origen($g['nd'], 'COMPRA'), 'grupo' => null];
+        $conjuntos = array_filter($conjuntos, static fn ($c) => !empty($c['docs']));
+
+        // Totales de cada conjunto.
+        $filas = [];
+        foreach ($conjuntos as $nombre => $c) {
+            $t = ['nombre' => $nombre, 'grupo' => $c['grupo'], 'docs' => count($c['docs']), 'items' => 0,
+                  'descuento' => 0.0, 'subtotal' => 0.0, 'total' => 0.0, 'base' => [], 'iva' => []];
+            foreach ($c['docs'] as $r) {
+                $t['items']     += (int) $r['n_items'];
+                $t['descuento'] += (float) ($r['descuento'] ?? 0);
+                $t['subtotal']  += (float) $r['subtotal_linea'];
+                $t['total']     += (float) $r['total_linea'];
+                foreach (['base' => 'base_desglose', 'iva' => 'iva_desglose'] as $k => $campo) {
+                    foreach (json_decode($r[$campo] ?? '{}', true) ?: [] as $cod => $v) {
+                        $t[$k][(string) $cod] = ($t[$k][(string) $cod] ?? 0) + (float) $v;
+                    }
+                }
+            }
+            $filas[] = $t;
+        }
+
+        // Tarifas presentes y columnas: Base de cada tarifa y, si alguna tiene IVA, su IVA al lado.
+        $codigos = [];
+        $ivaCod  = [];
+        foreach ($filas as $t) {
+            foreach (array_keys($t['base'] + $t['iva']) as $cod) {
+                $codigos[$cod] = true;
+                $ivaCod[$cod]  = ($ivaCod[$cod] ?? 0) + abs($t['iva'][$cod] ?? 0);
+            }
+        }
+        $codigos = array_keys($codigos);
+        sort($codigos, SORT_NUMERIC);
+        $etq    = $this->repository->getEtiquetasIva();
+        $sinTarifa = static fn (array $t): float => round($t['subtotal'] - array_sum($t['base']), 2);
+        $conSinTarifa = (bool) array_filter($filas, static fn ($t) => abs($sinTarifa($t)) >= 0.01);
+
+        $cab = ['Tipo de documento', 'Documentos', 'Ítems', 'Descuento', 'Subtotal'];
+        foreach ($codigos as $cod) {
+            $nom   = $etq[$cod] ?? "cód. $cod";
+            $cab[] = 'Base ' . $nom;
+            if ($ivaCod[$cod] >= 0.005) {
+                $cab[] = 'IVA ' . $nom;
+            }
+        }
+        if ($conSinTarifa) {
+            $cab[] = 'Subtotal sin tarifa de IVA';
+        }
+        $cab[] = 'Total IVA';
+        $cab[] = 'Total';
+
+        $fila = function (array $t) use ($codigos, $ivaCod, $conSinTarifa, $sinTarifa): array {
+            $f = [$t['nombre'], $t['docs'], $t['items'], round($t['descuento'], 2), round($t['subtotal'], 2)];
+            foreach ($codigos as $cod) {
+                $f[] = round($t['base'][$cod] ?? 0, 2);
+                if ($ivaCod[$cod] >= 0.005) {
+                    $f[] = round($t['iva'][$cod] ?? 0, 2);
+                }
+            }
+            if ($conSinTarifa) {
+                $f[] = $sinTarifa($t);
+            }
+            $f[] = round(array_sum($t['iva']), 2);
+            $f[] = round($t['total'], 2);
+            return $f;
+        };
+
+        $datos = array_map($fila, $filas);
+        if (!$datos) {
+            $datos[] = ['Sin documentos en el período'];
+        }
+
+        // Totales de ventas (facturas + recibos) y de compras (compras + liquidaciones).
+        foreach (['ventas' => 'TOTAL VENTAS (Facturas + Recibos)', 'compras' => 'TOTAL COMPRAS (Compras + Liquidaciones)'] as $grupo => $rotulo) {
+            $del = array_filter($filas, static fn ($t) => $t['grupo'] === $grupo);
+            if (!$del) {
+                continue;
+            }
+            $suma = ['nombre' => $rotulo, 'docs' => 0, 'items' => 0, 'descuento' => 0.0, 'subtotal' => 0.0, 'total' => 0.0, 'base' => [], 'iva' => []];
+            foreach ($del as $t) {
+                foreach (['docs', 'items', 'descuento', 'subtotal', 'total'] as $k) {
+                    $suma[$k] += $t[$k];
+                }
+                foreach (['base', 'iva'] as $k) {
+                    foreach ($t[$k] as $cod => $v) {
+                        $suma[$k][$cod] = ($suma[$k][$cod] ?? 0) + $v;
+                    }
+                }
+            }
+            $datos[] = $fila($suma);
+        }
+
+        // Retenciones de compra y de venta.
+        $ret = [];
+        foreach (['ret_compra' => 'Retenciones de Compra (practicadas a proveedores)', 'ret_venta' => 'Retenciones de Venta (recibidas de clientes)'] as $clave => $rotulo) {
+            if (!$g[$clave]) {
+                continue;
+            }
+            $s = ['base_renta' => 0.0, 'ret_renta' => 0.0, 'base_iva' => 0.0, 'ret_iva' => 0.0, 'ret_otros' => 0.0, 'lineas' => 0];
+            foreach ($g[$clave] as $r) {
+                $s['lineas'] += (int) $r['n_items'];
+                foreach (['base_renta', 'ret_renta', 'base_iva', 'ret_iva', 'ret_otros'] as $k) {
+                    $s[$k] += (float) $r[$k];
+                }
+            }
+            $ret[] = [$rotulo, count($g[$clave]), $s['lineas'], round($s['base_renta'], 2), round($s['ret_renta'], 2),
+                      round($s['base_iva'], 2), round($s['ret_iva'], 2), round($s['ret_otros'], 2),
+                      round($s['ret_renta'] + $s['ret_iva'] + $s['ret_otros'], 2)];
+        }
+        if ($ret) {
+            $datos[] = [];
+            $datos[] = [self::RESUMEN_CAB_RETENCIONES, 'Comprobantes', 'Líneas', 'Base Renta', 'Ret. Renta', 'Base IVA', 'Ret. IVA', 'Otras Ret. (ISD)', 'Total Retenido'];
+            array_push($datos, ...$ret);
+        }
+
+        return ['titulo' => 'Resumen', 'cab' => $cab, 'filas' => $datos];
+    }
+
+    /** Negrita en las filas de totales y en la cabecera de retenciones de la hoja Resumen. */
+    private function resaltarResumen(\PhpOffice\PhpSpreadsheet\Spreadsheet $spreadsheet): void
+    {
+        $sheet = $spreadsheet->getSheetByName('Resumen');
+        if ($sheet === null) {
+            return;
+        }
+        $ultimaCol = $sheet->getHighestColumn();
+        foreach ($sheet->getRowIterator() as $row) {
+            $n   = $row->getRowIndex();
+            $val = (string) $sheet->getCell('A' . $n)->getValue();
+            if (str_starts_with($val, self::RESUMEN_TOTAL_PREFIJO)) {
+                $sheet->getStyle("A{$n}:{$ultimaCol}{$n}")->getFont()->setBold(true);
+                $sheet->getStyle("A{$n}:{$ultimaCol}{$n}")->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('E9ECEF');
+            } elseif ($val === self::RESUMEN_CAB_RETENCIONES) {
+                $sheet->getStyle("A{$n}:I{$n}")->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+                $sheet->getStyle("A{$n}:I{$n}")->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)->getStartColor()->setRGB('4472C4');
+            }
+        }
+        $sheet->getColumnDimension('A')->setAutoSize(true);
+    }
+
+    /**
+     * Junta las líneas de detalle de cada documento en una sola fila: los campos de texto se
+     * toman de la primera línea, los de `$sumar` se suman, los desgloses de IVA y de base se
+     * suman por tarifa y `n_items` cuenta las líneas. La clave es origen + id de la cabecera
+     * (las hojas de NC/ND juntan venta y compra, cuyos ids pueden repetirse). Conserva el orden.
+     */
+    private function agruparPorDocumento(array $rows, array $sumar): array
+    {
+        $json = ['iva_desglose', 'base_desglose'];
+        $out  = [];
+        foreach ($rows as $r) {
+            $k = ($r['origen'] ?? '') . '|' . ($r['id_documento'] ?? '');
+            if (!isset($out[$k])) {
+                $base = $r;
+                $base['n_items'] = 0;
+                foreach ($sumar as $c) {
+                    $base[$c] = 0.0;
+                }
+                foreach ($json as $c) {
+                    $base['__' . $c] = [];
+                }
+                $out[$k] = $base;
+            }
+            $out[$k]['n_items']++;
+            foreach ($sumar as $c) {
+                $out[$k][$c] += (float) ($r[$c] ?? 0);
+            }
+            foreach ($json as $c) {
+                foreach (json_decode($r[$c] ?? '{}', true) ?: [] as $cod => $v) {
+                    $out[$k]['__' . $c][(string) $cod] = ($out[$k]['__' . $c][(string) $cod] ?? 0) + (float) $v;
+                }
+            }
+        }
+        foreach ($out as &$doc) {
+            foreach ($json as $c) {
+                $doc[$c] = json_encode($doc['__' . $c], JSON_FORCE_OBJECT);
+                unset($doc['__' . $c]);
+            }
+            foreach ($sumar as $c) {
+                $doc[$c] = round($doc[$c], 2);
+            }
+        }
+        unset($doc);
+        return array_values($out);
+    }
+
+    /**
+     * Reparte el valor de cada línea de retención por impuesto (renta / IVA / otras, p. ej.
+     * ISD) para sumarlas por comprobante. El código viene como '1'/'2' o 'RENTA'/'IVA'.
+     */
+    private function separarRetencion(array $rows): array
+    {
+        foreach ($rows as &$r) {
+            $imp  = strtoupper(trim((string) ($r['codigo_impuesto'] ?? '')));
+            $tipo = in_array($imp, ['1', 'RENTA'], true) ? 'renta' : (in_array($imp, ['2', 'IVA'], true) ? 'iva' : 'otros');
+            foreach (['renta', 'iva', 'otros'] as $t) {
+                $r["base_{$t}"] = $t === $tipo ? (float) $r['base_imponible'] : 0.0;
+                $r["ret_{$t}"]  = $t === $tipo ? (float) $r['valor_retenido'] : 0.0;
+            }
+        }
+        unset($r);
+        return $rows;
     }
 
     public function exportPdf(): void

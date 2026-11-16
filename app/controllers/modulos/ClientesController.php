@@ -692,7 +692,7 @@ class ClientesController extends BaseModuloController
         }
 
         try {
-            $vista   = ($_GET['vista'] ?? '') === 'producto' ? 'producto' : 'detalle';
+            $vista   = in_array($_GET['vista'] ?? '', ['producto', 'documento'], true) ? $_GET['vista'] : 'detalle';
             $page    = max(1, (int) ($_GET['page'] ?? 1));
             $perPage = 20;
 
@@ -719,6 +719,46 @@ class ClientesController extends BaseModuloController
                 'per_page'    => $perPage,
                 'total_pages' => max(1, (int) ceil($res['total'] / $perPage)),
             ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Pestaña "Transacciones", clic en un documento: cabecera, líneas con su detalle
+     * adicional e información adicional de la factura, recibo o nota de crédito. Mismas
+     * reglas que la pestaña: el origen exige permiso en su módulo y, sin acceso total, que
+     * el documento sea propio; si no es del cliente o no se puede ver, "no encontrado".
+     */
+    public function documentoTransaccionAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $origen  = (string) ($_GET['origen'] ?? '');
+        $fuentes = $this->fuentesTransacciones();
+        if (!isset(self::RUTAS_TRANSACCIONES[$origen]) || !array_key_exists($origen, $fuentes)) {
+            http_response_code(403);
+            echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver este documento.']);
+            exit;
+        }
+
+        try {
+            $doc = $this->service->getDocumentoTransaccion(
+                (int) ($_GET['id'] ?? 0),
+                (int) $_SESSION['id_empresa'],
+                $fuentes,
+                $origen,
+                (int) ($_GET['doc'] ?? 0)
+            );
+            if ($doc === null) {
+                http_response_code(404);
+                echo json_encode(['ok' => false, 'error' => 'El documento no existe o no tiene acceso a él.']);
+                exit;
+            }
+            echo json_encode(['ok' => true] + $doc);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

@@ -1563,6 +1563,16 @@
                     ultimaFecha: 'Última venta',
                     vacio: 'Todavía no hay facturas, recibos ni notas de crédito de este cliente.',
                 },
+                // Vista «Por documento», columna «Det. Adicional» y detalle del documento con un clic
+                documento: {
+                    origenes: { FACTURA: 'Factura de venta', RECIBO: 'Recibo de venta', NOTA_CREDITO: 'Nota de crédito' },
+                    urlPdf: (origen, id) => {
+                        const i = encodeURIComponent(id);
+                        if (origen === 'NOTA_CREDITO') return `${baseApp}/modulos/notas_credito/exportPdfDoc?id=${i}`;
+                        if (origen === 'RECIBO') return `${baseApp}/modulos/recibo-venta/exportarPdfAjax?id=${i}`;
+                        return `${baseApp}/modulos/factura-venta/exportarPdfAjax?id=${i}`;
+                    },
+                },
             },
             estadoCuenta: {
                 panel: 'cli-pane-estado-cuenta',

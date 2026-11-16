@@ -365,6 +365,19 @@ class ClienteService
     }
 
     /**
+     * Pestaña "Transacciones", clic en un documento: cabecera, líneas (con su detalle
+     * adicional) e información adicional de una factura, recibo o nota de crédito del
+     * cliente. Null si no es suyo o el usuario no puede verlo (mismas reglas que la pestaña).
+     */
+    public function getDocumentoTransaccion(int $idCliente, int $idEmpresa, array $fuentes, string $origen, int $idDocumento): ?array
+    {
+        $this->exigirCliente($idCliente, $idEmpresa);
+        return $this->repository->getDocumentoTransaccion(
+            $this->fichasDelCliente($idCliente, $idEmpresa), $idEmpresa, $fuentes, $origen, $idDocumento
+        );
+    }
+
+    /**
      * Pestaña "Estado de cuenta": el kardex del Reporte de Cartera resumido para la
      * ficha, con una sola fila por ingreso (ver EstadoCuentaTerceroService).
      */

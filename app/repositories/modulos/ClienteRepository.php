@@ -921,6 +921,11 @@ class ClienteRepository extends BaseRepository
         $excluidos = "'" . implode("','", $estadosExcluidos) . "'";
         // Todas las fichas del mismo cliente (cédula y RUC), igual que el resumen comercial.
         $inCli     = $this->sqlInTercero((array) $idCliente);
+        // Detalle adicional de la línea. notas_credito_detalle todavía no tiene la columna:
+        // sale vacío ('' y no NULL, para que "-adicional:x" del buscador no descarte la línea).
+        $adicional = $this->detalleVentaTieneAdicional($detalle)
+            ? "COALESCE(BTRIM(d.info_adicional), '')::text"
+            : "''::text";
 
         $sql = "SELECT '{$origen}'::text AS origen, c.id AS id_documento, d.id AS id_linea,
                        c.fecha_emision::date AS fecha,
@@ -932,7 +937,9 @@ class ClienteRepository extends BaseRepository
                        d.precio_total_sin_impuesto AS subtotal,
                        COALESCE(imp.iva, 0) AS iva,
                        COALESCE(imp.tarifa, 0) AS tarifa_iva,
-                       {$signo} AS signo
+                       {$signo} AS signo,
+                       {$adicional} AS info_adicional,
+                       COALESCE(c.importe_total, 0) AS total_documento
                 FROM {$detalle} d
                 INNER JOIN {$cabecera} c ON c.id = d.{$fk}
                 LEFT JOIN LATERAL (
@@ -955,6 +962,85 @@ class ClienteRepository extends BaseRepository
         }
 
         return $sql;
+    }
+
+    /** Las ramas exponen info_adicional y total_documento (vista "Por documento" de LineasDocumentoTrait). */
+    protected function lineasDocumentoConExtras(): bool
+    {
+        return true;
+    }
+
+    /** @var array<string,bool> tabla de detalle => ¿tiene info_adicional? (una consulta por petición) */
+    private array $detalleConAdicional = [];
+
+    private function detalleVentaTieneAdicional(string $tabla): bool
+    {
+        if (!array_key_exists($tabla, $this->detalleConAdicional)) {
+            try {
+                $st = $this->db->prepare("SELECT 1 FROM information_schema.columns
+                                          WHERE table_name = :t AND column_name = 'info_adicional'");
+                $st->execute([':t' => $tabla]);
+                $this->detalleConAdicional[$tabla] = $st->fetchColumn() !== false;
+            } catch (\Throwable $e) {
+                $this->detalleConAdicional[$tabla] = false;
+            }
+        }
+        return $this->detalleConAdicional[$tabla];
+    }
+
+    /**
+     * Un documento de la pestaña Transacciones (se abre con un clic): cabecera, líneas e
+     * información adicional de una factura, recibo o nota de crédito del cliente. Las
+     * líneas salen de la MISMA unión que la pestaña, así que si el documento no es de este
+     * cliente, no está vigente o el usuario no puede verlo (permiso o registros propios),
+     * devuelve null.
+     *
+     * @param array<string,?int> $fuentes Igual que en getTransacciones().
+     * @return array{cabecera: array, lineas: array, adicional: array}|null
+     */
+    public function getDocumentoTransaccion(int|array $idCliente, int $idEmpresa, array $fuentes, string $origen, int $idDocumento): ?array
+    {
+        // origen => [cabecera, etiqueta, autorización, doc. modificado, motivo, tabla adicional, FK adicional]
+        $docs = [
+            'FACTURA'      => ['ventas_cabecera', 'Factura de Venta', 'c.clave_acceso', 'NULL', 'NULL', 'ventas_adicional', 'id_venta'],
+            'RECIBO'       => ['recibos_venta_cabecera', 'Recibo de Venta', 'NULL', 'NULL', 'NULL', 'recibos_venta_adicional', 'id_recibo'],
+            'NOTA_CREDITO' => ['notas_credito_cabecera', 'Nota de Crédito', 'COALESCE(c.numero_autorizacion, c.clave_acceso)', 'c.num_doc_modificado', 'c.motivo', 'notas_credito_adicional', 'id_nota_credito'],
+        ];
+        if (!isset($docs[$origen]) || !array_key_exists($origen, $fuentes)) {
+            return null;
+        }
+        $params = [];
+        $ramas  = $this->ramasTransacciones($idCliente, $idEmpresa, [$origen => $fuentes[$origen]], $params);
+        $lineas = $this->lineasDeDocumento($ramas, $params, $origen, $idDocumento);
+        if ($lineas === []) {
+            return null;
+        }
+
+        [$cabecera, $etiqueta, $aut, $docMod, $motivo, $tablaAdic, $fkAdic] = $docs[$origen];
+        $st = $this->db->prepare("SELECT c.id, '{$etiqueta}'::text AS tipo_documento,
+                                         CONCAT(c.establecimiento, '-', c.punto_emision, '-', c.secuencial) AS numero_documento,
+                                         c.fecha_emision::date AS fecha,
+                                         ({$aut})::text AS numero_autorizacion,
+                                         c.total_sin_impuestos, c.total_descuento, c.importe_total,
+                                         c.observaciones, c.estado,
+                                         ({$docMod})::text AS documento_modificado, ({$motivo})::text AS motivo,
+                                         true AS tiene_xml
+                                  FROM {$cabecera} c
+                                  WHERE c.id = :id AND c.id_empresa = :emp AND c.eliminado = false");
+        $st->execute([':id' => $idDocumento, ':emp' => $idEmpresa]);
+        $cab = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$cab) {
+            return null;
+        }
+        $stA = $this->db->prepare("SELECT nombre, valor FROM {$tablaAdic} WHERE {$fkAdic} = :id ORDER BY id");
+        $stA->execute([':id' => $idDocumento]);
+
+        $cab['origen'] = $origen;
+        return [
+            'cabecera'  => $cab,
+            'lineas'    => $lineas,
+            'adicional' => $stA->fetchAll(PDO::FETCH_ASSOC),
+        ];
     }
 
     /**
