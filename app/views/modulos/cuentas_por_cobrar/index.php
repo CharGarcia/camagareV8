@@ -15,7 +15,7 @@
        saldo) y, al desplegar, se lee como el mayor de una cuenta: los documentos del
        cliente y, al final del listado, el TOTAL GENERAL. */
     .cxc-mayor-grp   > td { background:#eafaf1; border-top:1px solid rgba(25,135,84,.45); }
-    .cxc-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
+    .cxc-mayor-total > td { background:#dfe3e8; font-weight:800; border-top:2px solid #343a40; }
     .cxc-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
     /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
     .table-hover > tbody > tr.cxc-mayor-grp:hover > td,
