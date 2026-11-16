@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.22** (15-11-2026). El historial de cambios está al final.
+Versión actual: **0.23** (16-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -63,12 +63,10 @@ Ecuador.
 > «CaMaGaRe es el sistema que lleva su negocio completo en la nube: factura
 > electrónicamente al SRI, controla su inventario, sus cobros y pagos, su
 > nómina y su contabilidad, que se hace sola. Lo usa desde el computador o el
-> celular, sus datos están seguros y siempre tiene a quién preguntar. Usted se
-> dedica a vender; nosotros nos encargamos de que todo cuadre.»
-
-> ⚠️ **Antes de usar este discurso:** confirmar con la dirección que todo lo
-> prometido se cumple. Por ejemplo, «siempre tiene a quién preguntar» depende
-> de los horarios de soporte, que aún no están definidos (sección 5.3).
+> celular, sus datos están seguros y nosotros se lo dejamos listo y le
+> enseñamos a usarlo, con soporte de lunes a viernes por chat, WhatsApp y
+> teléfono. Usted se dedica a vender; nosotros nos encargamos de que todo
+> cuadre.»
 
 ---
 
@@ -425,31 +423,38 @@ programe. Por ejemplo:
 | 2 | **Aceptación** | Cliente | Aprueba la proforma con el botón del correo. |
 | 3 | **Alta de la empresa** | CaMaGaRe (superadministrador) | Crea la empresa en *Empresas del sistema*. La empresa queda registrada como cliente para facturarle la suscripción. |
 | 4 | **Documentos legales** | Cliente | Recibe por correo el **Contrato de uso** y el **Acuerdo de datos personales (LOPDP)** y los acepta en línea; queda constancia de fecha, hora e IP. |
-| 5 | **Configuración inicial** | *Por definir (CaMaGaRe o el cliente)* | Datos de la empresa y logo, establecimientos, puntos de emisión y secuenciales, y la **firma electrónica (.p12)**. |
-| 6 | **Usuarios y permisos** | *Por definir* | Se crean los usuarios y se asigna a cada uno qué puede ver, crear, modificar o eliminar. |
-| 7 | **Carga de datos** | *Por definir* | Clientes, proveedores y productos por **Excel**; **saldos iniciales** de cartera, bancos e inventario. |
-| 8 | **Pruebas** | Cliente | Puede practicar en **ambiente de pruebas** (sin validez tributaria). |
-| 9 | **Producción** | Cliente | Pasa a **producción** y empieza a emitir documentos reales. |
-| 10 | **Operación y soporte** | Cliente / CaMaGaRe | Trabajo diario con chat de soporte, manual y asistente con IA. |
-| 11 | **Renovación** | Cliente | Paga su suscripción según su modalidad (anual o mensual). |
+| 5 | **Configuración inicial** | CaMaGaRe | Datos de la empresa y logo, establecimientos, puntos de emisión y secuenciales, y la **firma electrónica (.p12)**. |
+| 6 | **Usuarios y permisos** | CaMaGaRe | Se crean los usuarios y se asigna a cada uno qué puede ver, crear, modificar o eliminar. |
+| 7 | **Carga de datos** | CaMaGaRe (el cliente entrega la información) | Clientes, proveedores y productos por **Excel**; **saldos iniciales** de cartera, bancos e inventario. |
+| 8 | **Capacitación** | CaMaGaRe | Capacitación **en línea**, incluida en la suscripción. |
+| 9 | **Pruebas** | Cliente | Puede practicar en **ambiente de pruebas** (sin validez tributaria). |
+| 10 | **Producción** | Cliente | Pasa a **producción** y empieza a emitir documentos reales. |
+| 11 | **Operación y soporte** | Cliente / CaMaGaRe | Trabajo diario con soporte de lunes a viernes (chat, WhatsApp y llamadas), manual y asistente con IA. |
+| 12 | **Renovación** | Cliente | Paga su suscripción según su modalidad (anual, semestral o mensual). |
 
-> **Por definir con la dirección:** quién hace los pasos 5 a 7 (¿los hace
-> CaMaGaRe como parte de la *Implementación* o el cliente con guía?), cuánto
-> tiempo toma la puesta en marcha y si incluye capacitación (¿cuántas horas?,
-> ¿presencial o en línea?).
+**Lo que el vendedor puede prometer:** *«Nosotros le dejamos el sistema listo:
+configuramos su empresa y su firma electrónica, creamos sus usuarios, cargamos
+sus clientes y productos, y lo capacitamos en línea.»* El cliente solo entrega
+su información (firma .p12, listados de clientes y productos, saldos).
+
+> **Por definir:** cuánto tiempo toma la puesta en marcha (P-08) y cuántas
+> horas de capacitación en línea se incluyen (P-09).
 
 ### 5.3 Soporte y ayuda dentro del sistema
 
 | Canal | Qué es |
 |---|---|
 | **Chat de soporte** | Burbuja de ayuda en todas las pantallas para escribirle al equipo de soporte. |
+| **WhatsApp y llamadas** | Atención del equipo de soporte por WhatsApp y teléfono. |
 | **Manual en línea** | Artículos de cada módulo y guías paso a paso, con buscador, desde el propio sistema. |
 | **Asistente con IA** | Responde preguntas usando el manual del sistema y los documentos que cargue la empresa. |
 | **Novedades del sistema** | Al entrar, una tarjeta avisa de las mejoras nuevas. |
 
-> **Por definir:** horario de atención del soporte, tiempos de respuesta y si
-> hay soporte por teléfono o WhatsApp. **No prometer** «24/7» ni tiempos de
-> respuesta hasta que estén definidos.
+**Horario de soporte:** de **lunes a viernes**, por chat, WhatsApp y llamadas.
+**No prometer** atención en fines de semana ni «24/7».
+
+> **Por definir:** las horas exactas de atención y los tiempos de respuesta
+> (P-11). Hasta tenerlos, no prometer horas ni tiempos.
 
 ### 5.4 Pagos y vencimiento de la suscripción
 
@@ -471,8 +476,12 @@ Así funciona hoy en el sistema:
   conservando la información del cliente. La suspensión la hace CaMaGaRe
   desactivando la empresa, lo que cierra las sesiones de sus usuarios.
 
-> **Por definir:** cuántos días de atraso se toleran antes de suspender y
-> quién lo decide.
+**Política de atraso:** si a los **10 días de atraso** el pago sigue pendiente,
+CaMaGaRe **suspende el servicio**, previo aviso. La información del cliente se
+conserva y el acceso vuelve al regularizar el pago.
+
+> El sistema todavía no suspende solo: al día 10 lo hace CaMaGaRe desactivando
+> la empresa.
 
 ### 5.5 Seguridad de la información (en palabras del cliente)
 
@@ -615,7 +624,9 @@ en *Cotizador → Configuración → Paquetes*:
 | **Uso del sistema en la nube** | Licencia de uso de los **módulos contratados**, para los establecimientos contratados, mientras la suscripción esté vigente. | Contrato de uso, cláusulas PRIMERA y SEGUNDA |
 | **Usuarios incluidos** | 3 por establecimiento, compartidos en el RUC. | Sección 6.2 |
 | **Servidor, seguridad y respaldos** | Alojamiento en la nube, comunicación cifrada y **respaldos periódicos**. | Contrato, QUINTA; Acuerdo de datos, QUINTA |
-| **Soporte** | Por los canales establecidos (chat de soporte en el sistema). | Contrato, QUINTA — horario por definir (P-11) |
+| **Soporte** | De lunes a viernes, por chat de soporte, WhatsApp y llamadas. | Contrato, QUINTA; sección 5.3 |
+| **Puesta en marcha** | CaMaGaRe configura la empresa y la firma electrónica, crea los usuarios y carga los datos que entrega el cliente. | Sección 5.2 |
+| **Capacitación** | En línea, incluida. | Sección 5.2 |
 | **Ayuda dentro del sistema** | Manual en línea, asistente con IA y novedades. | Sección 5.3 |
 | **App móvil** | Android e iPhone/iPad (en iPhone, empresas con 2 o más usuarios). | Sección 5.1 |
 | **Aviso de mantenimientos** | Los mantenimientos programados se avisan con anticipación. | Contrato, QUINTA |
@@ -628,7 +639,7 @@ en *Cotizador → Configuración → Paquetes*:
 | **Módulos no contratados** | Se agregan a la suscripción con su precio (Cotizador de Planes). |
 | **Usuarios adicionales** | Sobre los incluidos: $20 al año por usuario. |
 | **Firma electrónica** | La emite una entidad certificadora. CaMaGaRe también la vende aparte (módulo Firmas electrónicas). |
-| **Implementación, migración de datos y capacitación** | Servicios de una sola vez, según la cotización (P-07, P-09, P-10). |
+| **Implementación** | La puesta en marcha la hace CaMaGaRe; en la cotización va como el servicio único *Implementación*. ¿Sigue en $0 o tiene precio según el tamaño del cliente? (P-10). |
 | **Servicio contable y declaraciones** | El sistema prepara la información; la contabilidad y las declaraciones las hace el cliente o su contador. |
 | **Computadores, impresoras, internet** | Equipos y conexión los pone el cliente. |
 | **Costos de terceros** | Comisiones de pasarelas de pago (Payphone, Nuvei, Kushki) y, si aplica, costos de WhatsApp de Meta. *Confirmar* (P-29). |
@@ -701,9 +712,10 @@ en *Cotizador → Configuración → Paquetes*:
 | Tengo varios locales con el mismo RUC, ¿pago por cada uno? | Sí, cada establecimiento contrata sus módulos. En plan anual, los adicionales tienen 20 % de descuento y los usuarios se comparten. |
 | ¿Puedo cargar mis clientes y productos que ya tengo? | Sí, por Excel, y los saldos iniciales de cartera, bancos e inventario. |
 | ¿Hace mis declaraciones? | Prepara la información (ATS, IVA, retenciones, renta), pero las declaraciones son responsabilidad del cliente o de su contador. |
-| ¿Qué pasa si me atraso en el pago? | El sistema avisa y da 3 días de gracia. La falta de pago permite suspender el acceso, previo aviso, sin perder la información. |
+| ¿Qué pasa si me atraso en el pago? | El sistema le avisa antes y después del vencimiento. Si a los **10 días de atraso** el pago sigue pendiente, el servicio se suspende, previo aviso, **sin perder su información**; al pagar se reactiva. |
 | ¿Puedo cancelar? | El contrato rige mientras la suscripción esté activa y cualquiera de las partes puede terminarlo con aviso razonable; usted puede pedir la exportación de su información. |
-| ¿Qué horario tiene el soporte? | *Por definir (P-11).* No prometer horarios hasta tenerlos. |
+| ¿Qué horario tiene el soporte? | De **lunes a viernes**, por el chat del sistema, WhatsApp y llamadas. |
+| ¿Quién me configura el sistema? | Nosotros: configuramos su empresa y su firma electrónica, creamos sus usuarios, cargamos sus clientes y productos, y lo capacitamos en línea. |
 | ¿Cuánto tarda la puesta en marcha? | *Por definir (P-08).* |
 
 ### 9.2 Objeciones frecuentes
@@ -713,7 +725,7 @@ en *Cotizador → Configuración → Paquetes*:
 | **«Es caro»** | Compare con lo que hoy cuesta digitar dos veces, los errores y las multas. Muestre el plan **anual** (más barato) y arme solo los módulos que necesita con el Cotizador. |
 | **«Ya tengo un sistema»** | Pregunte qué le falta o qué le cuesta hoy (pregunta 10 de 2.3) y muestre solo eso. Destaque: todo en un solo sistema, contabilidad automática y celular. |
 | **«Mi contador ya me lleva todo»** | Ofrézcalo como herramienta para su contador: recibe la información completa y a tiempo, con ATS y declaraciones listas. Invite al contador a la demo. |
-| **«No tengo tiempo para aprender otro sistema»** | Muestre lo rápido que se factura, la carga por Excel, el manual y el chat de soporte dentro del sistema. |
+| **«No tengo tiempo para aprender otro sistema»** | Nosotros se lo dejamos configurado y con sus datos cargados, y lo capacitamos en línea. Muestre lo rápido que se factura, el manual y el soporte de lunes a viernes. |
 | **«¿Y si se cae internet?»** | Es un sistema en la nube: necesita internet. Funciona en el celular con datos móviles. No prometer funcionamiento sin conexión. |
 | **«Me da miedo perder mis datos»** | Respaldos periódicos, nada se borra físicamente, auditoría y los datos son del cliente, con exportación al terminar (sección 8). |
 | **«Lo pienso»** | Registre la oportunidad en el CRM con una actividad de seguimiento con fecha y envíe la proforma por correo con el botón de aprobación. |
@@ -731,7 +743,7 @@ en *Cotizador → Configuración → Paquetes*:
 | 5 | **Proforma** | La genera desde la cotización y la envía por correo o WhatsApp; el cliente la aprueba con un botón. | Cotizador → Proformas |
 | 6 | **Seguimiento** | Agenda actividades con fecha (llamar, reunión) hasta la respuesta. | CRM (oportunidad y actividades) |
 | 7 | **Cierre** | Con la proforma aprobada, marca la oportunidad como **ganada**. Si no, la marca **perdida** con su motivo. | CRM |
-| 8 | **Entrega a implementación** | Pasa el cliente al responsable del alta y la puesta en marcha (sección 5.2). | *Por definir (P-07)* |
+| 8 | **Entrega a implementación** | Pasa el cliente al equipo de CaMaGaRe que hace el alta, la configuración, la carga de datos y la capacitación (sección 5.2). Le pide al cliente su firma .p12 y sus listados. | CRM (oportunidad ganada) |
 
 ### 10.1 Reglas de oro del vendedor
 
@@ -753,7 +765,7 @@ actualiza su sección y se tacha aquí.
 | # | Pendiente | Sección |
 |---|---|---|
 | P-01 | Significado del nombre **CaMaGaRe** y su historia de origen (quién lo creó, desde cuándo, por qué). | 1.1 |
-| P-02 | Confirmar que el discurso de 30 segundos se cumple (depende de P-11). | 1.5 |
+| P-02 | ✅ **Resuelto (16-11-2026):** discurso ajustado a lo definido (puesta en marcha por CaMaGaRe, capacitación en línea, soporte de lunes a viernes). | 1.5 |
 
 ### B. Cliente y mercado
 | # | Pendiente | Sección |
@@ -766,12 +778,12 @@ actualiza su sección y se tacha aquí.
 ### C. Puesta en marcha y soporte
 | # | Pendiente | Sección |
 |---|---|---|
-| P-07 | Quién hace la **configuración inicial, usuarios y carga de datos** (CaMaGaRe o el cliente con guía). | 5.2 |
+| P-07 | ✅ **Resuelto (16-11-2026):** la configuración inicial, los usuarios y la carga de datos los hace **CaMaGaRe**. | 5.2 |
 | P-08 | **Tiempo** de la puesta en marcha. | 5.2 |
-| P-09 | ¿Incluye **capacitación**? Horas y modalidad (presencial / en línea). | 5.2 |
+| P-09 | ✅ Capacitación **en línea, incluida** (16-11-2026). Falta: **cuántas horas**. | 5.2 |
 | P-10 | ¿*Implementación* sigue en $0 o tiene precio según el tamaño del cliente? | 6.2 |
-| P-11 | **Soporte**: horario, tiempos de respuesta y canales (chat, teléfono, WhatsApp). | 5.3 |
-| P-12 | **Días de atraso** tolerados antes de suspender el servicio y quién lo decide. | 5.4 |
+| P-11 | ✅ Soporte de **lunes a viernes** por **chat, WhatsApp y llamadas** (16-11-2026). Falta: **horas exactas** y **tiempos de respuesta**. | 5.3 |
+| P-12 | ✅ **Resuelto (16-11-2026):** suspensión a los **10 días de atraso**, previo aviso; la aplica CaMaGaRe desactivando la empresa. | 5.4 |
 
 ### D. Precios
 | # | Pendiente | Sección |
@@ -815,6 +827,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.23 | 16-11-2026 | Puesta en marcha por CaMaGaRe, capacitación en línea incluida, soporte de lunes a viernes (chat, WhatsApp y llamadas) y suspensión a los 10 días de atraso: secciones 1.5, 5.2, 5.3, 5.4, 7, 9 y 10. P-02, P-07 y P-12 resueltos; P-09 y P-11 parciales |
 | 0.22 | 15-11-2026 | Módulos incluidos (sin costo cuando los requiere otro) y paquetes de precio fijo: secciones 6.4, 6.5 y P-17 |
 | 0.21 | 15-11-2026 | Cotización nueva sin módulos puestos: el vendedor agrega el paquete y/o los módulos (Implementación ya no entra sola) |
 | 0.20 | 15-11-2026 | P-20 resuelto: los 7 módulos que faltaban ya tienen manual de usuario; se quita la nota interna de la sección 4 |

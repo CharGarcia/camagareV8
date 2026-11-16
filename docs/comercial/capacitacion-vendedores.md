@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.5** (15-11-2026). El historial está al final.
+Versión actual: **0.6** (16-11-2026). El historial está al final.
 
 ---
 
@@ -154,7 +154,7 @@ sección 9.2.
 | 1 | «Es caro.» | Muestra el plan anual y arma solo lo necesario en el Cotizador. |
 | 2 | «Ya tengo un sistema.» | Pregunta qué le falta antes de mostrar. |
 | 3 | «Mi contador ya me lleva todo.» | Ofrece el sistema como herramienta para el contador e invita al contador a la demo. |
-| 4 | «No tengo tiempo para aprender.» | Muestra la carga por Excel, el manual y el chat de soporte. |
+| 4 | «No tengo tiempo para aprender.» | Nosotros le dejamos todo configurado, con sus datos cargados, y lo capacitamos en línea; luego tiene soporte de lunes a viernes por chat, WhatsApp y llamadas. |
 | 5 | «¿Y si se cae el internet?» | Dice la verdad: necesita internet; no promete funcionamiento sin conexión. |
 | 6 | «Me da miedo perder mis datos.» | Respaldos, nada se borra, los datos son del cliente. |
 | 7 | «Lo pienso.» | Deja una actividad con fecha en el CRM y envía la proforma. |
@@ -184,8 +184,10 @@ con fecha. El CRM avisa las actividades vencidas.
 
 ## 7. Reglas que no se rompen
 
-1. **No prometer lo que no está en la presentación.** Horarios de soporte,
-   tiempos de entrega o funciones nuevas se confirman con la dirección.
+1. **No prometer lo que no está en la presentación.** El soporte es de **lunes
+   a viernes** (chat, WhatsApp y llamadas): no prometer fines de semana, horas
+   exactas ni tiempos de respuesta. Tiempos de entrega o funciones nuevas se
+   confirman con la dirección.
 2. **Todo precio sale del Cotizador.** Nada de precios «a ojo».
 3. **Descuento comercial:** solo si la configuración lo permite y dentro del tope.
 4. **iPhone/iPad:** la app es solo para empresas con **2 o más usuarios**.
@@ -230,7 +232,7 @@ la tabla, para el capacitador.
 5. 2 (8 − 6 incluidos).
 6. No, solo en el plan anual.
 7. El de módulos base más caros.
-8. Por ejemplo: módulos no contratados, usuarios adicionales, firma electrónica, implementación o migración, servicio contable, equipos e internet.
+8. Por ejemplo: módulos no contratados, usuarios adicionales, firma electrónica, servicio contable, equipos e internet (la implementación va como servicio aparte en la cotización).
 9. No; puede usar la web o Android.
 10. Una próxima actividad con fecha.
 
@@ -267,6 +269,7 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.6 | 16-11-2026 | Puesta en marcha y capacitación en línea por CaMaGaRe y soporte de lunes a viernes en el juego de roles y en las reglas. |
 | 0.5 | 15-11-2026 | Cada cotización queda atada al vendedor: vincular el usuario con su ficha de vendedor. |
 | 0.4 | 15-11-2026 | Paquetes de precio fijo y módulos incluidos en las reglas y errores frecuentes. |
 | 0.3 | 15-11-2026 | Paquetes en las reglas y en los errores frecuentes al cotizar. |
