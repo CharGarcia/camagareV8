@@ -29,6 +29,8 @@
     .cxp-mayor-grp   > td { background:#eaf1fb; border-top:1px solid rgba(13,110,253,.45); }
     .cxp-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
     .cxp-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
+    /* TOTAL bajo los títulos (Por proveedor / Por antigüedad): la línea fuerte lo separa del listado */
+    thead > tr.cxp-total-cabecera > td { border-top:1px solid #dee2e6; border-bottom:2px solid #343a40; }
     /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
     .table-hover > tbody > tr.cxp-mayor-grp:hover > td,
     .table-hover > tbody > tr.cxp-mayor-total:hover > td,

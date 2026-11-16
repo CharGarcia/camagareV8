@@ -1709,6 +1709,15 @@ th[data-det-col] .cmg-resizer {
     background: #fff;
 }
 
+/* Cabecera flotante de la tabla (CMG_cabeceraFija, app.js): las celdas del thead
+   desplazadas pintan encima de las filas por las que pasan. */
+.table thead .cmg-th-flotante {
+    position: relative;
+    z-index: 3;
+    background-color: #f8f9fa;
+    box-shadow: 0 2px 3px -1px rgba(0,0,0,.18);
+}
+
 .cmg-control-card__stats {
     display: flex;
     flex-wrap: wrap;

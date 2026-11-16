@@ -1030,3 +1030,55 @@ window.CMG_Identificacion = (function () {
         if (el.title !== txt) el.title = txt;
     });
 })();
+
+/**
+ * Cabecera fija para tablas largas en páginas que hacen scroll completo (reportes con
+ * .cmg-control-card, donde la tabla NO tiene scroll interno, §9). Mientras la tabla pasa
+ * por debajo de la tarjeta de control, las celdas del <thead> se desplazan con translateY
+ * y quedan pegadas justo bajo ella. Si la fila de TOTAL va dentro del thead (después de
+ * los títulos), viaja con ellos: siempre se ve a qué columna corresponde cada total.
+ * No se usa position:sticky porque el contenedor {modulo}-scroll lleva overflow-x:auto
+ * y eso lo anula. Se re-aplica sola al repintar thead/tbody (vista, filtros, grupos).
+ *
+ *   CMG_cabeceraFija(document.getElementById('tabla-cxc'));
+ */
+window.CMG_cabeceraFija = function (tabla) {
+    if (!tabla || tabla.__cmgCabeceraFija) return;
+    tabla.__cmgCabeceraFija = true;
+    var raf = 0, movidas = [];
+
+    function tope() {
+        var card = document.querySelector('.cmg-control-card');
+        if (card) return card.getBoundingClientRect().bottom;
+        return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cmg-sticky-h')) || 0;
+    }
+    function aplicar() {
+        raf = 0;
+        // Limpiar lo desplazado antes de medir (la cabecera puede haberse repintado).
+        for (var i = 0; i < movidas.length; i++) {
+            movidas[i].style.transform = '';
+            movidas[i].classList.remove('cmg-th-flotante');
+        }
+        movidas = [];
+        var thead = tabla.tHead;
+        if (!thead || !tabla.isConnected || tabla.offsetParent === null) return;
+
+        var rTab  = tabla.getBoundingClientRect();
+        var hHead = thead.getBoundingClientRect().height;
+        // Baja hasta quedar bajo la tarjeta de control, sin salirse por el final de la tabla.
+        var dy = Math.min(Math.max(0, tope() - rTab.top), Math.max(0, rTab.height - hHead));
+        if (dy < 1) return;
+        var celdas = thead.querySelectorAll('th, td');
+        for (var j = 0; j < celdas.length; j++) {
+            celdas[j].style.transform = 'translateY(' + Math.round(dy) + 'px)';
+            celdas[j].classList.add('cmg-th-flotante');
+            movidas.push(celdas[j]);
+        }
+    }
+    function programar() { if (!raf) raf = requestAnimationFrame(aplicar); }
+
+    window.addEventListener('scroll', programar, { passive: true });
+    window.addEventListener('resize', programar);
+    new MutationObserver(programar).observe(tabla, { childList: true, subtree: true });
+    programar();
+};

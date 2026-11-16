@@ -105,6 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
     CXP_initOrden();
     CXP_aplicarFavoritos();
     CXP_estadoInicial();
+    // Con muchas filas, los títulos (y el TOTAL bajo ellos) quedan fijos bajo la tarjeta de control.
+    if (window.CMG_cabeceraFija) CMG_cabeceraFija(document.getElementById('tabla-cxp'));
     CXP_cargarCatalogos();
     CXP_initBuscadorProveedores();
 });
@@ -320,6 +322,7 @@ function CXP_renderTabla(filas) {
 
     // Las columnas dependen de la vista: la de "Por proveedor" muestra otro detalle.
     CXP_renderCabecera();
+    CXP_totalEnCabecera(''); // la vista que tenga total lo vuelve a poner bajo los títulos
 
     // Todavía sin aplicar: la tabla muestra la invitación a filtrar, no "sin resultados".
     if (!CXP_cargado) { CXP_estadoInicial(); return; }
@@ -708,8 +711,9 @@ function CXP_renderAgrupado(filas) {
         }
     }
 
-    html += `
-        <tr class="cxp-mayor-total">
+    // TOTAL GENERAL bajo los títulos (ver CXP_totalEnCabecera).
+    CXP_totalEnCabecera(`
+        <tr class="cxp-mayor-total cxp-total-cabecera">
             <td colspan="2" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''})</td>
             <td class="text-end" style="font-size:.82rem;">$${CXP_fmt(tTotal)}</td>
             <td class="text-end" style="font-size:.82rem;">${tNc > 0.001 ? '$' + CXP_fmt(tNc) : '<span class="text-muted">—</span>'}</td>
@@ -717,7 +721,7 @@ function CXP_renderAgrupado(filas) {
             <td class="text-end" style="font-size:.82rem;">${tRet > 0.001 ? '$' + CXP_fmt(tRet) : '<span class="text-muted">—</span>'}</td>
             <td class="text-end pe-2" style="font-size:.85rem;color:${tSaldo > 0.001 ? '#dc3545' : '#198754'};">$${CXP_fmt(tSaldo > 0 ? tSaldo : 0)}</td>
             <td colspan="2"></td>
-        </tr>`;
+        </tr>`);
 
     tbody.innerHTML = html;
 }
@@ -806,6 +810,7 @@ function CXP_renderAntiguedad(filas) {
     const pendientes = filas.filter(r => (parseFloat(r.saldo) || 0) > 0);
     const grupos = CXP_agruparPorProveedor(pendientes);
     label.textContent = `${pendientes.length} docs · ${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''}`;
+    CXP_totalEnCabecera('');
     if (!grupos.length) {
         tbody.innerHTML = `<tr><td colspan="${CXP_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-hourglass-split fs-3 d-block mb-2 text-primary opacity-40"></i>
@@ -848,12 +853,22 @@ function CXP_renderAntiguedad(filas) {
             }
         }
     }
-    html += `
-        <tr style="background:#e9ecef;font-weight:bold;">
+    // El TOTAL va justo debajo de los títulos (dentro del thead): con muchas filas viaja
+    // junto con la cabecera fija y siempre se ve a qué columna corresponde cada total.
+    CXP_totalEnCabecera(`
+        <tr class="cxp-mayor-total cxp-total-cabecera">
             <td colspan="3" class="text-end" style="font-size:.8rem;">TOTAL (${grupos.length} proveedor${grupos.length !== 1 ? 'es' : ''})</td>
             ${celdas(tot, tot.reduce((a, b) => a + b, 0), true)}
-        </tr>`;
+        </tr>`);
     tbody.innerHTML = html;
+}
+
+/* Fila de TOTAL de la vista Por antigüedad, como segunda fila del thead. */
+function CXP_totalEnCabecera(trHtml) {
+    const thead = document.getElementById('cxp-thead');
+    if (!thead) return;
+    thead.querySelectorAll('tr.cxp-total-cabecera').forEach(tr => tr.remove());
+    if (trHtml) thead.insertAdjacentHTML('beforeend', trHtml);
 }
 
 /* ════════════════════════════════════════════════════
