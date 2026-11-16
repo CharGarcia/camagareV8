@@ -188,7 +188,7 @@ class XmlAtsService
         // totbasesImpReemb es obligatorio en el XSD del ATS en esta posición (se
         // reporta en 0.00 cuando el documento no es un reembolso). El resto del
         // bloque *Reemb (cuando aplica) se emite más adelante, junto a docModificado.
-        $this->add($dom, $n, 'totbasesImpReemb', empty($d['reembolso']) ? '0.00' : $d['reembolso']['totbasesImpReemb']);
+        $this->add($dom, $n, 'totbasesImpReemb', $d['totbasesImpReemb'] ?? '0.00');
 
         // pagoExterior (bloque obligatorio; AtsService lo resuelve a pago local
         // con "NA" cuando la compra no está marcada como pago al exterior)
@@ -215,42 +215,48 @@ class XmlAtsService
             $this->appendDocModificado($dom, $n, $d);
         } else {
             $this->appendDocModificado($dom, $n, $d);
-            $this->appendReembolso($dom, $n, $d);
             $this->appendFormasDePago($dom, $n, $d);
             $this->appendAir($dom, $n, $d);
+            // Los reembolsos van al final del detalle (último bloque de la ficha).
+            $this->appendReembolso($dom, $n, $d);
         }
 
         return $n;
     }
 
     /**
-     * Sub-bloque *Reemb (sustento tributario 08, codDocReembolso=41): describe
-     * UN comprobante de un tercero reembolsado. NO validado contra el XSD real
-     * del ATS (no disponible en este proyecto) — revisar con el contador antes
-     * de presentar el anexo. Posición asumida a partir del orden documentado en
-     * la Ficha Técnica ATS (después de docModificado, antes de formasDePago).
+     * Bloque <reembolsos> (sustento tributario 08, codDocReembolso=41): un
+     * <reembolso> por cada comprobante de tercero reembolsado, al final del
+     * detalle de la compra (último grupo de campos de la ficha ATS). Los campos
+     * *Reemb sueltos dentro de <detalleCompras> hacían que el SRI rechazara el
+     * archivo como "XML mal formado". Nombres de campo según la ficha (incluido
+     * montoIvaRemb, que el SRI escribe así).
      */
     private function appendReembolso(DOMDocument $dom, DOMElement $n, array $d): void
     {
-        if (empty($d['reembolso'])) {
+        if (empty($d['reembolsos'])) {
             return;
         }
-        $r = $d['reembolso'];
-        $this->add($dom, $n, 'tipoComprobanteReemb', $r['tipoComprobanteReemb']);
-        $this->add($dom, $n, 'tpIdProvReemb', $r['tpIdProvReemb']);
-        $this->add($dom, $n, 'idProvReemb', $r['idProvReemb']);
-        $this->add($dom, $n, 'establecimientoReemb', $r['establecimientoReemb']);
-        $this->add($dom, $n, 'puntoEmisionReemb', $r['puntoEmisionReemb']);
-        $this->add($dom, $n, 'secuencialReemb', $r['secuencialReemb']);
-        $this->add($dom, $n, 'fechaEmisionReemb', $r['fechaEmisionReemb']);
-        $this->add($dom, $n, 'autorizacionReemb', $r['autorizacionReemb']);
-        $this->add($dom, $n, 'baseImponibleReemb', $r['baseImponibleReemb']);
-        $this->add($dom, $n, 'baseImpGravReemb', $r['baseImpGravReemb']);
-        $this->add($dom, $n, 'baseNoGraIvaReemb', $r['baseNoGraIvaReemb']);
-        $this->add($dom, $n, 'baseImpExeReemb', $r['baseImpExeReemb']);
-        // totbasesImpReemb ya se emitió antes (junto a valRetServ100/pagoExterior).
-        $this->add($dom, $n, 'montoIceReemb', $r['montoIceReemb']);
-        $this->add($dom, $n, 'montoIvaRemb', $r['montoIvaRemb']);
+        $bloque = $dom->createElement('reembolsos');
+        foreach ($d['reembolsos'] as $r) {
+            $re = $dom->createElement('reembolso');
+            $this->add($dom, $re, 'tipoComprobanteReemb', $r['tipoComprobanteReemb']);
+            $this->add($dom, $re, 'tpIdProvReemb', $r['tpIdProvReemb']);
+            $this->add($dom, $re, 'idProvReemb', $r['idProvReemb']);
+            $this->add($dom, $re, 'establecimientoReemb', $r['establecimientoReemb']);
+            $this->add($dom, $re, 'puntoEmisionReemb', $r['puntoEmisionReemb']);
+            $this->add($dom, $re, 'secuencialReemb', $r['secuencialReemb']);
+            $this->add($dom, $re, 'fechaEmisionReemb', $r['fechaEmisionReemb']);
+            $this->add($dom, $re, 'autorizacionReemb', $r['autorizacionReemb']);
+            $this->add($dom, $re, 'baseImponibleReemb', $r['baseImponibleReemb']);
+            $this->add($dom, $re, 'baseImpGravReemb', $r['baseImpGravReemb']);
+            $this->add($dom, $re, 'baseNoGraIvaReemb', $r['baseNoGraIvaReemb']);
+            $this->add($dom, $re, 'baseImpExeReemb', $r['baseImpExeReemb']);
+            $this->add($dom, $re, 'montoIceReemb', $r['montoIceReemb']);
+            $this->add($dom, $re, 'montoIvaRemb', $r['montoIvaRemb']);
+            $bloque->appendChild($re);
+        }
+        $n->appendChild($bloque);
     }
 
     private function appendFormasDePago(DOMDocument $dom, DOMElement $n, array $d): void

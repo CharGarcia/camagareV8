@@ -285,12 +285,10 @@ class AtsService
             $pagoComprasIdx = $this->pagosDesdeModificado($compras, $pagoComprasIdx);
             $pagoLiqIdx     = $this->indexarPagos($this->repo->getFormasPago('liquidaciones_pagos', 'id_cabecera', $idsLiq));
 
-            // Facturas de Reembolso RECIBIDAS (codDoc=01, codDocReembolso=41): el bloque
-            // *Reemb del ATS-Compras (tipoComprobanteReemb, establecimientoReemb, etc.)
-            // no tiene XSD disponible en este proyecto para confirmar su cardinalidad;
-            // se emite UNA fila "compra" por cada tercero reembolsado (misma compra base,
-            // sub-bloque *Reemb distinto en cada una). Sin validar contra el XSD real del
-            // ATS — revisar con el contador antes de presentar el anexo.
+            // Facturas de Reembolso RECIBIDAS (codDoc=01, codDocReembolso=41): UNA fila
+            // de compra con todos sus terceros dentro de <reembolsos><reembolso>…, al
+            // final del detalle. Antes se emitía una fila por tercero con los campos
+            // *Reemb sueltos, y el SRI rechazaba el archivo como "XML mal formado".
             $reembolsoIdx = $this->indexarReembolsoTerceros($this->repo->getReembolsoTercerosCompras($idEmp, $idsCompra));
 
             $documentosEmp = [];
@@ -298,13 +296,7 @@ class AtsService
                 $terceros = ((string) ($c['cod_doc_reembolso'] ?? '')) === '41'
                     ? ($reembolsoIdx[(int) $c['id']] ?? [])
                     : [];
-                if ($terceros !== []) {
-                    foreach ($terceros as $i => $t) {
-                        $documentosEmp[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? [], $t, $i === 0);
-                    }
-                } else {
-                    $documentosEmp[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? []);
-                }
+                $documentosEmp[] = $this->mapearDocumento($c, $retComprasIdx[$c['id']] ?? null, $pagoComprasIdx[$c['id']] ?? [], $terceros);
             }
             foreach ($liquidaciones as $l) {
                 $documentosEmp[] = $this->mapearDocumento($l, $retLiqIdx[$l['id']] ?? null, $pagoLiqIdx[$l['id']] ?? []);
@@ -825,14 +817,10 @@ class AtsService
     // ── normalización de un documento al formato SRI ─────────────────────────
 
     /**
-     * @param ?array $reemb Fila de getReembolsoTercerosCompras() cuando la compra es
-     *                      codDocReembolso=41 (una llamada por tercero reembolsado).
-     * @param bool $incluirBasePropia Solo la PRIMERA fila de una compra con varios
-     *                      terceros lleva las bases/IVA propias de la compra; las
-     *                      siguientes van en 0 para no duplicar el total al sumar
-     *                      todas las filas del mismo comprobante.
+     * @param array[] $terceros Filas de getReembolsoTercerosCompras() cuando la compra es
+     *                          codDocReembolso=41: cada una es un <reembolso>.
      */
-    private function mapearDocumento(array $doc, ?array $ret, array $pagos, ?array $reemb = null, bool $incluirBasePropia = true): array
+    private function mapearDocumento(array $doc, ?array $ret, array $pagos, array $terceros = []): array
     {
         $tipoComp = (string) $doc['tipo_comprobante'];
         $tpIdProv = self::MAP_TP_ID_PROV[(string) $doc['tipo_id_proveedor']] ?? (string) $doc['tipo_id_proveedor'];
@@ -841,17 +829,16 @@ class AtsService
         $pto   = str_pad(substr((string) $doc['punto_emision_prov'], 0, 3), 3, '0', STR_PAD_LEFT);
         $sec   = str_pad((string) (int) $doc['secuencial_prov'], 9, '0', STR_PAD_LEFT);
 
-        $baseGrav = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_grav'] : 0.0;
-        $base0    = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_0']    : 0.0;
-        $baseNoG  = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_no_gra_iva']      : 0.0;
-        $baseExe  = ($reemb === null || $incluirBasePropia) ? (float) $doc['base_imponible_exe']   : 0.0;
-        $montoIceDoc = ($reemb === null || $incluirBasePropia) ? (float) $doc['monto_ice'] : 0.0;
-        $montoIvaDoc = ($reemb === null || $incluirBasePropia) ? (float) $doc['monto_iva'] : 0.0;
+        $baseGrav = (float) $doc['base_imponible_grav'];
+        $base0    = (float) $doc['base_imponible_0'];
+        $baseNoG  = (float) $doc['base_no_gra_iva'];
+        $baseExe  = (float) $doc['base_imponible_exe'];
+        $montoIceDoc = (float) $doc['monto_ice'];
+        $montoIvaDoc = (float) $doc['monto_iva'];
 
         // Compra sin ninguna base de IVA en su detalle: el SRI la rechaza. Se deja
-        // constancia para explicar la causa en las advertencias (solo la fila que
-        // lleva las bases propias; las de terceros reembolsados van en 0 a propósito).
-        if ($incluirBasePropia && $baseGrav <= 0 && $base0 <= 0 && $baseNoG <= 0 && $baseExe <= 0) {
+        // constancia para explicar la causa en las advertencias.
+        if ($baseGrav <= 0 && $base0 <= 0 && $baseNoG <= 0 && $baseExe <= 0) {
             $serieDoc = "{$estab}-{$pto}-{$sec}";
             $this->sinBases[$tipoComp][$serieDoc] = $serieDoc;
         }
@@ -973,7 +960,13 @@ class AtsService
             'air'              => $air,
             'retencionDoc'     => $retDoc,
             'docModificado'    => $this->docModificado($doc, $tipoComp),
-            'reembolso'        => $reemb === null ? null : $this->mapearReembolso($reemb),
+            'reembolsos'       => array_map(fn (array $t) => $this->mapearReembolso($t), $terceros),
+            // Suma de las bases de todos los terceros reembolsados (0.00 si no hay).
+            'totbasesImpReemb' => $this->money(array_sum(array_map(
+                fn (array $t) => (float) $t['base_imponible_reemb'] + (float) $t['base_imp_grav_reemb']
+                               + (float) $t['base_no_gra_iva_reemb'] + (float) $t['base_imp_exe_reemb'],
+                $terceros
+            ))),
         ];
     }
 
