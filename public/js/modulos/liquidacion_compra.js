@@ -1059,14 +1059,14 @@
     // LiquidacionCompraRules los verifica en el servidor. Mismo criterio que Compras.
     // =====================================================================
 
-    const LC_IDS_PAGO_EXT = ['liq-cod-pais-pago', 'liq-aplic-conv-dob-trib', 'liq-pag-ext-suj-ret'];
+    const LC_IDS_PAGO_EXT = ['liq-cod-pais-pago', 'liq-aplic-conv-dob-trib', 'liq-pag-ext-suj-ret', 'liq-cod-ret-air-ext'];
 
     /** Habilita los campos dependientes y marca la pestaña si falta algo. */
     function lcSincronizarPagoExterior() {
         const sel = document.getElementById('liq-pago-loc-ext');
         if (!sel) return;
         const esExterior = sel.value === '02';
-        const campos = LC_IDS_PAGO_EXT.map(id => document.getElementById(id));
+        const campos = LC_IDS_PAGO_EXT.map(id => document.getElementById(id)).filter(Boolean);
 
         sel.disabled = LC_BLOQUEADO;
         campos.forEach(el => {
@@ -1074,7 +1074,17 @@
             el.disabled = LC_BLOQUEADO || !esExterior;
         });
 
-        const incompleto = esExterior && campos.some(el => !el.value);
+        // Con convenio (SI) la ficha del ATS no pide «sujeto a retención»: sale "NA".
+        const sujRet = document.getElementById('liq-pag-ext-suj-ret');
+        const conConvenio = document.getElementById('liq-aplic-conv-dob-trib').value === 'SI';
+        if (esExterior && conConvenio) {
+            sujRet.value = '';
+            sujRet.disabled = true;
+        }
+
+        // El concepto de Renta es opcional (solo si no hay retención).
+        const incompleto = esExterior && campos.some(el =>
+            el.id !== 'liq-cod-ret-air-ext' && !(el.id === 'liq-pag-ext-suj-ret' && conConvenio) && !el.value);
         document.getElementById('liq-badge-pago-exterior')?.classList.toggle('d-none', !incompleto);
     }
 
@@ -1084,6 +1094,8 @@
         document.getElementById('liq-cod-pais-pago').value       = d.cod_pais_pago || '';
         document.getElementById('liq-aplic-conv-dob-trib').value = d.aplic_conv_dob_trib || '';
         document.getElementById('liq-pag-ext-suj-ret').value     = d.pag_ext_suj_ret_nor_leg || '';
+        const concepto = document.getElementById('liq-cod-ret-air-ext');
+        if (concepto) concepto.value = d.cod_ret_air_exterior || '';
         lcSincronizarPagoExterior();
     }
 
@@ -1095,6 +1107,7 @@
             cod_pais_pago:           esExterior ? document.getElementById('liq-cod-pais-pago').value : '',
             aplic_conv_dob_trib:     esExterior ? document.getElementById('liq-aplic-conv-dob-trib').value : '',
             pag_ext_suj_ret_nor_leg: esExterior ? document.getElementById('liq-pag-ext-suj-ret').value : '',
+            cod_ret_air_exterior:    esExterior ? (document.getElementById('liq-cod-ret-air-ext')?.value || '') : '',
         };
     }
 
@@ -1109,7 +1122,9 @@
             ['liq-cod-pais-pago',       'el país donde se efectuó el pago'],
             ['liq-aplic-conv-dob-trib', 'si aplica convenio de doble tributación'],
             ['liq-pag-ext-suj-ret',     'si está sujeto a retención según la norma legal'],
-        ].filter(([id]) => !document.getElementById(id).value).map(([, texto]) => texto);
+        ].filter(([id]) => !(id === 'liq-pag-ext-suj-ret'
+                && document.getElementById('liq-aplic-conv-dob-trib').value === 'SI')
+            && !document.getElementById(id).value).map(([, texto]) => texto);
 
         if (!faltantes.length) return true;
 

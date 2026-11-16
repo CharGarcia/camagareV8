@@ -34,6 +34,29 @@ class AtsRepository extends BaseRepository
         return $st;
     }
 
+    /** @var array<string, bool> */
+    private array $tieneConcepto = [];
+
+    /**
+     * Expresión para leer cod_ret_air_exterior (concepto de Renta de un pago al
+     * exterior sin retención). La columna llega con
+     * database/2026-11-16_pago_exterior_concepto_renta.sql; sin ella se lee NULL y
+     * el anexo se genera igual que antes.
+     */
+    private function columnaConceptoExterior(string $tabla, string $alias): string
+    {
+        if (!isset($this->tieneConcepto[$tabla])) {
+            try {
+                $st = $this->db->prepare("SELECT 1 FROM information_schema.columns WHERE table_name = ? AND column_name = 'cod_ret_air_exterior'");
+                $st->execute([$tabla]);
+                $this->tieneConcepto[$tabla] = $st->fetchColumn() !== false;
+            } catch (\Throwable $e) {
+                $this->tieneConcepto[$tabla] = false;
+            }
+        }
+        return $this->tieneConcepto[$tabla] ? "{$alias}.cod_ret_air_exterior" : 'NULL::varchar';
+    }
+
     /**
      * Datos del informante: empresa + número de establecimientos activos.
      */
@@ -100,6 +123,7 @@ class AtsRepository extends BaseRepository
                        c.cod_doc_reembolso,
                        c.pago_loc_ext, c.cod_pais_pago,
                        c.aplic_conv_dob_trib, c.pag_ext_suj_ret_nor_leg,
+                       " . $this->columnaConceptoExterior('compras_cabecera', 'c') . " AS cod_ret_air_exterior,
                        p.tipo_id_proveedor,
                        p.identificacion AS prov_identificacion,
                        p.razon_social   AS prov_razon_social,
@@ -183,6 +207,7 @@ class AtsRepository extends BaseRepository
                        l.cod_pais_pago,
                        l.aplic_conv_dob_trib,
                        l.pag_ext_suj_ret_nor_leg,
+                       " . $this->columnaConceptoExterior('liquidaciones_cabecera', 'l') . " AS cod_ret_air_exterior,
                        p.tipo_id_proveedor,
                        p.identificacion AS prov_identificacion,
                        p.razon_social   AS prov_razon_social,

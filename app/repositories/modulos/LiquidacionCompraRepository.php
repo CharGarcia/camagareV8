@@ -481,7 +481,9 @@ class LiquidacionCompraRepository extends BaseRepository
             $pagoExt['pag_ext_suj_ret_nor_leg'],
         ];
 
-        return (int) $this->query($sql, $params)->fetchColumn();
+        $id = (int) $this->query($sql, $params)->fetchColumn();
+        $this->guardarConceptoRentaExterior($id, (int) $data['id_empresa'], $data);
+        return $id;
     }
 
     public function updateCabecera(int $id, array $data): void
@@ -524,6 +526,7 @@ class LiquidacionCompraRepository extends BaseRepository
         ];
 
         $this->query($sql, $params);
+        $this->guardarConceptoRentaExterior($id, (int) $data['id_empresa'], $data);
     }
 
     /**
@@ -543,8 +546,40 @@ class LiquidacionCompraRepository extends BaseRepository
             'pago_loc_ext'            => $esExterior ? '02' : '01',
             'cod_pais_pago'           => $esExterior ? (($data['cod_pais_pago'] ?? '') ?: null) : null,
             'aplic_conv_dob_trib'     => $esExterior ? (($data['aplic_conv_dob_trib'] ?? '') ?: null) : null,
-            'pag_ext_suj_ret_nor_leg' => $esExterior ? (($data['pag_ext_suj_ret_nor_leg'] ?? '') ?: null) : null,
+            // Con convenio (SI) la ficha del ATS no pide este dato: se guarda NULL y sale "NA".
+            'pag_ext_suj_ret_nor_leg' => $esExterior && ($data['aplic_conv_dob_trib'] ?? '') !== 'SI'
+                ? (($data['pag_ext_suj_ret_nor_leg'] ?? '') ?: null) : null,
         ];
+    }
+
+    private ?bool $tieneConceptoRentaExterior = null;
+
+    /** Ver ComprasRepository: columna de database/2026-11-16_pago_exterior_concepto_renta.sql. */
+    private function tieneConceptoRentaExterior(): bool
+    {
+        if ($this->tieneConceptoRentaExterior === null) {
+            try {
+                $this->tieneConceptoRentaExterior = $this->db->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'liquidaciones_cabecera' AND column_name = 'cod_ret_air_exterior'")->fetchColumn() !== false;
+            } catch (\Throwable $e) {
+                $this->tieneConceptoRentaExterior = false;
+            }
+        }
+        return $this->tieneConceptoRentaExterior;
+    }
+
+    /** Concepto de Renta (500-525) de un pago al exterior sin retención (ATS). */
+    private function guardarConceptoRentaExterior(int $id, int $idEmpresa, array $data): void
+    {
+        if (!array_key_exists('cod_ret_air_exterior', $data) || !$this->tieneConceptoRentaExterior()) {
+            return;
+        }
+        $valor = ($data['pago_loc_ext'] ?? '01') === '02'
+            ? \App\Helpers\ConceptosRentaExterior::normalizar($data['cod_ret_air_exterior'])
+            : null;
+        $this->query(
+            "UPDATE liquidaciones_cabecera SET cod_ret_air_exterior = ? WHERE id = ? AND id_empresa = ?",
+            [$valor, $id, $idEmpresa]
+        );
     }
 
     /**

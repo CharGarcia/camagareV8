@@ -6,7 +6,7 @@ ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
 etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras, nota de debito, valores en cero, forma de pago, 500, pago al exterior, no residente, tipo de regimen, 332
-version: 1.10
+version: 1.11
 orden: 30
 estado: activo
 ---
@@ -213,10 +213,13 @@ anexo usa las formas de pago registradas en el documento en **Compras**:
 - **"El concepto de retención en la fuente reportado [332] no es válido para
   tipo de pago"** o **"Es un pago al exterior sin retención de Renta"**: el
   332 (*no sujeto a retención*) solo sirve para pagos a residentes, y para
-  pagos al exterior no existe un concepto equivalente. Registre la retención
-  de la compra en **Retenciones en Compras** con el concepto de pago a no
-  residentes que corresponda (códigos 500 a 525), aunque sea al 0 % por un
-  convenio de doble tributación, y vuelva a generar el anexo.
+  pagos al exterior no existe un concepto equivalente. Si la compra **no**
+  lleva retención (p. ej. bienes comprados a un país con convenio, como
+  Colombia), abra la compra y en la pestaña **ATS**, tarjeta *Pago al
+  exterior*, elija el **Concepto de Renta si no hay retención** (por ejemplo
+  501): el anexo lo reporta con la base de la compra al 0 %. Si sí lleva
+  retención, regístrela en **Retenciones en Compras** con su concepto 500 a
+  525. Luego vuelva a generar el anexo.
 - **"El ID CLIENTE [...] no es válido para el TIPO [C]"** o **"la cédula ... no
   es válida (no cumple el dígito verificador)"**: el cliente (o proveedor) está
   registrado con cédula, pero el número no cumple el dígito verificador, casi
@@ -227,6 +230,7 @@ anexo usa las formas de pago registradas en el documento en **Compras**:
 
 ## Historial de cambios
 
+- **1.11** — Pago al exterior sin retención: el anexo reporta el **concepto de Renta** elegido en la compra o liquidación (500 a 525) con la base del documento al 0 %. Con convenio de doble tributación **SI**, *pagExtSujRetNorLeg* sale como "NA", como pide la ficha.
 - **1.10** — **Revisión antes de generar**: el botón *Generar* primero revisa
   el periodo y, si hay errores, los muestra sin crear el archivo (queda la
   opción *Generar de todas formas*). La revisión detecta además las cédulas de

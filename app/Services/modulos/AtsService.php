@@ -894,7 +894,21 @@ class AtsService
         // concepto equivalente; la compra necesita su retención con un código 5xx
         // (aunque sea al 0%) y el validador lo avisa.
         $esPagoExterior = (string) ($doc['pago_loc_ext'] ?? '01') === '02';
-        if ($air === [] && $tipoComp !== '04' && !$esPagoExterior) {
+        $conceptoExt    = \App\Helpers\ConceptosRentaExterior::normalizar($doc['cod_ret_air_exterior'] ?? null);
+        if ($air === [] && $tipoComp !== '04' && $esPagoExterior && $conceptoExt !== null) {
+            // Pago al exterior sin retención: el usuario eligió en el documento el
+            // concepto de pago a no residentes (p. ej. 501 con convenio de doble
+            // tributación). Se reporta como el 332: base del documento, 0 % y 0,00.
+            $baseNoRet = $baseGrav + $base0 + $baseNoG + $baseExe;
+            if ($baseNoRet > 0) {
+                $air[] = [
+                    'codRetAir'     => $conceptoExt,
+                    'baseImpAir'    => $this->money($baseNoRet),
+                    'porcentajeAir' => '0',
+                    'valRetAir'     => '0.00',
+                ];
+            }
+        } elseif ($air === [] && $tipoComp !== '04' && !$esPagoExterior) {
             $baseNoRet = $baseGrav + $base0 + $baseNoG + $baseExe;
             if ($baseNoRet > 0) {
                 $air[] = [
@@ -1123,7 +1137,10 @@ class AtsService
             'paisEfecPagoGen'    => $pais,
             'paisEfecPago'       => $pais,
             'aplicConvDobTrib'   => trim((string) ($doc['aplic_conv_dob_trib'] ?? '')) ?: 'NA',
-            'pagExtSujRetNorLeg' => trim((string) ($doc['pag_ext_suj_ret_nor_leg'] ?? '')) ?: 'NA',
+            // Ficha ATS: solo se reporta cuando NO aplica convenio; con convenio va "NA".
+            'pagExtSujRetNorLeg' => trim((string) ($doc['aplic_conv_dob_trib'] ?? '')) === 'SI'
+                ? 'NA'
+                : (trim((string) ($doc['pag_ext_suj_ret_nor_leg'] ?? '')) ?: 'NA'),
         ];
     }
 

@@ -596,6 +596,12 @@ $pestanasConfigLiq = array_merge(
                                                                 <option value="NO">NO</option>
                                                             </select>
                                                         </div>
+                                                        <div class="col-12">
+                                                            <label for="liq-cod-ret-air-ext" class="x-small text-muted d-block mb-1">Concepto de Renta si no hay retención</label>
+                                                            <select class="form-select form-select-sm" id="liq-cod-ret-air-ext" disabled>
+                                                                <?= \App\Helpers\ConceptosRentaExterior::opcionesHtml() ?>
+                                                            </select>
+                                                        </div>
                                                     </div>
                                                     <div class="x-small text-muted mt-2">
                                                         Servicios de un no residente (proveedor con identificación del exterior):

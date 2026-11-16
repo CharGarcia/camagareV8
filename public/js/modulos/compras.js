@@ -1132,22 +1132,33 @@ document.getElementById('mcTipoComprobante').addEventListener('change', function
 /** Habilita los campos dependientes y avisa si falta algo por llenar. */
 function mcSincronizarPagoExterior() {
     const esExterior = document.getElementById('mcPagoLocExt').value === '02';
-    const campos = ['mcCodPaisPago', 'mcAplicConvDobTrib', 'mcPagExtSujRetNorLeg']
-        .map(id => document.getElementById(id));
+    const campos = ['mcCodPaisPago', 'mcAplicConvDobTrib', 'mcPagExtSujRetNorLeg', 'mcCodRetAirExterior']
+        .map(id => document.getElementById(id)).filter(Boolean);
 
     campos.forEach(el => {
         el.disabled = !esExterior;
         if (!esExterior) el.value = '';
     });
 
+    // Con convenio de doble tributación (SI) la ficha del ATS no pide «sujeto a
+    // retención según norma legal»: se reporta "NA".
+    const sujRet = document.getElementById('mcPagExtSujRetNorLeg');
+    const conConvenio = document.getElementById('mcAplicConvDobTrib').value === 'SI';
+    if (esExterior && conConvenio) {
+        sujRet.value = '';
+        sujRet.disabled = true;
+    }
+
     // Badge en la pestaña: pago al exterior con algún dato pendiente, o un
-    // comprobante del exterior declarado como pago local.
+    // comprobante del exterior declarado como pago local. El concepto de Renta
+    // es opcional (solo si no hay retención).
     const tipo = document.getElementById('mcTipoComprobante').value;
-    const incompleto = esExterior ? campos.some(el => !el.value) : tipo === '15';
+    const obligatorios = campos.filter(el => el.id !== 'mcCodRetAirExterior' && !el.disabled);
+    const incompleto = esExterior ? obligatorios.some(el => !el.value) : tipo === '15';
     document.getElementById('mcBadgePagoExterior')?.classList.toggle('d-none', !incompleto);
 }
 
-['mcPagoLocExt', 'mcCodPaisPago', 'mcAplicConvDobTrib', 'mcPagExtSujRetNorLeg'].forEach(id => {
+['mcPagoLocExt', 'mcCodPaisPago', 'mcAplicConvDobTrib', 'mcPagExtSujRetNorLeg', 'mcCodRetAirExterior'].forEach(id => {
     document.getElementById(id)?.addEventListener('change', mcSincronizarPagoExterior);
 });
 
@@ -1157,6 +1168,8 @@ function mcCargarPagoExterior(d) {
     document.getElementById('mcCodPaisPago').value          = d.cod_pais_pago || '';
     document.getElementById('mcAplicConvDobTrib').value     = d.aplic_conv_dob_trib || '';
     document.getElementById('mcPagExtSujRetNorLeg').value   = d.pag_ext_suj_ret_nor_leg || '';
+    const concepto = document.getElementById('mcCodRetAirExterior');
+    if (concepto) concepto.value = d.cod_ret_air_exterior || '';
     mcSincronizarPagoExterior();
 }
 
@@ -1172,7 +1185,8 @@ function mcValidarPagoExterior() {
         ['mcCodPaisPago',        'el país donde se efectuó el pago'],
         ['mcAplicConvDobTrib',   'si aplica convenio de doble tributación'],
         ['mcPagExtSujRetNorLeg', 'si está sujeto a retención según la norma legal'],
-    ].filter(([id]) => !document.getElementById(id).value).map(([, texto]) => texto);
+    ].filter(([id]) => !document.getElementById(id).disabled && !document.getElementById(id).value)
+     .map(([, texto]) => texto);
 
     if (!faltantes.length) return true;
 
@@ -1205,6 +1219,7 @@ function mcRecolectarPagoExterior() {
         cod_pais_pago:           esExterior ? document.getElementById('mcCodPaisPago').value : '',
         aplic_conv_dob_trib:     esExterior ? document.getElementById('mcAplicConvDobTrib').value : '',
         pag_ext_suj_ret_nor_leg: esExterior ? document.getElementById('mcPagExtSujRetNorLeg').value : '',
+        cod_ret_air_exterior:    esExterior ? (document.getElementById('mcCodRetAirExterior')?.value || '') : '',
     };
 }
 

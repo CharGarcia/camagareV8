@@ -981,6 +981,16 @@
                             <option value="NO">NO</option>
                           </select>
                         </div>
+                        <div class="col-12">
+                          <label for="mcCodRetAirExterior" class="form-label small fw-bold d-block mb-1">Concepto de Renta si no hay retención</label>
+                          <select class="form-select form-select-sm" id="mcCodRetAirExterior" disabled>
+                            <?= \App\Helpers\ConceptosRentaExterior::opcionesHtml() ?>
+                          </select>
+                          <div class="x-small text-muted mt-1">
+                            Para el ATS, cuando la compra no lleva retención (p. ej. bienes de un país con convenio):
+                            se reporta con la base de la compra al 0 %. Si registra una retención, el anexo usa la retención.
+                          </div>
+                        </div>
                       </div>
                       <div class="x-small text-muted mt-2">
                         Un comprobante emitido en el exterior (tipo 15) es siempre un pago al exterior:

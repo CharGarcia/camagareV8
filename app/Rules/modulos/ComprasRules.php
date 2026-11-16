@@ -29,8 +29,15 @@ class ComprasRules
         if (!in_array((string) ($data['aplic_conv_dob_trib'] ?? ''), ['SI', 'NO'], true)) {
             throw new \Exception('Indique si al pago al exterior se le aplica convenio de doble tributación.');
         }
-        if (!in_array((string) ($data['pag_ext_suj_ret_nor_leg'] ?? ''), ['SI', 'NO'], true)) {
+        // Ficha ATS: «sujeto a retención según la norma legal» solo se pide cuando
+        // NO aplica convenio de doble tributación; con convenio sale "NA".
+        if (($data['aplic_conv_dob_trib'] ?? '') === 'NO'
+            && !in_array((string) ($data['pag_ext_suj_ret_nor_leg'] ?? ''), ['SI', 'NO'], true)) {
             throw new \Exception('Indique si el pago al exterior está sujeto a retención según la norma legal.');
+        }
+        $concepto = trim((string) ($data['cod_ret_air_exterior'] ?? ''));
+        if ($concepto !== '' && !\App\Helpers\ConceptosRentaExterior::existe($concepto)) {
+            throw new \Exception('El concepto de Renta del pago al exterior no corresponde a la tabla del SRI (500 a 525).');
         }
     }
 

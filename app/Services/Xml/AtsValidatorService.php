@@ -317,14 +317,18 @@ class AtsValidatorService
         // (es de pago a residente) y no hay un "no sujeto" para no residentes.
         if ($tipoComp !== '04' && $this->hijo($d, 'air') === null) {
             $err[] = "{$p}: es un pago al exterior sin retención de Renta. El SRI no acepta el concepto 332 "
-                   . "para no residentes: registre la retención de esta compra con el concepto de pago a no "
-                   . "residentes (códigos 500 a 525) que corresponda, aunque sea al 0%, y vuelva a generar el anexo.";
+                   . "para no residentes. Si la compra no lleva retención (p. ej. bienes de un país con convenio), "
+                   . "elija el «Concepto de Renta si no hay retención» en la tarjeta Pago al exterior de su pestaña "
+                   . "ATS (se reporta al 0 %); si sí lleva, registre la retención con su concepto 500 a 525.";
         }
-        foreach (['aplicConvDobTrib' => 'el convenio de doble tributación',
-                  'pagExtSujRetNorLeg' => 'la sujeción a retención según la norma legal'] as $campo => $texto) {
-            if (!in_array($this->texto($pe, $campo), ['SI', 'NO'], true)) {
-                $err[] = "{$p}: en un pago al exterior hay que indicar {$texto} (SI o NO).";
-            }
+        $convenio = $this->texto($pe, 'aplicConvDobTrib');
+        if (!in_array($convenio, ['SI', 'NO'], true)) {
+            $err[] = "{$p}: en un pago al exterior hay que indicar el convenio de doble tributación (SI o NO).";
+        } elseif ($convenio === 'NO'
+            && !in_array($this->texto($pe, 'pagExtSujRetNorLeg'), ['SI', 'NO'], true)) {
+            // Con convenio (SI) la ficha no pide este dato y sale "NA".
+            $err[] = "{$p}: en un pago al exterior sin convenio hay que indicar la sujeción a retención "
+                   . "según la norma legal (SI o NO).";
         }
     }
 
