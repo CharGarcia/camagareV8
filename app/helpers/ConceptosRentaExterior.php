@@ -72,7 +72,9 @@ final class ConceptosRentaExterior
     {
         $h = '<option value="">-- Sin concepto --</option>';
         foreach (self::CATALOGO as $cod => $nombre) {
-            $c = htmlspecialchars($cod, ENT_QUOTES, 'UTF-8');
+            // PHP convierte a entero las claves numéricas ('500' → 500) y con
+            // strict_types htmlspecialchars() no acepta un int: se fuerza string.
+            $c = htmlspecialchars((string) $cod, ENT_QUOTES, 'UTF-8');
             $h .= '<option value="' . $c . '">' . $c . ' - ' . htmlspecialchars($nombre, ENT_QUOTES, 'UTF-8') . '</option>';
         }
         return $h;
