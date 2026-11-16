@@ -66,7 +66,7 @@ las tarjetas *Vencido* y *Al Día* y la vista *Por antigüedad*:
 El botón **Por antigüedad** muestra una línea por proveedor con su **saldo
 pendiente repartido en columnas** según los días que lleva vencido: *Por
 vencer*, un rango por cada tramo y *Más de N días*, con el total del proveedor y
-el **TOTAL** justo debajo de los títulos. Lo vencido sale en rojo.
+el **TOTAL** al pie. Lo vencido sale en rojo.
 
 Junto a los botones de vista aparece el selector de **tramos** (30·60·90,
 15·30·60·90, 30·60·90·120, 15·30·45·60·90 o 30·60·90·180·360 días); cambiarlo
@@ -81,8 +81,8 @@ El botón **Por proveedor** resume la deuda en **una línea por proveedor**: su
 identificación, cuántos documentos tiene y sus totales —total, NC, abonos,
 retenciones y, sobre todo, el **saldo por pagar** de ese proveedor, en rojo
 mientras se le deba algo—. Al desplegar una línea se lee como el **mayor de una
-cuenta contable**: debajo aparecen los documentos de ese proveedor. Justo debajo
-de los títulos va la fila **TOTAL GENERAL**.
+cuenta contable**: debajo aparecen los documentos de ese proveedor. Al final del
+listado va la fila **TOTAL GENERAL**.
 
 - El listado arranca **plegado**: de un vistazo se ve cuánto se le debe a cada
   proveedor. Un clic en su línea despliega los documentos y otro la vuelve a
@@ -496,7 +496,7 @@ la factura que modifican. Mismo criterio que
 el Reporte de Cartera y que el asiento contable de la compra.
 
 ## Historial de cambios
-- **1.35** (16-11-2026) — Con muchas filas, los **títulos de las columnas quedan fijos** bajo la tarjeta de filtros al bajar por la lista, y en las vistas *Por proveedor* y *Por antigüedad* la fila de **TOTAL** pasa a ir justo debajo de los títulos: siempre se ve a qué columna corresponde cada total. El PDF y el Excel no cambian.
+- **1.35** (16-11-2026) — Con muchas filas, los **títulos de las columnas quedan fijos** bajo la tarjeta de filtros al bajar por la lista, y en las vistas *Por proveedor* y *Por antigüedad* la fila de **TOTAL** queda **pegada al borde inferior de la pantalla** hasta llegar al final de la lista: títulos y totales se ven a la vez. El PDF y el Excel no cambian.
 - **1.34** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas de la vista Detallado elegibles por separado para pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Se pueden agregar columnas que antes solo estaban en el Excel (RUC, Días vencidos, Notas de crédito, Notas de débito, Retenciones).
 - **1.33** — Corregido: un documento con un plazo de crédito desmedido (millones de días) hacía fallar la consulta con *timestamp out of range*; el vencimiento ahora se limita a 100 años.
 - **1.32** — Selector **Vencimiento según** (plazo del documento, del proveedor o

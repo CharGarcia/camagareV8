@@ -330,8 +330,8 @@ El botón **Por cliente** resume la cartera en **una línea por cliente**: su
 identificación, cuántos documentos tiene y sus totales —total, NC, abonos,
 retenciones y, sobre todo, el **saldo por cobrar** de ese cliente, en rojo
 mientras deba algo—. Al desplegar una línea se lee como el **mayor de una
-cuenta contable**: debajo aparecen los documentos de ese cliente. Justo debajo
-de los títulos va la fila **TOTAL GENERAL** con la suma de todos.
+cuenta contable**: debajo aparecen los documentos de ese cliente. Al final del
+listado va la fila **TOTAL GENERAL** con la suma de todos.
 
 - El listado arranca **plegado**: de un vistazo se ve cuánto debe cada cliente.
   Un clic en su línea despliega los documentos y otro la vuelve a plegar; el
@@ -563,8 +563,7 @@ automáticos y el registro del cobro siguen usando el crédito del documento.
 El botón **Por antigüedad** muestra una línea por cliente con su **saldo
 pendiente repartido en columnas** según los días que lleva vencido: *Por
 vencer*, luego un rango por cada tramo y al final *Más de N días*, con el total
-del cliente y, justo debajo de los títulos, el **TOTAL** de todos. Lo vencido
-sale en rojo.
+del cliente y el **TOTAL** de todos al pie. Lo vencido sale en rojo.
 
 Junto a los botones de vista aparece el selector de **tramos**: 30·60·90,
 15·30·60·90, 30·60·90·120, 15·30·45·60·90 o 30·60·90·180·360 días. Cambiarlo no
@@ -931,7 +930,7 @@ El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
   (y en las demás que tienen el panel de detalle). Ya está corregido.
 
 ## Historial de cambios
-- **2.44** (16-11-2026) — Con muchas filas, los **títulos de las columnas quedan fijos** bajo la tarjeta de filtros al bajar por la lista, y en las vistas *Por cliente* y *Por antigüedad* la fila de **TOTAL** pasa a ir justo debajo de los títulos: siempre se ve a qué columna corresponde cada total. El PDF y el Excel no cambian.
+- **2.44** (16-11-2026) — Con muchas filas, los **títulos de las columnas quedan fijos** bajo la tarjeta de filtros al bajar por la lista, y en las vistas *Por cliente* y *Por antigüedad* la fila de **TOTAL** queda **pegada al borde inferior de la pantalla** hasta llegar al final de la lista: títulos y totales se ven a la vez. El PDF y el Excel no cambian.
 - **2.43** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas de la vista Detallado elegibles por separado para pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Se pueden agregar columnas que antes solo estaban en el Excel (RUC/Cédula, Vendedor, Días, Abonos, Notas de crédito, Retenciones).
 - **2.42** — Corregido: un documento con un plazo de crédito desmedido (millones de días) hacía fallar la consulta con *timestamp out of range*; el vencimiento ahora se limita a 100 años.
 - **2.41** — El PDF de la factura que se envía por **WhatsApp** desde Cuentas por Cobrar usa la configuración del **establecimiento de la serie** de la factura (decimales, presentación de ítems, dirección, leyendas), igual que el módulo Facturas de Venta. Antes tomaba siempre el primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.

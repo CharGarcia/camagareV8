@@ -1032,19 +1032,23 @@ window.CMG_Identificacion = (function () {
 })();
 
 /**
- * Cabecera fija para tablas largas en páginas que hacen scroll completo (reportes con
- * .cmg-control-card, donde la tabla NO tiene scroll interno, §9). Mientras la tabla pasa
- * por debajo de la tarjeta de control, las celdas del <thead> se desplazan con translateY
- * y quedan pegadas justo bajo ella. Si la fila de TOTAL va dentro del thead (después de
- * los títulos), viaja con ellos: siempre se ve a qué columna corresponde cada total.
+ * Cabecera y totales fijos para tablas largas en páginas que hacen scroll completo
+ * (reportes con .cmg-control-card, donde la tabla NO tiene scroll interno, §9):
+ *  - Mientras la tabla pasa por debajo de la tarjeta de control, las celdas del <thead>
+ *    se desplazan con translateY y quedan pegadas justo bajo ella.
+ *  - Con `pie` (selector de la fila de totales; se toma la última que coincida), esa fila
+ *    se queda pegada al borde inferior de la ventana mientras el final de la tabla aún no
+ *    se ve; al llegar al final vuelve a su sitio. Así títulos y totales están a la vista
+ *    a la vez y se lee a qué columna corresponde cada total.
  * No se usa position:sticky porque el contenedor {modulo}-scroll lleva overflow-x:auto
  * y eso lo anula. Se re-aplica sola al repintar thead/tbody (vista, filtros, grupos).
  *
- *   CMG_cabeceraFija(document.getElementById('tabla-cxc'));
+ *   CMG_cabeceraFija(document.getElementById('tabla-cxc'), { pie: 'tr.cxc-mayor-total' });
  */
-window.CMG_cabeceraFija = function (tabla) {
+window.CMG_cabeceraFija = function (tabla, opciones) {
     if (!tabla || tabla.__cmgCabeceraFija) return;
     tabla.__cmgCabeceraFija = true;
+    var pieSel = (opciones && opciones.pie) || '';
     var raf = 0, movidas = [];
 
     function tope() {
@@ -1052,27 +1056,40 @@ window.CMG_cabeceraFija = function (tabla) {
         if (card) return card.getBoundingClientRect().bottom;
         return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cmg-sticky-h')) || 0;
     }
+    function mover(celdas, dy, clase) {
+        for (var i = 0; i < celdas.length; i++) {
+            celdas[i].style.transform = 'translateY(' + dy + 'px)';
+            celdas[i].classList.add(clase);
+            movidas.push(celdas[i]);
+        }
+    }
     function aplicar() {
         raf = 0;
-        // Limpiar lo desplazado antes de medir (la cabecera puede haberse repintado).
+        // Limpiar lo desplazado antes de medir (las filas pueden haberse repintado).
         for (var i = 0; i < movidas.length; i++) {
             movidas[i].style.transform = '';
-            movidas[i].classList.remove('cmg-th-flotante');
+            movidas[i].classList.remove('cmg-th-flotante', 'cmg-pie-flotante');
         }
         movidas = [];
-        var thead = tabla.tHead;
-        if (!thead || !tabla.isConnected || tabla.offsetParent === null) return;
+        if (!tabla.isConnected || tabla.offsetParent === null) return;
 
         var rTab  = tabla.getBoundingClientRect();
-        var hHead = thead.getBoundingClientRect().height;
-        // Baja hasta quedar bajo la tarjeta de control, sin salirse por el final de la tabla.
-        var dy = Math.min(Math.max(0, tope() - rTab.top), Math.max(0, rTab.height - hHead));
-        if (dy < 1) return;
-        var celdas = thead.querySelectorAll('th, td');
-        for (var j = 0; j < celdas.length; j++) {
-            celdas[j].style.transform = 'translateY(' + Math.round(dy) + 'px)';
-            celdas[j].classList.add('cmg-th-flotante');
-            movidas.push(celdas[j]);
+        var thead = tabla.tHead;
+        var hHead = thead ? thead.getBoundingClientRect().height : 0;
+        var pies  = pieSel && tabla.tBodies[0] ? tabla.tBodies[0].querySelectorAll(pieSel) : [];
+        var pie   = pies.length ? pies[pies.length - 1] : null;
+        var hPie  = pie ? pie.getBoundingClientRect().height : 0;
+
+        // Títulos: bajan hasta quedar bajo la tarjeta de control, sin pisar los totales.
+        var dy = Math.min(Math.max(0, tope() - rTab.top), Math.max(0, rTab.height - hHead - hPie));
+        if (thead && dy >= 1) mover(thead.querySelectorAll('th, td'), Math.round(dy), 'cmg-th-flotante');
+
+        // Totales: suben hasta el borde inferior de la ventana, sin montarse sobre los títulos.
+        if (pie) {
+            var rPie   = pie.getBoundingClientRect();
+            var limite = Math.max(rTab.top, tope()) + hHead;
+            var sube   = Math.min(rPie.bottom - window.innerHeight, rPie.top - limite);
+            if (sube >= 1) mover(pie.children, -Math.round(sube), 'cmg-pie-flotante');
         }
     }
     function programar() { if (!raf) raf = requestAnimationFrame(aplicar); }

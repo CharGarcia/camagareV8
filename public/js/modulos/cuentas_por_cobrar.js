@@ -110,8 +110,8 @@ document.addEventListener('DOMContentLoaded', () => {
     CXC_initOrden();
     CXC_aplicarFavoritos();
     CXC_estadoInicial();
-    // Con muchas filas, los títulos (y el TOTAL bajo ellos) quedan fijos bajo la tarjeta de control.
-    if (window.CMG_cabeceraFija) CMG_cabeceraFija(document.getElementById('tabla-cxc'));
+    // Con muchas filas, los títulos quedan fijos bajo la tarjeta de control y el TOTAL pegado al pie de la ventana.
+    if (window.CMG_cabeceraFija) CMG_cabeceraFija(document.getElementById('tabla-cxc'), { pie: 'tr.cxc-mayor-total' });
     // Series, conceptos y formas de cobro solo hacen falta si puede cobrar en esta empresa
     // (los de una hermana del consolidado se piden al abrir su cobro).
     if (CXC_PUEDE_COBRAR) CXC_cargarCatalogos();
@@ -356,7 +356,6 @@ function CXC_renderTabla(filas) {
 
     // Las columnas dependen de la vista: la de "Por cliente" muestra otro detalle.
     CXC_renderCabecera();
-    CXC_totalEnCabecera(''); // la vista que tenga total lo vuelve a poner bajo los títulos
 
     // Todavía sin aplicar: la tabla muestra la invitación a filtrar, no "sin resultados".
     if (!CXC_cargado) { CXC_estadoInicial(); return; }
@@ -806,9 +805,8 @@ function CXC_renderAgrupado(filas) {
         }
     }
 
-    // TOTAL GENERAL bajo los títulos (ver CXC_totalEnCabecera).
-    CXC_totalEnCabecera(`
-        <tr class="cxc-mayor-total cxc-total-cabecera">
+    html += `
+        <tr class="cxc-mayor-total">
             <td colspan="3" class="text-end" style="font-size:.8rem;">TOTAL GENERAL (${grupos.length} cliente${grupos.length !== 1 ? 's' : ''})</td>
             <td class="text-end" style="font-size:.82rem;">$${CXC_fmt(tTotal)}</td>
             <td class="text-end" style="font-size:.82rem;">${tNc > 0.001 ? '$' + CXC_fmt(tNc) : '<span class="text-muted">—</span>'}</td>
@@ -816,7 +814,7 @@ function CXC_renderAgrupado(filas) {
             <td class="text-end" style="font-size:.82rem;">${tRet > 0.001 ? '$' + CXC_fmt(tRet) : '<span class="text-muted">—</span>'}</td>
             <td class="text-end pe-2" style="font-size:.85rem;color:${tSaldo > 0 ? '#dc3545' : '#198754'};">$${CXC_fmt(tSaldo)}</td>
             <td colspan="${2 + colAse}"></td>
-        </tr>`);
+        </tr>`;
 
     tbody.innerHTML = html;
 }
@@ -915,7 +913,6 @@ function CXC_renderAntiguedad(filas) {
     const grupos = CXC_agruparPorCliente(pendientes);
     label.textContent = `${pendientes.length} docs · ${grupos.length} cliente${grupos.length !== 1 ? 's' : ''}`;
 
-    CXC_totalEnCabecera('');
     if (!grupos.length) {
         tbody.innerHTML = `<tr><td colspan="${CXC_nCols()}" class="text-center py-5 text-muted">
             <i class="bi bi-hourglass-split fs-3 d-block mb-2 text-success opacity-40"></i>
@@ -961,22 +958,12 @@ function CXC_renderAntiguedad(filas) {
             }
         }
     }
-    // El TOTAL va justo debajo de los títulos (dentro del thead): con muchas filas viaja
-    // junto con la cabecera fija y siempre se ve a qué columna corresponde cada total.
-    CXC_totalEnCabecera(`
-        <tr class="cxc-mayor-total cxc-total-cabecera">
+    html += `
+        <tr class="cxc-mayor-total">
             <td colspan="3" class="text-end" style="font-size:.8rem;">TOTAL (${grupos.length} cliente${grupos.length !== 1 ? 's' : ''})</td>
             ${celdas(tot, tot.reduce((a, b) => a + b, 0), true)}
-        </tr>`);
+        </tr>`;
     tbody.innerHTML = html;
-}
-
-/* Fila de TOTAL de la vista Por antigüedad, como segunda fila del thead. */
-function CXC_totalEnCabecera(trHtml) {
-    const thead = document.getElementById('cxc-thead');
-    if (!thead) return;
-    thead.querySelectorAll('tr.cxc-total-cabecera').forEach(tr => tr.remove());
-    if (trHtml) thead.insertAdjacentHTML('beforeend', trHtml);
 }
 
 /* ════════════════════════════════════════════════════

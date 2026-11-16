@@ -17,8 +17,6 @@
     .cxc-mayor-grp   > td { background:#eafaf1; border-top:1px solid rgba(25,135,84,.45); }
     .cxc-mayor-total > td { background:#f8f9fa; font-weight:800; border-top:2px solid #343a40; }
     .cxc-mayor-gap   > td { height:10px; padding:0; border:0; background:transparent; }
-    /* TOTAL bajo los títulos (Por cliente / Por antigüedad): la línea fuerte lo separa del listado */
-    thead > tr.cxc-total-cabecera > td { border-top:1px solid #dee2e6; border-bottom:2px solid #343a40; }
     /* Las filas de sección no son documentos: el hover de Bootstrap las apagaría. */
     .table-hover > tbody > tr.cxc-mayor-grp:hover > td,
     .table-hover > tbody > tr.cxc-mayor-total:hover > td,

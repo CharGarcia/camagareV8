@@ -1709,14 +1709,16 @@ th[data-det-col] .cmg-resizer {
     background: #fff;
 }
 
-/* Cabecera flotante de la tabla (CMG_cabeceraFija, app.js): las celdas del thead
+/* Títulos y totales flotantes de la tabla (CMG_cabeceraFija, app.js): las celdas
    desplazadas pintan encima de las filas por las que pasan. */
-.table thead .cmg-th-flotante {
+.table thead .cmg-th-flotante,
+.table tbody .cmg-pie-flotante {
     position: relative;
     z-index: 3;
     background-color: #f8f9fa;
-    box-shadow: 0 2px 3px -1px rgba(0,0,0,.18);
 }
+.table thead .cmg-th-flotante { box-shadow: 0 2px 3px -1px rgba(0,0,0,.18); }
+.table tbody .cmg-pie-flotante { box-shadow: 0 -3px 4px -1px rgba(0,0,0,.2); }
 
 .cmg-control-card__stats {
     display: flex;
