@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.6** (16-11-2026). El historial está al final.
+Versión actual: **0.7** (16-11-2026). El historial está al final.
 
 ---
 
@@ -120,7 +120,7 @@ Dos locales, cada uno con módulos base de **$1.000 al año**, y **5 usuarios**.
 - Local 003: módulos base de $600 y además **Producción** ($400, módulo adicional).
 - **12 usuarios.**
 
-**Ejercicio 4 — Con implementación**
+**Ejercicio 4 — Con un pago único**
 Un local con módulos base de **$1.000** y **Migración de datos** de **$150** (pago
 único). 3 usuarios.
 
@@ -232,7 +232,7 @@ la tabla, para el capacitador.
 5. 2 (8 − 6 incluidos).
 6. No, solo en el plan anual.
 7. El de módulos base más caros.
-8. Por ejemplo: módulos no contratados, usuarios adicionales, firma electrónica, servicio contable, equipos e internet (la implementación va como servicio aparte en la cotización).
+8. Por ejemplo: módulos no contratados, usuarios adicionales, firma electrónica, servicio contable, equipos e internet. (La implementación **no tiene costo**.)
 9. No; puede usar la web o Android.
 10. Una próxima actividad con fecha.
 
@@ -269,6 +269,7 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.7 | 16-11-2026 | Implementación sin costo: el ejercicio 4 pasa a llamarse «Con un pago único» y se ajusta la respuesta 8. |
 | 0.6 | 16-11-2026 | Puesta en marcha y capacitación en línea por CaMaGaRe y soporte de lunes a viernes en el juego de roles y en las reglas. |
 | 0.5 | 15-11-2026 | Cada cotización queda atada al vendedor: vincular el usuario con su ficha de vendedor. |
 | 0.4 | 15-11-2026 | Paquetes de precio fijo y módulos incluidos en las reglas y errores frecuentes. |
