@@ -176,7 +176,7 @@ class ReporteVentasController extends BaseModuloController
             $html .= $td;
         }
         $etq = $lider > 0 ? "<td class='ps-4'" . ($lider > 1 ? " colspan='{$lider}'" : '') . ">{$etiqueta}</td>" : '';
-        return "<tr class='table-light fw-bold'>{$etq}{$html}</tr>";
+        return "<tr class='table-light fw-bold rv-fila-total'>{$etq}{$html}</tr>";
     }
 
     private function getFiltrosDesdeRequest(): array

@@ -4,6 +4,9 @@
 <style>
     .rv-scroll { overflow-x: auto; }
     .rv-scroll thead th { background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; white-space: nowrap; }
+    /* Fila de TOTAL (la arma el controlador): más oscura que las filas para que no parezca una más;
+       con muchas filas queda pegada al pie de la ventana (CMG_cabeceraFija, app.js). */
+    #tabla-reporte-ventas tr.rv-fila-total > td { background-color:#dfe3e8; border-top:2px solid #343a40; }
     /* Evita que el contenedor de chips (vacío hasta que se elige un cliente) desalinee la fila de filtros */
     #rv-chips-cliente:empty { margin-top:0; }
     /* Altura idéntica y explícita para todos los controles de filtros */

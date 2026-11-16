@@ -1,5 +1,8 @@
 // Control de vista para Reporte de Ventas
 document.addEventListener('DOMContentLoaded', function () {
+    // Con muchas filas, los títulos quedan fijos bajo la tarjeta de control y el TOTAL pegado al pie de la ventana.
+    if (window.CMG_cabeceraFija) CMG_cabeceraFija(document.getElementById('tabla-reporte-ventas'), { pie: 'tr.rv-fila-total' });
+
     // Aplicar favoritos si están disponibles
     if (typeof aplicarFavoritosModal === 'function') {
         aplicarFavoritosModal();
