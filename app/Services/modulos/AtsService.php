@@ -823,6 +823,19 @@ class AtsService
     private function mapearDocumento(array $doc, ?array $ret, array $pagos, array $terceros = []): array
     {
         $tipoComp = (string) $doc['tipo_comprobante'];
+        // Factura de reembolso RECIBIDA (con terceros): el SRI la exige como tipo 41
+        // «Comprobante de venta emitido por reembolso»; con tipo 01 rechaza el bloque
+        // <reembolsos> ("debe ser de TIPO 41, 47 o 48").
+        if ($terceros !== [] && $tipoComp === '01') {
+            $tipoComp = '41';
+            // El tipo 41 solo admite sustentos 01 a 07 (Tabla 4). El 08 es del
+            // INTERMEDIARIO que pide el reembolso, no de quien lo recibe; el sistema
+            // lo asignaba por error a estas compras. Se reporta el de por defecto y
+            // se avisa para corregirlo en Compras.
+            if (trim((string) ($doc['cod_sustento'] ?? '')) === '08') {
+                $doc['cod_sustento'] = '';
+            }
+        }
         $tpIdProv = self::MAP_TP_ID_PROV[(string) $doc['tipo_id_proveedor']] ?? (string) $doc['tipo_id_proveedor'];
 
         $estab = str_pad(substr((string) $doc['establecimiento_prov'], 0, 3), 3, '0', STR_PAD_LEFT);

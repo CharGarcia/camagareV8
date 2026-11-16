@@ -337,12 +337,10 @@ class DocumentoAutomatedRegisterService
             } elseif ($tipoId === '04') { // RUC
                 $idSustento = $this->getSustentoIdByCodigo('01');
             }
-            // Factura de Reembolso recibida (codDocReembolso=41): el sustento tributario
-            // correcto es siempre "08 - Valor pagado para solicitar Reembolso de Gasto
-            // (intermediario)" (Tabla 5 SRI), sin importar el tipo de identificación.
-            if ((string) ($info->codDocReembolso ?? '') === '41') {
-                $idSustento = $this->getSustentoIdByCodigo('08') ?? $idSustento;
-            }
+            // Factura de Reembolso recibida (codDocReembolso=41): lleva el sustento normal
+            // de la compra. El 08 ("Valor pagado para solicitar reembolso de gasto") es del
+            // INTERMEDIARIO que pide el reembolso; en el ATS esta factura va como tipo 41,
+            // que solo admite sustentos 01 a 07 (Tabla 4 del SRI).
 
             $idCompra = $this->insertarCompra($xml, $idEmpresa, $idProv, $idUsuario, $ambiente, $esGastoPersonal, $idSustento);
 
@@ -588,26 +586,22 @@ class DocumentoAutomatedRegisterService
 
         $db = Database::getConnection();
 
-        // Factura de Reembolso recibida (codDoc=01 con codDocReembolso=41): el sustento
-        // SIEMPRE es "08 - Valor pagado para solicitar Reembolso de Gasto (intermediario)",
-        // sin importar la preferencia guardada en el proveedor.
+        // Factura de Reembolso recibida (codDoc=01 con codDocReembolso=41): mismo sustento
+        // que cualquier compra. Antes se forzaba el 08, que es del INTERMEDIARIO; el ATS la
+        // reporta como tipo 41 y el SRI solo admite ahí los sustentos 01 a 07.
         $codDocReembolso = $codDoc === '01' ? (string) ($info->codDocReembolso ?? '') : '';
-        $esReembolso = $codDocReembolso === '41';
+        $esReembolso = $codDocReembolso === '41'; // se usa abajo para guardar los terceros
 
-        if (!$esReembolso) {
-            // Determinar sustento tributario preferido del proveedor
-            $stProv = $db->prepare("SELECT id_sustento_tributario FROM proveedores WHERE id = ? LIMIT 1");
-            $stProv->execute([$idProv]);
-            $rowProv = $stProv->fetch(PDO::FETCH_ASSOC);
-            if (!empty($rowProv['id_sustento_tributario'])) {
-                $idSustento = (int)$rowProv['id_sustento_tributario'];
-            }
-            // Si no tiene el proveedor Y no fue pasado por parámetro (null), fallback a defecto total 1 (01)
-            if (!$idSustento) {
-                $idSustento = 1;
-            }
-        } elseif (!$idSustento) {
-            $idSustento = $this->getSustentoIdByCodigo('08') ?? 1;
+        // Determinar sustento tributario preferido del proveedor
+        $stProv = $db->prepare("SELECT id_sustento_tributario FROM proveedores WHERE id = ? LIMIT 1");
+        $stProv->execute([$idProv]);
+        $rowProv = $stProv->fetch(PDO::FETCH_ASSOC);
+        if (!empty($rowProv['id_sustento_tributario'])) {
+            $idSustento = (int)$rowProv['id_sustento_tributario'];
+        }
+        // Si no tiene el proveedor Y no fue pasado por parámetro (null), fallback a defecto total 1 (01)
+        if (!$idSustento) {
+            $idSustento = 1;
         }
 
         $db->beginTransaction();

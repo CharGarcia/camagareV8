@@ -1414,15 +1414,9 @@ class ComprasService
             throw new \Exception('Esta compra proviene de una migración y no puede editarse.');
         }
 
-        // Factura de Reembolso recibida (codDocReembolso=41): el sustento tributario
-        // SIEMPRE es código 08, sin importar lo que el usuario intente cambiar en el
-        // formulario (el JS ya bloquea el selector; esto es el refuerzo del servidor).
-        if ((string) ($cabecera['cod_doc_reembolso'] ?? '') === '41') {
-            $idSustento08 = $this->getSustentoIdByCodigo('08');
-            if ($idSustento08) {
-                $data['id_sustento_tributario'] = $idSustento08;
-            }
-        }
+        // Factura de Reembolso recibida (codDocReembolso=41): ya no se fuerza el sustento
+        // 08. Ese código es del INTERMEDIARIO que pide el reembolso; quien lo recibe la
+        // declara en el ATS como tipo 41, que solo admite sustentos 01 a 07.
 
         $this->rules->validar($data);
         $this->rules->validarDeducible(
@@ -1609,15 +1603,6 @@ class ComprasService
             $idEmpresa,
             'No se puede modificar el Sustento Tributario porque el periodo contable está cerrado.'
         );
-
-        // Factura de Reembolso recibida: el sustento SIEMPRE es código 08 (mismo
-        // refuerzo que actualizar()), sin importar lo que se haya enviado.
-        if ((string) ($cabecera['cod_doc_reembolso'] ?? '') === '41') {
-            $idSustento08 = $this->getSustentoIdByCodigo('08');
-            if ($idSustento08) {
-                $idSustento = $idSustento08;
-            }
-        }
 
         $db = Database::getConnection();
         $st = $db->prepare("SELECT 1 FROM sustento_tributario WHERE id = ? AND status = 1");

@@ -187,9 +187,6 @@
                 <select id="mcSustento" class="form-select form-select-sm">
                   <option value="">-- Seleccione Tipo de Comprobante --</option>
                 </select>
-                <div id="mcSustentoReembolsoHelp" class="form-text small text-muted d-none">
-                  <i class="bi bi-lock-fill"></i> Bloqueado: código 08 obligatorio por ser Factura de Reembolso recibida.
-                </div>
               </div>
 
               <!-- Autorización -->

@@ -4066,24 +4066,16 @@ function mcActualizarPestanaRelacionados(d) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Bloquea/desbloquea el selector de Sustento Tributario. Una Factura de
- * Reembolso recibida siempre debe declararse con sustento código 08 (Tabla 5
- * SRI); se deja fijo para que el usuario no pueda cambiarlo por error al
- * editar manualmente la compra (el servidor también lo re-fuerza al guardar).
+ * Antes bloqueaba el Sustento Tributario en 08 en las Facturas de Reembolso
+ * recibidas. Era un error: el 08 es del INTERMEDIARIO que pide el reembolso; quien
+ * lo recibe la declara en el ATS como tipo 41, que solo admite sustentos 01 a 07.
+ * Ahora solo libera un bloqueo que hubiera quedado de una compra anterior.
  */
-function mcAplicarBloqueoSustento(esReembolso) {
-    const sel  = document.getElementById('mcSustento');
-    const help = document.getElementById('mcSustentoReembolsoHelp');
-    if (!sel) return;
-    if (esReembolso) {
-        sel.disabled = true;
-        sel.classList.add('mc-lock-reembolso');
-        help?.classList.remove('d-none');
-    } else if (sel.classList.contains('mc-lock-reembolso')) {
-        sel.disabled = false;
-        sel.classList.remove('mc-lock-reembolso');
-        help?.classList.add('d-none');
-    }
+function mcAplicarBloqueoSustento() {
+    const sel = document.getElementById('mcSustento');
+    if (!sel || !sel.classList.contains('mc-lock-reembolso')) return;
+    sel.disabled = false;
+    sel.classList.remove('mc-lock-reembolso');
 }
 
 /** Muestra u oculta la pestaña "Detalle de Reembolso" y llena su tabla. */

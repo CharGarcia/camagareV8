@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, eliminar nota de credito de compra, nota de credito anulada, eliminar compra, eliminar factura electronica, se vuelve a descargar, no volver a descargar, documentos para no descargar, factura anulada en el sri, emitida por error, mover a otro establecimiento, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado
-version: 2.50
+version: 2.51
 orden: 20
 estado: activo
 ---
@@ -139,8 +139,13 @@ El sustento tributario se filtra por el **tipo de comprobante** elegido: primero
 seleccione el comprobante y recién ahí se cargan los sustentos válidos para ese
 tipo.
 
-En una **factura de reembolso recibida** el sustento queda fijo en *08 - Valor
-pagado para solicitar Reembolso de Gasto (intermediario)* y no se puede cambiar.
+En una **factura de reembolso recibida** (la que un proveedor le emite para
+recuperar gastos que pagó a nombre de su empresa) elija el sustento como en
+cualquier compra, normalmente *01 - Crédito tributario para declaración de IVA*.
+**No** use el *08 - Valor pagado para solicitar reembolso de gasto*: ese código
+es del intermediario que pide el reembolso, no de quien lo recibe. El ATS
+reporta esta factura como comprobante **tipo 41** (*emitido por reembolso*),
+que solo admite los sustentos 01 a 07.
 
 **Corregir el sustento en una compra migrada ELECTRÓNICA.** Una compra
 migrada **electrónica** (respaldada por un XML del SRI) es de solo lectura
@@ -149,8 +154,7 @@ Tributario** queda habilitado y se guarda con el botón **Actualizar** del pie
 del modal, porque las compras migradas llegan sin esta clasificación bien resuelta
 y el ATS/Declaración de IVA la necesitan correcta. Guardarlo no abre el resto
 del documento a edición, y sigue respetando las mismas reglas: no se puede
-tocar si el período contable de la compra está cerrado, y en una factura de
-reembolso recibida se sigue forzando al código 08.
+tocar si el período contable de la compra está cerrado.
 
 **Compras migradas y edición.** Una compra que viene de una migración es de
 **solo lectura** si es **electrónica** — no tiene otra forma de editarse salvo
@@ -921,6 +925,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.51** — **Facturas de reembolso recibidas**: el sustento tributario ya no se fuerza ni se bloquea en *08*. Ese código es del intermediario que pide el reembolso; la factura recibida lleva el sustento normal de la compra (normalmente 01) y el ATS la reporta como comprobante tipo 41. Las que quedaron con 08 se corrigen eligiendo el sustento en la compra.
 - **2.50** — Pestaña **ATS**, *Pago al exterior*: nuevo campo **Concepto de Renta si no hay retención** (códigos 500 a 525) para las compras al exterior sin retención, que el anexo reporta al 0 % en lugar del 332 que el SRI rechaza. Con convenio de doble tributación **SI**, *Sujeto a retención según norma legal* ya no se pide y sale como "NA". Requiere `database/2026-11-16_pago_exterior_concepto_renta.sql` para guardar el concepto.
 - **2.49** — El aviso al eliminar un comprobante electrónico también aplica, con su propio título, a las **notas de crédito y de débito de compra**: se puede dejar la nota en *Documentos para no descargar* (anulada en el SRI o registrada en otro establecimiento). El mensaje final dice *Nota de crédito eliminada* o *Nota de débito eliminada* según el documento.
 - **2.48** — Al **eliminar un comprobante electrónico** se pregunta el motivo: *anulado en el SRI o emitido por error* (no se vuelve a descargar en ningún establecimiento), *lo voy a registrar en otro establecimiento* (no se vuelve a descargar solo en este) o *solo eliminar*. Las dos primeras lo agregan a *Documentos para no descargar* de Descargas SRI. Requiere `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Eliminar un comprobante electrónico: que no se vuelva a descargar*.
