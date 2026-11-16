@@ -96,6 +96,29 @@ class AtsService
      */
     private array $sinFormaPago = [];
 
+    /**
+     * Facturas de reembolso recibidas (tipo 41) con una retención registrada: el
+     * SRI no admite retenciones en ese tipo, así que no se reportan y se avisa.
+     *
+     * @var array<string, string>  serie => serie
+     */
+    private array $reembolsoConRetencion = [];
+
+    /**
+     * Facturas de reembolso recibidas (tipo 41) registradas con el sustento 08, que
+     * ese tipo no admite: se reportan con el de por defecto y se avisa.
+     *
+     * @var array<string, string>  serie => "serie (proveedor)"
+     */
+    private array $reembolsoSustento08 = [];
+
+    /** "001-002-000014179 (RAZÓN SOCIAL DEL PROVEEDOR)" para los avisos del anexo. */
+    private function etiquetaDoc(string $serie, array $doc): string
+    {
+        $prov = trim((string) ($doc['prov_razon_social'] ?? ''));
+        return $prov !== '' ? "{$serie} ({$prov})" : $serie;
+    }
+
     public function __construct(
         private AtsRepository $repo,
         private XmlAtsService $xml,
@@ -225,6 +248,8 @@ class AtsService
         $this->sinBases      = [];
         $this->ndCompletadas = [];
         $this->sinFormaPago  = [];
+        $this->reembolsoConRetencion = [];
+        $this->reembolsoSustento08   = [];
 
         // El ATS se presenta por RUC completo, no por establecimiento: se consolidan todas las
         // filas de `empresas` con el mismo RUC a las que el usuario tenga acceso. Los queries de
@@ -564,6 +589,24 @@ class AtsService
             );
         }
 
+        if ($this->reembolsoSustento08 !== []) {
+            $series = array_values($this->reembolsoSustento08);
+            sort($series);
+            $out[] = 'Compras: ' . count($series) . ' factura(s) de reembolso recibida(s) (tipo 41) tienen el '
+                   . 'sustento 08, que el SRI no admite en ese tipo (el 08 es del intermediario que pide el '
+                   . 'reembolso). Se reportaron con el código ' . $this->sustentoPorDefecto('41') . '. Abra cada '
+                   . 'compra en el módulo Compras y elija el sustento que corresponda: ' . implode(', ', $series);
+        }
+
+        if ($this->reembolsoConRetencion !== []) {
+            $series = array_values($this->reembolsoConRetencion);
+            sort($series);
+            $out[] = 'Compras: ' . count($series) . ' factura(s) de reembolso recibida(s) (tipo 41) tienen una '
+                   . 'retención registrada. El SRI no admite retenciones en ese tipo de comprobante, así que '
+                   . 'no se reportaron en el anexo; las retenciones de un reembolso se hacen sobre los '
+                   . 'comprobantes de los terceros. Revise con su contador: ' . implode(', ', $series);
+        }
+
         ksort($this->sinBases);
         foreach ($this->sinBases as $tipoComp => $series) {
             $series  = array_values($series);
@@ -673,7 +716,7 @@ class AtsService
                 }
                 if ($b['base_no_gra_iva'] + $b['base_imponible_0'] + $b['base_imponible_grav'] + $b['base_imponible_exe'] > 0) {
                     $c = array_merge($c, array_map(fn ($v) => round($v, 2), $b));
-                    $this->ndCompletadas['xml'][$serie] = $serie;
+                    $this->ndCompletadas['xml'][$serie] = $this->etiquetaDoc($serie, $c);
                     continue;
                 }
             }
@@ -693,7 +736,7 @@ class AtsService
             } else {
                 $c['base_imponible_0'] = $base;
             }
-            $this->ndCompletadas['cabecera'][$serie] = $serie;
+            $this->ndCompletadas['cabecera'][$serie] = $this->etiquetaDoc($serie, $c);
         }
         unset($c);
         return $compras;
@@ -834,6 +877,7 @@ class AtsService
             // se avisa para corregirlo en Compras.
             if (trim((string) ($doc['cod_sustento'] ?? '')) === '08') {
                 $doc['cod_sustento'] = '';
+                $doc['_sustento_08_reembolso'] = true;
             }
         }
         $tpIdProv = self::MAP_TP_ID_PROV[(string) $doc['tipo_id_proveedor']] ?? (string) $doc['tipo_id_proveedor'];
@@ -853,13 +897,23 @@ class AtsService
         // constancia para explicar la causa en las advertencias.
         if ($baseGrav <= 0 && $base0 <= 0 && $baseNoG <= 0 && $baseExe <= 0) {
             $serieDoc = "{$estab}-{$pto}-{$sec}";
-            $this->sinBases[$tipoComp][$serieDoc] = $serieDoc;
+            $this->sinBases[$tipoComp][$serieDoc] = $this->etiquetaDoc($serieDoc, $doc);
         }
 
         // Retenciones IVA por porcentaje + líneas AIR (Renta)
         $iva = ['10' => 0.0, '20' => 0.0, '30' => 0.0, '50' => 0.0, '70' => 0.0, '100' => 0.0];
         $air = [];
         $retDoc = null;
+        // Tipo 41 (factura de reembolso recibida): el SRI no admite retenciones
+        // ("No se debe reportar RETENCIONES para el TIPO DE COMPROBANTE [41]"); las
+        // retenciones se hacen sobre los comprobantes de los terceros. Sin <air> ni
+        // retención de IVA; si la compra tiene una registrada, se avisa.
+        if ($tipoComp === '41') {
+            if ($ret !== null) {
+                $this->reembolsoConRetencion["{$estab}-{$pto}-{$sec}"] = $this->etiquetaDoc("{$estab}-{$pto}-{$sec}", $doc);
+            }
+            $ret = null;
+        }
         if ($ret !== null) {
             foreach ($ret['lineas'] as $l) {
                 $cod = strtoupper((string) $l['codigo_impuesto']);
@@ -895,7 +949,7 @@ class AtsService
         // (aunque sea al 0%) y el validador lo avisa.
         $esPagoExterior = (string) ($doc['pago_loc_ext'] ?? '01') === '02';
         $conceptoExt    = \App\Helpers\ConceptosRentaExterior::normalizar($doc['cod_ret_air_exterior'] ?? null);
-        if ($air === [] && $tipoComp !== '04' && $esPagoExterior && $conceptoExt !== null) {
+        if ($air === [] && !in_array($tipoComp, ['04', '41'], true) && $esPagoExterior && $conceptoExt !== null) {
             // Pago al exterior sin retención: el usuario eligió en el documento el
             // concepto de pago a no residentes (p. ej. 501 con convenio de doble
             // tributación). Se reporta como el 332: base del documento, 0 % y 0,00.
@@ -908,7 +962,7 @@ class AtsService
                     'valRetAir'     => '0.00',
                 ];
             }
-        } elseif ($air === [] && $tipoComp !== '04' && !$esPagoExterior) {
+        } elseif ($air === [] && !in_array($tipoComp, ['04', '41'], true) && !$esPagoExterior) {
             $baseNoRet = $baseGrav + $base0 + $baseNoG + $baseExe;
             if ($baseNoRet > 0) {
                 $air[] = [
@@ -1080,9 +1134,15 @@ class AtsService
         }
 
         $asumido = $this->sustentoPorDefecto($tipoComp);
+        // Factura de reembolso recibida que tenía el 08 (no admitido en el tipo 41):
+        // aviso propio, porque sí tenía sustento, solo que no el correcto.
+        if (!empty($doc['_sustento_08_reembolso'])) {
+            $this->reembolsoSustento08[$serie] = $this->etiquetaDoc($serie, $doc);
+            return $asumido;
+        }
         // Indexado por serie: una compra con varios terceros reembolsados se mapea
         // una vez por tercero y no debe contarse varias veces en el aviso.
-        $this->sinSustento[$tipoComp][$serie] = ['serie' => $serie, 'asumido' => $asumido];
+        $this->sinSustento[$tipoComp][$serie] = ['serie' => $this->etiquetaDoc($serie, $doc), 'asumido' => $asumido];
         return $asumido;
     }
 
@@ -1177,7 +1237,7 @@ class AtsService
             return [];
         }
         if ($pagos === []) {
-            $this->sinFormaPago[$tipoComp][$serie] = $serie;
+            $this->sinFormaPago[$tipoComp][$serie] = $this->etiquetaDoc($serie, $doc);
             return ['20'];
         }
         $codigos = [];

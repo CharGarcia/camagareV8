@@ -315,7 +315,7 @@ class AtsValidatorService
         }
         // Pago a no residente sin retención de Renta: el SRI no acepta el 332
         // (es de pago a residente) y no hay un "no sujeto" para no residentes.
-        if ($tipoComp !== '04' && $this->hijo($d, 'air') === null) {
+        if (!in_array($tipoComp, ['04', '41'], true) && $this->hijo($d, 'air') === null) {
             $err[] = "{$p}: es un pago al exterior sin retención de Renta. El SRI no acepta el concepto 332 "
                    . "para no residentes. Si la compra no lleva retención (p. ej. bienes de un país con convenio), "
                    . "elija el «Concepto de Renta si no hay retención» en la tarjeta Pago al exterior de su pestaña "
