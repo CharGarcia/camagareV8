@@ -1717,7 +1717,11 @@ th[data-det-col] .cmg-resizer {
     z-index: 3;
     background-color: #f8f9fa;
 }
-.table thead .cmg-th-flotante { box-shadow: 0 2px 3px -1px rgba(0,0,0,.18); }
+/* Títulos flotando: mismo tono que los totales, para que no se confundan con una fila. */
+.table thead .cmg-th-flotante {
+    background-color: #dfe3e8;
+    box-shadow: 0 3px 4px -1px rgba(0,0,0,.2);
+}
 /* Totales al pie: más oscuros que las filas, para que no se confundan con una más. */
 .table tbody .cmg-pie-flotante {
     background-color: #dfe3e8;

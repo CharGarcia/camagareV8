@@ -1051,10 +1051,11 @@ window.CMG_cabeceraFija = function (tabla, opciones) {
     var pieSel = (opciones && opciones.pie) || '';
     var raf = 0, movidas = [];
 
+    // Borde superior libre: bajo la tarjeta de control si está a la vista, o bajo el navbar.
     function tope() {
+        var nav  = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cmg-sticky-h')) || 0;
         var card = document.querySelector('.cmg-control-card');
-        if (card) return card.getBoundingClientRect().bottom;
-        return parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cmg-sticky-h')) || 0;
+        return card ? Math.max(nav, card.getBoundingClientRect().bottom) : nav;
     }
     function mover(celdas, dy, clase) {
         for (var i = 0; i < celdas.length; i++) {
@@ -1094,7 +1095,8 @@ window.CMG_cabeceraFija = function (tabla, opciones) {
     }
     function programar() { if (!raf) raf = requestAnimationFrame(aplicar); }
 
-    window.addEventListener('scroll', programar, { passive: true });
+    // En captura: también se entera si lo que hace scroll es un contenedor y no la ventana.
+    document.addEventListener('scroll', programar, { passive: true, capture: true });
     window.addEventListener('resize', programar);
     new MutationObserver(programar).observe(tabla, { childList: true, subtree: true });
     programar();
