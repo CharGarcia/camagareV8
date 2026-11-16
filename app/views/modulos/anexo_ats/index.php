@@ -53,7 +53,7 @@ $mesActual = date('m');
              solo con compras, liquidaciones y retenciones. -->
         <div class="col-12 col-md-3">
           <div class="form-check mt-4">
-            <input class="form-check-input" type="checkbox" value="1" id="ats-ventas" name="ventas" checked>
+            <input class="form-check-input" type="checkbox" value="1" id="ats-ventas" name="ventas">
             <label class="form-check-label" for="ats-ventas">
               Incluir el módulo de ventas
               <i class="fas fa-circle-info text-muted ms-1"

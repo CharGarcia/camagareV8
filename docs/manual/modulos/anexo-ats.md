@@ -25,11 +25,12 @@ del periodo. Este módulo lo genera a partir de lo ya registrado en el sistema.
 ## Generar el anexo sin ventas
 
 Reportar el módulo de ventas no le corresponde a todos los contribuyentes. Por
-eso el formulario trae la opción **Incluir el módulo de ventas**, activada:
+eso el formulario trae la opción **Incluir el módulo de ventas**, que viene **desactivada**: márquela si
+le corresponde reportar ventas.
 
-- **Activada** (como siempre): el anexo lleva el detalle de ventas por cliente y
-  el resumen por establecimiento.
-- **Desactivada**: el anexo sale solo con compras, liquidaciones y retenciones.
+- **Activada**: el anexo lleva el detalle de ventas por cliente y el resumen
+  por establecimiento.
+- **Desactivada** (por defecto): el anexo sale solo con compras, liquidaciones y retenciones.
   El total de ventas del informante va en 0.00 y el Excel de revisión no trae la
   hoja *Ventas*.
 
@@ -234,7 +235,8 @@ anexo usa las formas de pago registradas en el documento en **Compras**:
   general) y el país en su campo, que el SRI exige al pagar a un no residente.
   Una compra al exterior sin retención de Renta ya no sale con el concepto 332,
   que el SRI rechaza para no residentes: la revisión pide registrar la
-  retención con su concepto 500 a 525.
+  retención con su concepto 500 a 525. La opción *Incluir el módulo de ventas*
+  viene ahora desactivada por defecto.
 
 - **1.9** — Las notas de débito de compra sin desglose de IVA ya no salen con
   los valores en 0,00: se toman del XML autorizado o, sin XML, se estiman con
