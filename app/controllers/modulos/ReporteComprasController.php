@@ -300,7 +300,7 @@ class ReporteComprasController extends BaseModuloController
         if (!in_array($agruparPor, ['PROVEEDOR', 'PRODUCTO', 'FECHA', 'MES'], true) && !empty($r['id'])) {
             $attrs = ' style="cursor:pointer;" title="Clic para ver el detalle"'
                    . ' data-doc-id="' . (int)$r['id'] . '"'
-                   . ' data-doc-tipo="COMPRA"'
+                   . ' data-doc-tipo="' . (($r['origen'] ?? '') === 'LIQUIDACION' ? 'LIQUIDACION' : 'COMPRA') . '"'
                    . ' data-doc-numero="' . htmlspecialchars($r['numero_documento'] ?? '', ENT_QUOTES) . '"'
                    . ' data-doc-sujeto="' . htmlspecialchars($r['proveedor_nombre'] ?? '', ENT_QUOTES) . '"';
         }

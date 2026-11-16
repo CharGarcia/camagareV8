@@ -99,6 +99,44 @@ class ReporteComprasRepository extends BaseRepository
     private const SQL_TOTAL_DOC = '(c.importe_total + COALESCE(c.total_terceros, 0))';
 
     /**
+     * Fuente de documentos del reporte: compras recibidas (compras_cabecera) MÁS las
+     * liquidaciones de compra que emite la propia empresa (liquidaciones_cabecera, tipo 03).
+     * Las liquidaciones viven en su propia tabla y el reporte leía solo compras_cabecera,
+     * así que nunca aparecían (reporte del usuario, 2026-11-16). Cada fila lleva `origen`
+     * ('COMPRA' | 'LIQUIDACION') porque los id de ambas tablas se repiten: todo cruce con
+     * detalle, impuestos, adicionales o retenciones debe ir por (origen, id).
+     * De las liquidaciones solo entran las vigentes (autorizada/aprobada/contabilizada):
+     * un borrador o una anulada no es una compra real.
+     * Requiere setAlcance() previo (lo hace buildWhereYParams).
+     */
+    private function sqlDocumentos(): string
+    {
+        $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+        return "(
+            SELECT 'COMPRA'::varchar AS origen, cc.id, cc.id_empresa, cc.fecha_emision, cc.fecha_registro,
+                   cc.establecimiento_prov::varchar AS establecimiento_prov,
+                   cc.punto_emision_prov::varchar AS punto_emision_prov,
+                   cc.secuencial_prov::varchar AS secuencial_prov,
+                   cc.id_proveedor, cc.tipo_comprobante::varchar AS tipo_comprobante, cc.id_usuario,
+                   cc.numero_autorizacion::varchar AS numero_autorizacion,
+                   cc.propina, cc.otros_rubros_terceros, cc.total_terceros,
+                   cc.importe_total, cc.total_sin_impuestos, cc.tipo_ambiente::varchar AS tipo_ambiente, cc.eliminado
+              FROM compras_cabecera cc
+             WHERE cc.id_empresa IN ({$this->inEmp})
+            UNION ALL
+            SELECT 'LIQUIDACION'::varchar, l.id, l.id_empresa, l.fecha_emision, l.fecha_emision,
+                   l.establecimiento::varchar, l.punto_emision::varchar, l.secuencial::varchar,
+                   l.id_proveedor, '03'::varchar, l.id_usuario,
+                   COALESCE(NULLIF(l.numero_autorizacion, ''), l.clave_acceso)::varchar,
+                   0, 0, 0,
+                   l.importe_total, l.total_sin_impuestos, l.tipo_ambiente::varchar, l.eliminado
+              FROM liquidaciones_cabecera l
+             WHERE l.id_empresa IN ({$this->inEmp})
+               AND {$liqVigente}
+        )";
+    }
+
+    /**
      * Expresión de signo por tipo de comprobante para netear las compras.
      * Solo en la vista "Todas las compras" (sin filtro de tipo) las Notas de
      * Crédito de compra (04) RESTAN; si se filtra por un tipo específico, cada
@@ -117,13 +155,20 @@ class ReporteComprasRepository extends BaseRepository
      */
     public function getAniosDisponibles(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT EXTRACT(YEAR FROM fecha_emision) as anio
-                FROM compras_cabecera
-                WHERE id_empresa = :id_empresa
-                  AND eliminado = false
+        $sql = "SELECT anio FROM (
+                    SELECT EXTRACT(YEAR FROM fecha_emision) as anio
+                    FROM compras_cabecera
+                    WHERE id_empresa = :id_empresa
+                      AND eliminado = false
+                    UNION
+                    SELECT EXTRACT(YEAR FROM fecha_emision)
+                    FROM liquidaciones_cabecera
+                    WHERE id_empresa = :id_empresa2
+                      AND eliminado = false
+                ) x
                 ORDER BY anio DESC";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id_empresa' => $idEmpresa]);
+        $stmt->execute([':id_empresa' => $idEmpresa, ':id_empresa2' => $idEmpresa]);
         return $stmt->fetchAll(PDO::FETCH_COLUMN) ?: [date('Y')];
     }
 
@@ -154,8 +199,10 @@ class ReporteComprasRepository extends BaseRepository
         // tenía valor. El fallback solo aplica cuando TODO el desglose de IVA del documento
         // suma cero (no hay ninguna línea con base o valor real) — si la ND sí trae una
         // parte gravada, esa parte ya cae en base_iva/valor_iva normalmente y no se toca.
+        $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('lc.estado');
         return "
             SELECT
+                'COMPRA'::varchar AS origen,
                 d.id_compra,
                 CASE
                     WHEN cbc.tipo_comprobante = '05'
@@ -171,7 +218,48 @@ class ReporteComprasRepository extends BaseRepository
             JOIN compras_cabecera cbc ON cbc.id = d.id_compra AND cbc.id_empresa IN ({$this->inEmp})
             LEFT JOIN compras_detalle_impuestos i ON i.id_compra_detalle = d.id
             GROUP BY d.id_compra, cbc.tipo_comprobante, cbc.total_sin_impuestos
+            UNION ALL
+            SELECT
+                'LIQUIDACION'::varchar,
+                d.id_cabecera,
+                SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa = 0 THEN i.base_imponible ELSE 0 END),
+                SUM(CASE WHEN i.codigo_impuesto = '2' AND i.tarifa > 0 THEN i.base_imponible ELSE 0 END),
+                SUM(CASE WHEN i.codigo_impuesto = '2' THEN i.valor ELSE 0 END),
+                SUM(CASE WHEN i.codigo_impuesto = '3' THEN i.valor ELSE 0 END)
+            FROM liquidaciones_detalle d
+            JOIN liquidaciones_cabecera lc ON lc.id = d.id_cabecera AND lc.id_empresa IN ({$this->inEmp})
+                                          AND lc.eliminado = false AND {$liqVigente}
+            LEFT JOIN liquidaciones_detalle_impuestos i ON i.id_detalle = d.id
+            GROUP BY d.id_cabecera
         ";
+    }
+
+    /**
+     * Líneas de detalle de compras y liquidaciones con su IVA (una fila por impuesto IVA de
+     * la línea, como antes) y su ICE ya sumado, para la vista agrupada por producto.
+     */
+    private function sqlLineas(): string
+    {
+        $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('lx.estado');
+        return "(
+            SELECT 'COMPRA'::varchar AS origen, d.id_compra AS id_doc, d.id_producto,
+                   d.descripcion::text AS descripcion, d.cantidad, d.precio_total_sin_impuesto,
+                   iva.tarifa AS iva_tarifa, iva.base_imponible AS iva_base, iva.valor AS iva_valor,
+                   COALESCE((SELECT SUM(i3.valor) FROM compras_detalle_impuestos i3
+                              WHERE i3.id_compra_detalle = d.id AND i3.codigo_impuesto = '3'), 0) AS ice_valor
+              FROM compras_detalle d
+              JOIN compras_cabecera cx ON cx.id = d.id_compra AND cx.id_empresa IN ({$this->inEmp})
+              LEFT JOIN compras_detalle_impuestos iva ON iva.id_compra_detalle = d.id AND iva.codigo_impuesto = '2'
+            UNION ALL
+            SELECT 'LIQUIDACION'::varchar, d.id_cabecera, d.id_producto,
+                   d.descripcion::text, d.cantidad, d.precio_total_sin_impuesto,
+                   iva.tarifa, iva.base_imponible, iva.valor,
+                   COALESCE((SELECT SUM(i3.valor) FROM liquidaciones_detalle_impuestos i3
+                              WHERE i3.id_detalle = d.id AND i3.codigo_impuesto = '3'), 0)
+              FROM liquidaciones_detalle d
+              JOIN liquidaciones_cabecera lx ON lx.id = d.id_cabecera AND lx.id_empresa IN ({$this->inEmp}) AND {$liqVigente}
+              LEFT JOIN liquidaciones_detalle_impuestos iva ON iva.id_detalle = d.id AND iva.codigo_impuesto = '2'
+        )";
     }
 
     /**
@@ -215,7 +303,9 @@ class ReporteComprasRepository extends BaseRepository
             if ($aliasDetalle) {
                 $where .= " AND {$aliasDetalle}.id_producto IN (" . implode(',', $inNames) . ")";
             } else {
-                $where .= " AND EXISTS (SELECT 1 FROM compras_detalle cd WHERE cd.id_compra = {$aliasVenta}.id AND cd.id_producto IN (" . implode(',', $inNames) . "))";
+                $in = implode(',', $inNames);
+                $where .= " AND (EXISTS (SELECT 1 FROM compras_detalle cd WHERE {$aliasVenta}.origen = 'COMPRA' AND cd.id_compra = {$aliasVenta}.id AND cd.id_producto IN ({$in}))
+                              OR EXISTS (SELECT 1 FROM liquidaciones_detalle ld WHERE {$aliasVenta}.origen = 'LIQUIDACION' AND ld.id_cabecera = {$aliasVenta}.id AND ld.id_producto IN ({$in})))";
             }
         }
         if (!empty($filtros['tipo_comprobante'])) {
@@ -225,21 +315,31 @@ class ReporteComprasRepository extends BaseRepository
 
         // Filtro por Producto = texto de los ítems de las compras (descripción o código de línea)
         if (!empty($filtros['producto_texto'])) {
-            $where .= " AND EXISTS (
+            $where .= " AND (EXISTS (
                 SELECT 1 FROM compras_detalle cdp
-                WHERE cdp.id_compra = {$aliasVenta}.id
+                WHERE {$aliasVenta}.origen = 'COMPRA' AND cdp.id_compra = {$aliasVenta}.id
                   AND (cdp.descripcion ILIKE :prodtxt OR cdp.codigo_principal ILIKE :prodtxt)
-            )";
+            ) OR EXISTS (
+                SELECT 1 FROM liquidaciones_detalle ldp
+                WHERE {$aliasVenta}.origen = 'LIQUIDACION' AND ldp.id_cabecera = {$aliasVenta}.id
+                  AND (ldp.descripcion ILIKE :prodtxt2 OR ldp.codigo_principal ILIKE :prodtxt2)
+            ))";
+            $params[':prodtxt2'] = '%' . trim($filtros['producto_texto']) . '%';
             $params[':prodtxt'] = '%' . trim($filtros['producto_texto']) . '%';
         }
 
         // Filtro por Información Adicional del documento (campos adicionales nombre/valor)
         if (!empty($filtros['buscar_info'])) {
-            $where .= " AND EXISTS (
+            $where .= " AND (EXISTS (
                 SELECT 1 FROM compras_adicional ca
-                WHERE ca.id_compra = {$aliasVenta}.id
+                WHERE {$aliasVenta}.origen = 'COMPRA' AND ca.id_compra = {$aliasVenta}.id
                   AND (ca.nombre ILIKE :info OR ca.valor ILIKE :info)
-            )";
+            ) OR EXISTS (
+                SELECT 1 FROM liquidaciones_adicional la
+                WHERE {$aliasVenta}.origen = 'LIQUIDACION' AND la.id_cabecera = {$aliasVenta}.id
+                  AND (la.nombre ILIKE :info2 OR la.valor ILIKE :info2)
+            ))";
+            $params[':info2'] = '%' . trim($filtros['buscar_info']) . '%';
             $params[':info'] = '%' . trim($filtros['buscar_info']) . '%';
         }
 
@@ -258,6 +358,7 @@ class ReporteComprasRepository extends BaseRepository
             WITH bases AS (" . $this->getCteBasesImpuestos() . ")
             SELECT
                 c.id,
+                c.origen,
                 c.id_empresa,
                 (SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = c.id_empresa) AS establecimiento,
                 c.fecha_emision,
@@ -275,14 +376,18 @@ class ReporteComprasRepository extends BaseRepository
                 (" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 (" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 (" . self::SQL_TOTAL_DOC . " * {$sgn}) as total,
-                COALESCE((
+                COALESCE(CASE WHEN c.origen = 'LIQUIDACION' THEN (
+                    SELECT SUM(r.total_retenido)
+                    FROM retencion_compra_cabecera r
+                    WHERE r.id_liquidacion = c.id AND r.eliminado = false AND r.estado != 'anulada'
+                ) ELSE (
                     SELECT SUM(r.total_retenido)
                     FROM retencion_compra_cabecera r
                     WHERE r.id_compra = c.id AND r.eliminado = false AND r.estado != 'anulada'
-                ), 0) as retenciones
-            FROM compras_cabecera c
+                ) END, 0) as retenciones
+            FROM " . $this->sqlDocumentos() . " c
             JOIN proveedores p ON p.id = c.id_proveedor
-            LEFT JOIN bases b ON b.id_compra = c.id
+            LEFT JOIN bases b ON b.origen = c.origen AND b.id_compra = c.id
             LEFT JOIN usuarios usr ON usr.id = c.id_usuario
             LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
             WHERE {$where}
@@ -316,9 +421,9 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as total
-            FROM compras_cabecera c
+            FROM " . $this->sqlDocumentos() . " c
             JOIN proveedores p ON p.id = c.id_proveedor
-            LEFT JOIN bases b ON b.id_compra = c.id
+            LEFT JOIN bases b ON b.origen = c.origen AND b.id_compra = c.id
             WHERE {$where}
             GROUP BY p.id, p.identificacion, p.razon_social
             ORDER BY total DESC
@@ -343,30 +448,24 @@ class ReporteComprasRepository extends BaseRepository
         // filtrar, una línea con ICE además de IVA aparecería dos veces (una fila por
         // impuesto) y tanto cantidad_comprada como total quedarían duplicados. El ICE de
         // la línea se suma aparte con una subconsulta correlacionada (no duplica filas).
+        // Las líneas (compras + liquidaciones) ya vienen con su IVA e ICE desde sqlLineas().
         $sql = "
             SELECT
                 d.id_producto,
                 COALESCE(prod.codigo, '') as producto_codigo,
                 COALESCE(prod.nombre, d.descripcion) as producto_nombre,
-                COALESCE(iva.tarifa, 0) as tarifa_iva,
+                COALESCE(d.iva_tarifa, 0) as tarifa_iva,
                 SUM(d.cantidad * {$sgn}) as cantidad_comprada,
-                SUM((CASE WHEN iva.tarifa = 0 THEN iva.base_imponible ELSE 0 END) * {$sgn}) as base_0,
-                SUM((CASE WHEN iva.tarifa > 0 THEN iva.base_imponible ELSE 0 END) * {$sgn}) as base_iva,
-                SUM(COALESCE(iva.valor, 0) * {$sgn}) as valor_iva,
-                SUM(COALESCE((
-                    SELECT SUM(i3.valor) FROM compras_detalle_impuestos i3
-                    WHERE i3.id_compra_detalle = d.id AND i3.codigo_impuesto = '3'
-                ), 0) * {$sgn}) as valor_ice,
-                SUM((d.precio_total_sin_impuesto + COALESCE(iva.valor, 0) + COALESCE((
-                    SELECT SUM(i3.valor) FROM compras_detalle_impuestos i3
-                    WHERE i3.id_compra_detalle = d.id AND i3.codigo_impuesto = '3'
-                ), 0)) * {$sgn}) as total
-            FROM compras_detalle d
-            JOIN compras_cabecera c ON c.id = d.id_compra
+                SUM((CASE WHEN d.iva_tarifa = 0 THEN d.iva_base ELSE 0 END) * {$sgn}) as base_0,
+                SUM((CASE WHEN d.iva_tarifa > 0 THEN d.iva_base ELSE 0 END) * {$sgn}) as base_iva,
+                SUM(COALESCE(d.iva_valor, 0) * {$sgn}) as valor_iva,
+                SUM(d.ice_valor * {$sgn}) as valor_ice,
+                SUM((d.precio_total_sin_impuesto + COALESCE(d.iva_valor, 0) + d.ice_valor) * {$sgn}) as total
+            FROM " . $this->sqlLineas() . " d
+            JOIN " . $this->sqlDocumentos() . " c ON c.origen = d.origen AND c.id = d.id_doc
             LEFT JOIN productos prod ON prod.id = d.id_producto
-            LEFT JOIN compras_detalle_impuestos iva ON iva.id_compra_detalle = d.id AND iva.codigo_impuesto = '2'
             WHERE {$where}
-            GROUP BY d.id_producto, prod.codigo, COALESCE(prod.nombre, d.descripcion), COALESCE(iva.tarifa, 0)
+            GROUP BY d.id_producto, prod.codigo, COALESCE(prod.nombre, d.descripcion), COALESCE(d.iva_tarifa, 0)
             ORDER BY cantidad_comprada DESC
         ";
 
@@ -395,8 +494,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as total
-            FROM compras_cabecera c
-            LEFT JOIN bases b ON b.id_compra = c.id
+            FROM " . $this->sqlDocumentos() . " c
+            LEFT JOIN bases b ON b.origen = c.origen AND b.id_compra = c.id
             WHERE {$where}
             GROUP BY c.fecha_emision
             ORDER BY c.fecha_emision DESC
@@ -427,8 +526,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(" . self::SQL_OTROS_RUBROS . " * {$sgn}) as otros_rubros,
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as valores_terceros,
                 SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as total
-            FROM compras_cabecera c
-            LEFT JOIN bases b ON b.id_compra = c.id
+            FROM " . $this->sqlDocumentos() . " c
+            LEFT JOIN bases b ON b.origen = c.origen AND b.id_compra = c.id
             WHERE {$where}
             GROUP BY TO_CHAR(c.fecha_emision, 'YYYY-MM')
             ORDER BY mes DESC
@@ -446,16 +545,25 @@ class ReporteComprasRepository extends BaseRepository
     {
         // Busca por nombre (descripción) o por código de línea, igual que el filtro
         // producto_texto del reporte (ver buildWhereYParams: descripcion OR codigo_principal).
-        $sql = "SELECT DISTINCT TRIM(d.descripcion) AS descripcion, TRIM(COALESCE(d.codigo_principal, '')) AS codigo
-                FROM compras_detalle d
-                JOIN compras_cabecera c ON c.id = d.id_compra
-                WHERE c.id_empresa = :ie AND c.eliminado = false
-                  AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
-                  AND (d.descripcion ILIKE :q OR d.codigo_principal ILIKE :q)
+        $sql = "SELECT descripcion, codigo FROM (
+                    SELECT TRIM(d.descripcion) AS descripcion, TRIM(COALESCE(d.codigo_principal, '')) AS codigo
+                    FROM compras_detalle d
+                    JOIN compras_cabecera c ON c.id = d.id_compra
+                    WHERE c.id_empresa = :ie AND c.eliminado = false
+                      AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
+                      AND (d.descripcion ILIKE :q OR d.codigo_principal ILIKE :q)
+                    UNION
+                    SELECT TRIM(d.descripcion), TRIM(COALESCE(d.codigo_principal, ''))
+                    FROM liquidaciones_detalle d
+                    JOIN liquidaciones_cabecera l ON l.id = d.id_cabecera
+                    WHERE l.id_empresa = :ie2 AND l.eliminado = false
+                      AND d.descripcion IS NOT NULL AND TRIM(d.descripcion) <> ''
+                      AND (d.descripcion ILIKE :q2 OR d.codigo_principal ILIKE :q2)
+                ) x
                 ORDER BY descripcion
                 LIMIT {$limit}";
         $st = $this->db->prepare($sql);
-        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%', ':ie2' => $idEmpresa, ':q2' => '%' . $q . '%']);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         // valor = lo que queda escrito en el buscador al elegir: siempre el nombre
         // (descripción), igual que si el usuario lo hubiera tecleado a mano — así el
@@ -477,16 +585,25 @@ class ReporteComprasRepository extends BaseRepository
      */
     public function buscarInfoAdicional(int $idEmpresa, string $q, int $limit = 15): array
     {
-        $sql = "SELECT DISTINCT ca.nombre, ca.valor
-                FROM compras_adicional ca
-                JOIN compras_cabecera c ON c.id = ca.id_compra
-                WHERE c.id_empresa = :ie AND c.eliminado = false
-                  AND COALESCE(ca.valor, '') <> ''
-                  AND (ca.nombre ILIKE :q OR ca.valor ILIKE :q)
-                ORDER BY ca.nombre, ca.valor
+        $sql = "SELECT nombre, valor FROM (
+                    SELECT ca.nombre::text AS nombre, ca.valor::text AS valor
+                    FROM compras_adicional ca
+                    JOIN compras_cabecera c ON c.id = ca.id_compra
+                    WHERE c.id_empresa = :ie AND c.eliminado = false
+                      AND COALESCE(ca.valor, '') <> ''
+                      AND (ca.nombre ILIKE :q OR ca.valor ILIKE :q)
+                    UNION
+                    SELECT la.nombre::text, la.valor::text
+                    FROM liquidaciones_adicional la
+                    JOIN liquidaciones_cabecera l ON l.id = la.id_cabecera
+                    WHERE l.id_empresa = :ie2 AND l.eliminado = false
+                      AND COALESCE(la.valor, '') <> ''
+                      AND (la.nombre ILIKE :q2 OR la.valor ILIKE :q2)
+                ) x
+                ORDER BY nombre, valor
                 LIMIT {$limit}";
         $st = $this->db->prepare($sql);
-        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%']);
+        $st->execute([':ie' => $idEmpresa, ':q' => '%' . $q . '%', ':ie2' => $idEmpresa, ':q2' => '%' . $q . '%']);
         $rows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         return array_map(fn($r) => [
             'valor' => $r['valor'],
@@ -514,8 +631,8 @@ class ReporteComprasRepository extends BaseRepository
                 SUM(" . self::SQL_VALORES_TERCEROS . " * {$sgn}) as total_terceros,
                 SUM(" . self::SQL_TOTAL_DOC . " * {$sgn}) as gran_total,
                 COUNT(c.id)                    as total_documentos
-            FROM compras_cabecera c
-            LEFT JOIN bases b ON b.id_compra = c.id
+            FROM " . $this->sqlDocumentos() . " c
+            LEFT JOIN bases b ON b.origen = c.origen AND b.id_compra = c.id
             WHERE {$where}
         ";
 
@@ -544,15 +661,26 @@ class ReporteComprasRepository extends BaseRepository
      */
     public function getTiposComprobante(int $idEmpresa): array
     {
-        $sql = "SELECT DISTINCT c.tipo_comprobante,
-                       BTRIM(COALESCE(ca.comprobante, c.tipo_comprobante), E' \\t\\r\\n') as nombre
-                FROM compras_cabecera c
-                LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = c.tipo_comprobante
-                WHERE c.id_empresa = :id_empresa AND c.eliminado = false
-                  AND c.tipo_ambiente = '2'
-                ORDER BY c.tipo_comprobante";
+        // Las liquidaciones de compra (03) viven en su propia tabla: se ofrecen si la
+        // empresa tiene alguna vigente en producción (ver sqlDocumentos()).
+        $liqVigente = \App\Helpers\TiposComprobanteCompra::sqlLiquidacionVigente('l.estado');
+        $sql = "SELECT t.tipo_comprobante,
+                       BTRIM(COALESCE(ca.comprobante, t.tipo_comprobante), E' \\t\\r\\n') as nombre
+                FROM (
+                    SELECT DISTINCT c.tipo_comprobante::varchar AS tipo_comprobante
+                    FROM compras_cabecera c
+                    WHERE c.id_empresa = :id_empresa AND c.eliminado = false
+                      AND c.tipo_ambiente = '2'
+                    UNION
+                    SELECT '03'::varchar
+                    WHERE EXISTS (SELECT 1 FROM liquidaciones_cabecera l
+                                   WHERE l.id_empresa = :id_empresa2 AND l.eliminado = false
+                                     AND l.tipo_ambiente = '2' AND {$liqVigente})
+                ) t
+                LEFT JOIN comprobantes_autorizados ca ON ca.codigo_comprobante = t.tipo_comprobante
+                ORDER BY t.tipo_comprobante";
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':id_empresa' => $idEmpresa]);
+        $stmt->execute([':id_empresa' => $idEmpresa, ':id_empresa2' => $idEmpresa]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 }

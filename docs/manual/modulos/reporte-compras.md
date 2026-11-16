@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_compras
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico, personalizar, columnas, ocultar columnas, pdf vertical, pdf horizontal, orientacion del pdf, detalle del documento, panel lateral, clic en la fila, otros rubros, propina, servicio 10%, tasa de pernoctacion, hotel, restaurante, valores de terceros, bomberos, tasa de basura, planilla de luz, el total no cuadra con las bases, base mas iva no da el total
-version: 1.9
+etiquetas: reporte de compras, compras, cuanto compre, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, total en el excel, por proveedor, por producto, gasto, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, grafico, ocultar grafico, acordeon, mostrar grafico, personalizar, columnas, ocultar columnas, pdf vertical, pdf horizontal, orientacion del pdf, detalle del documento, panel lateral, clic en la fila, otros rubros, propina, servicio 10%, tasa de pernoctacion, hotel, restaurante, valores de terceros, bomberos, tasa de basura, planilla de luz, el total no cuadra con las bases, base mas iva no da el total, liquidacion de compra, liquidaciones, no salen las liquidaciones, no aparecen las liquidaciones
+version: 1.10
 orden: 20
 estado: activo
 ---
@@ -24,6 +24,11 @@ Es el espejo del reporte de ventas.
 | Producto | Compras de un producto concreto |
 
 Se combinan entre sí para acotar la consulta.
+
+El reporte incluye las compras registradas **y las liquidaciones de compra** que
+emite la empresa (tipo 03), siempre que estén autorizadas, aprobadas o
+contabilizadas. Las liquidaciones en borrador o anuladas no se cuentan. Al hacer
+clic en una liquidación se abre su propio detalle.
 
 **El reporte solo se consulta al pulsar Buscar** (o Enter en el formulario).
 Cambiar un filtro —tipo de documento, agrupación, año, mes, fechas,
@@ -150,11 +155,15 @@ El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
   vincular al catálogo.
 - **Las cifras no cuadran con cuentas por pagar**: este reporte muestra lo
   comprado, no lo pendiente de pago.
+- **No sale una liquidación de compra**: revise que esté autorizada (o
+  aprobada/contabilizada), que sea de producción y que su fecha esté en el
+  periodo; los borradores y las anuladas no se muestran.
 - **Cambié un filtro y la tabla no cambia**: los filtros no consultan solos;
   pulse **Buscar** (el botón queda en ámbar mientras haya cambios sin aplicar).
 
 ## Historial de cambios
 
+- **1.10** (16-11-2026) — El reporte ahora incluye las **liquidaciones de compra** (antes no aparecían en ninguna vista): detallado, por proveedor, por producto, por fecha y por mes, tarjetas, Excel y PDF. Se puede filtrar por el tipo *Liquidación de compra* y, al hacer clic, se abre el detalle de la liquidación. Solo cuentan las autorizadas, aprobadas o contabilizadas.
 - **1.9** (11-11-2026) — Nuevas columnas **Otros rubros** (propina y otros rubros de terceros) y **Val. terceros** (valores de terceros de planillas) antes del Gran Total, en las vistas detallado, por proveedor, por fecha y por mes, en pantalla, Excel y PDF. El **Gran Total** (columna y tarjeta) ahora suma también los valores de terceros: es todo lo que se paga al proveedor. Antes esos valores no tenían columna y el total no coincidía con la suma de bases e impuestos. El **detalle del documento** (panel lateral) lista esos mismos rubros y su total los incluye.
 - **1.8** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas visibles por vista en pantalla, Excel y PDF, y orientación del PDF, para toda la empresa. Además, el **PDF** ahora reparte el ancho de la hoja entre sus columnas: ocupa de margen a margen y el detallado ya no se sale por la derecha.
 - **1.7** — Nueva **fila TOTAL** al pie de la tabla en pantalla y al final del **Excel**, en todas las vistas (detallado, por proveedor, por producto, por fecha y por mes). Antes los totales solo se veían en las tarjetas de arriba y en el PDF.
