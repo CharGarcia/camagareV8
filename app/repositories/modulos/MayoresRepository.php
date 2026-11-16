@@ -100,6 +100,7 @@ class MayoresRepository
     private function sqlMovimientos(string $whereSql, string $docOrigen): string
     {
         return "SELECT
+                    ad.id AS id_linea,
                     pc.id AS id_cuenta,
                     pc.codigo AS codigo_cuenta,
                     pc.nombre AS nombre_cuenta,
@@ -125,6 +126,137 @@ class MayoresRepository
                 LEFT JOIN empleados emp ON COALESCE(ad.tipo_entidad, doc.tipo_entidad) = 'empleado' AND COALESCE(ad.id_entidad, doc.id_entidad) = emp.id
                 $whereSql
                 ORDER BY pc.codigo ASC, ac.fecha_asiento ASC, ac.id ASC";
+    }
+
+    /**
+     * Documentos cuyas líneas se pueden desglosar en el mayor: ingresos y egresos, cuyo asiento
+     * suma por cuenta las líneas del documento (varias facturas cobradas, varios «otros
+     * conceptos» al mismo gasto…). Tabla de detalle, FK, cabecera y columna del monto.
+     */
+    public const DESGLOSE_DOCUMENTOS = [
+        'egreso'  => ['detalle' => 'egresos_detalle',  'fk' => 'id_egreso',  'cabecera' => 'egresos_cabecera',  'monto' => 'monto_pagado',  'eliminado' => true],
+        'ingreso' => ['detalle' => 'ingresos_detalle', 'fk' => 'id_ingreso', 'cabecera' => 'ingresos_cabecera', 'monto' => 'monto_cobrado', 'eliminado' => false],
+    ];
+
+    /**
+     * Cuántas líneas (con monto) tiene cada documento: id_documento => n. Solo se ofrece el
+     * desglose en los documentos con dos o más líneas; con una sola no hay nada que abrir.
+     *
+     * @param int[] $ids
+     * @return array<int,int>
+     */
+    public function contarLineasDocumentos(int $idEmpresa, string $modulo, array $ids): array
+    {
+        $cfg = self::DESGLOSE_DOCUMENTOS[$modulo] ?? null;
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($cfg === null || !$ids) {
+            return [];
+        }
+
+        $res = [];
+        // Por tramos: un mayor de un año puede traer miles de documentos.
+        foreach (array_chunk($ids, 1000) as $tramo) {
+            $ph  = implode(',', array_fill(0, count($tramo), '?'));
+            $eli = $cfg['eliminado'] ? ' AND d.eliminado = false' : '';
+            $st  = $this->db->prepare("SELECT d.{$cfg['fk']} AS id_doc, COUNT(*) AS n
+                                       FROM {$cfg['detalle']} d
+                                       INNER JOIN {$cfg['cabecera']} c ON c.id = d.{$cfg['fk']}
+                                       WHERE c.id_empresa = ? AND d.{$cfg['fk']} IN ($ph)
+                                         AND d.{$cfg['monto']} > 0{$eli}
+                                       GROUP BY d.{$cfg['fk']}");
+            $st->execute(array_merge([$idEmpresa], $tramo));
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $res[(int) $r['id_doc']] = (int) $r['n'];
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Líneas del mayor que se quieren desglosar, con su documento origen (misma resolución que
+     * el listado). Solo de la empresa y con los mismos filtros de estado/ambiente del mayor.
+     *
+     * @param int[] $idsLinea
+     */
+    public function getLineasParaDesglose(int $idEmpresa, array $idsLinea): array
+    {
+        $idsLinea = array_values(array_unique(array_filter(array_map('intval', $idsLinea))));
+        if (!$idsLinea) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($idsLinea), '?'));
+        $sql = "SELECT ad.id AS id_linea, ad.id_asiento, ad.id_cuenta_contable, ad.debe, ad.haber,
+                       doc.modulo_doc, doc.id_doc
+                FROM asientos_contables_detalle ad
+                INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                {$this->sqlDocumentoOrigenAsiento()}
+                WHERE ad.id IN ($ph)
+                  AND ac.id_empresa = ?
+                  AND ac.estado = 'contabilizado'
+                  AND ac.eliminado = false
+                  AND ad.eliminado = false
+                  AND ac.tipo_ambiente = '2'";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute(array_merge($idsLinea, [$idEmpresa]));
+        } catch (\PDOException $e) {
+            // Mismo respaldo que getMovimientos(): sin documento origen no hay desglose.
+            error_log('Mayores (desglose): no se pudo resolver el documento origen. ' . $e->getMessage());
+            return [];
+        }
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Todas las líneas de los asientos indicados (para cruzar las líneas del documento con las
+     * cuentas del asiento). Formato de CuentasDetalleDesdeAsiento.
+     *
+     * @param int[] $idsAsiento
+     */
+    public function getLineasAsientos(int $idEmpresa, array $idsAsiento): array
+    {
+        $idsAsiento = array_values(array_unique(array_filter(array_map('intval', $idsAsiento))));
+        if (!$idsAsiento) {
+            return [];
+        }
+        $ph = implode(',', array_fill(0, count($idsAsiento), '?'));
+        $st = $this->db->prepare("SELECT ad.id, ad.id_asiento, ad.id_cuenta_contable, pc.codigo AS codigo_cuenta,
+                                         pc.nombre AS nombre_cuenta, ad.debe, ad.haber, ad.referencia_detalle
+                                  FROM asientos_contables_detalle ad
+                                  INNER JOIN asientos_contables_cabecera ac ON ad.id_asiento = ac.id
+                                  LEFT JOIN plan_cuentas pc ON pc.id = ad.id_cuenta_contable
+                                  WHERE ad.id_asiento IN ($ph) AND ac.id_empresa = ? AND ad.eliminado = false
+                                  ORDER BY ad.id_asiento, ad.id");
+        $st->execute(array_merge($idsAsiento, [$idEmpresa]));
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    }
+
+    /**
+     * Líneas (con monto) de los documentos indicados, en el orden en que se registraron.
+     * `monto` es lo pagado/cobrado en la línea; también se expone con su nombre original
+     * (monto_pagado / monto_cobrado) para CuentasDetalleDesdeAsiento.
+     *
+     * @param int[] $ids
+     */
+    public function getLineasDocumentos(int $idEmpresa, string $modulo, array $ids): array
+    {
+        $cfg = self::DESGLOSE_DOCUMENTOS[$modulo] ?? null;
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if ($cfg === null || !$ids) {
+            return [];
+        }
+        $ph  = implode(',', array_fill(0, count($ids), '?'));
+        $eli = $cfg['eliminado'] ? ' AND d.eliminado = false' : '';
+        $st  = $this->db->prepare("SELECT d.id, d.{$cfg['fk']} AS id_doc, d.tipo_documento, d.numero_documento,
+                                          d.descripcion, d.{$cfg['monto']} AS monto, d.{$cfg['monto']},
+                                          d.id_cuenta_contable
+                                   FROM {$cfg['detalle']} d
+                                   INNER JOIN {$cfg['cabecera']} c ON c.id = d.{$cfg['fk']}
+                                   WHERE c.id_empresa = ? AND d.{$cfg['fk']} IN ($ph)
+                                     AND d.{$cfg['monto']} > 0{$eli}
+                                   ORDER BY d.{$cfg['fk']}, d.id");
+        $st->execute(array_merge([$idEmpresa], $ids));
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function getAniosDisponibles(int $idEmpresa): array

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/mayores
 tipo: modulo
 visibilidad: todos
-etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre, pdf mayor, imprimir mayor
-version: 1.4
+etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre, pdf mayor, imprimir mayor, mayor detallado, detalle del asiento, desglose, lineas agrupadas, expandir detalle
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -65,6 +65,34 @@ número es el id que tenía ese asiento en el sistema anterior (sirve para
 ubicarlo allá). Los asientos de documentos migrados conservan su código de
 origen (p. ej. `FAC145065`, `EGR67320`).
 
+## Ver el detalle de un ingreso o egreso agrupado
+
+El asiento de un **ingreso** o **egreso** suma por cuenta las líneas del
+documento. Si un egreso tiene cinco líneas de *otros conceptos* que van a la
+misma cuenta de gasto (taxi, hotel, comida…), o paga diecisiete facturas de
+compra, el asiento lleva **una sola línea** por cuenta, con la glosa de la
+primera. Por eso el mayor muestra ese valor en una sola fila.
+
+Cuando una fila del mayor viene de un ingreso o egreso con dos o más líneas,
+aparece una **flecha ▸** junto a la fecha. Al pulsarla se abren debajo las
+líneas del documento que forman ese valor: tipo (otro concepto, factura de
+compra, factura de venta…), número del documento, descripción y monto. Pulsarla
+otra vez las cierra.
+
+El botón **Expandir detalle**, junto a PDF y Excel, abre el detalle de todas las
+filas a la vez; con alguna abierta cambia a **Contraer detalle**. El buscador del
+reporte también encuentra texto dentro del detalle abierto.
+
+El detalle **solo informa**: el saldo, los subtotales y las exportaciones siguen
+siendo los del asiento. Si las líneas del documento no suman exactamente lo que
+lleva la cuenta en el asiento (centavos de redondeo, o un valor que el asiento
+puso en esa cuenta sin línea propia en el documento), la diferencia se ve en una
+fila **Ajuste del asiento**, para que el detalle siempre cuadre con la fila.
+
+Las facturas de venta, compras y demás documentos no tienen flecha: su asiento
+agrupa por la configuración contable de cada producto, y su detalle se ve
+abriendo el documento desde la columna **Documento Ref.**
+
 ## Asientos pendientes
 
 Al abrir el módulo, si hay documentos sin su asiento contable generado, el
@@ -87,6 +115,9 @@ exportaciones quedan bloqueados.
 
 ## Historial de cambios
 
+- **1.5** — Flecha **▸** para ver, debajo de la fila, las líneas del ingreso o
+  egreso que el asiento agrupó en una sola cuenta, y botón **Expandir detalle**
+  para abrirlas todas.
 - **1.4** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.3** — La columna **Documento** queda vacía cuando el asiento no tiene
   documento de origen (antes repetía el número del comprobante). Los asientos

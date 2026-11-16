@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_consolidado
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc
-version: 1.3
+etiquetas: reporte consolidado, todas las transacciones, resumen general, compras, ventas, facturas, recibos, retenciones, notas de credito, notas de debito, liquidaciones de compra, cierre de periodo, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, notas de venta, rise, personalizar columnas, pdf con logo
+version: 1.4
 orden: 51
 estado: activo
 ---
@@ -60,7 +60,7 @@ Reglas:
 
 | Hoja / grupo | Fuente |
 |---|---|
-| Compras | Facturas de compra (`compras_cabecera`, tipo `01`) |
+| Compras | Todos los comprobantes de compra que son deuda con el proveedor: facturas (`01`), **notas de venta** (`02`), documentos de instituciones financieras (`12`), servicios básicos (`18`), comprobantes por reembolso (`41`), etc. La columna Tipo muestra el nombre del comprobante cuando no es factura |
 | Retenciones de Compra | Retenciones que la empresa practicó a sus proveedores |
 | Facturas de Venta | Facturas emitidas a clientes |
 | Recibos de Venta | Recibos de venta (documento interno, sin autorización SRI) |
@@ -71,9 +71,12 @@ Reglas:
 
 Las Notas de Crédito y Débito **recibidas de proveedores** se registran en el
 sistema como una compra especial (`compras_cabecera` con `tipo_comprobante`
-`04`/`05`) — por eso no aparecen también dentro de la hoja "Compras": ésta se
-limita a las facturas de compra normales para que ningún monto se cuente dos
-veces entre hojas.
+`04`/`05`) — por eso no aparecen también dentro de la hoja "Compras", para que
+ningún monto se cuente dos veces entre hojas. La guía de remisión (`06`) y el
+comprobante de retención (`07`) tampoco van en "Compras": no son compras.
+
+El reporte **siempre incluye los 8 tipos** de documento del período elegido; no
+hay casillas para excluir alguno.
 
 ## Filtros
 
@@ -81,22 +84,38 @@ veces entre hojas.
 - **Buscar**: nombre o identificación del tercero, o número de documento.
 - **Incluir anulados**: desactivado por defecto — los documentos anulados no sirven
   para un cuadre financiero, pero puede activarse si se necesita verlos.
-- **Documentos a incluir**: casillas para armar el reporte solo con un
-  subconjunto de los 8 tipos (por ejemplo, solo lo relacionado a ventas).
+
+Cambiar un filtro **no** recarga el reporte: los documentos se consultan solo al
+pulsar **Mostrar**.
 
 ## Cómo se usa
 
-1. Ajuste el rango de fechas y, si hace falta, los demás filtros.
-2. Haga clic en **Buscar**. La tabla y los indicadores (documentos, total ventas,
-   total compras, neto) se actualizan.
+1. Ajuste el período (Año / Mes o Fecha Desde / Fecha Hasta) y, si hace falta,
+   los demás filtros.
+2. Haga clic en **Mostrar**. La tabla y los indicadores (documentos, total
+   ventas, total compras, neto) se actualizan. Al abrir el módulo la tabla está
+   vacía hasta pulsar Mostrar.
 3. La tabla en pantalla y el PDF muestran un resumen a nivel de documento
    (cabecera). Para ver el detalle línea por línea (productos, impuestos,
    retenciones), descargue el **Excel**.
 
+## Personalizar columnas (botón «Personalizar»)
+
+Los administradores (niveles 2 y 3) ven el botón **Personalizar** junto al
+título. Ahí deciden, **para toda la empresa**, qué columnas salen en la
+**pantalla** y en el **PDF** (Tipo, Fecha, Tercero, Identificación, Subtotal,
+IVA, Total, Estado; el Número siempre se muestra) y la orientación del PDF. Si
+la columna Identificación no se muestra en pantalla, la identificación aparece
+debajo del nombre del tercero. El Excel no cambia: es el detalle por hoja. Guía
+general: *Personalizar reportes*.
+
 ## Exportar
 
-- **PDF**: resumen con indicadores por tipo de documento y el listado a nivel de
-  cabecera (una fila por documento).
+- **PDF**: con el mismo diseño que los demás reportes — logo y nombre de la
+  empresa, caja *Filtros aplicados*, indicadores por tipo de documento (cantidad
+  y total), indicadores de ventas, compras y neto, y el listado a nivel de
+  cabecera (una fila por documento) con las columnas elegidas en Personalizar.
+  Incluye todos los documentos del período (sin tope de filas).
 - **Excel**: un libro con **8 hojas**, una por tipo de documento, cada una con el
   detalle línea por línea (producto, cantidad, impuestos, retenciones, etc.)
   según lo que tenga esa fuente.
@@ -110,14 +129,18 @@ documentos de toda la empresa a quien tenga acceso al reporte.
 
 ## Errores frecuentes
 
-- **Un documento no aparece**: revise que su casilla esté marcada en
-  "Documentos a incluir" y que no esté anulado (o marque "Incluir anulados").
+- **Un documento no aparece**: revise que su fecha de emisión esté dentro del
+  período, que no esté anulado (o marque "Incluir anulados") y que sea de
+  producción (los de pruebas no salen en los reportes).
+- **La tabla está vacía al entrar**: es normal; pulse **Mostrar**.
 - **El total no cuadra con un reporte individual**: los reportes individuales
   (Compras, Ventas) pueden tener otros filtros por defecto (por ejemplo,
   incluir NC de compra dentro del mismo total). Compare con el mismo rango de
   fechas y revise el desglose por tipo antes de asumir una diferencia real.
 
 ## Historial de cambios
+
+- **1.4** — Las **notas de venta** y demás comprobantes de compra (instituciones financieras, servicios básicos, reembolsos…) ahora se incluyen en Compras (antes solo las facturas). Se quitaron las casillas *Documentos a incluir*: siempre van todos los documentos del período. El reporte se consulta solo al pulsar **Mostrar** (antes «Buscar», y cargaba solo). Nuevo botón **Personalizar** para elegir columnas de pantalla y PDF. El PDF usa el diseño estándar con logo, filtros aplicados e indicadores. El Excel de Compras agrega la columna *Tipo Comprobante*.
 
 - **1.3** — El reporte muestra solo documentos de **producción**, aunque la empresa esté configurada en pruebas (ver el artículo *Los reportes solo muestran documentos de producción*).
 - **1.2** — Corregido: en el detalle de retenciones, una línea cuyo código aparece más de una

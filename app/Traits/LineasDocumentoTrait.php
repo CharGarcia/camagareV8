@@ -30,10 +30,29 @@ use PDO;
  * cantidades y los totales. Todas las ramas llevan alias porque la primera del UNION es
  * la que da nombre a las columnas, y cuál es depende de los permisos del usuario.
  *
+ * Columnas opcionales (el repositorio las declara redefiniendo lineasDocumentoConExtras()
+ * para que devuelva true; entonces TODAS sus ramas deben exponerlas):
+ *
+ *   info_adicional   "Detalle adicional" de la línea (texto libre del ítem; '' si no tiene,
+ *                    no NULL, para que la negación del buscador no descarte esas líneas)
+ *   total_documento  importe total de la cabecera (se repite en cada línea)
+ *
+ * Con extras el buscador también mira el detalle adicional y hay una tercera vista,
+ * "documento": una fila por documento con sus líneas, subtotal, IVA y total.
+ *
  * Requiere `protected PDO $db` (BaseRepository lo provee).
  */
 trait LineasDocumentoTrait
 {
+    /**
+     * ¿Las ramas exponen info_adicional y total_documento? Por defecto no; el repositorio
+     * que las agregue redefine este método (un método de la clase gana al del trait).
+     */
+    protected function lineasDocumentoConExtras(): bool
+    {
+        return false;
+    }
+
     /**
      * Ambiente activo de la empresa ('1' pruebas | '2' producción), o null si no se
      * conoce; en ese caso las ramas no filtran por ambiente (mismo criterio que el
@@ -66,14 +85,23 @@ trait LineasDocumentoTrait
         if (empty($ramas)) {
             return ['rows' => [], 'total' => 0, 'total_neto' => 0.0, 'total_iva' => 0.0];
         }
-        $vista = $vista === 'producto' ? 'producto' : 'detalle';
+        $extras = $this->lineasDocumentoConExtras();
+        $vista  = match (true) {
+            $vista === 'producto'             => 'producto',
+            $vista === 'documento' && $extras => 'documento',
+            default                           => 'detalle',
+        };
 
         // Buscador: texto libre por palabras (sin tildes) + filtros clave:valor
         $where  = '';
         $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        $colsTexto = ['t.codigo', 't.descripcion', 't.numero_documento', 't.tipo_documento'];
+        if ($extras) {
+            $colsTexto[] = 't.info_adicional';
+        }
         if ($parsed['texto_libre'] !== '') {
             $cond = \App\Helpers\FiltrosBusqueda::condicionTexto(
-                ['t.codigo', 't.descripcion', 't.numero_documento', 't.tipo_documento'],
+                $colsTexto,
                 $parsed['texto_libre'],
                 $params,
                 'trx_b'
@@ -82,15 +110,19 @@ trait LineasDocumentoTrait
                 $where .= ' AND ' . $cond;
             }
         }
+        $mapaTexto = [
+            'producto'    => 't.descripcion',
+            'servicio'    => 't.descripcion',
+            'descripcion' => 't.descripcion',
+            'codigo'      => 't.codigo',
+            'documento'   => 't.numero_documento',
+            'tipo'        => 't.tipo_documento',
+        ];
+        if ($extras) {
+            $mapaTexto['adicional'] = 't.info_adicional';
+        }
         \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
-            'texto' => [
-                'producto'    => 't.descripcion',
-                'servicio'    => 't.descripcion',
-                'descripcion' => 't.descripcion',
-                'codigo'      => 't.codigo',
-                'documento'   => 't.numero_documento',
-                'tipo'        => 't.tipo_documento',
-            ],
+            'texto' => $mapaTexto,
             'fecha'    => ['fecha' => 't.fecha'],
             'numerico' => [
                 'cantidad' => 't.cantidad',
@@ -116,6 +148,33 @@ trait LineasDocumentoTrait
             $col = $orden[$ordenCol] ?? $orden['fecha'];
             $sql = "SELECT t.* {$base}
                     ORDER BY {$col} {$dir}, t.fecha DESC, t.id_documento DESC, t.id_linea ASC
+                    {$limite}";
+        } elseif ($vista === 'documento') {
+            // Una fila por documento. Con búsqueda, solo las líneas que coinciden cuentan
+            // para ítems, subtotal e IVA; el total del documento es siempre el de su cabecera.
+            $grupo = "SELECT t.origen, t.id_documento,
+                             MIN(t.fecha) AS fecha,
+                             MIN(t.numero_documento) AS numero_documento,
+                             MIN(t.tipo_documento) AS tipo_documento,
+                             MIN(t.signo) AS signo,
+                             COUNT(*) AS lineas,
+                             SUM(t.subtotal) AS subtotal,
+                             SUM(t.iva) AS iva,
+                             MAX(t.total_documento) AS total_documento,
+                             COUNT(*) FILTER (WHERE COALESCE(BTRIM(t.info_adicional), '') <> '') AS lineas_adicional
+                      {$base}
+                      GROUP BY t.origen, t.id_documento";
+
+            $stT = $this->db->prepare("SELECT COUNT(*) AS total,
+                                              COALESCE(SUM(g.signo * g.subtotal), 0) AS neto,
+                                              COALESCE(SUM(g.signo * g.iva), 0) AS iva
+                                       FROM ( {$grupo} ) g");
+            $stT->execute($params);
+            $tot = $stT->fetch(PDO::FETCH_ASSOC) ?: ['total' => 0, 'neto' => 0];
+
+            $col = $orden[$ordenCol] ?? $orden['fecha'];
+            $sql = "SELECT g.* FROM ( {$grupo} ) g
+                    ORDER BY {$col} {$dir} NULLS LAST, g.fecha DESC, g.id_documento DESC
                     {$limite}";
         } else {
             // Un producto/servicio = mismo código y descripción (sin distinguir mayúsculas).
@@ -175,11 +234,44 @@ trait LineasDocumentoTrait
     }
 
     /**
+     * Líneas de UN documento, sacadas de la misma unión que la pestaña: así el detalle que
+     * se abre con un clic respeta exactamente los mismos filtros (empresa, tercero,
+     * vigencia, ambiente, permisos y registros propios). Vacío = el documento no es
+     * visible para este usuario o no pertenece a este tercero.
+     *
+     * @param string[] $ramas  Las mismas ramas que recibiría consultarLineasDocumento().
+     */
+    protected function lineasDeDocumento(array $ramas, array $params, string $origen, int $idDocumento): array
+    {
+        if (empty($ramas) || $idDocumento <= 0) {
+            return [];
+        }
+        $params[':trx_origen'] = $origen;
+        $params[':trx_doc']    = $idDocumento;
+        $st = $this->db->prepare("SELECT t.* FROM ( " . implode("\n UNION ALL \n", $ramas) . " ) t
+                                  WHERE t.origen = :trx_origen AND t.id_documento = :trx_doc
+                                  ORDER BY t.id_linea ASC");
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
      * Columnas ordenables de cada vista (clave recibida del navegador => expresión SQL
      * fija). Deben coincidir con las columnas "o: true" de public/js/components/ficha_consultas.js.
      */
     private function ordenLineasDocumento(string $vista): array
     {
+        if ($vista === 'documento') {
+            return [
+                'fecha'     => 'g.fecha',
+                'tipo'      => 'g.tipo_documento',
+                'documento' => 'g.numero_documento',
+                'lineas'    => 'g.lineas',
+                'subtotal'  => 'g.subtotal',
+                'iva'       => 'g.iva',
+                'total'     => 'g.total_documento',
+            ];
+        }
         if ($vista === 'producto') {
             return [
                 'codigo'        => 'g.codigo',

@@ -17,6 +17,9 @@
  *       'transacciones' => 'prov-tab-transacciones',  // id del panel, o null para no pintarlo
  *       'estado_cuenta' => 'prov-tab-estado-cuenta',  // id del panel, o null
  *       'anticipos'     => 'prov-tab-anticipos',      // id del panel, o null
+ *       'vista_documento' => true,                    // botón «Por documento» en Transacciones (el
+ *                                                     // repositorio debe exponer las columnas extra
+ *                                                     // de LineasDocumentoTrait y el JS, `transacciones.documento`)
  *       'textos'        => [...],                     // ver valores por defecto abajo
  *   ];
  *
@@ -29,6 +32,7 @@ $fcPref   = preg_replace('/[^a-z0-9_-]/i', '', (string) ($fcConf['prefijo'] ?? '
 $fcPanTrx = $fcConf['transacciones'] ?? null;
 $fcPanEc  = $fcConf['estado_cuenta'] ?? null;
 $fcPanAnt = $fcConf['anticipos'] ?? null;
+$fcVistaDoc = !empty($fcConf['vista_documento']);
 $fcTxt    = ($fcConf['textos'] ?? []) + [
     'sin_guardar_trx' => 'Guarde la ficha para ver sus transacciones.',
     'sin_guardar_ec'  => 'Guarde la ficha para ver su estado de cuenta.',
@@ -89,8 +93,25 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .ficha-consulta-scroll > table > tbody > tr > td.fc-col-adic {
+        max-width: 260px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
     .fc-fila-abrible {
         cursor: pointer;
+    }
+    /* Detalle de un documento (modal encima de la ficha) */
+    .fc-doc-tabla {
+        font-size: 0.76rem;
+    }
+    .fc-doc-tabla > thead th {
+        background: #f8f9fa;
+        white-space: nowrap;
+    }
+    .fc-doc-tabla td.fc-doc-adic {
+        white-space: normal;
+        min-width: 160px;
     }
     .fc-fila-abrible:hover > td {
         background: rgba(13, 110, 253, .06);
@@ -121,6 +142,9 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                 <div class="btn-group btn-group-sm" role="group" aria-label="Vista">
                     <button type="button" class="btn btn-outline-secondary active" data-fc-vista="detalle"><i class="bi bi-list-ul me-1"></i>Detalle</button>
                     <button type="button" class="btn btn-outline-secondary" data-fc-vista="producto"><i class="bi bi-box-seam me-1"></i>Por producto</button>
+                    <?php if ($fcVistaDoc): ?>
+                    <button type="button" class="btn btn-outline-secondary" data-fc-vista="documento"><i class="bi bi-files me-1"></i>Por documento</button>
+                    <?php endif; ?>
                 </div>
                 <div class="ms-auto d-flex align-items-center gap-2">
                     <span class="small text-muted fw-medium" data-fc="info">0-0/0</span>
@@ -289,4 +313,4 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
 <?php endif; ?>
 <?php
 // Este archivo se incluye dentro de la vista de cada página: no dejar variables sueltas.
-unset($fcConf, $fcPref, $fcPanTrx, $fcPanEc, $fcPanAnt, $fcTxt, $fcEsc);
+unset($fcConf, $fcPref, $fcPanTrx, $fcPanEc, $fcPanAnt, $fcVistaDoc, $fcTxt, $fcEsc);

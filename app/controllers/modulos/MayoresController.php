@@ -190,6 +190,25 @@ class MayoresController extends BaseModuloController
         }
     }
 
+    /**
+     * Desglose por líneas del documento de una o varias filas del mayor (la flecha ▸ y el botón
+     * «Expandir todo»). Recibe `lineas` = ids de asientos_contables_detalle separados por coma;
+     * el servicio resuelve todo desde la empresa activa, no confía en el documento que diga el
+     * navegador. Solo lectura, con el mismo permiso que el reporte.
+     */
+    public function getDesgloseAjax(): void
+    {
+        $this->requireLeer();
+        try {
+            $ids = array_map('intval', explode(',', (string) ($_POST['lineas'] ?? $_GET['lineas'] ?? '')));
+            $datos = $this->service->getDesglose((int) $_SESSION['id_empresa'], $ids);
+            $this->json(['success' => true, 'data' => (object) $datos]);
+        } catch (\Throwable $th) {
+            \App\Services\ErrorLogService::registrar($th, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $this->json(['success' => false, 'error' => $th->getMessage()]);
+        }
+    }
+
     public function getCuentasAjax(): void
     {
         $this->requireLeer();

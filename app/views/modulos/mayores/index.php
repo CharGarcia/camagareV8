@@ -23,6 +23,14 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
     .tr-total td { font-weight: bold; background-color: rgba(13, 110, 253, 0.05); color: #0d6efd; border-top: 2px solid #dee2e6; }
     .tr-total-general td { font-weight: 800; background-color: #f8f9fa; border-top: 2px solid #343a40; font-size: 0.95rem; }
     .monto-negativo { color: #dc3545; }
+    /* Desglose por líneas del documento (ingresos/egresos cuyo asiento suma varias líneas en una cuenta) */
+    .btn-desglose { border:0; background:none; padding:0 4px 0 0; color:#0d6efd; line-height:1; vertical-align:baseline; }
+    .btn-desglose i { transition: transform .15s; display:inline-block; }
+    .fila-mov.abierta .btn-desglose i { transform: rotate(90deg); }
+    .fila-mov.abierta td { background-color: rgba(13,110,253,.04); }
+    .tabla-reporte tr.fila-desglose td { font-size: .78rem; color:#495057; background-color:#fbfcfe; padding-top:3px; padding-bottom:3px; border-bottom:1px dashed #e9ecef; }
+    .tabla-reporte tr.fila-desglose td:first-child { border-left:3px solid rgba(13,110,253,.35); }
+    .tabla-reporte tr.fila-desglose.ajuste td { font-style: italic; color:#6c757d; }
     /* Altura idéntica y explícita para todos los controles de filtros (selects, inputs, buscadores y botones),
        para que queden alineados sin depender de que cada variante -sm de Bootstrap renderice igual. */
     #formFiltros .form-select,
@@ -217,6 +225,10 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                         <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                     </button>
                 </div>
+                <button type="button" class="btn btn-outline-primary btn-sm d-none" id="btnExpandirTodo" onclick="expandirTodoDesglose()"
+                        title="Ver las líneas de cada ingreso/egreso que el asiento agrupó en una sola cuenta">
+                    <i class="bi bi-arrows-expand"></i><span class="d-none d-md-inline"> Expandir detalle</span>
+                </button>
                 <input type="search" class="form-control form-control-sm shadow-none border" style="max-width:320px;"
                        id="buscadorMayorTexto" placeholder="Buscar en el reporte (cuenta, tercero, comprobante, glosa...)"
                        autocomplete="off" oninput="filtrarMayorEnPantalla()">
@@ -452,6 +464,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         document.getElementById('dropdown_tercero').style.display = 'none';
         onTipoEntidadChange();
         document.getElementById('buscadorMayorTexto').value = '';
+        document.getElementById('btnExpandirTodo').classList.add('d-none');
         document.getElementById('content-reporte').innerHTML =
             '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> Seleccione el rango de fechas y presione Generar.</p>';
         actualizarStats(null);
@@ -459,6 +472,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
 
     function renderMayor(data) {
         actualizarStats(data);
+        document.getElementById('btnExpandirTodo').classList.add('d-none');
         if (!data.cuentas || !data.cuentas.length) {
             document.getElementById('content-reporte').innerHTML =
                 '<p class="text-muted text-center py-5 small"><i class="bi bi-info-circle me-1"></i> No hay movimientos con los filtros seleccionados.</p>';
@@ -487,8 +501,12 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
                 const de = parseFloat(mov.debe) || 0;
                 const ha = parseFloat(mov.haber) || 0;
                 const glosa = mov.referencia_detalle || mov.concepto || '';
-                html += `<tr class="fila-mov">
-                    <td class="text-center">${mov.fecha_asiento}</td>
+                // Flecha ▸: el asiento sumó en esta cuenta varias líneas del ingreso/egreso.
+                const flecha = mov.desglosable
+                    ? `<button type="button" class="btn-desglose" onclick="toggleDesglose(this)" title="Ver las líneas del documento que forman este valor"><i class="bi bi-caret-right-fill"></i></button>`
+                    : '';
+                html += `<tr class="fila-mov" ${mov.desglosable ? `data-linea="${mov.id_linea}" data-lado="${de > 0 ? 'debe' : 'haber'}"` : ''}>
+                    <td class="text-center text-nowrap">${flecha}${mov.fecha_asiento}</td>
                     <td class="text-center"><a href="#" onclick="event.preventDefault(); ASIENTO_abrirModal(${mov.id_asiento});" class="text-decoration-none fw-bold" title="Ver asiento contable">${mov.numero_comprobante || 'S/N'}</a></td>
                     <td>${docRefHtml(mov)}</td>
                     <td>${mov.tercero || ''}</td>
@@ -519,6 +537,13 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         html += '</table>';
         document.getElementById('content-reporte').innerHTML = html;
 
+        // El botón «Expandir detalle» solo aparece si hay algo que desglosar.
+        desgloseCache = {};
+        const hayDesglose = data.cuentas.some(c => c.movimientos.some(m => m.desglosable));
+        const btnExp = document.getElementById('btnExpandirTodo');
+        btnExp.classList.toggle('d-none', !hayDesglose);
+        actualizarBotonExpandir();
+
         // Si ya había texto escrito en el buscador (ej. el usuario generó otro reporte
         // sin borrar la búsqueda), reaplica el filtro sobre el nuevo contenido.
         filtrarMayorEnPantalla();
@@ -535,7 +560,7 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
         grupos.forEach(tbody => {
             if (!q) {
                 tbody.style.display = '';
-                tbody.querySelectorAll('tr.fila-mov').forEach(tr => { tr.style.display = ''; });
+                tbody.querySelectorAll('tr.fila-mov, tr.fila-desglose').forEach(tr => { tr.style.display = ''; });
                 algunGrupoVisible = true;
                 return;
             }
@@ -545,8 +570,12 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             let algunaFilaVisible = false;
 
             tbody.querySelectorAll('tr.fila-mov').forEach(tr => {
-                const visible = coincideCuenta || tr.textContent.toLowerCase().includes(q);
+                // También cuenta lo que dice el desglose abierto (p. ej. la descripción de una línea).
+                const subs = filasDesglose(tr);
+                const texto = (tr.textContent + ' ' + subs.map(s => s.textContent).join(' ')).toLowerCase();
+                const visible = coincideCuenta || texto.includes(q);
                 tr.style.display = visible ? '' : 'none';
+                subs.forEach(s => { s.style.display = visible ? '' : 'none'; });
                 if (visible) algunaFilaVisible = true;
             });
 
@@ -566,6 +595,132 @@ $urlBaseReporte = rtrim($base, '/') . '/' . ltrim($rutaModulo ?? '', '/');
             }
         } else if (msgVacio) {
             msgVacio.remove();
+        }
+    }
+
+    // ── Desglose por líneas del documento ───────────────────────────────────────────
+    // El asiento de un ingreso/egreso suma por cuenta las líneas del documento (varios «otros
+    // conceptos» al mismo gasto, varias facturas pagadas). La flecha ▸ abre esas líneas debajo
+    // de la fila; solo informa: el saldo sigue siendo el del asiento.
+    let desgloseCache = {};
+    const LIMITE_DESGLOSE = 1000; // mismo tope que el servidor por petición
+
+    const escDesglose = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    // Sub-filas de desglose que cuelgan de una fila del mayor (van justo debajo).
+    function filasDesglose(tr) {
+        const res = [];
+        let sig = tr.nextElementSibling;
+        while (sig && sig.classList.contains('fila-desglose')) { res.push(sig); sig = sig.nextElementSibling; }
+        return res;
+    }
+
+    async function cargarDesglose(ids) {
+        const faltan = ids.filter(id => !(id in desgloseCache));
+        for (let i = 0; i < faltan.length; i += LIMITE_DESGLOSE) {
+            const tramo = faltan.slice(i, i + LIMITE_DESGLOSE);
+            const resp = await fetch(`${urlBase}/getDesgloseAjax`, {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ lineas: tramo.join(',') }),
+            });
+            const json = await resp.json();
+            if (!json.success) throw new Error(json.error || 'No se pudo cargar el detalle');
+            // Las que el servidor no devuelve se guardan vacías para no volver a pedirlas.
+            tramo.forEach(id => { desgloseCache[id] = (json.data || {})[id] || null; });
+        }
+    }
+
+    function htmlDesglose(tr, d) {
+        const lado = tr.dataset.lado;
+        const celdaMonto = (v) => lado === 'debe'
+            ? `<td class="text-end">${formatMoney(v)}</td><td></td>`
+            : `<td></td><td class="text-end">${formatMoney(v)}</td>`;
+        if (!d || (!d.lineas.length && !d.ajuste)) {
+            return `<tr class="fila-desglose ajuste"><td></td><td colspan="7">No se encontraron líneas del documento para esta cuenta.</td></tr>`;
+        }
+        let html = '';
+        d.lineas.forEach(l => {
+            html += `<tr class="fila-desglose">
+                <td></td>
+                <td class="text-center"><small>${escDesglose(l.tipo)}</small></td>
+                <td><small>${escDesglose(l.numero)}</small></td>
+                <td></td>
+                <td><small>${escDesglose(l.descripcion)}</small></td>
+                ${celdaMonto(l.monto)}
+                <td></td>
+            </tr>`;
+        });
+        if (Math.abs(d.ajuste) >= 0.005) {
+            const motivo = d.lineas.length
+                ? 'Ajuste del asiento (redondeo o valor sin línea propia en el documento)'
+                : 'Valor del asiento sin línea identificable en el documento';
+            html += `<tr class="fila-desglose ajuste"><td></td><td colspan="4"><small>${motivo}</small></td>${celdaMonto(d.ajuste)}<td></td></tr>`;
+        }
+        if (d.lineas_asiento > 1) {
+            html += `<tr class="fila-desglose ajuste"><td></td><td colspan="7"><small>Esta cuenta tiene ${d.lineas_asiento} líneas en el mismo asiento: el detalle corresponde al total de la cuenta (${formatMoney(d.total_cuenta)}).</small></td></tr>`;
+        }
+        return html;
+    }
+
+    function abrirFila(tr) {
+        if (tr.classList.contains('abierta')) return;
+        tr.insertAdjacentHTML('afterend', htmlDesglose(tr, desgloseCache[tr.dataset.linea]));
+        tr.classList.add('abierta');
+    }
+
+    function cerrarFila(tr) {
+        filasDesglose(tr).forEach(s => s.remove());
+        tr.classList.remove('abierta');
+    }
+
+    async function toggleDesglose(btn) {
+        const tr = btn.closest('tr');
+        if (tr.classList.contains('abierta')) {
+            cerrarFila(tr);
+            actualizarBotonExpandir();
+            return;
+        }
+        btn.disabled = true;
+        try {
+            await cargarDesglose([tr.dataset.linea]);
+            abrirFila(tr);
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+        } finally {
+            btn.disabled = false;
+            actualizarBotonExpandir();
+        }
+    }
+
+    function actualizarBotonExpandir() {
+        const btn = document.getElementById('btnExpandirTodo');
+        const abierta = !!document.querySelector('#content-reporte tr.fila-mov.abierta');
+        btn.innerHTML = abierta
+            ? '<i class="bi bi-arrows-collapse"></i><span class="d-none d-md-inline"> Contraer detalle</span>'
+            : '<i class="bi bi-arrows-expand"></i><span class="d-none d-md-inline"> Expandir detalle</span>';
+    }
+
+    // Con alguna fila abierta, contrae todo; si no, abre todas las que tienen desglose.
+    async function expandirTodoDesglose() {
+        const filas = [...document.querySelectorAll('#content-reporte tr.fila-mov[data-linea]')];
+        if (filas.some(tr => tr.classList.contains('abierta'))) {
+            filas.forEach(cerrarFila);
+            actualizarBotonExpandir();
+            return;
+        }
+        const btn = document.getElementById('btnExpandirTodo');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Cargando...';
+        try {
+            await cargarDesglose(filas.map(tr => tr.dataset.linea));
+            filas.forEach(abrirFila);
+            filtrarMayorEnPantalla();
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message });
+        } finally {
+            btn.disabled = false;
+            actualizarBotonExpandir();
         }
     }
 

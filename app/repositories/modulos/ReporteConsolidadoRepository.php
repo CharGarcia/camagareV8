@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\repositories\modulos;
 
 use App\Helpers\CruceRetencionSri;
+use App\Helpers\TiposComprobanteCompra;
 use App\repositories\BaseRepository;
 use PDO;
 
@@ -18,12 +19,15 @@ use PDO;
  *
  * Reglas de origen (evitan duplicar montos entre hojas, ver
  * DocumentoAutomatedRegisterService):
- *  - "Compras" = compras_cabecera con tipo_comprobante = '01' (factura de compra).
+ *  - "Compras" = compras_cabecera de TODO tipo que sea cargo con el proveedor
+ *    (factura 01, nota de venta 02, liquidación 03, institución financiera 12,
+ *    servicios básicos 18, reembolso 41, …): TiposComprobanteCompra::sqlEsCargo().
+ *    Antes solo se tomaba la factura '01' y las notas de venta no aparecían.
  *  - Notas de Crédito de compra (recibidas de proveedor) = compras_cabecera
- *    tipo_comprobante = '04'; se combinan con notas_credito_cabecera (emitidas)
+ *    tipo_comprobante en TiposComprobanteCompra::NOTAS_CREDITO; se combinan con notas_credito_cabecera (emitidas)
  *    en la hoja "Notas de Crédito", distinguidas por la columna "origen".
  *  - Notas de Débito de compra (recibidas) = compras_cabecera tipo_comprobante
- *    = '05'; se combinan con nota_debito_cabecera (emitidas) en "Notas de Débito".
+ *    en TiposComprobanteCompra::NOTAS_DEBITO; se combinan con nota_debito_cabecera (emitidas) en "Notas de Débito".
  *  - Liquidaciones de Compra vive en su propia tabla (liquidaciones_cabecera),
  *    no en compras_cabecera.
  */
@@ -78,7 +82,7 @@ class ReporteConsolidadoRepository extends BaseRepository
         return "(SELECT COALESCE(e.establecimiento, '') FROM empresas e WHERE e.id = {$alias}.id_empresa) AS establecimiento";
     }
 
-    /** Grupos de checkbox "Incluir" del filtro (clave => etiqueta). */
+    /** Tipos de documento del reporte (clave => etiqueta). Siempre se incluyen todos. */
     public const GRUPOS = [
         'COMPRAS'          => 'Compras',
         'RETENCION_COMPRA' => 'Retenciones de Compra',
@@ -90,11 +94,23 @@ class ReporteConsolidadoRepository extends BaseRepository
         'LIQUIDACION'      => 'Liquidaciones de Compra',
     ];
 
-    /** ¿Se incluye este grupo dado el filtro de checkboxes? (todos por defecto) */
-    private function incluyeGrupo(string $grupo, array $f): bool
+    /** Fragmento SQL (con AND inicial) de los tipos de comprobante de compra de cada rama. */
+    private function condTipoCompra(string $alias, string $rama): string
     {
-        $incluir = $f['incluir'] ?? array_keys(self::GRUPOS);
-        return in_array($grupo, $incluir, true);
+        $col = "{$alias}.tipo_comprobante";
+        return match ($rama) {
+            'COMPRAS'      => ' AND ' . TiposComprobanteCompra::sqlEsCargo($col),
+            'NOTA_CREDITO' => " AND {$col} IN ('" . implode("','", TiposComprobanteCompra::NOTAS_CREDITO) . "')",
+            'NOTA_DEBITO'  => " AND {$col} IN ('" . implode("','", TiposComprobanteCompra::NOTAS_DEBITO) . "')",
+        };
+    }
+
+    /** Nombre del comprobante de compra cuando no es factura ("Nota de Venta", …); NULL si es factura. */
+    private function nombreTipoCompra(string $alias): string
+    {
+        $col = "{$alias}.tipo_comprobante";
+        return "CASE WHEN COALESCE(NULLIF(TRIM({$col}), ''), '01') = '01' THEN NULL
+                     ELSE " . TiposComprobanteCompra::sqlNombre($col) . " END";
     }
 
     /**
@@ -192,11 +208,11 @@ class ReporteConsolidadoRepository extends BaseRepository
                                COALESCE(p.razon_social, '—') AS tercero_nombre,
                                COALESCE(p.identificacion, '') AS tercero_ident,
                                c.total_sin_impuestos AS subtotal, " . $this->ivaCompras('c') . " AS iva, c.importe_total AS total,
-                               'registrado'::varchar AS estado, NULL::varchar AS origen
+                               'registrado'::varchar AS estado, (" . $this->nombreTipoCompra('c') . ")::varchar AS origen
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
                         WHERE " . $this->condEmpresa('c') . "
-                              AND c.tipo_comprobante = '01'
+                              " . $this->condTipoCompra('c', 'COMPRAS') . "
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_cp');
                         // compras_cabecera no tiene columna "estado": no hay concepto de anulado que filtrar aquí.
 
@@ -292,7 +308,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
                         WHERE " . $this->condEmpresa('c') . "
-                              AND c.tipo_comprobante = '04'
+                              " . $this->condTipoCompra('c', 'NOTA_CREDITO') . "
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_ncc');
 
             case 'NOTA_DEBITO_VENTA':
@@ -323,7 +339,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                         FROM compras_cabecera c
                         LEFT JOIN proveedores p ON p.id = c.id_proveedor
                         WHERE " . $this->condEmpresa('c') . "
-                              AND c.tipo_comprobante = '05'
+                              " . $this->condTipoCompra('c', 'NOTA_DEBITO') . "
                               " . $this->condFecha('c.fecha_emision', $f, $params, '_ndc');
 
             case 'LIQUIDACION':
@@ -348,8 +364,8 @@ class ReporteConsolidadoRepository extends BaseRepository
         }
     }
 
-    /** Mapa rama interna => grupo de checkbox al que pertenece. */
-    private const RAMA_GRUPO = [
+    /** Ramas internas del UNION => tipo de documento (todas se incluyen siempre). */
+    private const RAMAS = [
         'COMPRAS'            => 'COMPRAS',
         'RETENCION_COMPRA'   => 'RETENCION_COMPRA',
         'FACTURA_VENTA'      => 'FACTURA_VENTA',
@@ -362,18 +378,14 @@ class ReporteConsolidadoRepository extends BaseRepository
         'LIQUIDACION'        => 'LIQUIDACION',
     ];
 
-    /** UNION de las ramas aplicables según los checkboxes. Devuelve [sql, params]. */
+    /** UNION de todas las ramas: el reporte trae siempre todos los documentos del período. Devuelve [sql, params]. */
     private function armarUnion(int|array $idEmpresa, array $f): array
     {
         $this->setAlcance($idEmpresa);
         $params = [];
         $ramas = [];
-        foreach (self::RAMA_GRUPO as $rama => $grupo) {
-            if (!$this->incluyeGrupo($grupo, $f)) continue;
+        foreach (array_keys(self::RAMAS) as $rama) {
             $ramas[] = $this->selectResumen($rama, $f, $params);
-        }
-        if (empty($ramas)) {
-            $ramas[] = $this->selectResumen('COMPRAS', $f, $params) . " AND 1=0";
         }
         return [implode("\n UNION ALL \n", $ramas), $params];
     }
@@ -459,7 +471,7 @@ class ReporteConsolidadoRepository extends BaseRepository
 
     // ── Consultas públicas: detalle por hoja (Excel) ────────────────────────────
 
-    /** Detalle línea por línea de Compras (tipo_comprobante = '01'). */
+    /** Detalle línea por línea de Compras (todo tipo que sea cargo: factura, nota de venta, …). */
     public function getDetalleCompras(int|array $idEmpresa, array $f): array
     {
         $this->setAlcance($idEmpresa);
@@ -467,6 +479,7 @@ class ReporteConsolidadoRepository extends BaseRepository
         $sql = "SELECT " . $this->colEst('c') . ", c.fecha_emision AS fecha,
                        (c.establecimiento_prov || '-' || c.punto_emision_prov || '-' || c.secuencial_prov) AS numero_documento,
                        c.numero_autorizacion,
+                       " . TiposComprobanteCompra::sqlNombre('c.tipo_comprobante') . " AS tipo_comprobante_nombre,
                        p.razon_social AS proveedor_nombre, p.identificacion AS proveedor_ruc,
                        COALESCE(d.codigo_principal, d.codigo_auxiliar, '') AS codigo,
                        d.descripcion, d.cantidad, d.precio_unitario, d.descuento,
@@ -478,7 +491,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 JOIN compras_cabecera c ON c.id = d.id_compra
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
                 WHERE " . $this->condEmpresa('c') . "
-                      AND c.tipo_comprobante = '01'
+                      " . $this->condTipoCompra('c', 'COMPRAS') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '') . "
                 ORDER BY c.fecha_emision, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
@@ -613,7 +626,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 JOIN compras_cabecera c ON c.id = d.id_compra
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
                 WHERE " . $this->condEmpresa('c') . "
-                      AND c.tipo_comprobante = '04'
+                      " . $this->condTipoCompra('c', 'NOTA_CREDITO') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '2') . "
                 ORDER BY fecha, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);
@@ -657,7 +670,7 @@ class ReporteConsolidadoRepository extends BaseRepository
                 JOIN compras_cabecera c ON c.id = d.id_compra
                 LEFT JOIN proveedores p ON p.id = c.id_proveedor
                 WHERE " . $this->condEmpresa('c') . "
-                      AND c.tipo_comprobante = '05'
+                      " . $this->condTipoCompra('c', 'NOTA_DEBITO') . "
                       " . $this->condFecha('c.fecha_emision', $f, $params, '2') . "
                 ORDER BY fecha, numero_documento";
         return $this->q($sql, $params)->fetchAll(PDO::FETCH_ASSOC);

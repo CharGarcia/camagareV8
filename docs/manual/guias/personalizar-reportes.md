@@ -1,11 +1,11 @@
 ---
 titulo: Personalizar un reporte para toda la empresa
-resumen: El administrador elige qué columnas muestra un reporte en pantalla, Excel y PDF, y si el PDF sale vertical u horizontal. Aplica a todos los usuarios de la empresa. Disponible en Reporte de Ventas, Reporte de Compras, Cuentas por Cobrar, Cuentas por Pagar y Reporte de Cartera.
+resumen: El administrador elige qué columnas muestra un reporte en pantalla, Excel y PDF, y si el PDF sale vertical u horizontal. Aplica a todos los usuarios de la empresa. Disponible en Reporte de Ventas, Reporte de Compras, Cuentas por Cobrar, Cuentas por Pagar, Reporte de Cartera y Reporte Consolidado.
 categoria: Reportes
 tipo: guia
 visibilidad: todos
-etiquetas: personalizar reporte, personalizar, columnas del reporte, ocultar columnas, mostrar columnas, quitar columna, no quiero ver una columna, columnas del pdf, columnas del excel, orientación del pdf, pdf horizontal, pdf vertical, hoja horizontal, hoja vertical, apaisado, retrato, configurar reporte, reporte por empresa, botón personalizar, no veo el botón personalizar, restablecer reporte, solo administradores, nivel 2, nivel 3, reporte de compras, reporte de ventas, cuentas por cobrar, cuentas por pagar, cartera, agregar columna, columna ruc, columna vendedor, raya, columna no disponible, reporte de cartera, estado de cuenta
-version: 1.3
+etiquetas: personalizar reporte, personalizar, columnas del reporte, ocultar columnas, mostrar columnas, quitar columna, no quiero ver una columna, columnas del pdf, columnas del excel, orientación del pdf, pdf horizontal, pdf vertical, hoja horizontal, hoja vertical, apaisado, retrato, configurar reporte, reporte por empresa, botón personalizar, no veo el botón personalizar, restablecer reporte, solo administradores, nivel 2, nivel 3, reporte de compras, reporte de ventas, cuentas por cobrar, cuentas por pagar, cartera, agregar columna, columna ruc, columna vendedor, raya, columna no disponible, reporte de cartera, estado de cuenta, reporte consolidado
+version: 1.4
 orden: 37
 estado: activo
 ---
@@ -34,6 +34,7 @@ tal como lo dejó el administrador.
 | Cuentas por Pagar | Sí | La vista Detallado |
 | Reporte de Ventas | Sí | Todas sus agrupaciones; se eligen las columnas a ocultar |
 | Reporte de Cartera | Sí | El estado de cuenta de cada cliente o proveedor (también lo que se envía por correo) |
+| Reporte Consolidado de Transacciones | Sí | La tabla y el PDF (resumen por documento). El Excel, que es el detalle por hoja, no se personaliza |
 
 En Cuentas por Cobrar y Cuentas por Pagar las vistas *Por cliente / Por
 proveedor*, *Por producto* y *Por antigüedad* tienen una estructura propia y no
@@ -52,6 +53,7 @@ se personalizan.
    - En **Cuentas por Cobrar**, **Cuentas por Pagar**, el **Reporte de
      Ventas** y el **Reporte de Cartera**: **Pantalla**, **Excel** y **PDF**,
      cada uno por separado.
+   - En el **Reporte Consolidado**: **Pantalla** y **PDF** (el Excel no cambia).
 4. Elija la **Orientación del PDF**.
 5. Pulse **Guardar**. Si ya había generado el reporte, la tabla se actualiza
    sola con las columnas nuevas.
@@ -122,6 +124,8 @@ confirmación antes de hacerlo.
 | «Falta ejecutar … reportes_personalizacion.sql» | La base de datos aún no tiene la tabla de esta función | Avise a soporte |
 
 ## Historial de cambios
+
+- **1.4** (16-11-2026) — Disponible en el **Reporte Consolidado de Transacciones** (pantalla y PDF).
 
 - **1.3** (11-11-2026) — Disponible en el **Reporte de Cartera** (estado de cuenta por cliente o proveedor).
 - **1.2** (10-11-2026) — Disponible en el **Reporte de Ventas** (todas sus agrupaciones).

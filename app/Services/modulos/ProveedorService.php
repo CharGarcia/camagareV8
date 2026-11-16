@@ -396,6 +396,19 @@ class ProveedorService
     }
 
     /**
+     * Pestaña "Transacciones", clic en un documento: cabecera, líneas (con su detalle
+     * adicional) e información adicional de una compra o liquidación del proveedor.
+     * Null si no es suyo o el usuario no puede verlo (mismas reglas que la pestaña).
+     */
+    public function getDocumentoTransaccion(int $idProveedor, int $idEmpresa, array $fuentes, string $origen, int $idDocumento): ?array
+    {
+        $this->exigirProveedor($idProveedor, $idEmpresa);
+        return $this->repository->getDocumentoTransaccion(
+            $this->fichasDelProveedor($idProveedor, $idEmpresa), $idEmpresa, $fuentes, $origen, $idDocumento
+        );
+    }
+
+    /**
      * Pestaña "Estado de cuenta": el kardex del Reporte de Cartera resumido para la
      * ficha, con una sola fila por egreso (ver EstadoCuentaTerceroService).
      */

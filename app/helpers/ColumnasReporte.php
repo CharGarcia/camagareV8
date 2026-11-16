@@ -35,7 +35,9 @@ namespace App\Helpers;
  *
  * Atributos de vista: `titulo`, `auto` (orientación automática del PDF: 'P' o 'L'),
  * `auto_txt` (texto de la opción Automática cuando depende de los datos),
- * `excel_propio` (true = el Excel se elige aparte de la pantalla) y `orden` (claves que van
+ * `excel_propio` (true = el Excel se elige aparte de la pantalla), `pantalla_txt` (rótulo
+ * del medio pantalla en la ventana cuando el Excel no la sigue; por defecto «Pantalla y
+ * Excel») y `orden` (claves que van
  * primero en un medio cuando su orden no es el del catálogo: ['pantalla' => […], 'pdf' => […]]).
  *   suma     Campo de la fila que se suma en la fila de totales (pantalla y Excel).
  *   stat     Clave de las estadísticas del reporte para el total del PDF.
@@ -297,6 +299,32 @@ final class ColumnasReporte
                         'deuda'     => ['titulo' => 'Deuda Generada', 'alinear' => 'der', 'ancho' => 12, 'suma' => 'total_cargos'],
                         'abono'     => ['titulo' => 'Abono', 'alinear' => 'der', 'ancho' => 12, 'suma' => 'total_abonos'],
                         'saldo'     => ['titulo' => 'Saldo', 'alinear' => 'der', 'ancho' => 12, 'suma' => 'saldo_final'],
+                    ],
+                ],
+            ],
+        ],
+        // Reporte Consolidado: la personalización rige la pantalla y el PDF (resumen por
+        // documento). El Excel es otro informe (una hoja por tipo de documento, línea por
+        // línea) y no se personaliza: por eso la ventana rotula el medio solo «Pantalla».
+        // «Estab.» (consolidado por RUC) depende de los datos y no va al catálogo.
+        'modulos/reporte_consolidado' => [
+            'titulo' => 'Reporte Consolidado de Transacciones',
+            'icono'  => 'bi-collection',
+            'vistas' => [
+                'RESUMEN' => [
+                    'titulo'       => 'Resumen por documento',
+                    'auto'         => 'L',
+                    'pantalla_txt' => 'Pantalla',
+                    'columnas'     => [
+                        'tipo'           => ['titulo' => 'Tipo', 'ancho' => 14],
+                        'fecha'          => ['titulo' => 'Fecha', 'alinear' => 'centro', 'ancho' => 8],
+                        'numero'         => ['titulo' => 'Número', 'ancho' => 13, 'fija' => true],
+                        'tercero'        => ['titulo' => 'Tercero', 'nombre' => 'Tercero (cliente / proveedor)', 'ancho' => 22],
+                        'identificacion' => ['titulo' => 'Identificación', 'nombre' => 'Identificación del tercero (en pantalla, como columna aparte)', 'ancho' => 10, 'pantalla' => false],
+                        'subtotal'       => ['titulo' => 'Subtotal', 'alinear' => 'der', 'ancho' => 8],
+                        'iva'            => ['titulo' => 'IVA', 'alinear' => 'der', 'ancho' => 7],
+                        'total'          => ['titulo' => 'Total', 'alinear' => 'der', 'ancho' => 9],
+                        'estado'         => ['titulo' => 'Estado', 'alinear' => 'centro', 'ancho' => 9],
                     ],
                 ],
             ],

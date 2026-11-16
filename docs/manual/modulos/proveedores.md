@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
-etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, pestaña informacion, quien creo el proveedor, quien modifico el proveedor, historial del proveedor
-version: 2.16
+etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, pestaña informacion, quien creo el proveedor, quien modifico el proveedor, historial del proveedor, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver compra, ver documento, detalle de la compra, lote, observacion del item
+version: 2.17
 orden: 10
 estado: activo
 ---
@@ -160,12 +160,17 @@ La pestaña *Transacciones* lista lo que se le ha comprado al proveedor a partir
 de sus **compras** (facturas, notas de venta, notas de débito y demás
 comprobantes) y sus **liquidaciones de compra**. Es de solo lectura.
 
-Tiene dos vistas:
+Tiene tres vistas:
 
 | Vista | Qué muestra |
 |-------|-------------|
-| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, cantidad, precio unitario, descuento, subtotal e IVA |
+| Detalle | Una fila por línea de documento: fecha, tipo y número del documento, código, descripción, **Det. Adicional**, cantidad, precio unitario, descuento, subtotal e IVA |
 | Por producto | Una fila por producto o servicio (mismo código y descripción): veces comprado, cantidad total, último precio pagado, fecha de la última compra y total |
+| Por documento | Una fila por compra o liquidación: fecha, tipo, número, cuántos ítems tiene, subtotal, IVA y total del documento. El ícono de comentario junto a los ítems indica que alguno trae detalle adicional |
+
+La columna **Det. Adicional** es el texto propio de cada ítem (por ejemplo el
+lote, la serie o una observación del producto) tal como viene en el comprobante
+del proveedor. Si es largo se recorta con «…»; al pasar el cursor se ve completo.
 
 Las **notas de crédito** del proveedor se ven en rojo y **restan** en cantidades
 y totales, porque son devoluciones o descuentos posteriores. Los documentos
@@ -183,11 +188,29 @@ de la derecha (al lado se ve cuántas filas está viendo del total).
 La pestaña **solo aparece** si el proveedor tiene documentos: a un proveedor al
 que todavía no se le ha comprado nada no se le muestra esta pestaña.
 
+### Ver el detalle de un documento
+
+En la vista **Por documento** haga clic en la fila; en la vista **Detalle**, en
+el número del documento. Se abre una ventana de solo lectura, encima de la
+ficha, con:
+
+- los datos del documento: tipo, número, fecha de emisión, autorización y, en
+  las notas de crédito, el documento modificado y el motivo;
+- todas sus líneas, cada una con su **Det. Adicional**, y los totales (subtotal
+  sin impuestos, descuento, IVA y total del documento);
+- la **Información adicional** del documento: los campos que el emisor agrega
+  al comprobante (dirección, correo, teléfono, observaciones, etc.);
+- el botón **PDF** del documento. En las compras solo está disponible si la
+  compra tiene su XML electrónico; las registradas a mano no lo tienen.
+
+La ventana respeta los mismos permisos que la pestaña: solo abre documentos que
+usted puede ver en Compras o en Liquidaciones de Compra.
+
 ### Buscar en las transacciones
 
 El buscador de la pestaña encuentra por **palabras sueltas**, en cualquier orden
-y sin distinguir tildes ni mayúsculas, en el código, la descripción y el número
-y tipo de documento: `aceite oliva` encuentra *CARBONELL ACEITE SOL OLIVA PET*.
+y sin distinguir tildes ni mayúsculas, en el código, la descripción, el detalle
+adicional y el número y tipo de documento: `aceite oliva` encuentra *CARBONELL ACEITE SOL OLIVA PET*.
 
 También acepta filtros por campo con la sintaxis `clave:valor`:
 
@@ -201,6 +224,11 @@ También acepta filtros por campo con la sintaxis `clave:valor`:
 | `precio:` | `precio:>10` | Precio unitario |
 | `cantidad:` | `cantidad:1..5` | Cantidad |
 | `total:` (o `subtotal:`) | `total:>=100` | Subtotal de la línea |
+| `adicional:` | `adicional:lote` o `-adicional:lote` | Busca solo en el detalle adicional de los ítems; el `-` lo excluye |
+
+En la vista **Por documento** el buscador muestra los documentos que tienen
+alguna línea que coincide; los ítems, el subtotal y el IVA de la fila cuentan
+solo esas líneas, y el total es siempre el del documento completo.
 
 ## Estado de cuenta e historial de pagos
 
@@ -501,6 +529,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.17** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`).
 - **2.16** — La pestaña **Estado de cuenta** del proveedor carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
 - **2.15** — Nueva pestaña **Información** en la ventana del proveedor (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **2.14** — *Generar pagos pendientes* muestra un aviso de progreso mientras revisa las compras y mientras genera los pagos, para que se sepa que el sistema está trabajando.

@@ -8,7 +8,6 @@
     #form-filtros-consolidado .form-control,
     #form-filtros-consolidado .input-group-text,
     #form-filtros-consolidado .btn { height: 28px; font-size: .75rem; }
-    .rcon-chk-grupo { font-size: .72rem; }
     @media (max-width: 767.98px) {
         #modulo-reporte_consolidado .reporte-consolidado-scroll { max-height: none !important; height: auto !important; overflow-y: visible !important; }
     }
@@ -18,12 +17,13 @@
 
     <!-- ── Tarjeta de control fija (título + filtros + KPIs) ── -->
     <div class="card cmg-control-card border-0 shadow-sm rounded-3 mb-3">
-        <div class="card-header bg-white border-bottom py-2 px-3">
+        <div class="card-header bg-white border-bottom py-2 px-3 d-flex justify-content-between align-items-center gap-2">
             <h5 class="mb-0 fw-bold"><i class="bi bi-collection me-2 text-primary"></i>Reporte Consolidado de Transacciones</h5>
+            <?= \App\Helpers\ColumnasReporte::boton($rutaModulo) ?>
         </div>
         <div class="card-body p-3">
             <form id="form-filtros-consolidado" onsubmit="event.preventDefault(); window.RCON_generarReporte();">
-                <div class="d-flex flex-wrap align-items-start gap-2 mb-2">
+                <div class="d-flex flex-wrap align-items-start gap-2">
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Año</label>
                         <select id="rcon-anio" class="form-select form-select-sm shadow-none border" style="width:90px;"
@@ -60,7 +60,6 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Establecimientos</label>
                         <select id="rcon-alcance" name="alcance" class="form-select form-select-sm shadow-none border" style="width:180px;"
-                                onchange="window.RCON_generarReporte();"
                                 title="Consolidado por RUC: <?php echo htmlspecialchars(implode(' · ', $establecimientos ?? [])); ?>">
                             <option value="ESTABLECIMIENTO" selected>Solo este (matriz)</option>
                             <option value="CONSOLIDADO">Consolidado (<?php echo count($establecimientos ?? []); ?> establec.)</option>
@@ -92,7 +91,7 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Anulados</label>
                         <div class="form-check mt-1">
-                            <input class="form-check-input" type="checkbox" name="incluir_anulados" value="1" id="rcon-incluir-anulados" onchange="window.RCON_generarReporte();">
+                            <input class="form-check-input" type="checkbox" name="incluir_anulados" value="1" id="rcon-incluir-anulados">
                             <label class="form-check-label small" for="rcon-incluir-anulados">Incluir anulados</label>
                         </div>
                     </div>
@@ -100,21 +99,8 @@
                     <div>
                         <label class="form-label small fw-bold mb-1 d-block" style="font-size:.65rem;">&nbsp;</label>
                         <button type="submit" class="btn btn-primary btn-sm shadow-sm" style="width:130px;">
-                            <i class="bi bi-search me-1"></i> Buscar
+                            <i class="bi bi-search me-1"></i> Mostrar
                         </button>
-                    </div>
-                </div>
-
-                <div>
-                    <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Documentos a incluir</label>
-                    <div class="d-flex flex-wrap gap-3">
-                        <?php foreach (($grupos ?? []) as $clave => $etiqueta): ?>
-                            <div class="form-check rcon-chk-grupo">
-                                <input class="form-check-input rcon-chk" type="checkbox" name="incluir[]" value="<?= htmlspecialchars($clave) ?>"
-                                       id="rcon-chk-<?= htmlspecialchars($clave) ?>" checked onchange="window.RCON_generarReporte();">
-                                <label class="form-check-label" for="rcon-chk-<?= htmlspecialchars($clave) ?>"><?= htmlspecialchars($etiqueta) ?></label>
-                            </div>
-                        <?php endforeach; ?>
                     </div>
                 </div>
             </form>
@@ -171,22 +157,14 @@
         <div class="card-body p-0">
             <div class="reporte-consolidado-scroll w-100">
                 <table class="table table-hover table-sm mb-0 align-middle" id="tabla-reporte-consolidado">
-                    <thead class="table-light">
-                        <tr>
-                            <th class="ps-2">Tipo</th>
-                            <th class="text-center">Fecha</th>
-                            <th>Número</th>
-                            <th>Tercero</th>
-                            <th class="text-end">Subtotal</th>
-                            <th class="text-end">IVA</th>
-                            <th class="text-end pe-3">Total</th>
-                            <th class="text-center">Estado</th>
-                        </tr>
+                    <?php // Columnas según la personalización de la empresa (botón «Personalizar»). ?>
+                    <thead class="table-light" id="rcon-thead">
+                        <?= \App\controllers\modulos\ReporteConsolidadoController::theadHtml($columnas ?? []) ?>
                     </thead>
                     <tbody id="rcon-tbody">
-                        <tr><td colspan="8" class="text-center py-5 text-muted">
+                        <tr><td colspan="<?= max(1, count($columnas ?? [])) ?>" class="text-center py-5 text-muted">
                             <i class="bi bi-filter-circle fs-3 d-block mb-2"></i>
-                            Aplica los filtros y haz clic en Buscar para ver los resultados.
+                            Elige el período y haz clic en Mostrar para ver los documentos.
                         </td></tr>
                     </tbody>
                 </table>
@@ -199,3 +177,4 @@
     const RUTA_MODULO = "<?php echo $rutaModulo; ?>";
 </script>
 <script src="<?php echo BASE_URL; ?>/js/modulos/reporte_consolidado.js?v=<?= asset_ver('/js/modulos/reporte_consolidado.js') ?>"></script>
+<?= \App\Helpers\ColumnasReporte::modal($rutaModulo) ?>

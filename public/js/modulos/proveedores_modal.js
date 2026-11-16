@@ -1492,6 +1492,13 @@
                     ultimaFecha: 'Última compra',
                     vacio: 'Todavía no hay compras ni liquidaciones de este proveedor.',
                 },
+                // Vista «Por documento», columna «Det. Adicional» y detalle del documento con un clic
+                documento: {
+                    origenes: { COMPRA: 'Compra', LIQUIDACION: 'Liquidación de compra' },
+                    urlPdf: (origen, id) => origen === 'LIQUIDACION'
+                        ? `${BASE_URL}/modulos/liquidacion-compra/exportarPdfDoc?id=${encodeURIComponent(id)}`
+                        : `${BASE_URL}/modulos/compras/exportarPdfAjax?id=${encodeURIComponent(id)}`,
+                },
             },
             estadoCuenta: {
                 panel: 'prov-tab-estado-cuenta',

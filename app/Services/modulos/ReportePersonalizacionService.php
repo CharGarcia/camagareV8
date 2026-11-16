@@ -170,7 +170,7 @@ class ReportePersonalizacionService
                 'titulo'        => $def['titulo'],
                 'medios'        => $excelPropio
                     ? [['clave' => 'pantalla', 'titulo' => 'Pantalla'], ['clave' => 'excel', 'titulo' => 'Excel'], ['clave' => 'pdf', 'titulo' => 'PDF']]
-                    : [['clave' => 'pantalla', 'titulo' => 'Pantalla y Excel'], ['clave' => 'pdf', 'titulo' => 'PDF']],
+                    : [['clave' => 'pantalla', 'titulo' => (string) ($def['pantalla_txt'] ?? 'Pantalla y Excel')], ['clave' => 'pdf', 'titulo' => 'PDF']],
                 'auto'          => $def['auto'] ?? 'L',
                 'auto_txt'      => $def['auto_txt'] ?? null,
                 'orientacion'   => $c['orientacion'],

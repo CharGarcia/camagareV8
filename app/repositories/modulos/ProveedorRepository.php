@@ -565,6 +565,10 @@ class ProveedorRepository extends BaseRepository
             $listaSql      = static fn(array $cods): string => "'" . implode("','", $cods) . "'";
             $tiposNc       = $listaSql(\App\Helpers\TiposComprobanteCompra::NOTAS_CREDITO);
             $tiposSinLineas = $listaSql(\App\Helpers\TiposComprobanteCompra::SIN_CARTERA); // guía de remisión / retención
+            // compras_detalle.info_adicional llega con database/2026-10-29_compras_detalle_info_adicional.sql:
+            // mientras una base no lo tenga, la columna sale vacía en lugar de romper la pestaña.
+            // Texto vacío y no NULL: así "-adicional:x" del buscador no descarta las líneas sin detalle.
+            $adicCompra = $this->comprasDetalleTieneAdicional() ? "COALESCE(BTRIM(d.info_adicional), '')::text" : "''::text";
 
             $sql = "SELECT 'COMPRA'::text AS origen, c.id AS id_documento, d.id AS id_linea,
                            c.fecha_emision::date AS fecha,
@@ -576,7 +580,9 @@ class ProveedorRepository extends BaseRepository
                            d.precio_total_sin_impuesto AS subtotal,
                            COALESCE(imp.iva, 0) AS iva,
                            COALESCE(imp.tarifa, 0) AS tarifa_iva,
-                           CASE WHEN COALESCE(TRIM(c.tipo_comprobante), '') IN ({$tiposNc}) THEN -1 ELSE 1 END AS signo
+                           CASE WHEN COALESCE(TRIM(c.tipo_comprobante), '') IN ({$tiposNc}) THEN -1 ELSE 1 END AS signo,
+                           {$adicCompra} AS info_adicional,
+                           COALESCE(c.importe_total, 0) AS total_documento
                     FROM compras_detalle d
                     INNER JOIN compras_cabecera c ON c.id = d.id_compra
                     LEFT JOIN LATERAL (
@@ -614,7 +620,9 @@ class ProveedorRepository extends BaseRepository
                            d.precio_total_sin_impuesto AS subtotal,
                            COALESCE(imp.iva, 0) AS iva,
                            COALESCE(imp.tarifa, 0) AS tarifa_iva,
-                           1 AS signo
+                           1 AS signo,
+                           COALESCE(BTRIM(d.info_adicional), '')::text AS info_adicional,
+                           COALESCE(l.importe_total, 0) AS total_documento
                     FROM liquidaciones_detalle d
                     INNER JOIN liquidaciones_cabecera l ON l.id = d.id_cabecera
                     LEFT JOIN LATERAL (
@@ -639,6 +647,88 @@ class ProveedorRepository extends BaseRepository
         }
 
         return $ramas;
+    }
+
+    /** Las ramas exponen info_adicional y total_documento (vista "Por documento" de LineasDocumentoTrait). */
+    protected function lineasDocumentoConExtras(): bool
+    {
+        return true;
+    }
+
+    private ?bool $comprasDetalleConAdicional = null;
+
+    /** ¿Ya existe compras_detalle.info_adicional en esta base? (se consulta una vez por petición) */
+    private function comprasDetalleTieneAdicional(): bool
+    {
+        if ($this->comprasDetalleConAdicional === null) {
+            try {
+                $this->comprasDetalleConAdicional = $this->db->query(
+                    "SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'compras_detalle' AND column_name = 'info_adicional'"
+                )->fetchColumn() !== false;
+            } catch (\Throwable $e) {
+                $this->comprasDetalleConAdicional = false;
+            }
+        }
+        return $this->comprasDetalleConAdicional;
+    }
+
+    /**
+     * Un documento de la pestaña Transacciones (se abre con un clic): cabecera, líneas e
+     * información adicional. Las líneas salen de la MISMA unión que la pestaña, así que si
+     * el documento no es de este proveedor, no está vigente o el usuario no puede verlo
+     * (permiso o registros propios), devuelve null.
+     *
+     * @param array<string,?int> $fuentes Igual que en getTransacciones().
+     * @return array{cabecera: array, lineas: array, adicional: array}|null
+     */
+    public function getDocumentoTransaccion(int|array $idProveedor, int $idEmpresa, array $fuentes, string $origen, int $idDocumento): ?array
+    {
+        if (!array_key_exists($origen, $fuentes)) {
+            return null;
+        }
+        $params = [];
+        $ramas  = $this->ramasTransacciones($idProveedor, $idEmpresa, [$origen => $fuentes[$origen]], $params);
+        $lineas = $this->lineasDeDocumento($ramas, $params, $origen, $idDocumento);
+        if ($lineas === []) {
+            return null;
+        }
+
+        if ($origen === 'COMPRA') {
+            $nombreTipo = \App\Helpers\TiposComprobanteCompra::sqlNombre('c.tipo_comprobante');
+            $st = $this->db->prepare("SELECT c.id, ({$nombreTipo})::text AS tipo_documento,
+                                             CONCAT(c.establecimiento_prov, '-', c.punto_emision_prov, '-', c.secuencial_prov) AS numero_documento,
+                                             c.fecha_emision::date AS fecha, c.numero_autorizacion,
+                                             c.total_sin_impuestos, c.total_descuento, c.importe_total,
+                                             c.observaciones, c.estado, c.documento_modificado, c.motivo,
+                                             (COALESCE(BTRIM(c.detalle_xml), '') <> '') AS tiene_xml
+                                      FROM compras_cabecera c
+                                      WHERE c.id = :id AND c.id_empresa = :emp AND c.eliminado = false");
+            $stA = $this->db->prepare("SELECT nombre, valor FROM compras_adicional WHERE id_compra = :id ORDER BY id");
+        } else {
+            $st = $this->db->prepare("SELECT l.id, 'Liquidación de Compra'::text AS tipo_documento,
+                                             CONCAT(l.establecimiento, '-', l.punto_emision, '-', l.secuencial) AS numero_documento,
+                                             l.fecha_emision::date AS fecha, l.numero_autorizacion,
+                                             l.total_sin_impuestos, l.total_descuento, l.importe_total,
+                                             l.observaciones, l.estado, NULL::text AS documento_modificado, NULL::text AS motivo,
+                                             true AS tiene_xml
+                                      FROM liquidaciones_cabecera l
+                                      WHERE l.id = :id AND l.id_empresa = :emp AND l.eliminado = false");
+            $stA = $this->db->prepare("SELECT nombre, valor FROM liquidaciones_adicional WHERE id_cabecera = :id ORDER BY id");
+        }
+        $st->execute([':id' => $idDocumento, ':emp' => $idEmpresa]);
+        $cabecera = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$cabecera) {
+            return null;
+        }
+        $stA->execute([':id' => $idDocumento]);
+
+        $cabecera['origen'] = $origen;
+        return [
+            'cabecera'  => $cabecera,
+            'lineas'    => $lineas,
+            'adicional' => $stA->fetchAll(PDO::FETCH_ASSOC),
+        ];
     }
 
     public function create(array $data): int

@@ -42,6 +42,7 @@ class MayoresService
     public function generarMayor(int $idEmpresa, array $filtros): array
     {
         $movimientos = $this->repository->getMovimientos($idEmpresa, $filtros);
+        $desglosables = $this->documentosDesglosables($idEmpresa, $movimientos);
 
         $cuentas = [];
         $totalDebe = 0.0;
@@ -84,6 +85,9 @@ class MayoresService
                 // Documento origen: con esto la vista enlaza "Documento Ref." a su modal.
                 'modulo_documento' => $mov['modulo_documento'],
                 'id_documento' => $mov['id_documento'],
+                // Línea del asiento + si se puede abrir el desglose por líneas del documento.
+                'id_linea' => (int) $mov['id_linea'],
+                'desglosable' => $this->esDesglosable($mov, $desglosables),
                 'debe' => $debe,
                 'haber' => $haber,
                 'saldo_acumulado' => $cuentas[$idCuenta]['saldo_arrastrado'],
@@ -113,6 +117,286 @@ class MayoresService
                 'haber' => $totalHaber,
             ],
         ];
+    }
+
+    // ── Desglose por líneas del documento ──────────────────────────────────────────────
+    //
+    // El asiento de un ingreso/egreso SUMA por cuenta las líneas del documento: cinco «otros
+    // conceptos» al mismo gasto o diecisiete facturas de compra pagadas quedan en una sola línea
+    // del asiento, con la glosa de la primera. El mayor lee el asiento, así que no puede mostrar
+    // ese detalle por sí solo. El desglose lo reconstruye desde el documento, SOLO para mostrarlo:
+    // el saldo y los totales siguen saliendo del asiento.
+
+    /** Lado del asiento donde el documento pone su contrapartida (lo que se desglosa). */
+    private const LADO_CONTRAPARTIDA = ['egreso' => 'debe', 'ingreso' => 'haber'];
+
+    /** tipo_documento de las líneas manuales («otros conceptos»). */
+    private const TIPO_MANUAL = ['egreso' => 'MANUAL', 'ingreso' => 'OTRO'];
+
+    /** Cómo se lee cada tipo de línea en el desglose. */
+    private const ETIQUETA_TIPO_LINEA = [
+        'MANUAL'            => 'Otro concepto',
+        'OTRO'              => 'Otro concepto',
+        'COMPRA'            => 'Factura de compra',
+        'LIQUIDACION'       => 'Liquidación de compra',
+        'ROL'               => 'Rol de pagos',
+        'IMPORTACION'       => 'Importación',
+        'FACTURA'           => 'Factura de venta',
+        'RECIBO'            => 'Recibo de venta',
+        'FACTURA_REEMBOLSO' => 'Factura de reembolso',
+    ];
+
+    /** Tope de líneas por petición de desglose («Expandir todo» las pide juntas). */
+    private const MAX_LINEAS_DESGLOSE = 1000;
+
+    /**
+     * Documentos (ingresos/egresos) del mayor con dos o más líneas: modulo => [id => true].
+     * Una consulta por tipo de documento, no una por fila.
+     */
+    private function documentosDesglosables(int $idEmpresa, array $movimientos): array
+    {
+        $ids = [];
+        foreach ($movimientos as $mov) {
+            $modulo = (string) ($mov['modulo_documento'] ?? '');
+            if (isset(self::LADO_CONTRAPARTIDA[$modulo]) && !empty($mov['id_documento'])) {
+                $ids[$modulo][(int) $mov['id_documento']] = true;
+            }
+        }
+
+        $res = [];
+        foreach ($ids as $modulo => $lista) {
+            try {
+                $conteo = $this->repository->contarLineasDocumentos($idEmpresa, $modulo, array_keys($lista));
+            } catch (\PDOException $e) {
+                // Sin la tabla de detalle el mayor sale igual, solo que sin desglose.
+                error_log('Mayores: no se pudo contar las líneas de ' . $modulo . '. ' . $e->getMessage());
+                continue;
+            }
+            foreach ($conteo as $idDoc => $n) {
+                if ($n >= 2) {
+                    $res[$modulo][$idDoc] = true;
+                }
+            }
+        }
+        return $res;
+    }
+
+    /** La fila es la contrapartida de un documento con varias líneas (no la pata de banco/caja). */
+    private function esDesglosable(array $mov, array $desglosables): bool
+    {
+        $modulo = (string) ($mov['modulo_documento'] ?? '');
+        $lado = self::LADO_CONTRAPARTIDA[$modulo] ?? null;
+        return $lado !== null
+            && isset($desglosables[$modulo][(int) $mov['id_documento']])
+            && (float) $mov[$lado] > 0;
+    }
+
+    /**
+     * Desglose de varias líneas del mayor: id_linea => [
+     *   'lineas'       => [[tipo, numero, descripcion, monto], …]  líneas del documento en esa cuenta
+     *   'total_cuenta' => lo que el asiento lleva en esa cuenta (lado de la contrapartida)
+     *   'ajuste'       => total_cuenta − suma de las líneas (redondeo, saldo sin línea propia…)
+     *   'lineas_asiento' => cuántas líneas tiene esa cuenta en el asiento (normalmente 1)
+     * ]. Las líneas que no son de un ingreso/egreso, o no son su contrapartida, no aparecen.
+     *
+     * @param int[] $idsLinea
+     */
+    public function getDesglose(int $idEmpresa, array $idsLinea): array
+    {
+        $idsLinea = array_slice(array_values(array_unique(array_filter(array_map('intval', $idsLinea)))), 0, self::MAX_LINEAS_DESGLOSE);
+        if (!$idsLinea) {
+            return [];
+        }
+
+        $lineas = array_values(array_filter(
+            $this->repository->getLineasParaDesglose($idEmpresa, $idsLinea),
+            static fn (array $l): bool => isset(self::LADO_CONTRAPARTIDA[(string) $l['modulo_doc']]) && !empty($l['id_doc'])
+        ));
+        if (!$lineas) {
+            return [];
+        }
+
+        // Asientos y documentos involucrados: una consulta por cada cosa, no por fila.
+        $asientos = [];
+        foreach ($this->repository->getLineasAsientos($idEmpresa, array_column($lineas, 'id_asiento')) as $la) {
+            $asientos[(int) $la['id_asiento']][] = $la;
+        }
+        $docs = [];
+        foreach (array_keys(self::LADO_CONTRAPARTIDA) as $modulo) {
+            $ids = array_column(array_filter($lineas, static fn (array $l): bool => $l['modulo_doc'] === $modulo), 'id_doc');
+            foreach ($this->repository->getLineasDocumentos($idEmpresa, $modulo, $ids) as $d) {
+                $docs[$modulo][(int) $d['id_doc']][] = $d;
+            }
+        }
+
+        $res = [];
+        $asignados = []; // cache por asiento+documento: varias filas del mismo asiento
+        foreach ($lineas as $l) {
+            $modulo   = (string) $l['modulo_doc'];
+            $lado     = self::LADO_CONTRAPARTIDA[$modulo];
+            $idAs     = (int) $l['id_asiento'];
+            $idDoc    = (int) $l['id_doc'];
+            $idCuenta = (int) $l['id_cuenta_contable'];
+            if ((float) $l[$lado] <= 0) {
+                continue; // pata de banco/caja: no es la que agrupa líneas del documento
+            }
+
+            $clave = $idAs . ':' . $modulo . ':' . $idDoc;
+            $asignados[$clave] ??= $this->asignarLineasACuentas($modulo, $docs[$modulo][$idDoc] ?? [], $asientos[$idAs] ?? []);
+            [$detalles, $porCuenta] = $asignados[$clave];
+
+            $filas = [];
+            $suma  = 0.0;
+            foreach ($detalles as $d) {
+                if (($d['cuenta_asignada'] ?? 0) !== $idCuenta) {
+                    continue;
+                }
+                $monto  = round((float) $d['monto'], 2);
+                $suma   = round($suma + $monto, 2);
+                $tipo   = strtoupper(trim((string) $d['tipo_documento']));
+                $filas[] = [
+                    'tipo'        => self::ETIQUETA_TIPO_LINEA[$tipo] ?? ucfirst(strtolower(str_replace('_', ' ', $tipo))),
+                    'numero'      => (string) ($d['numero_documento'] ?? ''),
+                    'descripcion' => (string) ($d['descripcion'] ?? ''),
+                    'monto'       => $monto,
+                ];
+            }
+
+            $total = round((float) ($porCuenta[$idCuenta]['monto'] ?? (float) $l[$lado]), 2);
+            $res[(int) $l['id_linea']] = [
+                'lineas'         => $filas,
+                'total_cuenta'   => $total,
+                'ajuste'         => round($total - $suma, 2),
+                'lineas_asiento' => (int) ($porCuenta[$idCuenta]['n'] ?? 1),
+            ];
+        }
+        return $res;
+    }
+
+    /**
+     * A qué cuenta del asiento fue a parar cada línea del documento (`cuenta_asignada`, 0 si no
+     * se pudo saber). Mismo orden de criterios que usó el asiento al armarse:
+     *   1. Línea manual con su cuenta guardada.
+     *   2. Línea manual sin cuenta (documentos antiguos) cuya descripción es la glosa de una
+     *      sola cuenta (el asiento guarda la descripción de la primera línea de cada grupo).
+     *   3. Documento de cartera (factura, compra…): la cuenta cuya referencia lo nombra
+     *      ("Pago facturas de compra 42869, 42870").
+     *   4. Lo que quede, por saldo: si una sola cuenta tiene saldo sin explicar que lo cubra
+     *      (o el asiento tiene una sola cuenta en ese lado), va ahí.
+     *   5. Manuales aún sin cuenta: el cruce de CuentasDetalleDesdeAsiento (el del modal del
+     *      documento), solo si cabe en el saldo de esa cuenta. Va al final porque empata por
+     *      monto y, antes de mirar saldos, mandaba una línea a la cuenta equivocada.
+     * Lo que no se resuelve no se inventa: queda fuera y su monto se ve como «Ajuste».
+     *
+     * @return array{0: array, 1: array<int,array{monto: float, n: int}>} [detalles, cuentas del lado]
+     */
+    private function asignarLineasACuentas(string $modulo, array $detalles, array $lineasAsiento): array
+    {
+        $lado = self::LADO_CONTRAPARTIDA[$modulo];
+        $tipoManual = self::TIPO_MANUAL[$modulo];
+        $colMonto = \App\repositories\modulos\MayoresRepository::DESGLOSE_DOCUMENTOS[$modulo]['monto'];
+
+        $porCuenta = [];
+        foreach ($lineasAsiento as $la) {
+            $m = round((float) ($la[$lado] ?? 0), 2);
+            $id = (int) ($la['id_cuenta_contable'] ?? 0);
+            if ($m <= 0 || $id <= 0) {
+                continue;
+            }
+            $porCuenta[$id] ??= ['monto' => 0.0, 'n' => 0, 'refs' => []];
+            $porCuenta[$id]['monto'] = round($porCuenta[$id]['monto'] + $m, 2);
+            $porCuenta[$id]['n']++;
+            $porCuenta[$id]['refs'][] = (string) ($la['referencia_detalle'] ?? '');
+        }
+        if (!$porCuenta || !$detalles) {
+            return [$detalles, $porCuenta];
+        }
+
+        $esManual = static fn (array $d): bool => strtoupper(trim((string) $d['tipo_documento'])) === $tipoManual;
+        $norm = static fn (string $s): string => mb_strtolower(trim((string) preg_replace('/\s+/u', ' ', $s)));
+        $sinCuentaGuardada = []; // índices de líneas manuales sin cuenta guardada (para el paso 5)
+
+        foreach ($detalles as $i => $d) {
+            $detalles[$i]['cuenta_asignada'] = 0;
+            $cta = (int) ($d['id_cuenta_contable'] ?? 0);
+            if ($esManual($d)) {
+                if ($cta > 0 && isset($porCuenta[$cta])) {
+                    // 1. Cuenta guardada en la línea.
+                    $detalles[$i]['cuenta_asignada'] = $cta;
+                    continue;
+                }
+                $sinCuentaGuardada[] = $i;
+                // 2. La glosa del asiento es la descripción de la primera línea de cada cuenta.
+                $desc = $norm((string) ($d['descripcion'] ?? ''));
+                if ($desc !== '') {
+                    $coinciden = array_keys(array_filter(
+                        $porCuenta,
+                        static fn (array $c): bool => in_array($desc, array_map($norm, $c['refs']), true)
+                    ));
+                    if (count($coinciden) === 1) {
+                        $detalles[$i]['cuenta_asignada'] = $coinciden[0];
+                    }
+                }
+            } else {
+                // 3. Documento de cartera nombrado en la referencia de una sola cuenta.
+                $num = \App\Services\modulos\AsientoBuilderService::secuencialCorto((string) ($d['numero_documento'] ?? ''));
+                if ($num !== '') {
+                    $patron = '/(?<!\d)' . preg_quote($num, '/') . '(?!\d)/u';
+                    $coinciden = array_keys(array_filter(
+                        $porCuenta,
+                        static fn (array $c): bool => (bool) preg_grep($patron, $c['refs'])
+                    ));
+                    if (count($coinciden) === 1) {
+                        $detalles[$i]['cuenta_asignada'] = $coinciden[0];
+                    }
+                }
+            }
+        }
+
+        // 4. Por saldo sin explicar.
+        $saldo = array_map(static fn (array $c): float => $c['monto'], $porCuenta);
+        foreach ($detalles as $d) {
+            if ($d['cuenta_asignada'] > 0) {
+                $saldo[$d['cuenta_asignada']] = round($saldo[$d['cuenta_asignada']] - (float) $d['monto'], 2);
+            }
+        }
+        // Se repite mientras haya avance: asignar una línea puede dejar a otra con una sola opción.
+        do {
+            $avance = false;
+            foreach ($detalles as $i => $d) {
+                if ($d['cuenta_asignada'] > 0) {
+                    continue;
+                }
+                $monto = round((float) $d['monto'], 2);
+                $candidatas = count($porCuenta) === 1
+                    ? array_keys($porCuenta)
+                    : array_keys(array_filter($saldo, static fn (float $s): bool => $s >= $monto - 0.005));
+                if (count($candidatas) === 1) {
+                    $detalles[$i]['cuenta_asignada'] = $candidatas[0];
+                    $saldo[$candidatas[0]] = round($saldo[$candidatas[0]] - $monto, 2);
+                    $avance = true;
+                }
+            }
+        } while ($avance);
+
+        // 5. Manuales que siguen sin cuenta: el cruce del modal del documento
+        //    (CuentasDetalleDesdeAsiento: referencia que contiene la descripción, mismo monto…),
+        //    aceptado solo si esa cuenta todavía tiene saldo que lo cubra.
+        $pendientes = array_values(array_filter($sinCuentaGuardada, static fn (int $i): bool => $detalles[$i]['cuenta_asignada'] === 0));
+        if ($pendientes) {
+            $copia = $detalles;
+            \App\Helpers\CuentasDetalleDesdeAsiento::aplicar($copia, $lineasAsiento, $lado, $tipoManual, $colMonto);
+            foreach ($pendientes as $i) {
+                $cta = (int) ($copia[$i]['id_cuenta_contable'] ?? 0);
+                $monto = round((float) $detalles[$i]['monto'], 2);
+                if ($cta > 0 && isset($saldo[$cta]) && $saldo[$cta] >= $monto - 0.005) {
+                    $detalles[$i]['cuenta_asignada'] = $cta;
+                    $saldo[$cta] = round($saldo[$cta] - $monto, 2);
+                }
+            }
+        }
+
+        return [$detalles, $porCuenta];
     }
 
     /**

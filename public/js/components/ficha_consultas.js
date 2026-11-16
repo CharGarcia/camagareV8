@@ -33,7 +33,7 @@
     if (window.FichaConsultas) return; // script incluido dos veces en la misma página
 
     /** Columnas de Transacciones. o = ordenable (clave de LineasDocumentoTrait::ordenLineasDocumento()). */
-    function columnasTransacciones(textos) {
+    function columnasTransacciones(textos, conDoc) {
         return {
             detalle: [
                 { k: 'fecha',       t: 'Fecha',       o: true, cls: 'ps-2' },
@@ -41,6 +41,7 @@
                 { k: 'documento',   t: 'Documento',   o: true },
                 { k: 'codigo',      t: 'Código',      o: true },
                 { k: 'descripcion', t: 'Descripción', o: true },
+                ...(conDoc ? [{ k: 'adicional', t: 'Det. Adicional' }] : []),
                 { k: 'cantidad',    t: 'Cantidad',    o: true, cls: 'text-end' },
                 { k: 'precio',      t: 'P. unitario', o: true, cls: 'text-end' },
                 { k: 'descuento',   t: 'Descuento',   cls: 'text-end' },
@@ -56,7 +57,181 @@
                 { k: 'ultima_fecha',  t: textos.ultimaFecha,    o: true, cls: 'text-center' },
                 { k: 'total',         t: 'Total',               o: true, cls: 'text-end pe-2' },
             ],
+            // Solo con config.transacciones.documento (LineasDocumentoTrait con extras)
+            documento: [
+                { k: 'fecha',     t: 'Fecha',      o: true, cls: 'ps-2' },
+                { k: 'tipo',      t: 'Tipo',       o: true },
+                { k: 'documento', t: 'Documento',  o: true },
+                { k: 'lineas',    t: 'Ítems',      o: true, cls: 'text-center' },
+                { k: 'subtotal',  t: 'Subtotal',   o: true, cls: 'text-end' },
+                { k: 'iva',       t: 'IVA',        o: true, cls: 'text-end' },
+                { k: 'total',     t: 'Total doc.', o: true, cls: 'text-end' },
+                { k: 'ver',       t: '',           cls: 'text-center pe-2' },
+            ],
         };
+    }
+
+    // ── Detalle de un documento (modal encima de la ficha) ──────────────────
+
+    /**
+     * Modal de solo lectura con la cabecera, las líneas (con su detalle adicional) y la
+     * información adicional de un documento de la pestaña Transacciones. Se crea una sola
+     * vez, colgado del <body> (no dentro del modal de la ficha: si no, quedaría atrapado
+     * en su contexto de apilamiento y detrás del backdrop).
+     */
+    let modalDoc = null;
+
+    function obtenerModalDocumento() {
+        if (modalDoc) return modalDoc;
+        const div = document.createElement('div');
+        div.className = 'modal fade';
+        div.id = 'fcModalDocumento';
+        div.tabIndex = -1;
+        div.setAttribute('aria-hidden', 'true');
+        div.innerHTML = `
+            <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header py-2">
+                        <h6 class="modal-title fw-bold" data-fcd="titulo"><i class="bi bi-file-earmark-text me-2 text-primary"></i>Documento</h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                    </div>
+                    <div class="modal-body pt-2" data-fcd="cuerpo"></div>
+                    <div class="modal-footer py-2">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>`;
+        document.body.appendChild(div);
+
+        // Toda la app fuerza .modal a z-index 5060 !important: el que va encima necesita más
+        const subirFondo = () => {
+            const fondos = document.querySelectorAll('.modal-backdrop');
+            fondos[fondos.length - 1]?.style.setProperty('z-index', '5075', 'important');
+        };
+        div.addEventListener('show.bs.modal', () => {
+            div.style.setProperty('z-index', '5080', 'important');
+            setTimeout(subirFondo, 0);
+        });
+        div.addEventListener('shown.bs.modal', subirFondo);
+        // Al cerrar, Bootstrap quita .modal-open del body aunque la ficha siga abierta
+        div.addEventListener('hidden.bs.modal', () => {
+            if (document.querySelector('.modal.show')) document.body.classList.add('modal-open');
+        });
+
+        modalDoc = {
+            el: div,
+            titulo: div.querySelector('[data-fcd="titulo"]'),
+            cuerpo: div.querySelector('[data-fcd="cuerpo"]'),
+            bs: bootstrap.Modal.getOrCreateInstance(div),
+            peticion: 0,
+            pdf: null,
+        };
+        div.addEventListener('click', (e) => {
+            if (e.target.closest('[data-fcd="pdf"]') && modalDoc.pdf) {
+                if (typeof window.CMG_pdfDocumento === 'function') window.CMG_pdfDocumento(modalDoc.pdf);
+            }
+        });
+        return modalDoc;
+    }
+
+    function htmlDocumento(json, docConf) {
+        const c      = json.cabecera || {};
+        const lineas = json.lineas || [];
+        const adic   = json.adicional || [];
+        const nc     = lineas.some(l => parseInt(l.signo, 10) < 0);
+        const pdfOk  = !!(docConf.urlPdf && c.tiene_xml);
+
+        const dato = (etiqueta, valor) => valor
+            ? `<div><span class="text-muted small d-block">${esc(etiqueta)}</span><span class="fw-medium">${valor}</span></div>`
+            : '';
+
+        let sub = 0, iva = 0, desc = 0;
+        const filas = lineas.map(l => {
+            sub  += parseFloat(l.subtotal) || 0;
+            iva  += parseFloat(l.iva) || 0;
+            desc += parseFloat(l.descuento) || 0;
+            const adicional = (l.info_adicional || '').trim();
+            return `<tr>
+                <td class="ps-2"><code class="text-secondary">${esc(l.codigo) || '—'}</code></td>
+                <td>${esc(l.descripcion)}</td>
+                <td class="fc-doc-adic">${adicional ? esc(adicional) : '<span class="text-muted">—</span>'}</td>
+                <td class="text-end">${fmtCantidad(l.cantidad)}</td>
+                <td class="text-end">$${fmtPrecio(l.precio_unitario)}</td>
+                <td class="text-end">${parseFloat(l.descuento) ? '$' + fmtDinero(l.descuento) : '—'}</td>
+                <td class="text-end fw-medium">$${fmtDinero(l.subtotal)}</td>
+                <td class="text-end pe-2"${parseFloat(l.tarifa_iva) ? ` title="Tarifa ${fmtCantidad(l.tarifa_iva)}%"` : ''}>${parseFloat(l.iva) ? '$' + fmtDinero(l.iva) : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        const filasAdic = adic.length
+            ? adic.map(a => `<tr><td class="ps-2 fw-medium text-nowrap" style="width: 30%;">${esc(a.nombre)}</td><td class="pe-2" style="white-space: normal;">${esc(a.valor)}</td></tr>`).join('')
+            : `<tr><td colspan="2" class="text-center text-muted py-3">El documento no tiene información adicional.</td></tr>`;
+
+        return `
+            <!-- Barra de acciones del documento -->
+            <div class="d-flex gap-1 align-items-center flex-wrap border-bottom pb-2 mb-2">
+                <button type="button" class="btn btn-sm btn-outline-danger" data-fcd="pdf" ${pdfOk ? '' : 'disabled'}
+                    title="${pdfOk ? 'PDF del documento' : 'Este documento no tiene XML electrónico para generar el PDF'}">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                </button>
+                ${nc ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 ms-1">Nota de crédito: resta</span>' : ''}
+            </div>
+            <div class="d-flex flex-wrap gap-4 mb-3 small">
+                ${dato('Tipo', esc(c.tipo_documento))}
+                ${dato('Número', `<code class="text-dark">${esc(c.numero_documento)}</code>`)}
+                ${dato('Fecha de emisión', esc(fmtFecha(c.fecha)))}
+                ${dato('Autorización', c.numero_autorizacion ? `<span class="text-break">${esc(c.numero_autorizacion)}</span>` : '')}
+                ${dato('Documento modificado', esc(c.documento_modificado || ''))}
+                ${dato('Motivo', esc(c.motivo || ''))}
+            </div>
+            <h6 class="small fw-bold text-uppercase text-muted mb-1"><i class="bi bi-list-ul me-1"></i>Detalle</h6>
+            <div class="table-responsive border rounded mb-2">
+                <table class="table table-sm mb-0 fc-doc-tabla">
+                    <thead><tr>
+                        <th class="ps-2">Código</th><th>Descripción</th><th>Det. Adicional</th>
+                        <th class="text-end">Cantidad</th><th class="text-end">P. unitario</th>
+                        <th class="text-end">Descuento</th><th class="text-end">Subtotal</th><th class="text-end pe-2">IVA</th>
+                    </tr></thead>
+                    <tbody>${filas}</tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end mb-3">
+                <table class="table table-sm table-borderless mb-0 small" style="width: auto;">
+                    <tr><td class="text-muted text-end py-0">Subtotal sin impuestos</td><td class="text-end fw-medium py-0 ps-3">$${fmtDinero(sub)}</td></tr>
+                    ${desc ? `<tr><td class="text-muted text-end py-0">Descuento</td><td class="text-end py-0 ps-3">$${fmtDinero(desc)}</td></tr>` : ''}
+                    <tr><td class="text-muted text-end py-0">IVA</td><td class="text-end py-0 ps-3">$${fmtDinero(iva)}</td></tr>
+                    <tr><td class="text-end fw-bold py-0">Total del documento</td><td class="text-end fw-bold py-0 ps-3">$${fmtDinero(c.importe_total)}</td></tr>
+                </table>
+            </div>
+            <h6 class="small fw-bold text-uppercase text-muted mb-1"><i class="bi bi-info-square me-1"></i>Información adicional</h6>
+            <div class="border rounded mb-2">
+                <table class="table table-sm mb-0 fc-doc-tabla"><tbody>${filasAdic}</tbody></table>
+            </div>
+            ${(c.observaciones || '').trim() ? `<div class="small"><span class="text-muted">Observaciones:</span> ${esc(c.observaciones)}</div>` : ''}`;
+    }
+
+    async function abrirDocumento(cfg, origen, idDoc) {
+        const docConf = cfg.transacciones.documento || {};
+        const m   = obtenerModalDocumento();
+        const nro = ++m.peticion;
+        const etiqueta = (docConf.origenes || {})[origen] || 'Documento';
+        m.pdf = null;
+        m.titulo.innerHTML = `<i class="bi bi-file-earmark-text me-2 text-primary"></i>${esc(etiqueta)}`;
+        m.cuerpo.innerHTML = `<div class="text-center text-muted py-5">${CARGANDO}</div>`;
+        m.bs.show();
+
+        const q    = new URLSearchParams({ id: idFicha(cfg), origen, doc: idDoc });
+        const json = await pedirJson(`${cfg.urlBase}/documentoTransaccionAjax?${q}`);
+        if (nro !== m.peticion) return;
+        if (!json.ok) {
+            m.cuerpo.innerHTML = `<div class="text-center text-danger py-5">${esc(json.error || 'No se pudo cargar el documento.')}</div>`;
+            return;
+        }
+        const c = json.cabecera || {};
+        m.titulo.innerHTML = `<i class="bi bi-file-earmark-text me-2 text-primary"></i>${esc(c.tipo_documento || etiqueta)} `
+            + `<code class="text-dark ms-1">${esc(c.numero_documento)}</code>`;
+        m.pdf = (docConf.urlPdf && c.tiene_xml) ? docConf.urlPdf(origen, c.id) : null;
+        m.cuerpo.innerHTML = htmlDocumento(json, docConf);
     }
 
     // ── Utilidades ──────────────────────────────────────────────────────────
@@ -130,7 +305,8 @@
         if (!panel) return null; // sin permiso: la vista no pintó el panel
 
         const textos = Object.assign({ documentos: 'Veces', ultimaFecha: 'Última fecha', vacio: 'Todavía no hay transacciones.' }, conf.textos || {});
-        const cols   = columnasTransacciones(textos);
+        const conDoc = !!conf.documento;
+        const cols   = columnasTransacciones(textos, conDoc);
         const el     = clave => panel.querySelector(`[data-fc="${clave}"]`);
         const st     = { idCargado: null, page: 1, vista: 'detalle', sort: 'fecha', dir: 'desc', timer: null, peticion: 0 };
 
@@ -157,8 +333,29 @@
             if (next) next.disabled = page >= totalPages;
         }
 
+        /** Atributos que vuelven abrible una fila o un enlace (detalle del documento). */
+        function attrDoc(r) {
+            return conDoc ? ` data-fc-origen="${esc(r.origen)}" data-fc-doc="${parseInt(r.id_documento, 10) || 0}"` : '';
+        }
+
         function fila(r) {
             const desc = esc(r.descripcion);
+            if (st.vista === 'documento') {
+                const nc    = parseInt(r.signo, 10) < 0;
+                const rojo  = nc ? ' text-danger' : '';
+                const signo = nc ? '−' : '';
+                const conAdic = parseInt(r.lineas_adicional, 10) > 0;
+                return `<tr class="fc-fila-abrible"${attrDoc(r)} title="Ver el detalle del documento${nc ? ' (nota de crédito: resta)' : ''}">
+                    <td class="ps-2">${fmtFecha(r.fecha)}</td>
+                    <td class="${rojo}">${esc(r.tipo_documento)}</td>
+                    <td><code class="text-secondary">${esc(r.numero_documento)}</code></td>
+                    <td class="text-center">${parseInt(r.lineas, 10) || 0}${conAdic ? ' <i class="bi bi-chat-left-text text-info small" title="Tiene detalle adicional en sus ítems"></i>' : ''}</td>
+                    <td class="text-end${rojo}">${signo}$${fmtDinero(r.subtotal)}</td>
+                    <td class="text-end${rojo}">${parseFloat(r.iva) ? `${signo}$${fmtDinero(r.iva)}` : '—'}</td>
+                    <td class="text-end fw-medium${rojo}">${signo}$${fmtDinero(r.total_documento)}</td>
+                    <td class="text-center pe-2"><i class="bi bi-box-arrow-up-right text-primary"></i></td>
+                </tr>`;
+            }
             if (st.vista === 'producto') {
                 return `<tr>
                     <td class="ps-2"><code class="text-secondary">${esc(r.codigo) || '—'}</code></td>
@@ -177,9 +374,12 @@
             return `<tr${nc ? ' title="Nota de crédito: resta del total"' : ''}>
                 <td class="ps-2">${fmtFecha(r.fecha)}</td>
                 <td class="${rojo}">${esc(r.tipo_documento)}</td>
-                <td><code class="text-secondary">${esc(r.numero_documento)}</code></td>
+                <td>${conDoc
+                    ? `<a href="#" class="text-decoration-none"${attrDoc(r)} title="Ver el detalle del documento"><code>${esc(r.numero_documento)}</code></a>`
+                    : `<code class="text-secondary">${esc(r.numero_documento)}</code>`}</td>
                 <td><code class="text-secondary">${esc(r.codigo) || '—'}</code></td>
                 <td class="fc-col-desc" title="${desc}">${desc}</td>
+                ${conDoc ? `<td class="fc-col-adic" title="${esc(r.info_adicional || '')}">${r.info_adicional ? esc(r.info_adicional) : '<span class="text-muted">—</span>'}</td>` : ''}
                 <td class="text-end${rojo}">${signo}${fmtCantidad(r.cantidad)}</td>
                 <td class="text-end">$${fmtPrecio(r.precio_unitario)}</td>
                 <td class="text-end">${parseFloat(r.descuento) ? '$' + fmtDinero(r.descuento) : '—'}</td>
@@ -271,6 +471,16 @@
             panel.querySelectorAll('[data-fc-vista]').forEach(b => b.classList.toggle('active', b === btn));
             cargar();
         }));
+
+        // Clic en un documento (fila de «Por documento» o número en «Detalle»): su detalle
+        if (conDoc) {
+            el('tbody')?.addEventListener('click', (e) => {
+                const t = e.target.closest('[data-fc-doc]');
+                if (!t) return;
+                e.preventDefault();
+                abrirDocumento(cfg, t.dataset.fcOrigen, t.dataset.fcDoc);
+            });
+        }
 
         el('thead')?.addEventListener('click', (e) => {
             const th = e.target.closest('th[data-orden]');

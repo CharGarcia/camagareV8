@@ -267,6 +267,7 @@ if (!defined('LEAFLET_LOADED')) {
                                 'transacciones' => $provVerTransacciones ? 'prov-tab-transacciones' : null,
                                 'estado_cuenta' => $provVerEstadoCuenta ? 'prov-tab-estado-cuenta' : null,
                                 'anticipos'     => $provVerAnticipos ? 'prov-tab-anticipos' : null,
+                                'vista_documento' => true, // botón «Por documento» (detalle del documento con un clic)
                                 'textos'        => [
                                     'sin_guardar_trx' => 'Guarde el proveedor para ver los productos y servicios que se le han comprado.',
                                     'sin_guardar_ec'  => 'Guarde el proveedor para ver su estado de cuenta.',

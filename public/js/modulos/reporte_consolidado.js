@@ -1,7 +1,11 @@
 // Reporte Consolidado de Transacciones — carga AJAX, filtros y exportación.
-document.addEventListener('DOMContentLoaded', function () {
-    window.RCON_generarReporte();
-});
+// Los documentos se consultan solo al pulsar «Mostrar» (no al abrir ni al cambiar un filtro).
+window.rcon_reporte_generado = false;
+
+// Columnas que tiene hoy la tabla (cambian con «Personalizar»), para el colspan de los avisos.
+function RCON_nColumnas() {
+    return document.querySelectorAll('#rcon-thead th').length || 1;
+}
 
 window.RCON_generarReporte = function () {
     const form     = document.getElementById('form-filtros-consolidado');
@@ -9,7 +13,7 @@ window.RCON_generarReporte = function () {
     const params   = new URLSearchParams(formData).toString();
 
     const tbody = document.getElementById('rcon-tbody');
-    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4">
+    tbody.innerHTML = `<tr><td colspan="${RCON_nColumnas()}" class="text-center py-4">
         <div class="spinner-border text-primary" role="status"></div>
         <br><span class="text-muted small mt-2 d-inline-block">Generando reporte...</span>
     </td></tr>`;
@@ -26,7 +30,9 @@ window.RCON_generarReporte = function () {
     })
     .then(res => {
         if (res.ok) {
+            if (res.thead) document.getElementById('rcon-thead').innerHTML = res.thead;
             tbody.innerHTML = res.rows;
+            window.rcon_reporte_generado = true;
             if (res.stats) {
                 document.getElementById('rcon-stat-documentos').textContent = res.stats.n_documentos ?? 0;
                 document.getElementById('rcon-stat-ventas').textContent     = parseFloat(res.stats.total_ventas ?? 0).toFixed(2);
@@ -35,17 +41,23 @@ window.RCON_generarReporte = function () {
             }
         } else {
             Swal.fire('Error', res.error || 'Ocurrió un error al generar el reporte', 'error');
-            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">Error al generar reporte.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${RCON_nColumnas()}" class="text-center py-4 text-danger">Error al generar reporte.</td></tr>`;
         }
     })
     .catch(err => {
         console.error(err);
         Swal.fire('Error del Servidor', 'Detalle: ' + err.message, 'error');
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-danger">Error de conexión.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="${RCON_nColumnas()}" class="text-center py-4 text-danger">Error de conexión.</td></tr>`;
     });
 };
 
-// ── Selector Año/Mes: recalcula fecha_desde/fecha_hasta y recarga ──────────────
+// Tras guardar la personalización, el reporte ya mostrado se vuelve a consultar con las
+// columnas nuevas (si aún no se pulsó «Mostrar», no hay nada que redibujar).
+document.addEventListener('reportePersonalizado', function () {
+    if (window.rcon_reporte_generado) window.RCON_generarReporte();
+});
+
+// ── Selector Año/Mes: recalcula fecha_desde/fecha_hasta (los datos, al pulsar «Mostrar») ──
 window.RCON_cambiarMesAnio = function () {
     const anio = document.getElementById('rcon-anio').value;
     const mes  = document.getElementById('rcon-mes').value;
@@ -61,7 +73,6 @@ window.RCON_cambiarMesAnio = function () {
         document.getElementById('rcon-fecha-desde').value = `${anio}-${mes}-01`;
         document.getElementById('rcon-fecha-hasta').value = `${anio}-${mes}-${String(ultimoDia).padStart(2, '0')}`;
     }
-    window.RCON_generarReporte();
 };
 
 window.RCON_exportarExcel = function () {
