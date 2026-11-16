@@ -229,8 +229,9 @@ class XmlAtsService
      * <reembolso> por cada comprobante de tercero reembolsado, al final del
      * detalle de la compra (último grupo de campos de la ficha ATS). Los campos
      * *Reemb sueltos dentro de <detalleCompras> hacían que el SRI rechazara el
-     * archivo como "XML mal formado". Nombres de campo según la ficha (incluido
-     * montoIvaRemb, que el SRI escribe así).
+     * archivo como "XML mal formado". Ojo: montoIceRemb y montoIvaRemb llevan una
+     * sola «e» en el esquema del SRI (la ficha dice montoIceReemb, pero el SRI lo
+     * rechaza: "se esperaba {montoIceRemb}").
      */
     private function appendReembolso(DOMDocument $dom, DOMElement $n, array $d): void
     {
@@ -252,7 +253,9 @@ class XmlAtsService
             $this->add($dom, $re, 'baseImpGravReemb', $r['baseImpGravReemb']);
             $this->add($dom, $re, 'baseNoGraIvaReemb', $r['baseNoGraIvaReemb']);
             $this->add($dom, $re, 'baseImpExeReemb', $r['baseImpExeReemb']);
-            $this->add($dom, $re, 'montoIceReemb', $r['montoIceReemb']);
+            // El SRI escribe ICE e IVA con una sola «e» (montoIceRemb / montoIvaRemb),
+            // aunque la ficha técnica diga montoIceReemb: lo confirmó el rechazo del SRI.
+            $this->add($dom, $re, 'montoIceRemb', $r['montoIceReemb']);
             $this->add($dom, $re, 'montoIvaRemb', $r['montoIvaRemb']);
             $bloque->appendChild($re);
         }

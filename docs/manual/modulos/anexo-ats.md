@@ -230,7 +230,7 @@ anexo usa las formas de pago registradas en el documento en **Compras**:
 
 ## Historial de cambios
 
-- **1.12** — **Facturas de reembolso de gastos** (sustento 08): los comprobantes de los terceros reembolsados salían como campos sueltos dentro de la compra y el SRI rechazaba el archivo con *"El XML esta mal formado"*. Ahora la compra sale una sola vez, con todos sus terceros dentro del bloque *reembolsos* al final del detalle, y el total de bases reembolsadas suma los de todos.
+- **1.12** — **Facturas de reembolso de gastos** (sustento 08): los comprobantes de los terceros reembolsados salían como campos sueltos dentro de la compra y el SRI rechazaba el archivo con *"El XML esta mal formado"*. Ahora la compra sale una sola vez, con todos sus terceros dentro del bloque *reembolsos* al final del detalle, y el total de bases reembolsadas suma los de todos. El monto de ICE de cada reembolso sale como *montoIceRemb*, el nombre que exige el SRI.
 - **1.11** — Pago al exterior sin retención: el anexo reporta el **concepto de Renta** elegido en la compra o liquidación (500 a 525) con la base del documento al 0 %. Con convenio de doble tributación **SI**, *pagExtSujRetNorLeg* sale como "NA", como pide la ficha.
 - **1.10** — **Revisión antes de generar**: el botón *Generar* primero revisa
   el periodo y, si hay errores, los muestra sin crear el archivo (queda la
