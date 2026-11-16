@@ -195,6 +195,12 @@ class XmlAtsService
         $pago = $d['pagoExterior'] ?? [];
         $pe = $dom->createElement('pagoExterior');
         $this->add($dom, $pe, 'pagoLocExt', $pago['pagoLocExt'] ?? '01');
+        // Solo en pago al exterior: tipo de régimen y país del régimen general,
+        // en este orden (ficha ATS, bloque de pago a residente / no residente).
+        if (!empty($pago['tipoRegi'])) {
+            $this->add($dom, $pe, 'tipoRegi', $pago['tipoRegi']);
+            $this->add($dom, $pe, 'paisEfecPagoGen', $pago['paisEfecPagoGen'] ?? 'NA');
+        }
         $this->add($dom, $pe, 'paisEfecPago', $pago['paisEfecPago'] ?? 'NA');
         $this->add($dom, $pe, 'aplicConvDobTrib', $pago['aplicConvDobTrib'] ?? 'NA');
         $this->add($dom, $pe, 'pagExtSujRetNorLeg', $pago['pagExtSujRetNorLeg'] ?? 'NA');

@@ -113,10 +113,12 @@ class AtsService
      * @param string $anio           'YYYY'
      * @param bool   $semestral      Régimen RIMPE semestral
      * @param bool   $incluirVentas  Reportar el módulo de ventas (ver recopilar())
+     * @param bool   $soloRevisar    Arma y valida el anexo sin guardar archivos ni
+     *                               registrar en log_sistema (revisión previa).
      * @return array{ok:bool, mensaje?:string, registros?:int, nombre_xml?:string,
      *               ruta_xml?:string, nombre_zip?:string, ruta_zip?:string}
      */
-    public function generar(int $idEmpresa, int $idUsuario, string $mes, string $anio, bool $semestral, bool $incluirVentas = true): array
+    public function generar(int $idEmpresa, int $idUsuario, string $mes, string $anio, bool $semestral, bool $incluirVentas = true, bool $soloRevisar = false): array
     {
         $datos = $this->recopilar($idEmpresa, $mes, $anio, $semestral, $idUsuario, $incluirVentas);
         if (!$datos['ok']) {
@@ -140,6 +142,19 @@ class AtsService
         // el catálogo de sustentos para que detecte combinaciones sustento/tipo de
         // comprobante que el SRI rechaza.
         $validacion = $this->validator->validar($contenido, $this->sustentoTipos);
+
+        // Revisión antes de generar: solo se informa, no se escribe ni se registra nada.
+        if ($soloRevisar) {
+            return [
+                'ok'             => true,
+                'registros'      => count($documentos),
+                'ambiente'       => $ambiente,
+                'incluye_ventas' => $incluirVentas,
+                'ventas'         => count($datos['ventas']),
+                'errores'        => $validacion['errores'],
+                'advertencias'   => array_merge($datos['advertencias'] ?? [], $validacion['advertencias']),
+            ];
+        }
 
         // Persistir XML + ZIP
         $dir = $this->dirSalida($idEmpresa);
@@ -873,8 +888,13 @@ class AtsService
         }
 
         // Si no hubo retención de Renta, reportar la base como "no sujeta" (332),
-        // salvo en notas de crédito (04).
-        if ($air === [] && $tipoComp !== '04') {
+        // salvo en notas de crédito (04) y en pagos al exterior: el 332 es un
+        // concepto de "pago a residente" y el SRI lo rechaza con pagoLocExt = 02
+        // ("no es válido para tipo de pago"). Para no residentes no existe un
+        // concepto equivalente; la compra necesita su retención con un código 5xx
+        // (aunque sea al 0%) y el validador lo avisa.
+        $esPagoExterior = (string) ($doc['pago_loc_ext'] ?? '01') === '02';
+        if ($air === [] && $tipoComp !== '04' && !$esPagoExterior) {
             $baseNoRet = $baseGrav + $base0 + $baseNoG + $baseExe;
             if ($baseNoRet > 0) {
                 $air[] = [
@@ -1076,8 +1096,8 @@ class AtsService
      * en la subpestaña del mismo nombre de Liquidaciones de Compra. Un documento
      * anterior a esos campos llega sin ellos y se reporta como pago local.
      *
-     * @return array{pagoLocExt:string, paisEfecPago:string,
-     *               aplicConvDobTrib:string, pagExtSujRetNorLeg:string}
+     * @return array{pagoLocExt:string, tipoRegi?:string, paisEfecPagoGen?:string,
+     *               paisEfecPago:string, aplicConvDobTrib:string, pagExtSujRetNorLeg:string}
      */
     private function pagoExterior(array $doc): array
     {
@@ -1091,9 +1111,17 @@ class AtsService
             ];
         }
 
+        // Ficha ATS: con pago a no residente el tipo de régimen fiscal del exterior
+        // (Tabla 19) es obligatorio, y el país va además en el campo de ese régimen.
+        // El sistema no captura régimen: se reporta 01 (régimen general), que es el
+        // caso común; paraíso fiscal (02) y régimen preferente (03) piden otro
+        // catálogo de países (Tabla 17) o la denominación del régimen.
+        $pais = trim((string) ($doc['cod_pais_pago'] ?? '')) ?: 'NA';
         return [
             'pagoLocExt'         => '02',
-            'paisEfecPago'       => trim((string) ($doc['cod_pais_pago'] ?? '')) ?: 'NA',
+            'tipoRegi'           => '01',
+            'paisEfecPagoGen'    => $pais,
+            'paisEfecPago'       => $pais,
             'aplicConvDobTrib'   => trim((string) ($doc['aplic_conv_dob_trib'] ?? '')) ?: 'NA',
             'pagExtSujRetNorLeg' => trim((string) ($doc['pag_ext_suj_ret_nor_leg'] ?? '')) ?: 'NA',
         ];

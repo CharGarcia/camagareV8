@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Xml;
 
+use App\Helpers\DigitoVerificador;
 use DOMDocument;
 use DOMElement;
 
@@ -157,6 +158,9 @@ class AtsValidatorService
                 $err[] = "{$p}: idProv (RUC) debe tener 13 dígitos.";
             } elseif ($tp === '02' && !preg_match('/^\d{10}$/', $idProv)) {
                 $err[] = "{$p}: idProv (Cédula) debe tener 10 dígitos.";
+            } elseif ($tp === '02' && !DigitoVerificador::cedulaValida($idProv)) {
+                $err[] = "{$p}: la cédula {$idProv} no es válida (no cumple el dígito verificador). "
+                       . "Corrija la identificación en la ficha del proveedor.";
             } elseif ($idProv === '') {
                 $err[] = "{$p}: idProv es obligatorio.";
             }
@@ -306,6 +310,16 @@ class AtsValidatorService
         if ($pais === '' || $pais === 'NA') {
             $err[] = "{$p}: en un pago al exterior hay que indicar el país donde se efectuó el pago.";
         }
+        if (!in_array($this->texto($pe, 'tipoRegi'), ['01', '02', '03'], true)) {
+            $err[] = "{$p}: en un pago al exterior hay que indicar el tipo de régimen fiscal del exterior.";
+        }
+        // Pago a no residente sin retención de Renta: el SRI no acepta el 332
+        // (es de pago a residente) y no hay un "no sujeto" para no residentes.
+        if ($tipoComp !== '04' && $this->hijo($d, 'air') === null) {
+            $err[] = "{$p}: es un pago al exterior sin retención de Renta. El SRI no acepta el concepto 332 "
+                   . "para no residentes: registre la retención de esta compra con el concepto de pago a no "
+                   . "residentes (códigos 500 a 525) que corresponda, aunque sea al 0%, y vuelva a generar el anexo.";
+        }
         foreach (['aplicConvDobTrib' => 'el convenio de doble tributación',
                   'pagExtSujRetNorLeg' => 'la sujeción a retención según la norma legal'] as $campo => $texto) {
             if (!in_array($this->texto($pe, $campo), ['SI', 'NO'], true)) {
@@ -335,6 +349,12 @@ class AtsValidatorService
             }
             if ($idCli === '') {
                 $err[] = "{$p}: idCliente es obligatorio.";
+            } elseif ($tp === '05' && !DigitoVerificador::cedulaValida($idCli)) {
+                // El SRI rechaza la cédula que no cumple el dígito verificador
+                // ("El ID CLIENTE no es válido para el TIPO [C]").
+                $err[] = "{$p}: la cédula {$idCli} no es válida (no cumple el dígito verificador). "
+                       . "Corrija la identificación en la ficha del cliente; si es extranjero, regístrelo "
+                       . "con pasaporte o identificación del exterior.";
             }
             // Cliente con pasaporte / identificación del exterior: el SRI exige tipo
             // de cliente y su denominación.

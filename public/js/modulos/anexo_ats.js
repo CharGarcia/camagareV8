@@ -34,11 +34,11 @@
     });
   }
 
-  // Lista colapsable de errores/advertencias (máx. 50 visibles)
-  function listaValidacion(titulo, items, color) {
+  // Lista colapsable de errores/advertencias (máx. 50 visibles, salvo 'todos')
+  function listaValidacion(titulo, items, color, abierta, todos) {
     if (!items || items.length === 0) return '';
-    const visibles = items.slice(0, 50);
-    let h = '<details class="mt-2"><summary class="text-' + color + ' fw-semibold">' +
+    const visibles = todos ? items : items.slice(0, 50);
+    let h = '<details class="mt-2"' + (abierta ? ' open' : '') + '><summary class="text-' + color + ' fw-semibold">' +
             titulo + ' (' + items.length + ')</summary>' +
             '<ul class="small mb-0 mt-1">';
     visibles.forEach(function (it) { h += '<li class="text-' + color + '">' + esc(it) + '</li>'; });
@@ -49,25 +49,86 @@
     return h;
   }
 
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
+  let enCurso = false;
 
+  function datosForm(revisar) {
     const fd = new FormData();
     fd.append('mes', mesSel.value);
     fd.append('anio', document.getElementById('ats-anio').value);
     fd.append('semestral', semestChk.checked ? '1' : '0');
     fd.append('ventas', ventasChk.checked ? '1' : '0');
+    if (revisar) fd.append('revisar', '1');
+    return fd;
+  }
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
-    alerta('info', 'Generando Anexo ATS, espere por favor...');
-
-    fetch(base + '/' + modulo + '/generarAjax', {
+  function pedir(fd) {
+    return fetch(base + '/' + modulo + '/generarAjax', {
       method: 'POST',
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
       body: fd
-    })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+    }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); });
+  }
+
+  function ocupado(texto) {
+    enCurso = true;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> ' + texto;
+  }
+
+  function libre() {
+    enCurso = false;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-cogs me-1"></i> Generar';
+  }
+
+  // Paso 1: revisar el periodo. Si hay errores se muestran y NO se genera,
+  // salvo que el usuario lo pida expresamente; sin errores, se genera directo.
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (enCurso) return;
+
+    ocupado('Revisando...');
+    alerta('info', 'Revisando los documentos del periodo antes de generar el anexo...');
+
+    pedir(datosForm(true))
+      .then(function (res) {
+        const j = res.j || {};
+        if (!res.ok || !j.ok) {
+          alerta('danger', '<strong>Error:</strong> ' + (j.mensaje || 'No se pudo revisar el periodo.'));
+          libre();
+          return;
+        }
+        const errores = j.errores || [];
+        if (errores.length === 0) {
+          generar();
+          return;
+        }
+        let html = '<div><i class="fas fa-exclamation-triangle text-danger me-1"></i> La revisión encontró <strong>' +
+                   errores.length + '</strong> error(es) que el SRI rechazaría. Corríjalos en los documentos o fichas ' +
+                   'indicados y vuelva a pulsar <strong>Generar</strong>. El anexo todavía no se generó.</div>';
+        html += listaValidacion('Errores', errores, 'danger', true, true);
+        html += listaValidacion('Advertencias', j.advertencias || [], 'warning', false, true);
+        html += '<div class="mt-3"><button type="button" class="btn btn-outline-danger btn-sm" id="ats-generar-igual">' +
+                '<i class="fas fa-cogs me-1"></i> Generar de todas formas</button></div>';
+        resultado.innerHTML = '<div class="alert alert-light border mb-0">' + html + '</div>';
+        document.getElementById('ats-generar-igual').addEventListener('click', function () {
+          if (enCurso) return;
+          generar();
+        });
+        libre();
+      })
+      .catch(function () {
+        alerta('danger', 'Error de comunicación al revisar el periodo.');
+        libre();
+      });
+  });
+
+  // Paso 2: generar el XML/ZIP.
+  function generar() {
+    ocupado('Generando...');
+    alerta('info', 'Generando Anexo ATS, espere por favor...');
+
+    pedir(datosForm(false))
       .then(function (res) {
         const j = res.j || {};
         if (!res.ok || !j.ok) {
@@ -117,9 +178,6 @@
       .catch(function () {
         alerta('danger', 'Error de comunicación al generar el anexo.');
       })
-      .finally(function () {
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-cogs me-1"></i> Generar';
-      });
-  });
+      .finally(libre);
+  }
 })();

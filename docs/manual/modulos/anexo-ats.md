@@ -5,8 +5,8 @@ categoria: Impuestos
 ruta_modulo: modulos/anexo-ats
 tipo: modulo
 visibilidad: todos
-etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras, nota de debito, valores en cero, forma de pago, 500
-version: 1.9
+etiquetas: ats, anexo transaccional, xml, dimm, declaracion, compras, ventas, anulados, sri, sin ventas, solo compras, nota de debito, valores en cero, forma de pago, 500, pago al exterior, no residente, tipo de regimen, 332
+version: 1.10
 orden: 30
 estado: activo
 ---
@@ -57,8 +57,16 @@ Al generar se obtienen tres cosas:
 - Un **Excel de revisión** con el detalle en varias hojas, para cuadrar antes de
   presentar.
 
-Además se valida el archivo generado, de modo que los errores aparezcan aquí y no
-al cargarlo.
+## Revisión antes de generar
+
+Al pulsar **Generar**, el sistema primero **revisa** los documentos del periodo
+con las mismas reglas que aplica el SRI al cargar el anexo. Si encuentra
+errores, los lista abiertos, cada uno con el documento o la ficha que hay que
+corregir, y **no genera el archivo**. Corríjalos y vuelva a pulsar
+**Generar**. Si aun así necesita el archivo (p. ej. para revisarlo con su
+contador), el botón **Generar de todas formas** lo crea con los errores
+pendientes. Si la revisión no encuentra errores, el anexo se genera
+directamente.
 
 ## Datos que el anexo toma de las fichas
 
@@ -133,7 +141,8 @@ anexo usa las formas de pago registradas en el documento en **Compras**:
 
 1. Elija el **periodo**.
 2. Decida si **incluye el módulo de ventas**.
-3. Genere el anexo.
+3. Pulse **Generar**. Si la revisión previa muestra errores, corríjalos y
+   vuelva a generar.
 4. Revise el **Excel** y cuadre los totales con sus declaraciones.
 5. Descargue el XML o el ZIP y preséntelo.
 
@@ -194,8 +203,38 @@ anexo usa las formas de pago registradas en el documento en **Compras**:
     reconstruye el detalle desde el XML autorizado guardado en la compra (y
     después el anterior, por si esa nota también traía base 0,00). Las que no
     tengan XML se completan a mano.
+- **"Debe seleccionar un tipo de régimen cuando el pago es a no residente"**:
+  aparecía en las compras marcadas como pago al exterior. Desde la versión
+  1.10 el anexo reporta el **régimen general** con el país del pago; basta con
+  volver a generarlo. Si el proveedor está en un paraíso fiscal o en un
+  régimen fiscal preferente, el sistema todavía no captura ese dato: avise a
+  soporte.
+- **"El concepto de retención en la fuente reportado [332] no es válido para
+  tipo de pago"** o **"Es un pago al exterior sin retención de Renta"**: el
+  332 (*no sujeto a retención*) solo sirve para pagos a residentes, y para
+  pagos al exterior no existe un concepto equivalente. Registre la retención
+  de la compra en **Retenciones en Compras** con el concepto de pago a no
+  residentes que corresponda (códigos 500 a 525), aunque sea al 0 % por un
+  convenio de doble tributación, y vuelva a generar el anexo.
+- **"El ID CLIENTE [...] no es válido para el TIPO [C]"** o **"la cédula ... no
+  es válida (no cumple el dígito verificador)"**: el cliente (o proveedor) está
+  registrado con cédula, pero el número no cumple el dígito verificador, casi
+  siempre por un error de digitación. Corrija la identificación en su ficha. Si
+  es un extranjero, regístrelo con pasaporte o identificación del exterior.
+  Las ventas ya emitidas no cambian; el anexo toma la identificación de la
+  ficha al generarse.
 
 ## Historial de cambios
+
+- **1.10** — **Revisión antes de generar**: el botón *Generar* primero revisa
+  el periodo y, si hay errores, los muestra sin crear el archivo (queda la
+  opción *Generar de todas formas*). La revisión detecta además las cédulas de
+  clientes y proveedores que no cumplen el dígito verificador. Pago al
+  exterior: el anexo reporta el tipo de régimen fiscal del exterior (régimen
+  general) y el país en su campo, que el SRI exige al pagar a un no residente.
+  Una compra al exterior sin retención de Renta ya no sale con el concepto 332,
+  que el SRI rechaza para no residentes: la revisión pide registrar la
+  retención con su concepto 500 a 525.
 
 - **1.9** — Las notas de débito de compra sin desglose de IVA ya no salen con
   los valores en 0,00: se toman del XML autorizado o, sin XML, se estiman con

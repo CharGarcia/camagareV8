@@ -81,8 +81,12 @@ class AnexoAtsController extends BaseModuloController
             $this->json(['ok' => false, 'mensaje' => 'Seleccione mes y año.'], 422);
         }
 
+        // revisar=1: valida el periodo y devuelve los errores sin generar archivos,
+        // para corregirlos antes de generar el anexo.
+        $soloRevisar = in_array((string) ($_POST['revisar'] ?? ''), ['1', 'true'], true);
+
         try {
-            $res = $this->service->generar($idEmpresa, $idUsuario, $mes, $anio, $semestral, $incluirVentas);
+            $res = $this->service->generar($idEmpresa, $idUsuario, $mes, $anio, $semestral, $incluirVentas, $soloRevisar);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->json(['ok' => false, 'mensaje' => 'Error al generar el anexo: ' . $e->getMessage()], 500);
@@ -90,6 +94,19 @@ class AnexoAtsController extends BaseModuloController
 
         if (empty($res['ok'])) {
             $this->json(['ok' => false, 'mensaje' => $res['mensaje'] ?? 'No se pudo generar el anexo.'], 400);
+        }
+
+        if ($soloRevisar) {
+            $this->json([
+                'ok'             => true,
+                'revision'       => true,
+                'registros'      => $res['registros'],
+                'ambiente'       => ($res['ambiente'] ?? '1') === '2' ? 'Producción' : 'Pruebas',
+                'incluye_ventas' => (bool) ($res['incluye_ventas'] ?? true),
+                'ventas'         => (int) ($res['ventas'] ?? 0),
+                'errores'        => $res['errores'] ?? [],
+                'advertencias'   => $res['advertencias'] ?? [],
+            ]);
         }
 
         $ruta    = rtrim(BASE_URL, '/') . '/' . $this->getRutaModulo();

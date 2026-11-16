@@ -782,8 +782,12 @@ class SincronizadorAsientosService
         ];
 
         // 2. Liquidaciones de Compra
+        //    Igual que Facturas de Compra: con importe total CERO no hay nada que contabilizar, así
+        //    que no se cuenta como pendiente ni se avisa (vuelve sola si se le corrige el total).
         $trabajos[] = [
-            'sql'    => "SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')" . $excMig('liquidaciones', 'liquidaciones_cabecera.id'),
+            'sql'    => "SELECT id FROM liquidaciones_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND estado IN ('autorizado', 'contabilizado')"
+                      . " AND ABS(COALESCE(importe_total, 0)) >= 0.01"
+                      . $excMig('liquidaciones', 'liquidaciones_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\LiquidacionCompraService(
@@ -819,7 +823,13 @@ class SincronizadorAsientosService
             // Se compara normalizado porque los documentos migrados guardan el estado en
             // mayúsculas. COALESCE a '' para no perder las compras con estado NULL, que son
             // registros válidos anteriores a la columna.
-            'sql'    => "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) NOT IN ('ANULADO', 'PENDIENTE_APROBACION', 'RECHAZADA')" . $excMig('compras', 'compras_cabecera.id'),
+            // Compra con importe total CERO: no hay nada que contabilizar (el builder no arma
+            // ninguna línea y el aviso pedía "revise el documento / comuníquese con soporte").
+            // Igual que las retenciones en cero, no se cuenta como pendiente ni se avisa; si luego
+            // se le corrige el total, vuelve a aparecer sola.
+            'sql'    => "SELECT id FROM compras_cabecera WHERE id_empresa = ? AND eliminado = false AND id_asiento_contable IS NULL AND UPPER(TRIM(COALESCE(estado, ''))) NOT IN ('ANULADO', 'PENDIENTE_APROBACION', 'RECHAZADA')"
+                      . " AND ABS(COALESCE(importe_total, 0)) >= 0.01"
+                      . $excMig('compras', 'compras_cabecera.id'),
             'params' => [$idEmpresa],
             'factory' => function() {
                 return new \App\Services\modulos\ComprasService();

@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido, pestaña asiento contable, ver asiento del documento, generar asiento de una compra
-version: 1.7
+version: 1.8
 orden: 30
 estado: activo
 ---
@@ -115,6 +115,9 @@ contable…*.
   disparó la generación.
 - **Un documento anulado no se contabiliza nunca**, en ningún módulo. Tampoco los
   borradores: solo se contabiliza el documento vigente ya emitido o autorizado.
+- **Una factura o liquidación de compra con valor total 0 no se contabiliza ni genera aviso**:
+  no tiene nada que registrar, así que no aparece como pendiente ni pide revisarla
+  o comunicarse con soporte. Si luego se le corrige el total, se contabiliza sola.
 - **Los documentos traídos de la migración no se contabilizan**, porque su
   contabilidad viene del sistema anterior. Esto alcanza también a lo que nace de
   ellos: el retorno o la facturación de una consignación migrada tampoco generan
@@ -183,6 +186,9 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.8** — Las facturas y liquidaciones de compra con valor total 0 ya no muestran el aviso «revise
+  el documento; si está bien, comuníquese con soporte»: no tienen nada que
+  contabilizar y se omiten en silencio.
 - **1.7** — La pestaña **Asiento contable** de los documentos genera en el acto el
   asiento del documento que aún no lo tiene, sin esperar a la siguiente pasada.
 - **1.6** — Configurar o corregir una cuenta de IVA ahora reintenta los documentos
