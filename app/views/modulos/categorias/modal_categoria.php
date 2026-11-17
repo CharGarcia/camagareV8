@@ -28,10 +28,15 @@ $urlBaseCatShared = BASE_URL . '/modulos/categorias';
                         </div>
                         <div class="col-12">
                             <label class="form-label small fw-bold text-muted mb-1 d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('categorias', 'categoria_status_modal', 'status') ?></label>
-                            <select class="form-select form-select-sm shadow-none" name="status" id="categoria_status_modal">
-                                <option value="1">Activo</option>
-                                <option value="0">Inactivo</option>
-                            </select>
+                            <!-- El valor real (1/0) viaja en el oculto: lo leen la estrella de
+                                 favorito y el guardado. El interruptor solo lo refleja. -->
+                            <input type="hidden" name="status" id="categoria_status_modal" value="1">
+                            <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                <input class="form-check-input" type="checkbox" id="categoria_status_switch" checked>
+                                <label class="form-check-label small fw-semibold ms-2" for="categoria_status_switch">
+                                    <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>

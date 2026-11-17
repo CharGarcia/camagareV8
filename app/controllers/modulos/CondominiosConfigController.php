@@ -9,7 +9,7 @@ use App\Services\modulos\CondominioService;
 
 /**
  * Configuración de condominios (modulos/condominios-config): único submódulo de Condominios.
- * Pestañas: condominio, condóminos (todos los clientes y sus inmuebles), alícuota y cuotas extraordinarias, mora
+ * Pestañas: condominio, condóminos (todos los clientes y sus inmuebles), alícuota y fondo de reserva, mora
  * y multas, reajuste de cuotas, descuentos. Permisos: ver = consultar; crear = asignar inmuebles
  * y carga Excel; actualizar = guardar la configuración, editar, restringir y enlazar; eliminar =
  * inmuebles, multas y valores. Guardar la configuración ACTIVA el módulo para la empresa.
@@ -628,6 +628,267 @@ class CondominiosConfigController extends BaseModuloController
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
+    }
+
+    // ── Cuotas extraordinarias a plazos (pestaña Cuotas extraordinarias) ─────
+    // Diseño: docs/diseno/condominios-cuotas-extraordinarias.md. Lógica en CondominioCuotaExtraService.
+
+    private function cuotasExtra(): \App\Services\modulos\CondominioCuotaExtraService
+    {
+        return \App\Services\modulos\CondominioCuotaExtraService::crear();
+    }
+
+    private function filasPost(): array
+    {
+        $f = json_decode((string) ($_POST['filas'] ?? '[]'), true);
+        return is_array($f) ? $f : [];
+    }
+
+    /** Listado de la pestaña + catálogos del modal. */
+    public function cuotasExtraAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $orden = OrdenListado::parsear((string) ($_GET['orden'] ?? ''));
+            $this->json(['ok' => true, 'rows' => $this->cuotasExtra()->listar($idEmpresa, trim((string) ($_GET['b'] ?? '')), $orden)]
+                + (!empty($_GET['opciones']) ? ['opciones' => $this->cuotasExtra()->opciones($idEmpresa)] : []));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Una cuota extraordinaria con sus planes, cuotas y lo cobrado. */
+    public function cuotaExtraGetAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true] + $this->cuotasExtra()->detalle((int) ($_GET['id'] ?? 0), $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function cuotaExtraGuardarAjax(): void
+    {
+        $id = (int) ($_POST['id'] ?? 0);
+        $id > 0 ? $this->requireActualizar() : $this->requireCrear();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $id = $this->cuotasExtra()->guardarAporte($_POST, $id > 0 ? $id : null, $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'id' => $id, 'mensaje' => 'Cuota extraordinaria guardada.'] + $this->cuotasExtra()->detalle($id, $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function cuotaExtraCerrarAjax(): void
+    {
+        $this->requireActualizar();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $this->cuotasExtra()->cerrarAporte((int) ($_POST['id'] ?? 0), $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'mensaje' => 'Cuota extraordinaria cerrada. Lo emitido se conserva; las cuotas que faltaban no se emitirán.']);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    public function cuotaExtraEliminarAjax(): void
+    {
+        $this->requireEliminar();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $this->cuotasExtra()->eliminarAporte((int) ($_POST['id'] ?? 0), $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'mensaje' => 'Cuota extraordinaria eliminada.']);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Vista previa del reparto para los inmuebles sin plan. Nada se graba. */
+    public function cuotaExtraPlanesPreviewAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true] + $this->cuotasExtra()->previsualizarPlanes((int) ($_POST['id'] ?? 0), $this->filasPost(), $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Crea los planes y sus cuotas; aplica los anticipos (guardado único). */
+    public function cuotaExtraActivarAjax(): void
+    {
+        $this->requireCrear();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            $r = $this->cuotasExtra()->activarPlanes($id, $this->filasPost(), (string) ($_POST['token_guardado'] ?? ''), $idEmpresa, $idUsuario);
+            $msg = $r['previo'] ? 'Estos planes ya estaban registrados; no se crearon otros.'
+                : "Planes activados: {$r['planes']}." . ($r['abonos'] ? " Anticipos aplicados: {$r['abonos']}." : '');
+            $this->json(['ok' => true, 'mensaje' => $msg, 'avisos' => $r['avisos']] + $this->cuotasExtra()->detalle($id, $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Cuotas por emitir en documento propio hasta un mes. */
+    public function cuotaExtraApartePreviewAjax(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->json(['ok' => true] + $this->cuotasExtra()->previsualizarAparte((int) ($_POST['id'] ?? 0), (string) ($_POST['periodo'] ?? ''), $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Emite las cuotas aparte con la emisión en bloque (segundo plano). */
+    public function cuotaExtraEmitirAparteAjax(): void
+    {
+        $this->requireCrear();
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        try {
+            $res = $this->cuotasExtra()->emitirAparte((int) ($_POST['id'] ?? 0), $_POST, (string) ($_POST['token_guardado'] ?? ''), $idEmpresa, $idUsuario);
+            $this->liberarSesionSiExiste();
+            $lanzado = $res['previo'] ? false : \App\Helpers\ProcesoSegundoPlano::lanzar('procesar_emision_condominios.php', ['emision' => $res['id']]);
+            $msg = $res['previo'] ? 'Esta emisión ya estaba registrada; no se creó otra.'
+                : "Emisión creada con {$res['items']} documento(s). " . ($lanzado ? 'Se están generando en segundo plano.' : 'El sistema la procesará en unos minutos.');
+            $this->json(['ok' => true, 'id' => $res['id'], 'mensaje' => $msg]);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Acciones sobre el plan de un inmueble: liquidar, cambiar plazo, pagador, reintentar abono. */
+    public function cuotaExtraPlanAccionAjax(): void
+    {
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        $accion = (string) ($_POST['accion'] ?? '');
+        $idPlan = (int) ($_POST['id_plan'] ?? 0);
+        $svc = $this->cuotasExtra();
+        try {
+            switch ($accion) {
+                case 'liquidar':
+                    $this->requireCrear();
+                    $this->requireActualizar();
+                    $msg = $svc->liquidar($idPlan, 'pago_anticipado', null, $idEmpresa, $idUsuario)['mensaje'];
+                    break;
+                case 'plazo':
+                    $this->requireActualizar();
+                    $svc->cambiarPlazo($idPlan, (int) ($_POST['cuotas'] ?? 0), $idEmpresa, $idUsuario);
+                    $msg = 'Plazo cambiado.';
+                    break;
+                case 'pagador':
+                    $this->requireActualizar();
+                    $svc->cambiarPagador($idPlan, (string) ($_POST['pagador'] ?? ''), $idEmpresa, $idUsuario);
+                    $msg = 'Pagador cambiado en las cuotas que faltan emitir.';
+                    break;
+                case 'abono':
+                    $this->requireCrear();
+                    $r = $svc->aplicarAbono($idPlan, $idEmpresa, $idUsuario);
+                    if (!$r['ok']) {
+                        throw new \DomainException($r['mensaje']);
+                    }
+                    $msg = 'Anticipo aplicado.';
+                    break;
+                case 'emitir_cargo':
+                    $this->requireCrear();
+                    $msg = $svc->emitirCargoSuelto((int) ($_POST['id_cargo'] ?? 0), $idEmpresa, $idUsuario)['mensaje'];
+                    break;
+                case 'pendiente':
+                    $this->requireActualizar();
+                    $svc->volverAPendiente((int) ($_POST['id_cargo'] ?? 0), $idEmpresa, $idUsuario);
+                    $msg = 'La cuota vuelve a estar pendiente y saldrá en la próxima emisión.';
+                    break;
+                default:
+                    throw new \InvalidArgumentException('Acción no válida.');
+            }
+            $this->json(['ok' => true, 'mensaje' => $msg] + $svc->detalle((int) ($_POST['id'] ?? 0), $idEmpresa));
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Ficha del inmueble, tras cambiar propietario/arrendatario: planes cuya deuda hay que decidir. */
+    public function cuotaExtraCambioPersonaAjax(): void
+    {
+        [$idEmpresa, $idUsuario] = $this->sesion();
+        $idUnidad = (int) ($_REQUEST['id_unidad'] ?? 0);
+        try {
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST' || empty($_POST['decisiones'])) {
+                $this->requireLeer();
+                $this->json(['ok' => true, 'planes' => $this->cuotasExtra()->instalado() ? $this->cuotasExtra()->planesConCambioDePersona($idUnidad, $idEmpresa) : []]);
+            }
+            $this->requireCrear();
+            $this->requireActualizar();
+            $dec = json_decode((string) $_POST['decisiones'], true);
+            $msgs = $this->cuotasExtra()->aplicarCambioDePersona($idUnidad, is_array($dec) ? $dec : [], (string) ($_POST['desde'] ?? ''), $idEmpresa, $idUsuario);
+            $this->json(['ok' => true, 'mensaje' => implode("\n", $msgs)]);
+        } catch (\Throwable $e) {
+            $this->error($e, __FUNCTION__);
+        }
+    }
+
+    /** Estado de una cuota extraordinaria por inmueble (PDF o Excel). */
+    public function cuotaExtraExport(): void
+    {
+        $this->requireLeer();
+        [$idEmpresa] = $this->sesion();
+        try {
+            $this->autoload();
+            $d = $this->cuotasExtra()->detalle((int) ($_GET['id'] ?? 0), $idEmpresa);
+            $a = $d['aporte'];
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $estados = ['pendiente' => 'Pendiente', 'en_curso' => 'En curso', 'completo' => 'Completo', 'liquidado' => 'Liquidado', 'pagado' => 'Pagado', 'cancelado' => 'Cancelado'];
+            $fila = fn($p) => [
+                $p['unidad_codigo'], $p['cliente_nombre'] ?? '', (float) $p['monto_total'], (float) $p['anticipo_aplicado'], (int) $p['plazo_elegido'],
+                (float) $p['cuota_valor'], (int) $p['cuotas_emitidas'] . '/' . (int) $p['plazo_elegido'], (float) $p['emitido'], (float) $p['cobrado'],
+                (float) $p['saldo'], $estados[$p['estado']] ?? $p['estado'],
+            ];
+            $headers = ['Inmueble', 'Paga', 'Asignado', 'Anticipo', 'Plazo', 'Cuota', 'Emitidas', 'Emitido', 'Cobrado', 'Saldo', 'Estado'];
+            $titulo = $a['nombre'] . ($a['acta'] ? ' · Acta ' . $a['acta'] : '');
+            if (($_GET['formato'] ?? 'pdf') === 'excel') {
+                (new \App\Services\ReportService())->exportToExcel('Cuota_extraordinaria', $headers, array_map($fila, $d['planes']), $titulo, $empresa['nombre'] ?? '');
+                exit;
+            }
+            $h = fn($v) => htmlspecialchars((string) ($v ?? ''), ENT_QUOTES, 'UTF-8');
+            $m = fn($v) => number_format((float) $v, 2);
+            $anchos = [22, 60, 22, 20, 13, 18, 17, 22, 22, 22, 22];
+            $th = '';
+            foreach ($headers as $i => $hd) {
+                $th .= '<th style="width:' . $anchos[$i] . 'mm' . ($i >= 2 && $i <= 9 ? ';text-align:right' : '') . '">' . $h($hd) . '</th>';
+            }
+            $t = $d['totales'];
+            $html = '<style>table{border-collapse:collapse;font-family:Arial;font-size:8pt}th{background:#f2f2f2;border:1px solid #ccc;padding:3px}td{border:1px solid #ccc;padding:3px}h1{margin:0;font-size:13pt;text-align:center}h2{margin:3px 0;font-size:10pt;text-align:center}p{font-size:8pt;text-align:center;color:#555;margin:0 0 8px}</style>'
+                . '<page orientation="landscape" backtop="8mm" backbottom="8mm" backleft="8mm" backright="8mm">'
+                . '<h1>' . $h($empresa['nombre'] ?? '') . '</h1><h2>' . $h($titulo) . '</h2>'
+                . '<p>Monto aprobado $' . $m($a['meta_total']) . ' · Asignado $' . $m($t['asignado']) . ' · Anticipos $' . $m($t['anticipos'])
+                . ' · Emitido $' . $m($t['emitido']) . ' · Cobrado $' . $m($t['cobrado']) . ' · Saldo $' . $m($t['saldo']) . ' · al ' . date('d-m-Y H:i:s') . '</p>'
+                . '<table><thead><tr>' . $th . '</tr></thead><tbody>';
+            foreach ($d['planes'] as $p) {
+                $html .= '<tr>';
+                foreach ($fila($p) as $i => $v) {
+                    $html .= '<td style="width:' . $anchos[$i] . 'mm' . ($i >= 2 && $i <= 9 ? ';text-align:right' : '') . '">'
+                        . (is_float($v) ? $m($v) : $h($v)) . '</td>';
+                }
+                $html .= '</tr>';
+            }
+            if (!$d['planes']) {
+                $html .= '<tr><td colspan="11" style="width:260mm;text-align:center">Aún no hay planes por inmueble.</td></tr>';
+            }
+            $html .= '</tbody></table></page>';
+            $pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            $pdf->writeHTML($html);
+            $pdf->output('Cuota_extraordinaria_' . (int) $a['id'] . '.pdf', 'D');
+        } catch (\Throwable $e) {
+            $this->errorDescarga($e, __FUNCTION__);
+        }
+        exit;
     }
 
     /** Servicios activos de la empresa para los selectores de concepto (buscador tipo chip). */

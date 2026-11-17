@@ -17,9 +17,41 @@
         return modalInstVeh;
     }
 
+    // ─── Interruptor de Estado ───────────────────────────────────────────────
+    // El valor real va en el oculto #vehiculo_estado ('activo'/'inactivo'), que es el
+    // que leen la estrella de favorito (favoritos.js trabaja con .value) y el guardado.
+    // El interruptor #vehiculo_estado_switch solo lo muestra y lo cambia.
+    function vehSincronizarEstadoSwitch() {
+        const oculto = document.getElementById('vehiculo_estado');
+        const sw     = document.getElementById('vehiculo_estado_switch');
+        if (oculto && sw) sw.checked = String(oculto.value || 'activo') !== 'inactivo';
+    }
+
+    function vehInitEstadoSwitch() {
+        const oculto = document.getElementById('vehiculo_estado');
+        const sw     = document.getElementById('vehiculo_estado_switch');
+        if (!oculto || !sw || sw.dataset.iniciado === '1') return;
+        sw.dataset.iniciado = '1';
+        sw.addEventListener('change', () => {
+            oculto.value = sw.checked ? 'activo' : 'inactivo';
+            oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+        });
+        // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+        oculto.addEventListener('change', vehSincronizarEstadoSwitch);
+    }
+
+    function vehFijarEstado(valor) {
+        vehInitEstadoSwitch();
+        const oculto = document.getElementById('vehiculo_estado');
+        if (oculto) oculto.value = (valor === 'inactivo') ? 'inactivo' : 'activo';
+        vehSincronizarEstadoSwitch();
+    }
+
     window.abrirModalVehiculoCrear = function() {
         if (!formVeh) return;
         formVeh.reset();
+        // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+        vehFijarEstado('activo');
         vehSriInfo(''); vehSriUltimaPlaca = '';
         document.getElementById('vehiculo_id').value = '';
         document.getElementById('tituloModal').textContent = 'Nuevo Vehículo';
@@ -54,7 +86,7 @@
         const inpMotor = document.getElementById('vehiculo_motor'); if (inpMotor) inpMotor.value = data.motor || '';
         document.getElementById('vehiculo_anio').value = data.anio > 0 ? data.anio : '';
         document.getElementById('vehiculo_propietario').value = data.propietario || '';
-        document.getElementById('vehiculo_estado').value = data.estado || 'activo';
+        vehFijarEstado(data.estado || 'activo');
         document.getElementById('vehiculo_correo').value = data.correo || '';
         document.getElementById('vehiculo_telefono').value = data.telefono || '';
         
@@ -842,8 +874,11 @@
     };
 
     if (formVeh) {
+        // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
+        let guardandoVehiculo = false;
         formVeh.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (guardandoVehiculo) return;
 
             const marca = document.getElementById('vehiculo_marca').value.trim();
             const placa = document.getElementById('vehiculo_placa').value.trim();
@@ -870,8 +905,22 @@
             const btn = document.getElementById('btnGuardar');
             const url = id ? `${urlBaseVeh}/update` : `${urlBaseVeh}/store`;
 
+            guardandoVehiculo = true;
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
+            const restaurarBtn = () => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+            };
+            // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+            Swal.fire({
+                title: id ? 'Actualizando vehículo...' : 'Guardando vehículo...',
+                text: 'Por favor espere, no cierre esta ventana.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
 
             try {
                 const fd = new FormData(formVeh);
@@ -879,32 +928,39 @@
                 const json = await resp.json();
 
                 if (json.ok) {
-                    Swal.fire({ icon: 'success', title: '¡Guardado!', text: json.msg || 'Guardado correctamente.', timer: 2000, showConfirmButton: false });
-                    // Al EDITAR desde un documento (enlace «Editar» de la orden de Car-Wash, modal
-                    // sobre modal) la ficha no se cierra sola: el documento repinta los datos por
-                    // 'vehiculoGuardado' y el usuario la cierra con Cerrar. Al crear, o desde el
-                    // listado de Vehículos, se cierra como siempre.
-                    const quedaAbierta = !!id && typeof window.CMG_modalSobreOtro === 'function'
+                    // Crear al vuelo (§9): un alta abierta encima de otro modal (orden de
+                    // Car-Wash / Taller) se cierra sola y queda puesta en el documento. En
+                    // cualquier otro caso la ficha se queda abierta para seguir trabajando.
+                    const alVuelo = !id && typeof window.CMG_modalSobreOtro === 'function'
                         && window.CMG_modalSobreOtro(formVeh.closest('.modal'));
-                    setTimeout(() => {
-                        if (quedaAbierta) {
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
-                        } else {
-                            getModalVeh()?.hide();
-                        }
-                        if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
-                        window.dispatchEvent(new CustomEvent('vehiculoGuardado', { detail: { ...json, nuevo: !id } }));
-                    }, 800);
+
+                    if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+                    // Se avisa ANTES de fijar el id del vehículo nuevo en el formulario: los
+                    // documentos leen el formulario y, con vehiculo_id puesto, lo tratarían
+                    // como una edición en vez de un alta.
+                    window.dispatchEvent(new CustomEvent('vehiculoGuardado', { detail: { ...json, nuevo: !id } }));
+
+                    if (alVuelo) {
+                        getModalVeh()?.hide();
+                    } else if (!id && json.id) {
+                        // Pasa a modo edición: el siguiente Guardar actualiza, no crea otro.
+                        document.getElementById('vehiculo_id').value = json.id;
+                        document.getElementById('tituloModal').textContent = 'Editar Vehículo';
+                        document.getElementById('btnEliminar')?.classList.remove('d-none');
+                        vehPrepararPestanas(json.id); // habilita Transacciones / Recordatorios / Mantenimiento
+                    }
+                    restaurarBtn();
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2200,
+                        title: alVuelo ? 'Vehículo creado y seleccionado.' : (json.msg || 'Guardado correctamente.') });
                 } else {
                     Swal.fire({ icon: 'error', title: 'Error', text: json.error || 'Ocurrió un error al guardar.' });
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+                    restaurarBtn();
                 }
             } catch (err) {
                 Swal.fire({ icon: 'error', title: 'Error de Conexión', text: 'No se pudo conectar con el servidor.' });
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+                restaurarBtn();
+            } finally {
+                guardandoVehiculo = false;
             }
         });
     }

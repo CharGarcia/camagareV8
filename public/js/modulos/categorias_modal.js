@@ -21,10 +21,42 @@
         return modalInst;
     }
 
+    // ─── Interruptor de Estado ───────────────────────────────────────────────
+    // El valor real va en el oculto #categoria_status_modal (1/0), que es el que leen
+    // la estrella de favorito (favoritos.js trabaja con .value) y el guardado. El
+    // interruptor #categoria_status_switch solo lo muestra y lo cambia.
+    function sincronizarStatusSwitchCat() {
+        const oculto = document.getElementById('categoria_status_modal');
+        const sw     = document.getElementById('categoria_status_switch');
+        if (oculto && sw) sw.checked = String(oculto.value) !== '0';
+    }
+
+    function initStatusSwitchCat() {
+        const oculto = document.getElementById('categoria_status_modal');
+        const sw     = document.getElementById('categoria_status_switch');
+        if (!oculto || !sw || sw.dataset.iniciado === '1') return;
+        sw.dataset.iniciado = '1';
+        sw.addEventListener('change', () => {
+            oculto.value = sw.checked ? '1' : '0';
+            oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+        });
+        // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+        oculto.addEventListener('change', sincronizarStatusSwitchCat);
+    }
+
+    function fijarStatusCat(valor) {
+        initStatusSwitchCat();
+        const oculto = document.getElementById('categoria_status_modal');
+        if (oculto) oculto.value = (valor === 0 || valor === '0' || valor === false || valor === 'false' || valor === 'f') ? '0' : '1';
+        sincronizarStatusSwitchCat();
+    }
+
     window.abrirModalCategoriaCrear = function() {
         const form = document.getElementById('formCategoriaModal');
         if (!form) return;
         form.reset();
+        // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+        fijarStatusCat('1');
         
         const cid = document.getElementById('categoria_id_modal');
         if (cid) cid.value = '';
@@ -74,8 +106,7 @@
         const cnom = document.getElementById('categoria_nombre_modal');
         if (cnom) cnom.value = data.nombre || '';
         
-        const cstat = document.getElementById('categoria_status_modal');
-        if (cstat) cstat.value = data.status ?? '1';
+        fijarStatusCat(data.status ?? '1');
 
         const title = document.getElementById('tituloModalCat');
         if (title) title.textContent = 'Editar Categoría';
@@ -175,7 +206,11 @@
         return '<span class="text-muted">Acción registrada</span>';
     };
 
+    // Bandera "en curso" (§8): un doble clic no envía un segundo guardado.
+    let guardandoCat = false;
+
     window.guardarCategoriaModal = async function() {
+        if (guardandoCat) return;
         const form = document.getElementById('formCategoriaModal');
         const id = document.getElementById('categoria_id_modal')?.value;
         const actionUrl = id ? `${urlBase}/update` : `${urlBase}/store`;
@@ -183,38 +218,74 @@
         const alertEl = document.getElementById('modalAlertCat');
 
         if (!form || !btn) return;
+        guardandoCat = true;
 
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
+        if (alertEl) alertEl.classList.add('d-none');
+        const mostrarError = (texto) => {
+            if (typeof Swal !== 'undefined') Swal.close();
+            if (alertEl) {
+                alertEl.textContent = texto;
+                alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
+                alertEl.classList.remove('d-none');
+            }
+        };
+        // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: id ? 'Actualizando categoría...' : 'Guardando categoría...',
+                text: 'Por favor espere, no cierre esta ventana.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+        }
 
         try {
             const fd = new FormData(form);
             const resp = await fetch(actionUrl, { method: 'POST', body: fd });
             const json = await resp.json();
 
-            if (alertEl) {
-                alertEl.textContent = json.msg || json.error;
-                alertEl.className = `alert mb-3 py-2 small shadow-sm border-0 ${json.ok ? 'alert-success' : 'alert-danger'}`;
-                alertEl.classList.remove('d-none');
-            }
-
             if (json.ok) {
-                setTimeout(async () => {
+                const idGuardado = id || json.id;
+                // Crear al vuelo (§9): un alta abierta encima de otro modal (la ficha del
+                // producto) se cierra sola y queda seleccionada. En cualquier otro caso la
+                // ficha se queda abierta para seguir trabajando.
+                const alVuelo = !id && typeof window.CMG_modalSobreOtro === 'function'
+                    && modalEl && window.CMG_modalSobreOtro(modalEl);
+
+                if (window.fetchSearchCat) window.fetchSearchCat();
+                window.dispatchEvent(new CustomEvent('categoriaGuardada', {
+                    detail: { ...(json.data || { id: idGuardado, nombre: fd.get('nombre') }), nuevo: !id }
+                }));
+
+                if (alVuelo) {
                     getModal()?.hide();
-                    // Si estamos en el módulo de categorías, recargar tabla
-                    if (window.fetchSearchCat) window.fetchSearchCat();
-                    // Si estamos en otros módulos, disparar evento
-                    const event = new CustomEvent('categoriaGuardada', { detail: json.data || {id: id || json.id, nombre: fd.get('nombre')} });
-                    window.dispatchEvent(event);
-                }, 800);
+                } else if (!id && json.id) {
+                    // Pasa a modo edición: el siguiente Guardar actualiza, no crea otra.
+                    document.getElementById('categoria_id_modal').value = json.id;
+                    const title = document.getElementById('tituloModalCat');
+                    if (title) title.textContent = 'Editar Categoría';
+                    document.getElementById('btnEliminarCatModal')?.classList.remove('d-none');
+                    document.getElementById('tab-cat-info-btn')?.classList.remove('disabled');
+                }
+                if (idGuardado && !alVuelo) {
+                    fetchInfoCat(idGuardado);
+                    fetchHistorialCat(idGuardado);
+                }
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2200,
+                        title: alVuelo ? 'Categoría creada y seleccionada.' : (json.msg || 'Guardado correctamente.') });
+                }
+            } else {
+                mostrarError(json.msg || json.error || 'No se pudo guardar.');
             }
         } catch (e) {
-            if (alertEl) {
-                alertEl.textContent = 'Error de conexión';
-                alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                alertEl.classList.remove('d-none');
-            }
+            mostrarError('Error de conexión');
         } finally {
+            guardandoCat = false;
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
         }

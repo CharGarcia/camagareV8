@@ -6,7 +6,7 @@ ruta_modulo: modulos/suscripciones
 tipo: modulo
 visibilidad: todos
 etiquetas: suscripciones, suscripcion, adicional, adicional por item, informacion adicional del item, detalle adicional, texto por linea, cobro recurrente, facturacion recurrente, factura recurrente, mensualidad, pension, plan mensual, membresia, renovacion, periodicidad, proximo cobro, generar documentos, generar facturas, facturacion automatica, facturas del cliente, facturas emitidas, historial de facturas, detalle de facturas, recibos del cliente, que le facture, saldo del cliente, facturas pendientes, facturas pagadas, facturas abonadas, cobro con tarjeta, debito automatico, nuvei, kushki, aviso de vencimiento, pagos reportados, comprobante de pago, reporte de pago, revisar pago, rechazar pago, pago verificado, aceptar pago, confirmar pago, quitar aviso de pagos reportados, pagado, ya pague, transferencia del cliente, imprimir, impresora, excel, exportar, resumen de valores, total por periodicidad, proyeccion anual, ingresos recurrentes, iva por tarifa, resumen por concepto, detalle por cliente, que se le factura a cada cliente, items por cliente, informacion adicional en excel, resumen en pdf, detalle por cliente en pdf, pdf de la suscripcion, imprimir suscripcion, contrato, ficha de la suscripcion, detalle de la suscripcion en pdf, devengado, devengo, ingreso diferido, ingresos diferidos, ingreso anticipado, cobro por adelantado, mes caido, mes vencido, facturacion vencida, niif 15, seccion 23, reconocimiento de ingresos, provision de ingresos, ingresos por facturar
-version: 1.32
+version: 1.33
 orden: 0
 estado: activo
 ---
@@ -450,6 +450,10 @@ registrados*.
   vencimiento por correo o WhatsApp.
 - **Empresa**: la tarjeta de suscripción y vigencia del sistema lee la suscripción
   del cliente.
+- **Condominios (cuotas extraordinarias)**: si la suscripción está enlazada a un inmueble
+  (pestaña Expensa), al generar su documento se agregan como líneas las cuotas extraordinarias
+  «con la alícuota» que ese inmueble tenga pendientes hasta ese mes (p. ej. «Pintura del edificio –
+  cuota 5/24»). Cada cuota sale una sola vez. Ver *Configuración de condominios*.
 - **Barra superior**: el ícono de flechas circulares avisa cuántas suscripciones de
   clientes están vencidas o por vencer (próximos 7 días). Lo ve quien tiene asignado
   este módulo en la empresa activa (el superadministrador lo ve siempre). En la empresa
@@ -482,6 +486,10 @@ registrados*.
   registrado en Ingresos, o se registró en otro documento.
 
 ## Historial de cambios
+
+- **1.33** — Condominios: el documento de una suscripción enlazada a un inmueble incluye las
+  cuotas extraordinarias «con la alícuota» que tenga pendientes (una línea por cuota, sin el
+  texto del lote).
 
 - **1.32** — **Pagos reportados**: al registrar el cobro, el reporte pasa solo a **Pagado** y
   deja de contar en el aviso de la barra superior (antes seguía contando hasta 3 días y la

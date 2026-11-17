@@ -65,10 +65,15 @@ $urlBaseVendShared = BASE_URL . '/modulos/vendedores';
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('vendedores', 'vendedor_status', 'status') ?></label>
-                                    <select name="status" id="vendedor_status" class="form-select form-select-sm shadow-none">
-                                        <option value="1">Activo</option>
-                                        <option value="0">Inactivo</option>
-                                    </select>
+                                    <!-- El valor real (1/0) viaja en el oculto: lo leen la estrella de
+                                         favorito y el guardado. El interruptor solo lo refleja. -->
+                                    <input type="hidden" name="status" id="vendedor_status" value="1">
+                                    <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                        <input class="form-check-input" type="checkbox" id="vendedor_status_switch" checked>
+                                        <label class="form-check-label small fw-semibold ms-2" for="vendedor_status_switch">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="col-md-12">
                                     <label class="form-label mb-1 small fw-bold text-muted">Correo Electrónico</label>

@@ -6,7 +6,7 @@ ruta_modulo: modulos/transportistas
 tipo: modulo
 visibilidad: todos
 etiquetas: transportistas, transportista, transporte, chofer, conductor, guia de remision, placa, correo, email, varios correos
-version: 1.1
+version: 1.2
 orden: 60
 estado: activo
 ---
@@ -22,7 +22,14 @@ emitir una.
 3. Indique el **tipo de identificación** y el número.
 4. Registre el **correo electrónico**, la **placa** habitual y, si quiere,
    teléfono y dirección.
-5. Guarde.
+5. Deje encendido el interruptor **Estado** (*Activo*); apáguelo para dejar al
+   transportista inactivo.
+6. Pulse **Guardar**.
+
+Mientras se guarda aparece el aviso **Guardando transportista...** (o
+**Actualizando transportista...** si ya existía); espere a que termine. La ficha
+**no se cierra** al guardar: queda abierta en modo edición y se cierra con
+**Cancelar**.
 
 El mismo formulario se abre desde la guía de remisión con el botón
 **Registrar nuevo transportista**; al guardarlo queda seleccionado en la guía.
@@ -61,6 +68,7 @@ Si elige otro, el sistema lo rechaza indicando estos tres.
 
 ## Historial de cambios
 
+- **1.2** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes, Proveedores, Vendedores y Empleados. Al guardar aparece el aviso *Guardando / Actualizando transportista...* mientras el servidor responde.
 - **1.1** — El campo **Correo electrónico** admite **varios correos** (coma,
   punto y coma o espacio). Antes el formulario lo permitía, pero al guardar el
   servidor rechazaba la ficha con "El email no tiene un formato válido"; ahora

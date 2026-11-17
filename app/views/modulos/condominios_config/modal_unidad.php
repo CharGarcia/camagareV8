@@ -3,7 +3,7 @@
  *  @var callable $prodChip (de index.php) @var array $perm @var array $vistaConfig @var string $rutaModulo @var array $tiposUnidad @var array $metodos */
 $pestanasUni = [
     'pane-uni-general'     => 'General',
-    'pane-uni-alicuota'    => 'Alícuota y cuotas extraordinarias',
+    'pane-uni-alicuota'    => 'Alícuota y fondo de reserva',
     'pane-uni-historial'   => 'Propietarios',
     'pane-uni-restriccion' => 'Áreas comunes',
     'pane-uni-suscripcion' => 'Expensa',
@@ -36,7 +36,7 @@ $pestanasUni = [
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
                         <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap" role="tablist">
                             <li class="nav-item"><a class="nav-link active py-2 small" id="uni-tab-general-btn" data-bs-toggle="tab" href="#pane-uni-general" role="tab"><i class="bi bi-card-text me-1"></i>General</a></li>
-                            <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-alicuota-btn" data-bs-toggle="tab" href="#pane-uni-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y cuotas extraord.</a></li>
+                            <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-alicuota-btn" data-bs-toggle="tab" href="#pane-uni-alicuota" role="tab"><i class="bi bi-calculator me-1"></i>Alícuota y fondo</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-historial-btn" data-bs-toggle="tab" href="#pane-uni-historial" role="tab"><i class="bi bi-people me-1"></i>Propietarios</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-restriccion-btn" data-bs-toggle="tab" href="#pane-uni-restriccion" role="tab"><i class="bi bi-slash-circle me-1"></i>Áreas comunes</a></li>
                             <li class="nav-item"><a class="nav-link py-2 small" id="uni-tab-suscripcion-btn" data-bs-toggle="tab" href="#pane-uni-suscripcion" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Expensa</a></li>
@@ -145,10 +145,10 @@ $pestanasUni = [
                                 </div>
                             </div>
 
-                            <!-- Fila 4: cuota extraordinaria propia, estado, cuota estimada (2+2+8) -->
+                            <!-- Fila 4: fondo de reserva propio, estado, cuota estimada (2+2+8) -->
                             <div class="row g-2 mt-0">
                                 <div class="col-md-2">
-                                    <label for="uni_fondo_reserva_valor_propio">Cuota extraord. propia</label>
+                                    <label for="uni_fondo_reserva_valor_propio">Fondo de reserva propio</label>
                                     <input type="number" class="form-control form-control-sm text-end" id="uni_fondo_reserva_valor_propio" name="fondo_reserva_valor_propio" step="0.01" min="0" placeholder="Regla del condominio">
                                 </div>
                                 <div class="col-md-2">
@@ -175,7 +175,7 @@ $pestanasUni = [
 
                         <!-- ══ Alícuota del condominio (configuración común a todos los inmuebles) ══ -->
                         <div class="tab-pane fade condcfg" id="pane-uni-alicuota" role="tabpanel">
-                            <div class="alert alert-info py-2 small mb-3"><i class="bi bi-info-circle me-1"></i>Estos valores son del <b>condominio</b> y aplican a <b>todos los inmuebles</b>. Lo propio de este inmueble (método, % de alícuota, cuota extraordinaria propia) está en <b>General</b>.</div>
+                            <div class="alert alert-info py-2 small mb-3"><i class="bi bi-info-circle me-1"></i>Estos valores son del <b>condominio</b> y aplican a <b>todos los inmuebles</b>. Lo propio de este inmueble (método, % de alícuota, fondo de reserva propio) está en <b>General</b>.</div>
                             <div class="row g-2">
                                 <div class="col-md-6">
                                     <label for="cfg_metodo_alicuota">Método de alícuota *</label>
@@ -196,7 +196,7 @@ $pestanasUni = [
                             <hr class="my-3">
                             <div class="row g-2">
                                 <div class="col-md-3">
-                                    <label for="cfg_fondo_reserva_tipo">Cuotas extraordinarias</label>
+                                    <label for="cfg_fondo_reserva_tipo">Fondo de reserva</label>
                                     <select class="form-select form-select-sm" id="cfg_fondo_reserva_tipo" form="formCondConfig" name="fondo_reserva_tipo" onchange="CONDCFG.onFondo()">
                                         <option value="no">No se cobra</option>
                                         <option value="porcentaje">% sobre la alícuota ordinaria</option>
@@ -208,7 +208,7 @@ $pestanasUni = [
                                     <input type="number" class="form-control form-control-sm text-end" id="cfg_fondo_reserva_valor" form="formCondConfig" name="fondo_reserva_valor" step="0.01" min="0" value="0">
                                 </div>
                                 <div class="col-md-6 position-relative" id="cfg-wrap-prod-fondo">
-                                    <?= str_replace(' name="', ' form="formCondConfig" name="', $prodChip('cfg_prod_fondo', 'Producto para las cuotas extraordinarias', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (según el destino de la cuota extraordinaria).')) ?>
+                                    <?= str_replace(' name="', ' form="formCondConfig" name="', $prodChip('cfg_prod_fondo', 'Producto para el fondo de reserva', 'id_producto_fondo', 'Línea separada en el recibo; su cuenta contable la define el producto (según el destino del fondo de reserva).')) ?>
                                 </div>
                             </div>
                 

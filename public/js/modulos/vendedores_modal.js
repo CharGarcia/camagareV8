@@ -54,9 +54,51 @@
         }
     }
 
+    // ─── Interruptor de Estado ───────────────────────────────────────────────
+    // El valor real va en el oculto #vendedor_status (1/0), que es el que leen la
+    // estrella de favorito (favoritos.js trabaja con .value) y el guardado. El
+    // interruptor #vendedor_status_switch solo lo muestra y lo cambia.
+    function sincronizarStatusSwitchV() {
+        const oculto = document.getElementById('vendedor_status');
+        const sw     = document.getElementById('vendedor_status_switch');
+        if (oculto && sw) sw.checked = String(oculto.value) !== '0';
+    }
+
+    function initStatusSwitchV() {
+        const oculto = document.getElementById('vendedor_status');
+        const sw     = document.getElementById('vendedor_status_switch');
+        if (!oculto || !sw || sw.dataset.iniciado === '1') return;
+        sw.dataset.iniciado = '1';
+        sw.addEventListener('change', () => {
+            oculto.value = sw.checked ? '1' : '0';
+            oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+        });
+        // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+        oculto.addEventListener('change', sincronizarStatusSwitchV);
+    }
+
+    function fijarStatusV(valor) {
+        initStatusSwitchV();
+        const oculto = document.getElementById('vendedor_status');
+        if (oculto) oculto.value = (valor === 0 || valor === '0' || valor === false || valor === 'false') ? '0' : '1';
+        sincronizarStatusSwitchV();
+    }
+
+    /** Deja la ficha en modo edición del vendedor recién creado (sin cerrarla). */
+    function pasarAEdicionV(id) {
+        const vid = document.getElementById('vendedor_id');
+        if (vid && id) vid.value = id;
+        const title = document.getElementById('tituloModalVendedorLabel');
+        if (title) title.textContent = 'Editar Vendedor';
+        document.getElementById('btnEliminarVendedorActual')?.classList.remove('d-none');
+        if (id) fetchInformacionExtraV(id);
+    }
+
     window.abrirModalVendedorCrear = function() {
         if (!formV) return;
         formV.reset();
+        // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+        fijarStatusV('1');
         cargarUsuariosVinculablesV(0, null);
         
         const vid = document.getElementById('vendedor_id');
@@ -113,8 +155,7 @@
         const vdir = document.getElementById('vendedor_direccion');
         if (vdir) vdir.value = data.direccion || '';
         
-        const vstat = document.getElementById('vendedor_status');
-        if (vstat) vstat.value = data.status ?? 1;
+        fijarStatusV(data.status ?? 1);
 
         cargarUsuariosVinculablesV(data.id, data.id_usuario_vinculado || null);
 
@@ -188,8 +229,19 @@
     function initVendedorModalEvents() {
         if (!formV) return;
 
+        // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
+        let guardandoVendedor = false;
+        const restaurarBtnV = (btn) => {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            }
+        };
+
         formV.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (guardandoVendedor) return;
+            guardandoVendedor = true;
             const vid = document.getElementById('vendedor_id')?.value;
             const action = vid ? '/update' : '/store';
             const fd = new FormData(formV);
@@ -201,6 +253,17 @@
                 btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
             }
             if (alertEl) alertEl.classList.add('d-none');
+            // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: vid ? 'Actualizando vendedor...' : 'Guardando vendedor...',
+                    text: 'Por favor espere, no cierre esta ventana.',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
+                });
+            }
 
             try {
                 const resp = await fetch(urlBaseVendedores + action, {
@@ -209,13 +272,10 @@
                 });
                 const json = await resp.json();
 
-                if (alertEl) {
-                    alertEl.textContent = json.msg || json.error || 'Error';
-                    alertEl.className = 'alert mb-3 py-2 small shadow-sm border-0 ' + (json.ok ? 'alert-success' : 'alert-danger');
-                    alertEl.classList.remove('d-none');
-                }
-
                 if (json.ok) {
+                    // El id va primero: sin él, el siguiente Guardar crearía otro vendedor.
+                    if (!vid && json.id) pasarAEdicionV(json.id);
+
                     // Si estamos en Clientes, podríamos necesitar actualizar el select (si es que no recarga catálogos)
                     // Nota: En clientes_modal.js ya forzamos la recarga de catálogos si se usa guardarVendedorRapido.
                     // Pero si se usa este modal estándar, podemos intentar lo mismo.
@@ -229,7 +289,7 @@
 
                     // Crear al vuelo (CLAUDE.md §9): avisa a quien abrió el modal desde un
                     // documento (p. ej. Consignaciones) para que agregue el vendedor a su
-                    // selector y lo deje seleccionado. El modal se cierra más abajo.
+                    // selector y lo deje seleccionado.
                     document.dispatchEvent(new CustomEvent('vendedorGuardado', { detail: {
                         ...json,
                         id:     json.id || vid,
@@ -237,27 +297,43 @@
                         nuevo:  !vid
                     } }));
 
-                    setTimeout(() => {
-                        if (btn) {
-                            btn.disabled = false;
-                            btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-                        }
-                        getModalV()?.hide();
-                        if (typeof window.cargarListado === 'function' && window.location.href.includes('vendedores')) {
-                            window.cargarListado();
-                        }
-                    }, 800);
+                    if (typeof window.cargarListado === 'function' && window.location.href.includes('vendedores')) {
+                        window.cargarListado();
+                    }
+
+                    // Un alta abierta encima de otro modal (crear al vuelo) se cierra sola;
+                    // en cualquier otro caso la ficha se queda abierta para seguir trabajando.
+                    const alVuelo = !vid && typeof window.CMG_modalSobreOtro === 'function'
+                        && window.CMG_modalSobreOtro(document.getElementById('modalVendedor'));
+                    if (alVuelo) getModalV()?.hide();
+                    restaurarBtnV(btn);
+
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({
+                            toast: true,
+                            position: 'top-end',
+                            icon: 'success',
+                            title: alVuelo ? 'Vendedor creado y seleccionado.' : (json.msg || 'Guardado correctamente.'),
+                            timer: 2200,
+                            showConfirmButton: false
+                        });
+                    }
                 } else {
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                    restaurarBtnV(btn);
+                    if (typeof Swal !== 'undefined') Swal.close();
+                    if (alertEl) {
+                        alertEl.textContent = json.msg || json.error || 'Error';
+                        alertEl.className = 'alert mb-3 py-2 small shadow-sm border-0 alert-danger';
+                        alertEl.classList.remove('d-none');
                     }
                 }
             } catch (err) {
-                if (btn) {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                restaurarBtnV(btn);
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo comunicar con el servidor.' });
                 }
+            } finally {
+                guardandoVendedor = false;
             }
         });
     }

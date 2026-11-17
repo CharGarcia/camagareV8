@@ -6,7 +6,7 @@ ruta_modulo: modulos/vendedores
 tipo: modulo
 visibilidad: todos
 etiquetas: vendedores, buscar vendedor, buscador, filtros, filtrar vendedores, vendedores sin clientes, chips, vendedor, comercial, agente, asesor, comision, ventas por vendedor, importar vendedores, carga masiva, excel, vincular usuario con vendedor, usuario del sistema, que el asesor vea solo sus ventas, quien es cada vendedor, cartera del vendedor, clientes asignados, pestaña informacion, quien creo el vendedor, quien modifico el vendedor, historial del vendedor
-version: 1.6
+version: 1.7
 orden: 50
 estado: activo
 ---
@@ -25,7 +25,16 @@ la ficha del vendedor permite decirlo (campo **Usuario del sistema**).
 3. Añada el correo si quiere (se valida el formato).
 4. Si ese vendedor entra al sistema con su propia cuenta, elíjala en **Usuario
    del sistema** (ver el apartado siguiente).
-5. Guarde.
+5. Deje encendido el interruptor **Estado** (*Activo*); apáguelo para dejar al
+   vendedor inactivo.
+6. Pulse **Guardar**.
+
+Mientras se guarda aparece el aviso **Guardando vendedor...** (o **Actualizando
+vendedor...** si ya existía); espere a que termine. Al guardar, la ficha **no se
+cierra**: queda abierta y un siguiente **Guardar** actualiza ese mismo vendedor
+(no crea otro). Ciérrela con la **X** cuando termine. La excepción es cuando el
+vendedor se crea desde otra ventana (un cliente, una consignación…): ahí se
+cierra sola y el vendedor queda seleccionado.
 
 ## Usuario del sistema (para que el asesor vea solo sus ventas)
 
@@ -108,6 +117,7 @@ la guía *Importar datos desde Excel*.
 
 ## Historial de cambios
 
+- **1.7** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes y Proveedores; la estrella de favorito sigue funcionando. Al guardar, la ficha ya no se cierra (salvo al crear el vendedor desde otra ventana) y muestra el aviso *Guardando / Actualizando vendedor...* mientras el servidor responde.
 - **1.6** — Nueva pestaña **Información** en la ventana del vendedor (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.5** — El modal ya no tiene pestaña *Información*; el número de clientes asignados se
   muestra al pie de la pestaña **General**. El historial del registro se consulta en

@@ -32,6 +32,7 @@ $pestanasCfg = [
     'pane-cfg-condominos' => 'Condóminos',
     'pane-cfg-mora'       => 'Mora y multas',
     'pane-cfg-reajuste'   => 'Reajuste de cuotas',
+    'pane-cfg-cuotas-extra' => 'Cuotas extraordinarias',
 ];
 $puedeGuardar = !empty($perm['actualizar']);
 $prodChip = function (string $id, string $label, string $campo, string $ayuda) use ($rutaModulo, $base): string {
@@ -91,6 +92,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             <li class="nav-item"><a class="nav-link py-2 small" id="cfg-tab-condominos-btn" data-bs-toggle="tab" href="#pane-cfg-condominos" role="tab"><i class="bi bi-people me-1"></i>Condóminos</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-mora" role="tab"><i class="bi bi-hourglass-split me-1"></i>Mora y multas</a></li>
             <li class="nav-item"><a class="nav-link py-2 small" data-bs-toggle="tab" href="#pane-cfg-reajuste" role="tab"><i class="bi bi-arrow-repeat me-1"></i>Reajuste de cuotas</a></li>
+            <li class="nav-item"><a class="nav-link py-2 small" id="cfg-tab-cuotas-extra-btn" data-bs-toggle="tab" href="#pane-cfg-cuotas-extra" role="tab"><i class="bi bi-cash-stack me-1"></i>Cuotas extraordinarias</a></li>
         </ul>
         <div class="flex-shrink-0">
             <?= \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasCfg, $vistaConfig ?? [], basename($rutaModulo)) ?>
@@ -385,6 +387,42 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
             </div>
         </div>
 
+        <!-- ══ Cuotas extraordinarias a plazos (pintura, ascensor…) ══ -->
+        <div class="tab-pane fade" id="pane-cfg-cuotas-extra" role="tabpanel">
+            <p class="small text-muted mb-2"><i class="bi bi-info-circle me-1"></i>Obras o gastos aprobados en asamblea que se pagan a plazos. El monto se reparte entre los inmuebles, se descuenta el <b>anticipo</b> que ya dio cada condómino y el saldo se divide en las cuotas que elija cada uno. Cada cuota sale una sola vez: en el recibo o factura de la alícuota o en un documento aparte.</p>
+            <?php if (!$config): ?>
+                <div class="alert alert-info py-2 small mb-0">Guarde primero la configuración del condominio.</div>
+            <?php else: ?>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <div class="input-group input-group-sm" style="width:320px">
+                    <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>
+                    <input type="text" class="form-control" id="cex-buscar" placeholder="Buscar por nombre, acta o concepto…" autocomplete="off">
+                </div>
+                <div class="ms-auto d-flex gap-2">
+                    <?php if (!empty($perm['crear'])): ?>
+                        <button type="button" class="btn btn-primary btn-sm" onclick="CEX.nuevo()"><i class="bi bi-plus-lg me-1"></i>Nueva cuota extraordinaria</button>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="border rounded-3 bg-white cuotasextra-scroll" style="max-height:60vh;overflow:auto">
+                <table class="table table-sm table-hover mb-0 small" id="cex-tabla">
+                    <thead class="table-light"><tr>
+                        <th class="ps-2" data-sort="nombre" style="cursor:pointer">Nombre</th>
+                        <th data-sort="fecha_acta" style="cursor:pointer">Acta</th>
+                        <th>Concepto</th>
+                        <th class="text-end" data-sort="meta" style="cursor:pointer">Monto aprobado</th>
+                        <th class="text-end" data-sort="inmuebles" style="cursor:pointer">Inmuebles</th>
+                        <th class="text-end" data-sort="emitido" style="cursor:pointer">Emitido</th>
+                        <th class="text-end" data-sort="por_emitir" style="cursor:pointer">Por emitir</th>
+                        <th>Se cobra</th>
+                        <th class="pe-2" data-sort="estado" style="cursor:pointer">Estado</th>
+                    </tr></thead>
+                    <tbody id="cex-body"><tr><td colspan="9" class="text-center text-muted py-3">—</td></tr></tbody>
+                </table>
+            </div>
+            <?php endif; ?>
+        </div>
+
         <?php // Descuentos: sin pestaña; se conservan los valores guardados para no apagarlos al guardar. ?>
         <input type="hidden" id="cfg_pronto_pago_activo" name="pronto_pago_activo" value="">
         <input type="hidden" id="cfg_pronto_pago_pct" name="pronto_pago_pct" value="">
@@ -452,7 +490,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
                     <div class="row g-2 mb-2" id="val-kpis"></div>
                     <div class="border rounded-3 bg-white" style="max-height: 45vh; overflow: auto;">
                         <table class="table table-sm table-hover mb-0 small">
-                            <thead class="table-light"><tr><th class="ps-2">Inmueble</th><th>Propietario</th><th>Método</th><th class="text-end">m²</th><th class="text-end">%</th><th class="text-end">Cuota</th><th class="text-end">C. extraord.</th><th class="text-end pe-2">Total</th></tr></thead>
+                            <thead class="table-light"><tr><th class="ps-2">Inmueble</th><th>Propietario</th><th>Método</th><th class="text-end">m²</th><th class="text-end">%</th><th class="text-end">Cuota</th><th class="text-end">Fondo res.</th><th class="text-end pe-2">Total</th></tr></thead>
                             <tbody id="val-body"></tbody>
                         </table>
                     </div>
@@ -484,6 +522,7 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     <?php include __DIR__ . '/modal_unidad.php'; ?>
     <?php include __DIR__ . '/modal_excel.php'; ?>
     <?php include __DIR__ . '/modal_cobro.php'; ?>
+    <?php include __DIR__ . '/modal_cuota_extra.php'; ?>
     <script>
         window.COND_CFG = {
             url: <?= json_encode($urlBase) ?>,
@@ -497,4 +536,5 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
         };
     </script>
     <script src="<?= rtrim($base, '/') ?>/js/modulos/condominios.js?v=<?= asset_ver('/js/modulos/condominios.js') ?>"></script>
+    <script src="<?= rtrim($base, '/') ?>/js/modulos/condominios_cuotas_extra.js?v=<?= asset_ver('/js/modulos/condominios_cuotas_extra.js') ?>"></script>
 <?php endif; ?>

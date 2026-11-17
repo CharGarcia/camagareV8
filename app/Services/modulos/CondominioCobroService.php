@@ -420,6 +420,12 @@ class CondominioCobroService
                 'id_tarifa_iva'     => $producto['id_tarifa_iva'] ? (int) $producto['id_tarifa_iva'] : null,
             ]];
             $extras = ['texto_item' => (string) ($em['texto_item'] ?? ''), 'info_concepto' => 'Concepto', 'info_detalle' => (string) $em['descripcion']];
+            if (($em['forma_valor'] ?? '') === 'cargos') {
+                // Cuotas extraordinarias «aparte»: las líneas son las cuotas reservadas para este
+                // ítem; se toman y se marcan emitidas en la misma transacción del documento.
+                $detalle = [];
+                $extras['condominio_cargos'] = ['item' => $idItem];
+            }
             $res = $facturacion->generarUnPeriodo($idEmpresa, $idUsuario, $susc, $detalle, $serie, $empresa, $extras, date('Y-m-d'));
         } catch (\Throwable $e) {
             $this->repo->actualizarItem($idItem, ['estado' => 'error', 'mensaje' => mb_substr($e->getMessage(), 0, 1000),

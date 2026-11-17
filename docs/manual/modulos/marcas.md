@@ -6,7 +6,7 @@ ruta_modulo: modulos/marcas
 tipo: modulo
 visibilidad: todos
 etiquetas: marcas, marca, fabricante, proveedor de marca, clasificar productos
-version: 1.0
+version: 1.1
 orden: 50
 estado: activo
 ---
@@ -19,7 +19,16 @@ es*, la marca dice *de quién es*.
 
 1. Pulse **Nuevo**.
 2. Escriba el **nombre** de la marca (máximo 100 caracteres).
-3. Guarde.
+3. Deje encendido el interruptor **Estado** (*Activo*); apáguelo para dejar la
+   marca inactiva.
+4. Pulse **Guardar**.
+
+Mientras se guarda aparece el aviso **Guardando marca...** (o **Actualizando
+marca...** si ya existía); espere a que termine. Al guardar, la ventana **no se
+cierra**: queda abierta (una marca nueva pasa a modo edición) y un siguiente
+**Guardar** actualiza esa misma marca. Ciérrela con **Cerrar** cuando termine.
+La excepción es cuando la marca se crea con el botón **+** desde la ficha de un
+producto: ahí se cierra sola y queda seleccionada en el producto.
 
 ## Cuándo usarlas
 
@@ -37,4 +46,5 @@ La eliminación es **lógica**. Los productos que la tenían asignada la conserv
 
 ## Historial de cambios
 
+- **1.1** — El **Estado** pasa a ser un interruptor (*Activo*), igual que en Productos, Categorías y demás catálogos; la estrella de favorito sigue funcionando. Al guardar, la ventana ya no se cierra (salvo al crear la marca desde un producto) y muestra el aviso *Guardando / Actualizando marca...* mientras el servidor responde.
 - **1.0** — Versión inicial.

@@ -44,9 +44,41 @@
         if (!si) pct.value = 0;
     };
 
+    // ─── Interruptor de Estado ───────────────────────────────────────────────
+    // El valor real va en el oculto #emp_estado ('activo'/'inactivo'), que es el que
+    // leen la estrella de favorito (favoritos.js trabaja con .value) y el guardado.
+    // El interruptor #emp_estado_switch solo lo muestra y lo cambia.
+    function empSincronizarEstadoSwitch() {
+        const oculto = document.getElementById('emp_estado');
+        const sw     = document.getElementById('emp_estado_switch');
+        if (oculto && sw) sw.checked = String(oculto.value || 'activo') !== 'inactivo';
+    }
+
+    function empInitEstadoSwitch() {
+        const oculto = document.getElementById('emp_estado');
+        const sw     = document.getElementById('emp_estado_switch');
+        if (!oculto || !sw || sw.dataset.iniciado === '1') return;
+        sw.dataset.iniciado = '1';
+        sw.addEventListener('change', () => {
+            oculto.value = sw.checked ? 'activo' : 'inactivo';
+            oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+        });
+        // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+        oculto.addEventListener('change', empSincronizarEstadoSwitch);
+    }
+
+    function empFijarEstado(valor) {
+        empInitEstadoSwitch();
+        const oculto = document.getElementById('emp_estado');
+        if (oculto) oculto.value = (valor === 'inactivo') ? 'inactivo' : 'activo';
+        empSincronizarEstadoSwitch();
+    }
+
     window.abrirModalCrear = async function() {
         if (!formEmp) return;
         formEmp.reset();
+        // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+        empFijarEstado('activo');
         window.empToggleDiscapacidad();
         limpiarBadgeSriEmp();
         document.getElementById('emp_id').value = '';
@@ -108,7 +140,7 @@
                 document.getElementById('emp_cargas_familiares').value = parseInt(d.cargas_familiares || 0, 10) || 0;
                 document.getElementById('emp_fecha_nacimiento').value = d.fecha_nacimiento || '';
                 document.getElementById('emp_sexo').value = d.sexo || 'M';
-                document.getElementById('emp_estado').value = d.estado || 'activo';
+                empFijarEstado(d.estado || 'activo');
 
                 // Laboral
                 document.getElementById('emp_fondos_reserva').value = d.fondos_reserva || 'no_se_paga';
@@ -704,8 +736,12 @@
     };
 
     if (formEmp) {
+        // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
+        let guardandoEmpleado = false;
         formEmp.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (guardandoEmpleado) return;
+            guardandoEmpleado = true;
             serializarTablasEmp();
             const id = document.getElementById('emp_id').value;
             const btn = document.getElementById('btnGuardar');
@@ -715,6 +751,16 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
 
             const restaurarBtn = () => { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar'; };
+            // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+            const mostrarGuardando = () => Swal.fire({
+                title: id ? 'Actualizando empleado...' : 'Guardando empleado...',
+                text: 'Por favor espere, no cierre esta ventana.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+            mostrarGuardando();
 
             try {
                 const fd = new FormData(formEmp);
@@ -734,6 +780,7 @@
                     });
                     if (!conf.isConfirmed) { restaurarBtn(); return; }
                     fd.append('confirmar_roles', '1');
+                    mostrarGuardando();
                     resp = await fetch(url, { method: 'POST', body: fd });
                     json = await resp.json();
                 }
@@ -779,6 +826,8 @@
             } catch (err) {
                 Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo conectar con el servidor.' });
                 restaurarBtn();
+            } finally {
+                guardandoEmpleado = false;
             }
         });
     }

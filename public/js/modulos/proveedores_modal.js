@@ -314,10 +314,38 @@
         el.setAttribute('title', limpio);
     }
 
+    // ─── Interruptor de Estado ───────────────────────────────────────────────
+    // El valor real va en el oculto #prov_status (1/0), que es el que leen la
+    // estrella de favorito (favoritos.js trabaja con .value) y el guardado. El
+    // interruptor #prov_status_switch solo lo muestra y lo cambia.
+    function provSincronizarStatusSwitch() {
+        const oculto = document.getElementById('prov_status');
+        const sw     = document.getElementById('prov_status_switch');
+        if (oculto && sw) sw.checked = String(oculto.value) !== '0';
+    }
+
+    function provInitStatusSwitch() {
+        const oculto = document.getElementById('prov_status');
+        const sw     = document.getElementById('prov_status_switch');
+        if (!oculto || !sw || sw.dataset.iniciado === '1') return;
+        sw.dataset.iniciado = '1';
+        sw.addEventListener('change', () => {
+            oculto.value = sw.checked ? '1' : '0';
+            oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+        });
+        // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+        oculto.addEventListener('change', provSincronizarStatusSwitch);
+    }
+
     async function abrirModalCrearInternal() {
         const form = document.getElementById('prov_formProveedor');
         if (!form) return;
         form.reset();
+        // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+        provInitStatusSwitch();
+        const statusOculto = document.getElementById('prov_status');
+        if (statusOculto) statusOculto.value = '1';
+        provSincronizarStatusSwitch();
         _provResetMapa();
         const elId = document.getElementById('prov_id');
         if (elId) elId.value = '';
@@ -461,6 +489,8 @@
         }
         const statusVal = (data.status === false || data.status === 'false' || data.status === 0) ? '0' : '1';
         setVal('prov_status', statusVal);
+        provInitStatusSwitch();
+        provSincronizarStatusSwitch();
     }
 
     async function abrirModalEditarInternal(rowOrData) {
@@ -593,12 +623,14 @@
      * actualiza el resumen comercial.
      */
     async function refrescarModalTrasGuardar(json, eraNuevo) {
+        // El id manda siempre: sin él el siguiente guardado crearía un duplicado.
+        // Se fija ANTES de repoblar, por si la recarga de campos falla.
+        const elId = document.getElementById('prov_id');
+        if (elId && json.id) elId.value = json.id;
+
         if (json.data) {
             await poblarCamposProv(json.data);
         }
-
-        // El id manda siempre: sin él el siguiente guardado crearía un duplicado.
-        const elId = document.getElementById('prov_id');
         if (elId && json.id) elId.value = json.id;
 
         const idProv = elId?.value || '';
@@ -644,8 +676,12 @@
 
         const form = document.getElementById('prov_formProveedor');
         if (form) {
+            // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
+            let guardandoProveedor = false;
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                if (guardandoProveedor) return;
+                guardandoProveedor = true;
                 const btnSave = document.getElementById('prov_btnGuardar');
                 const alertEl = document.getElementById('prov_modalAlert');
                 const idEl = document.getElementById('prov_id');
@@ -655,6 +691,17 @@
                 btnSave.disabled = true;
                 btnSave.innerHTML = '<span class="spinner-grow spinner-grow-sm me-1"></span>Guardando...';
                 if (alertEl) alertEl.classList.add('d-none');
+                // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        title: id ? 'Actualizando proveedor...' : 'Guardando proveedor...',
+                        text: 'Por favor espere, no cierre esta ventana.',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        didOpen: () => Swal.showLoading()
+                    });
+                }
 
                 try {
                     // Habilitar temporalmente prov_tipo_id para que el FormData lo capture si está deshabilitado
@@ -731,6 +778,8 @@
                     if (typeof Swal !== 'undefined') {
                         Swal.fire({ icon: 'error', title: 'Error de Red', text: 'No se pudo comunicar con el servidor' });
                     }
+                } finally {
+                    guardandoProveedor = false;
                 }
             });
         }

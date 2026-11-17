@@ -72,10 +72,13 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigT
                             <!-- Estado -->
                             <div class="col-md-3">
                                 <label class="form-label fw-semibold small">Estado</label>
-                                <select id="tr-estado" class="form-select form-select-sm">
-                                    <option value="activo">Activo</option>
-                                    <option value="inactivo">Inactivo</option>
-                                </select>
+                                <!-- Encendido = 'activo', apagado = 'inactivo' (lo arma TR_guardar). -->
+                                <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                    <input class="form-check-input" type="checkbox" id="tr-estado" checked>
+                                    <label class="form-check-label small fw-semibold ms-2" for="tr-estado">
+                                        <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                    </label>
+                                </div>
                             </div>
 
                             <!-- Nombre -->

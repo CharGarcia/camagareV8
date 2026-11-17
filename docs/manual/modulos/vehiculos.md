@@ -6,7 +6,7 @@ ruta_modulo: modulos/vehiculos
 tipo: modulo
 visibilidad: todos
 etiquetas: vehiculos, vehiculo, carro, auto, placa, propietario, dueño, consulta sri, consultar placa, datos del vehiculo por placa, matricula, marca, año, historial del vehiculo, transacciones, visitas, ordenes car wash, lavado, taller, proxima cita, recordatorio, recordar cita, agregar recordatorio, nuevo recordatorio, crear recordatorio, recordatorio manual, motivo, cambio de aceite, mantenimiento, aviso al cliente, whatsapp, correo, automatizacion, buscar placa, placa sin guion, buscar sin guion, buscar item, buscar servicio, buscar producto, categoria, marca del producto, filtrar por marca, filtrar por categoria, cuando se cambio el aceite, filtros, mantenimientos, proximo cambio de aceite, aceite de motor, aceite de caja, kilometraje, km, cada cuantos km, intervalo, motor, cilindraje, registrar cambio de aceite, cambio hecho en otro lugar, vencido, servicios de mantenimiento, misma marca, sugerido, aviso de cambio de aceite, avisar cambio de aceite, recordar mantenimiento, km estimado, kilometraje estimado, aviso automatico de mantenimiento, plantilla whatsapp mantenimiento, mantenimiento vencido, filtrar vencidos, no aplica, servicio que no aplica, ocultar servicio, quitar servicio del vehiculo, carro electrico
-version: 1.16
+version: 1.17
 orden: 11
 estado: activo
 ---
@@ -37,6 +37,13 @@ El módulo de **Vehículos** guarda la ficha de cada vehículo que atiende la em
    sistema trae la marca, el modelo y el año desde el SRI. Complete chasis, estado,
    propietario, correo y teléfono, y pulse **Guardar**.
 3. Con el vehículo guardado, use las pestañas **Transacciones** y **Recordatorios**.
+
+Mientras se guarda aparece el aviso **Guardando vehículo...** (o **Actualizando
+vehículo...** si ya existía); espere a que termine. Al guardar, la ficha **no se
+cierra**: queda abierta (un vehículo nuevo pasa a modo edición y se habilitan sus
+pestañas) y un siguiente **Guardar** actualiza ese mismo vehículo. Ciérrela con
+**Cerrar** cuando termine. La excepción es cuando el vehículo se crea desde una
+orden de Car-Wash o de Taller: ahí se cierra sola y queda puesto en la orden.
 
 Cada usuario puede ocultar las pestañas que no use con el engranaje a la derecha de
 las pestañas.
@@ -275,7 +282,7 @@ km estimado de hoy: sirve para llamar a los clientes.
 | Marca y modelo | Marca y modelo del vehículo en un solo campo; se llena desde el SRI. Obligatorio. |
 | Motor | Motor del vehículo (p. ej. *1.6 GASOLINA*). Opcional; sirve para sugerir los km de mantenimiento según otros vehículos con el mismo motor. |
 | Chasis / Año | Datos del vehículo. Opcionales; si se escribe el año debe estar entre 1900 y 2100. |
-| Estado | Activo o inactivo (los inactivos no aparecen al buscar en las órdenes). |
+| Estado | Interruptor **Activo**: encendido = activo, apagado = inactivo (los inactivos no aparecen al buscar en las órdenes). Admite estrella de favorito. |
 | Propietario | Dueño del vehículo. Opcional. |
 | Correo / Teléfono | Contacto para los recordatorios (teléfono de 10 dígitos). |
 
@@ -334,6 +341,7 @@ km estimado de hoy: sirve para llamar a los clientes.
 
 ## Historial de cambios
 
+- **1.17** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes, Proveedores, Vendedores, Empleados y Transportistas; la estrella de favorito sigue funcionando. Al guardar, la ficha ya no se cierra (salvo al crear el vehículo desde una orden) y muestra el aviso *Guardando / Actualizando vehículo...* mientras el servidor responde.
 - **1.16** — Ventana **Servicios** de mantenimiento: las líneas nuevas o modificadas sin guardar se resaltan y, al cerrar, se avisa que hay servicios sin guardar (Guardar y cerrar / Cerrar sin guardar / Seguir editando).
 - **1.15** — Botón **No aplica a este vehículo** en cada servicio de la pestaña Mantenimiento (también en la orden de Car-Wash): lo oculta y deja de avisarse; reversible.
 - **1.14** — El cambio hecho a mano se registra con el botón **+** de la línea de cada servicio (antes, un botón general con selector de servicio). La tabla *Cambios realizados* muestra la observación en su propia columna, completa.

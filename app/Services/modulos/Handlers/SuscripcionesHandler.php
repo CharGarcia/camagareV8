@@ -107,6 +107,8 @@ class SuscripcionesHandler extends BaseHandler
                 'texto_item'    => trim($override['texto_item']    ?? $p['texto_item']    ?? ''),
                 'info_concepto' => trim($override['info_concepto'] ?? $p['info_concepto'] ?? ''),
                 'info_detalle'  => trim($override['info_detalle']  ?? $p['info_detalle']  ?? ''),
+                // Condominios: suma al documento las cuotas extraordinarias «junto a la alícuota» pendientes.
+                'condominio_cargos' => ['suscripcion' => true],
             ];
 
             // Bucle de "ponerse al día": una factura por cada período vencido,

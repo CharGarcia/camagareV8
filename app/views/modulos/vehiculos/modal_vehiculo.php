@@ -101,10 +101,15 @@ $urlBaseVehShared = BASE_URL . '/modulos/vehiculos';
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label mb-1 small fw-bold text-muted d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('vehiculos', 'vehiculo_estado', 'estado') ?></label>
-                                <select class="form-select form-select-sm shadow-none" name="estado" id="vehiculo_estado">
-                                    <option value="activo">Activo</option>
-                                    <option value="inactivo">Inactivo</option>
-                                </select>
+                                <!-- El valor real (activo/inactivo) viaja en el oculto: lo leen la
+                                     estrella de favorito y el guardado. El interruptor solo lo refleja. -->
+                                <input type="hidden" name="estado" id="vehiculo_estado" value="activo">
+                                <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                    <input class="form-check-input" type="checkbox" id="vehiculo_estado_switch" checked>
+                                    <label class="form-check-label small fw-semibold ms-2" for="vehiculo_estado_switch">
+                                        <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                    </label>
+                                </div>
                             </div>
                             <div class="col-md-12">
                                 <label class="form-label mb-1 small fw-bold text-muted">Propietario</label>

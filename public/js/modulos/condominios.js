@@ -274,11 +274,15 @@ window.COND = (function () {
             fd.set('monto_manual', $('uni_monto_manual').value); // disabled no viaja
             const res = await post(M.id ? 'updateAjax' : 'storeAjax', fd);
             if (!res.ok) return errorForm(res.mensaje, $('modalUnidad'));
+            const eraEdicion = !!M.id;
             M.id = res.id || M.id;
             $('uni_id').value = M.id;
             await abrir(M.id);
             cargarListado();
-            Swal.fire({ icon: 'success', title: 'Listo', text: res.mensaje, timer: 1600, showConfirmButton: false, target: $('modalUnidad') });
+            await Swal.fire({ icon: 'success', title: 'Listo', text: res.mensaje, timer: 1600, showConfirmButton: false, target: $('modalUnidad') });
+            // Venta o cambio de arrendatario: si hay cuotas extraordinarias por cobrar a la persona
+            // anterior, preguntar si la deuda sigue con el inmueble o se liquida (pestaña Cuotas extraordinarias).
+            if (eraEdicion && window.CEX) await window.CEX.revisarCambioPersona(M.id, $('uni_propietario_desde')?.value || '');
         } catch (err) { aviso('error', 'No se pudo guardar', 'Error de comunicación con el servidor.', $('modalUnidad')); }
         finally { M.guardando = false; if (btn) btn.disabled = false; }
     }

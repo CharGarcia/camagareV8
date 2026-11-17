@@ -176,10 +176,15 @@ if (!defined('LEAFLET_LOADED')) {
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('proveedores', 'prov_status', 'status') ?></label>
-                                    <select class="form-select form-select-sm" name="status" id="prov_status">
-                                        <option value="1">Activo</option>
-                                        <option value="0">Inactivo</option>
-                                    </select>
+                                    <!-- El valor real (1/0) viaja en el oculto: lo leen la estrella de
+                                         favorito y el guardado. El interruptor solo lo refleja. -->
+                                    <input type="hidden" name="status" id="prov_status" value="1">
+                                    <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                        <input class="form-check-input" type="checkbox" id="prov_status_switch" checked>
+                                        <label class="form-check-label small fw-semibold ms-2" for="prov_status_switch">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="col-12">
                                     <label class="form-label small fw-bold">Razón Social *</label>

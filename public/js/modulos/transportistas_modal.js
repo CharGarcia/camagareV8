@@ -50,7 +50,7 @@
         document.getElementById('tr-telefono').value            = r.telefono        || '';
         document.getElementById('tr-email').value               = r.email           || '';
         document.getElementById('tr-direccion').value           = r.direccion       || '';
-        document.getElementById('tr-estado').value              = r.estado          || 'activo';
+        document.getElementById('tr-estado').checked            = (r.estado || 'activo') !== 'inactivo';
         
         window.TR_cambiarTipoId(false);
         const btnEl = document.getElementById('btn-tr-eliminar');
@@ -67,7 +67,7 @@
             const el = document.getElementById(id); if (el) el.value = '';
         });
         document.getElementById('tr-tipo-id').value = '05';
-        document.getElementById('tr-estado').value  = 'activo';
+        document.getElementById('tr-estado').checked = true;
         TR_limpiarBadgeSri();
         const errEmail = document.getElementById('tr-email-error');
         if (errEmail) { errEmail.textContent = ''; errEmail.classList.add('d-none'); }
@@ -191,7 +191,11 @@
         return true;
     };
 
+    // Bandera "en curso" (§8): un doble clic no envía un segundo guardado.
+    let guardandoTr = false;
+
     window.TR_guardar = function () {
+        if (guardandoTr) return;
         const nombreInput = document.getElementById('tr-nombre');
         const identInput  = document.getElementById('tr-identificacion');
         if (!nombreInput || !identInput) return;
@@ -204,6 +208,7 @@
 
         const id  = document.getElementById('tr-id').value;
         const btn = document.getElementById('btn-tr-guardar');
+        guardandoTr = true;
         if (btn) {
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando…';
@@ -218,11 +223,22 @@
         fd.append('telefono',       document.getElementById('tr-telefono').value);
         fd.append('email',          document.getElementById('tr-email').value.trim());
         fd.append('direccion',      document.getElementById('tr-direccion').value);
-        fd.append('estado',         document.getElementById('tr-estado').value);
+        fd.append('estado',         document.getElementById('tr-estado').checked ? 'activo' : 'inactivo');
+
+        // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+        Swal.fire({
+            title: id ? 'Actualizando transportista...' : 'Guardando transportista...',
+            text: 'Por favor espere, no cierre esta ventana.',
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            showConfirmButton: false,
+            didOpen: () => Swal.showLoading()
+        });
 
         fetch(urlBaseTr + '/guardar-ajax', { method: 'POST', body: fd })
             .then(r => r.json())
             .then(d => {
+                guardandoTr = false;
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
@@ -235,6 +251,7 @@
                         && window.CMG_modalSobreOtro(document.getElementById('modalTransportista'))) {
                         if (typeof window.TR_fetchSearch === 'function') window.TR_fetchSearch(1);
                         document.dispatchEvent(new CustomEvent('transportistaGuardado', { detail: { ...d, nuevo: true } }));
+                        Swal.close(); // quita el aviso "Guardando…" antes de cerrar el modal
                         TR_cerrarModal(() => Swal.fire({ toast: true, position: 'top-end', icon: 'success',
                             title: 'Transportista creado y seleccionado.', timer: 2500, showConfirmButton: false }));
                         return;
@@ -263,6 +280,7 @@
                 }
             })
             .catch(() => {
+                guardandoTr = false;
                 if (btn) {
                     btn.disabled = false;
                     btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';

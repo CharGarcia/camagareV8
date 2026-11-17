@@ -188,10 +188,15 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('bodegas', 'bodega_status', 'status') ?></label>
-                                    <select name="status" id="bodega_status" class="form-select form-select-sm">
-                                        <option value="1">Activo</option>
-                                        <option value="0">Inactivo</option>
-                                    </select>
+                                    <!-- El valor real (1/0) viaja en el oculto: lo leen la estrella de
+                                         favorito y el guardado. El interruptor solo lo refleja. -->
+                                    <input type="hidden" name="status" id="bodega_status" value="1">
+                                    <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                        <input class="form-check-input" type="checkbox" id="bodega_status_switch" checked>
+                                        <label class="form-check-label small fw-semibold ms-2" for="bodega_status_switch">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                        </label>
+                                    </div>
                                 </div>
                                 <div class="col-md-6">
                                     <label class="form-label small fw-bold d-flex align-items-center">
@@ -361,8 +366,36 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         }
 
+        // ─── Interruptor de Estado ───────────────────────────────────────────
+        // El valor real va en el oculto #bodega_status (1/0), que es el que leen la
+        // estrella de favorito (favoritos.js trabaja con .value) y el guardado. El
+        // interruptor #bodega_status_switch solo lo muestra y lo cambia.
+        function sincronizarStatusSwitchBodega() {
+            const oculto = document.getElementById('bodega_status');
+            const sw     = document.getElementById('bodega_status_switch');
+            if (oculto && sw) sw.checked = String(oculto.value) !== '0';
+        }
+        (function initStatusSwitchBodega() {
+            const oculto = document.getElementById('bodega_status');
+            const sw     = document.getElementById('bodega_status_switch');
+            if (!oculto || !sw) return;
+            sw.addEventListener('change', () => {
+                oculto.value = sw.checked ? '1' : '0';
+                oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+            });
+            // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+            oculto.addEventListener('change', sincronizarStatusSwitchBodega);
+        })();
+        function fijarStatusBodega(activo) {
+            const oculto = document.getElementById('bodega_status');
+            if (oculto) oculto.value = activo ? '1' : '0';
+            sincronizarStatusSwitchBodega();
+        }
+
         window.abrirModalBodegaCrear = function() {
             form.reset();
+            // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+            fijarStatusBodega(true);
             document.getElementById('bodega_id').value = '';
             document.getElementById('tituloModal').textContent = 'Nueva Bodega';
             document.getElementById('btnEliminar')?.classList.add('d-none');
@@ -388,7 +421,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('bodega_id').value = data.id;
             document.getElementById('bodega_nombre').value = data.nombre || '';
             const isInactive = data.status === false || data.status === 'false' || data.status === 0 || data.status === '0' || data.status === 'f';
-            document.getElementById('bodega_status').value = isInactive ? '0' : '1';
+            fijarStatusBodega(!isInactive);
             const selEst = document.getElementById('bodega_id_establecimiento');
             if (selEst) selEst.value = data.id_establecimiento ? String(data.id_establecimiento) : '';
 
@@ -493,17 +526,44 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             if (timeline) timeline.innerHTML = '<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>';
         }
 
+        // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
+        let guardandoBodega = false;
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (guardandoBodega) return;
+            guardandoBodega = true;
             const id = document.getElementById('bodega_id').value;
             const action = id ? '/update' : '/store';
             const fd = new FormData(form);
             const btn = document.getElementById('btnGuardar');
             const alertEl = document.getElementById('modalAlert');
+            const restaurarBtn = () => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            };
+            const mostrarError = (texto) => {
+                if (typeof Swal !== 'undefined') Swal.close();
+                if (alertEl) {
+                    alertEl.textContent = texto;
+                    alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
+                    alertEl.classList.remove('d-none');
+                }
+            };
 
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
             if (alertEl) alertEl.classList.add('d-none');
+            // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+            if (typeof Swal !== 'undefined') {
+                Swal.fire({
+                    title: id ? 'Actualizando bodega...' : 'Guardando bodega...',
+                    text: 'Por favor espere, no cierre esta ventana.',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: () => Swal.showLoading()
+                });
+            }
 
             try {
                 const resp = await fetch(urlBase + action, {
@@ -512,36 +572,35 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 });
                 const json = await resp.json();
 
-                if (alertEl) {
-                    alertEl.textContent = json.msg || json.error || 'Error desconocido';
-                    alertEl.className = 'alert mb-3 py-2 small shadow-sm border-0 ' + (json.ok ? 'alert-success' : 'alert-danger');
-                    alertEl.classList.remove('d-none');
-                }
-
                 if (json.ok) {
                     const bodegaId = id || json.id;
+                    // El modal se queda abierto. Si era nueva, pasa a modo edición con su id:
+                    // así el siguiente Guardar actualiza esta bodega y no crea otra.
+                    if (!id && json.id) {
+                        document.getElementById('bodega_id').value = json.id;
+                        document.getElementById('tituloModal').textContent = 'Editar Bodega';
+                        document.getElementById('btnEliminar')?.classList.remove('d-none');
+                    }
                     if (bodegaId) {
                         await guardarAccesosUsuarios(bodegaId);
+                        fetchInformacionExtra(bodegaId);
+                        fetchAccesosUsuarios(bodegaId);
                     }
-
-                    setTimeout(() => {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-                        getModal().hide();
-                        cargarListado();
-                    }, 800);
+                    cargarListado();
+                    restaurarBtn();
+                    if (typeof Swal !== 'undefined') {
+                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2200,
+                            title: json.msg || 'Guardado correctamente.' });
+                    }
                 } else {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                    mostrarError(json.msg || json.error || 'Error desconocido');
+                    restaurarBtn();
                 }
             } catch (err) {
-                if (alertEl) {
-                    alertEl.textContent = 'Error de red al conectar con el servidor';
-                    alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                    alertEl.classList.remove('d-none');
-                }
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                mostrarError('Error de red al conectar con el servidor');
+                restaurarBtn();
+            } finally {
+                guardandoBodega = false;
             }
         });
 

@@ -51,6 +51,29 @@ class SuscripcionFacturacionService
         $infoConcepto = strtr(trim($extras['info_concepto'] ?? ''), $reemplazos);
         $infoDetalle  = strtr(trim($extras['info_detalle']  ?? ''), $reemplazos);
 
+        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
+        // final (FacturaVentaService::crear() / ReciboVentaService::crear()): el lock de
+        // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
+        // Se abre aquí (antes de armar las líneas) para que las cuotas extraordinarias de
+        // condominios se tomen con FOR UPDATE y se marquen emitidas en esta misma transacción.
+        $db = Database::getConnection();
+        $managedTransaction = !$db->inTransaction();
+        if ($managedTransaction) {
+            $db->beginTransaction();
+        }
+
+        try {
+        // Condominios: cuotas extraordinarias que salen en este documento (las «junto» a la
+        // alícuota de la suscripción, las de un ítem de emisión aparte o cargos sueltos). Solo si
+        // el llamador lo pide con $extras['condominio_cargos'].
+        $cuotasCondo = ['ids' => [], 'planes' => [], 'lineas' => []];
+        if (!empty($extras['condominio_cargos'])) {
+            $cuotasCondo = CondominioCuotaExtraService::crear()->lineasDocumento($extras['condominio_cargos'], $susc, $periodoFecha, $idEmpresa);
+            foreach ($cuotasCondo['lineas'] as $linea) {
+                $detalle[] = $linea + ['sin_texto_lote' => true];
+            }
+        }
+
         // Modo de cálculo de IVA configurado en el establecimiento (igual que la
         // factura de venta): 'linea_linea' redondea el IVA por línea y suma;
         // 'subtotal' calcula el IVA sobre la base acumulada de cada tarifa.
@@ -154,17 +177,7 @@ class SuscripcionFacturacionService
         $esRecibo   = ($susc['tipo_comprobante'] ?? 'factura') === 'recibo';
         $tipoSec    = $esRecibo ? 'Recibos de venta' : 'Facturas de venta';
 
-        // Se abre la transacción ANTES de calcular el secuencial y se mantiene hasta el INSERT
-        // final (FacturaVentaService::crear() / ReciboVentaService::crear()): el lock de
-        // obtenerSiguienteSecuencial() se libera solo al COMMIT/ROLLBACK (CLAUDE.md §8).
-        $db = Database::getConnection();
-        $managedTransaction = !$db->inTransaction();
-        if ($managedTransaction) {
-            $db->beginTransaction();
-        }
-
-        try {
-        $secRes     = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], $tipoSec, date('Y-m-d'));
+        $secRes    = $this->secService->obtenerSiguienteSecuencial((int)$estabConfig['id_punto_emision'], $tipoSec, date('Y-m-d'));
         $secuencial = $secRes['formateado'];
 
         $infoAdicional = [];
@@ -230,6 +243,7 @@ class SuscripcionFacturacionService
 
         if (!$esRecibo) {
             $idFactura = $this->facturaService->crear($documentoData);
+            CondominioCuotaExtraService::crear()->confirmarDocumento($cuotasCondo, 'factura', $idFactura, $susc['id'] ?? null, $idUsuario);
             if ($managedTransaction) {
                 $db->commit();
             }
@@ -259,6 +273,7 @@ class SuscripcionFacturacionService
         $documentoData['pagos'][0]['unidad_tiempo'] = 'dias';
 
         $idRecibo = $this->reciboService->crear($documentoData);
+        CondominioCuotaExtraService::crear()->confirmarDocumento($cuotasCondo, 'recibo', $idRecibo, $susc['id'] ?? null, $idUsuario);
         if ($managedTransaction) {
             $db->commit();
         }
@@ -301,6 +316,11 @@ class SuscripcionFacturacionService
         $propio = trim((string) ($det['info_item'] ?? ''));
         if ($propio !== '') {
             return strtr($propio, $reemplazos);
+        }
+        // Cuotas extraordinarias de condominios: la descripción ya dice «cuota 5/24»; el texto del
+        // lote de la suscripción (p. ej. «Alícuota {mes}») no les corresponde.
+        if (!empty($det['sin_texto_lote'])) {
+            return null;
         }
         $partes = array_filter([
             strtr(trim((string) ($det['info_adicional'] ?? '')), $reemplazos),

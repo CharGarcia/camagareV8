@@ -6,7 +6,7 @@ ruta_modulo: modulos/bodegas
 tipo: modulo
 visibilidad: todos
 etiquetas: bodegas, bodega, almacen, deposito, sucursal, ubicacion, stock por bodega, responsable, establecimiento de la bodega, local, en que establecimiento esta la bodega, acceso por usuario, quitar acceso a una bodega, bodegas asignadas, no veo una bodega
-version: 1.2
+version: 1.3
 orden: 30
 estado: activo
 ---
@@ -25,9 +25,17 @@ la única forma de saber dónde está realmente la mercadería.
 2. Escriba el **nombre** (máximo 100 caracteres).
 3. Elija el **usuario responsable**.
 4. Indique el **establecimiento** donde está físicamente la bodega (opcional).
-5. Guarde.
+5. Deje encendido el interruptor **Estado** (*Activo*); apáguelo para dejar la
+   bodega inactiva.
+6. Pulse **Guardar**.
 
 El nombre y el responsable son obligatorios.
+
+Mientras se guarda aparece el aviso **Guardando bodega...** (o **Actualizando
+bodega...** si ya existía); espere a que termine. Al guardar, la ficha **no se
+cierra**: queda abierta (una bodega nueva pasa a modo edición) y un siguiente
+**Guardar** actualiza esa misma bodega, no crea otra. Ciérrela con la **X** o
+**Cerrar** cuando termine.
 
 ## Establecimiento de la bodega
 
@@ -71,6 +79,7 @@ movimientos. Si ya no se usa, es preferible dejarla sin stock y no operar con el
 
 ## Historial de cambios
 
+- **1.3** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes y demás catálogos; la estrella de favorito sigue funcionando. Al guardar, la ficha ya no se cierra y muestra el aviso *Guardando / Actualizando bodega...* mientras el servidor responde.
 - **1.2** — El acceso por usuario ahora también filtra la **información** del
   *Reporte de inventarios* (existencias, movimientos, valorización,
   consignaciones y auditoría), no solo los selectores de bodega.

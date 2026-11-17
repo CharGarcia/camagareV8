@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, pestaña informacion, quien creo el proveedor, quien modifico el proveedor, historial del proveedor, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver compra, ver documento, detalle de la compra, lote, observacion del item
-version: 2.17
+version: 2.18
 orden: 10
 estado: activo
 ---
@@ -29,7 +29,9 @@ concepto ya propuestos.
 
 Al guardar desde el listado de Proveedores, la ficha **no se cierra**: se queda
 abierta y se refresca con lo que quedó realmente grabado, para que siga
-completando pestañas sin volver a buscar el proveedor.
+completando pestañas sin volver a buscar el proveedor. Mientras se guarda aparece
+el aviso **Guardando proveedor...** (o **Actualizando proveedor...** si ya
+existía); espere a que termine.
 
 Si crea un proveedor **nuevo** desde un documento (compra, egreso, orden de
 compra, liquidación, retención de compra o importación), al guardar la ficha
@@ -46,7 +48,7 @@ se cierra sola y el proveedor queda seleccionado en el documento. Ver la guía
 | Dirección, ciudad, provincia | No | Ubicación del proveedor |
 | Teléfono, correo | No | Contacto |
 | Parte relacionada | No | Está en la pestaña *SRI*. Marque si lo es: se reporta en el anexo |
-| Estado | Sí | Activo o inactivo |
+| Estado | Sí | Interruptor **Activo**: encendido = activo, apagado = inactivo. Admite estrella de favorito |
 
 Razón social, nombre comercial y dirección admiten hasta **300 caracteres**, el
 máximo que el SRI permite en un comprobante electrónico. Si un texto llega más
@@ -529,6 +531,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.18** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos y Clientes; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando proveedor...* mientras el servidor responde.
 - **2.17** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`).
 - **2.16** — La pestaña **Estado de cuenta** del proveedor carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
 - **2.15** — Nueva pestaña **Información** en la ventana del proveedor (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.

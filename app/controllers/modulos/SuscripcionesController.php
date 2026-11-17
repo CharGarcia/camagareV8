@@ -977,6 +977,8 @@ class SuscripcionesController extends BaseModuloController
                 'texto_item'    => $textoItem,
                 'info_concepto' => $infoConcepto,
                 'info_detalle'  => $infoDetalle,
+                // Condominios: suma al documento las cuotas extraordinarias «junto a la alícuota» pendientes.
+                'condominio_cargos' => ['suscripcion' => true],
             ];
 
             $generadas = 0;

@@ -1,27 +1,31 @@
 ---
 titulo: Configuración de condominios
-resumen: Todo el módulo Condominios en una pantalla: datos del condominio, condóminos (clientes y sus inmuebles), alícuota y cuotas extraordinarias, mora y multas, reajuste de cuotas. Guardarla activa el módulo.
+resumen: Todo el módulo Condominios en una pantalla: datos del condominio, condóminos (clientes y sus inmuebles), alícuota y fondo de reserva, mora y multas, reajuste de cuotas y cuotas extraordinarias a plazos (con anticipos). Guardarla activa el módulo.
 categoria: Ventas
 ruta_modulo: modulos/condominios-config
 tipo: modulo
 visibilidad: todos
-etiquetas: condominio, condominios, generar cobro, emitir recibos en bloque, facturas masivas, multas masivas, cuota extraordinaria, enviar por correo, emisiones, configuracion condominio, condominos, condomino, inmuebles, inmueble, departamento, parqueadero, bodega, local, propietario, arrendatario, inquilino, propiedad horizontal, edificio, conjunto, urbanizacion, expensas, administrador del condominio, alicuota, alicuotas, cuota de mantenimiento, cuotas extraordinarias, cuota extraordinaria, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dias de gracia, restriccion areas comunes, cargar inmuebles excel, reajuste de cuotas, activar condominios
-version: 1.7
+etiquetas: condominio, condominios, generar cobro, emitir recibos en bloque, facturas masivas, multas masivas, cuota extraordinaria, enviar por correo, emisiones, configuracion condominio, condominos, condomino, inmuebles, inmueble, departamento, parqueadero, bodega, local, propietario, arrendatario, inquilino, propiedad horizontal, edificio, conjunto, urbanizacion, expensas, administrador del condominio, alicuota, alicuotas, cuota de mantenimiento, cuotas extraordinarias, cuota extraordinaria, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dias de gracia, restriccion areas comunes, cargar inmuebles excel, reajuste de cuotas, activar condominios, cuota extraordinaria a plazos, pintura del edificio, obra aprobada en asamblea, acta de asamblea, cuotas de una obra, dividir en cuotas, 24 cuotas, plan de pagos, anticipo de clientes, abono inicial, liquidar saldo, venta de inmueble deuda, cronograma de cuotas
+version: 1.8
 orden: 1
 estado: activo
 ---
 
 **Configuración de condominios** es la pantalla única del módulo Condominios. La empresa es el
-condominio: aquí se guardan sus reglas (administrador, alícuota, cuotas extraordinarias, mora y multas),
-a cada **cliente** se le asignan sus **inmuebles** y se reajustan las cuotas en
-bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la hace
-**Suscripciones**, el cobro **Ingresos** y la cartera **Cuentas por Cobrar**, como siempre.
+condominio: aquí se guardan sus reglas (administrador, alícuota, fondo de reserva, mora y multas),
+a cada **cliente** se le asignan sus **inmuebles**, se reajustan las cuotas en bloque y se llevan
+las **cuotas extraordinarias a plazos** (obras aprobadas en asamblea). **Guardarla activa el
+módulo** para la empresa. La emisión mensual la hace **Suscripciones**, el cobro **Ingresos** y la
+cartera **Cuentas por Cobrar**, como siempre.
 
 ## Qué es y para qué sirve
 
-- Una sola pantalla en pestañas: **Condominio**, **Condóminos**, **Mora y multas** y **Reajuste de
-  cuotas**. La alícuota y las cuotas extraordinarias del condominio se configuran en la ventana
-  de cualquier inmueble (pestaña **Alícuota y cuotas extraord.**).
+- Una sola pantalla en pestañas: **Condominio**, **Condóminos**, **Mora y multas**, **Reajuste de
+  cuotas** y **Cuotas extraordinarias**. La alícuota y el fondo de reserva del condominio se
+  configuran en la ventana de cualquier inmueble (pestaña **Alícuota y fondo**).
+- **Cuotas extraordinarias** lleva las obras o gastos aprobados en asamblea que se pagan a plazos
+  (p. ej. pintar el edificio): reparte el monto entre los inmuebles, aplica el anticipo que ya dio
+  cada condómino y emite el saldo en las cuotas que elija cada uno, sin repetir ninguna.
 - **Condóminos** lista **todos los clientes** de la empresa y, a cada uno, sus inmuebles
   (departamento, local, parqueadero, bodega…) como propietario o arrendatario, con quién paga,
   área, % de alícuota, historial de propietarios y restricción de áreas comunes.
@@ -35,7 +39,10 @@ bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la 
 
 - La empresa debe ser el condominio (RUC, establecimiento y serie propios).
 - Los condóminos son **clientes**. Si no existen, la carga por Excel los crea.
-- Si se cobran cuotas extraordinarias, intereses o multas, un servicio en **Productos** para cada uno.
+- Si se cobran fondo de reserva, cuotas extraordinarias, intereses o multas, un servicio en
+  **Productos** para cada uno.
+- Para aplicar anticipos a una cuota extraordinaria: una forma de cobro de tipo **Anticipo** activa
+  (la que se usa en Ingresos para los anticipos de clientes).
 - Permiso **Actualizar** en este submódulo para guardar.
 
 ## Cómo se usa
@@ -44,9 +51,10 @@ bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la 
    cobro judicial, art. 13 LPH), presidente de la asamblea (opcional), desde cuántas expensas
    vencidas se habilita la liquidación. **Guardar** activa el módulo.
 2. **Condóminos**: asigne a cada cliente su inmueble (ver la sección propia más abajo).
-3. **Alícuota y cuotas extraordinarias** (en la ventana de cualquier inmueble de **Condóminos**;
+3. **Alícuota y fondo de reserva** (en la ventana de cualquier inmueble de **Condóminos**;
    aplica a **todo el condominio** y se graba con **Guardar para el condominio**): método de
-   alícuota del condominio (por %, por m² o manual; cada inmueble puede tener el suyo). Cuotas extraordinarias: no / % sobre la alícuota / monto fijo, con su
+   alícuota del condominio (por %, por m² o manual; cada inmueble puede tener el suyo). Fondo de
+   reserva: no / % sobre la alícuota / monto fijo, que se suma a **cada** cuota, con su
    producto. Debajo, **Valores que rigen**: la tarifa por m² y el monto mensual a repartir, cada
    uno con el **mes desde el que rige**. Se agregan con **Nuevo valor desde…**, que muestra una
    **vista previa** de la cuota de cada inmueble antes de guardar; el monto a repartir puede
@@ -59,6 +67,8 @@ bloque. **Guardarla activa el módulo** para la empresa. La emisión mensual la 
    (monto fijo, aumento % o según el inmueble). **Vista previa** muestra cada suscripción con su
    valor actual y el nuevo (se pueden destildar); **Aplicar** cambia la línea del concepto en
    cada suscripción. Con una **fecha futura** queda **programado** y se aplica solo ese día.
+6. **Cuotas extraordinarias**: obras o gastos aprobados en asamblea que se pagan a plazos (ver la
+   sección propia más abajo).
 
 El botón **Guardar** del pie graba la configuración. En la pestaña Condóminos no aparece: cada
 inmueble se guarda en su propia ventana.
@@ -83,8 +93,8 @@ tachado, que tiene restringidas las áreas comunes.
 
 | Pestaña | Qué tiene |
 |---|---|
-| General | Código, nombre, tipo, torre, piso, propietario / arrendatario / quién paga, área, alícuota, método, monto manual, cuota extraordinaria propia, estado y la cuota ordinaria estimada con el valor que rige hoy. Al cambiar las personas aparece **Rige desde**. |
-| Alícuota y cuotas extraord. | Configuración **común a todos los inmuebles**: método de alícuota del condominio, cuotas extraordinarias y **Valores que rigen**. Tiene su propio botón **Guardar para el condominio**; el Guardar del pie no aparece en esta pestaña. |
+| General | Código, nombre, tipo, torre, piso, propietario / arrendatario / quién paga, área, alícuota, método, monto manual, fondo de reserva propio, estado y la cuota ordinaria estimada con el valor que rige hoy. Al cambiar las personas aparece **Rige desde**; si el inmueble tiene cuotas extraordinarias por cobrar a la persona anterior, al guardar se pregunta qué hacer con esa deuda. |
+| Alícuota y fondo | Configuración **común a todos los inmuebles**: método de alícuota del condominio, fondo de reserva y **Valores que rigen**. Tiene su propio botón **Guardar para el condominio**; el Guardar del pie no aparece en esta pestaña. |
 | Propietarios | Historial de propietario, arrendatario y pagador con desde / hasta. |
 | Áreas comunes | Marcar o levantar la restricción (fecha de notificación y motivo obligatorios) y su bitácora. |
 | Expensa | La suscripción que emite la cuota del inmueble. Se enlaza aquí una suscripción del pagador que aún no tenga inmueble. El inmueble que deba salir en el documento se escribe a mano en la **Información adicional** de la suscripción. |
@@ -98,7 +108,7 @@ tachado, que tiene restringidas las áreas comunes.
 | Arrendatario / Paga el | No | Si paga el arrendatario, el documento sale a su nombre. |
 | Rige desde | Al cambiar personas | Fecha desde la que rige el nuevo propietario, arrendatario o pagador. |
 | Método / Monto manual | No | Vacío = el del condominio. Con método manual el monto es obligatorio. |
-| Cuota extraordinaria propia | No | Valor propio del inmueble; vacío = regla del condominio. |
+| Fondo de reserva propio | No | Valor propio del inmueble; vacío = regla del condominio. |
 | Estado | Sí | Inactivo = no cuenta para el reparto ni para el reajuste. |
 
 ### Buscar, filtrar y ordenar condóminos
@@ -122,7 +132,7 @@ Marque los condóminos en el listado (la casilla del encabezado marca la página
 conservan al cambiar de página o de filtro) y pulse **Generar cobro**. También puede cobrar a
 **todos los del filtro actual** sin marcar uno por uno. Hay dos caminos:
 
-**Emitir ahora** (multas, cuotas extraordinarias o cualquier servicio). Genera de una sola vez un
+**Emitir ahora** (multas, un cobro único o cualquier servicio). Genera de una sola vez un
 recibo de venta o una factura por condómino, o por cada inmueble que paga, **sin pasar por
 Suscripciones**.
 
@@ -162,7 +172,7 @@ Los documentos emitidos se consultan en **Recibos de Venta** o **Facturas de Ven
 ejemplo (bórrelas). Columnas: `CODIGO`, `NOMBRE`, `TIPO`, `TORRE_BLOQUE`, `PISO`, `AREA_M2`,
 `ALICUOTA_PCT`, `PROPIETARIO_IDENTIFICACION`, `PROPIETARIO_NOMBRE`, `PROPIETARIO_EMAIL`,
 `PROPIETARIO_TELEFONO`, `ARRENDATARIO_IDENTIFICACION`, `ARRENDATARIO_NOMBRE`, `PAGADOR`,
-`METODO`, `MONTO_MANUAL`, `FONDO_RESERVA_PROPIO` (cuota extraordinaria propia), `OBSERVACIONES`.
+`METODO`, `MONTO_MANUAL`, `FONDO_RESERVA_PROPIO` (fondo de reserva propio), `OBSERVACIONES`.
 
 - El propietario y el arrendatario se cruzan con **Clientes por cédula/RUC**; si no existen se
   crean con el nombre, correo y teléfono del archivo.
@@ -170,6 +180,101 @@ ejemplo (bórrelas). Columnas: `CODIGO`, `NOMBRE`, `TIPO`, `TORRE_BLOQUE`, `PISO
   nueva en el historial.
 - **Vista previa** antes de grabar, con la acción por fila, los clientes nuevos y los errores.
   Nada se graba hasta **Aplicar**.
+
+## Cuotas extraordinarias a plazos (pintura, ascensor, obras)
+
+Sirve para lo que la asamblea aprueba una sola vez y se paga en cuotas. Ejemplo: pintar el edificio
+cuesta $30.000; varios condóminos ya dieron un anticipo y el saldo se divide en 24 cuotas. El
+sistema reparte el monto, aplica los anticipos, emite cada cuota una sola vez y muestra cuánto se
+emitió, cuánto se cobró y cuánto falta, por inmueble y en total.
+
+### Crear la cuota extraordinaria
+
+Pestaña **Cuotas extraordinarias** → **Nueva cuota extraordinaria**:
+
+1. **Nombre**, **concepto** (un servicio de Productos: su nombre, IVA y cuenta contable salen de
+   ahí), **acta** y su fecha.
+2. **Monto aprobado** y **reparto**: en **partes iguales** o **por % de alícuota**.
+3. **Cuotas permitidas** (p. ej. `1, 6, 12, 24`) y las que vienen por defecto. Cada condómino
+   puede elegir otra de la lista.
+4. **Primera cuota** (mes) y **quién paga**: el propietario (lo normal) o el arrendatario.
+5. **Dónde sale cada cuota**: en el **recibo o factura de la alícuota** que ya emite
+   Suscripciones, o en un **documento aparte**.
+6. **Documento propio** (recibo o factura) y **serie**: se usan para el abono inicial, las cuotas
+   que salen aparte y las liquidaciones. **Forma de cobro de anticipos**: la de tipo Anticipo con
+   la que se aplica lo que cada condómino ya entregó.
+
+Pulse **Guardar**. Todavía no se crea ninguna cuota.
+
+### Armar el plan de cada inmueble
+
+En la pestaña **Inmuebles** pulse **Calcular reparto**. Aparece una fila por inmueble activo sin plan:
+
+| Columna | Qué significa |
+|---|---|
+| Casilla | Destíldela si el inmueble no participa (p. ej. parqueaderos). El monto se reparte entre los marcados. |
+| Paga | Propietario o arrendatario (solo si tiene uno registrado). |
+| Asignado | Lo que le toca. En blanco se calcula solo; escriba un valor para fijarlo a mano y el resto se reparte entre los demás. |
+| Anticipo | Cuánto del anticipo de clientes se usa para esta obra. **Disponible** muestra el saldo de anticipo del cliente; clic en él para usarlo completo. |
+| Cuotas | En cuántas cuotas paga lo que queda. |
+| Cuota | Valor de cada cuota. La última absorbe los centavos (p. ej. 23 de $8,33 y una de $8,41). |
+
+Arriba se ve la **diferencia** contra el monto aprobado: debe quedar en $0,00 para activar. Al
+pulsar **Activar planes**:
+
+- se crean todas las cuotas de cada inmueble, mes a mes, desde la primera;
+- si el inmueble tiene anticipo, se emite un **abono inicial** por ese valor y se cobra con la
+  forma **Anticipo**: el anticipo deja de estar pendiente y queda aplicado a la obra.
+
+Se pueden activar más inmuebles después (por ejemplo, uno que se agregó): el cálculo reparte lo
+que falta para llegar al monto aprobado.
+
+### Cómo sale cada cuota
+
+- **Con la alícuota**: cuando Suscripciones emite el recibo o factura del mes del inmueble, agrega
+  una línea «Pintura del edificio – cuota 5/24». Si había cuotas atrasadas, salen también. Después
+  de la última cuota no se agrega nada más.
+- **Aparte**: en la pestaña **Cuotas**, elija el mes en **Emitir aparte hasta**, pulse **Vista
+  previa** y luego **Emitir**. Sale un documento por inmueble con sus cuotas pendientes hasta ese
+  mes, en segundo plano, como **Generar cobro** (SRI y correo incluidos).
+- Una cuota marcada «con la alícuota» sale **aparte** cuando el inmueble no tiene una suscripción
+  activa o cuando la alícuota la paga otra persona (p. ej. la paga el arrendatario y la obra el
+  propietario). Esas cuotas aparecen en la vista previa de **Emitir aparte** con el motivo.
+
+Cada cuota sale **una sola vez**: queda marcada con el documento en que salió.
+
+### Seguimiento, cobro y acciones
+
+La pestaña **Inmuebles** muestra por inmueble: asignado, anticipo, cuota, cuotas emitidas
+(«5/24»), emitido, **cobrado** y **saldo**. Lo cobrado sale de los cobros registrados en Ingresos
+(y retenciones o notas de crédito). Si la cuota salió en el mismo documento que la alícuota y el
+condómino pagó solo una parte, ese pago cubre **primero la alícuota** y después la cuota.
+
+En el menú de cada inmueble (⋮):
+
+- **Liquidar el saldo**: emite un solo documento con todas las cuotas que faltan y cierra su plan.
+- **Cambiar número de cuotas**: reparte lo que falta en otro número de cuotas (las ya emitidas no
+  cambian; la numeración sigue, p. ej. 2/7…7/7).
+- **Cambiar quién paga**: propietario o arrendatario, para las cuotas que faltan emitir.
+- **Aplicar el anticipo (reintentar)**: aparece si el abono inicial no se pudo aplicar.
+
+En la pestaña **Cuotas** está el cronograma completo con el documento de cada cuota. Si se anula
+el documento de una cuota en Recibos o Facturas de Venta, la fila aparece tachada y el botón
+**Volver a pendiente** la deja lista para la próxima emisión.
+
+**Cerrar** (barra superior) termina la cuota extraordinaria: las cuotas que faltaban emitir se
+anulan; lo emitido y lo cobrado se conservan. Los botones **PDF** y **Excel** entregan el estado
+por inmueble.
+
+### Venta del inmueble o cambio de arrendatario
+
+Al guardar un inmueble con un propietario (o arrendatario) nuevo, si tiene cuotas extraordinarias
+por cobrar a la persona anterior, el sistema pregunta por cada una:
+
+- **Sigue con el inmueble**: las cuotas que faltan desde la fecha **Rige desde** pasan al nuevo
+  pagador. Lo ya emitido sigue a nombre del anterior.
+- **Liquidarla**: se emite al anterior un documento con todo lo que falta y su plan se cierra.
+- **Decidir después**: no cambia nada; las cuotas siguen a nombre del anterior.
 
 ## Campos del formulario
 
@@ -182,23 +287,29 @@ ejemplo (bórrelas). Columnas: `CODIGO`, `NOMBRE`, `TIPO`, `TORRE_BLOQUE`, `PISO
 | Días de gracia | Sí | 0–60, contados desde el vencimiento del recibo. Si paga dentro no hay interés. |
 | Método de alícuota | Sí | **Por %**: monto a repartir × % del inmueble. **Por m²**: tarifa × área. **Manual**: monto acordado por inmueble. |
 | Manuales con presupuesto | — | Solo con base en un presupuesto aprobado: *repartir el resto* (por defecto) o *manuales aparte*. |
-| Cuotas extraordinarias | — | No / % sobre la alícuota ordinaria / monto fijo por inmueble, en cada cuota. Producto opcional. |
+| Fondo de reserva | — | No / % sobre la alícuota ordinaria / monto fijo por inmueble, en cada cuota. Producto opcional. |
 | Valores que rigen | — | Tarifa por m² y monto mensual a repartir, cada uno con el mes desde el que rige. |
 | Reajuste de cuotas | — | Concepto, forma (fijo / % / según inmueble), parámetro, fecha de aplicación, descripción o acta, incluir suscripciones sin inmueble. |
 | Cobra intereses de mora | — | Apagado por defecto. Tasa legal vigente o % mensual fijo (0,01–20). Interés simple sobre el capital vencido. Exige su producto. |
 | Dónde se cobra el interés | — | Línea en el siguiente recibo o recibo aparte. |
 | Cobra multas | — | Apagado por defecto. Habilita cargar multas del catálogo a un inmueble. |
 | Restricción automática | — | Marca la restricción de áreas comunes al superar N meses de mora; se quita al quedar al día. |
+| Cuota extraordinaria: nombre, concepto, monto aprobado | Sí | El concepto es un servicio de Productos. Con planes activados, el monto, el reparto, el concepto y la primera cuota ya no se cambian. |
+| Cuota extraordinaria: reparto | Sí | Partes iguales o por % de alícuota, con ajuste manual por inmueble. |
+| Cuota extraordinaria: cuotas permitidas / por defecto | Sí | Números de cuotas que puede elegir cada condómino (1 a 120). |
+| Cuota extraordinaria: dónde sale | Sí | Con la alícuota (Suscripciones) o en un documento aparte. |
+| Cuota extraordinaria: documento propio y serie | Sí | Para el abono inicial, las cuotas aparte y las liquidaciones. |
+| Cuota extraordinaria: forma de cobro de anticipos | No | Vacía = la primera forma de cobro activa de tipo Anticipo. |
 
 ## Permisos
 
 | Permiso | Qué permite |
 |---|---|
 | Ver | Consultar la configuración, los condóminos, sus inmuebles, PDF y Excel. |
-| Crear | Asignar inmuebles, cargar Excel, crear multas y **emitir cobros en bloque**. |
-| Actualizar | **Guardar la configuración**, editar inmuebles, marcar o levantar restricciones, enlazar suscripciones, editar multas, registrar valores que rigen y aplicar o programar reajustes. |
-| Crear + Actualizar | **Agregar a suscripciones** (crea suscripciones y cambia valores). |
-| Eliminar | Eliminar inmuebles sin expensas emitidas, multas y valores que rigen. |
+| Crear | Asignar inmuebles, cargar Excel, crear multas, **emitir cobros en bloque**, crear cuotas extraordinarias, **activar planes** (con su abono inicial) y emitir cuotas aparte. |
+| Actualizar | **Guardar la configuración**, editar inmuebles, marcar o levantar restricciones, enlazar suscripciones, editar multas, registrar valores que rigen, aplicar o programar reajustes, editar o **cerrar** una cuota extraordinaria, cambiar el número de cuotas o quién paga y volver a pendiente una cuota. |
+| Crear + Actualizar | **Agregar a suscripciones** (crea suscripciones y cambia valores), **liquidar** el saldo de un plan y decidir la deuda al vender un inmueble. |
+| Eliminar | Eliminar inmuebles sin expensas emitidas, multas, valores que rigen y cuotas extraordinarias sin planes. |
 
 Los registros propios no aplican: la cartera del condominio es una sola y todos los usuarios con
 permiso ven todos los condóminos.
@@ -230,6 +341,16 @@ permiso ven todos los condóminos.
   vuelve a emitir solo (podría duplicarse). El sistema retoma lo pendiente en unos minutos.
 - **Agregar a suscripciones** nunca crea una segunda suscripción para el mismo inmueble con el
   mismo concepto; aplicarlo dos veces no cambia nada.
+- **Cuotas extraordinarias**: la suma de lo asignado debe igualar el monto aprobado (los centavos
+  van al inmueble de mayor monto). El anticipo a aplicar no puede superar lo asignado ni el saldo
+  de anticipo del cliente; se revalida al activar y otra vez al aplicarlo, sin que otro cobro use
+  ese mismo saldo al mismo tiempo.
+- Cada cuota sale en **un solo documento**: se marca en el mismo momento en que se graba el
+  documento. Si el documento falla, la cuota sigue pendiente para la próxima emisión. Activar dos
+  veces con el mismo clic o tras «Error de conexión» no crea planes repetidos.
+- Lo cobrado de una cuota no se guarda: se calcula siempre desde los cobros, retenciones y notas
+  de crédito del documento.
+- Una cuota extraordinaria con planes no se elimina: se **cierra**.
 
 ## Integraciones con otros módulos
 
@@ -243,6 +364,11 @@ permiso ven todos los condóminos.
 - **Recibos de Venta / Facturas de Venta / SRI**: los cobros en bloque crean documentos normales
   de esos módulos (se ven, se cobran y se anulan allí); las facturas se envían al SRI y el correo
   usa la configuración de correo de la empresa.
+- **Suscripciones (cuotas extraordinarias)**: al emitir el documento del mes de un inmueble,
+  Suscripciones agrega sus cuotas extraordinarias «con la alícuota» que estén pendientes.
+- **Ingresos (anticipos)**: el abono inicial de una cuota extraordinaria se cobra con un ingreso
+  automático con la forma de cobro **Anticipo**, que descuenta el saldo de anticipo del cliente.
+  Contablemente, el anticipo de clientes pasa a la cuenta del producto de la obra.
 
 ## Errores frecuentes
 
@@ -266,8 +392,27 @@ permiso ven todos los condóminos.
   de cada inmueble, en el módulo Suscripciones.
 - **Backspace no borra letra a letra en un buscador de cliente o producto**: es a propósito; con
   una selección hecha, Backspace o Supr limpian toda la selección.
+- **«Falta aplicar database/migrations/20261117_condominios_cuotas_extraordinarias.sql»**: la
+  pestaña Cuotas extraordinarias necesita ese SQL en la base de datos.
+- **«La suma de lo asignado no iguala el monto aprobado»**: revise los montos escritos a mano o
+  los inmuebles destildados hasta que la diferencia quede en $0,00.
+- **«El cliente no tiene ese saldo de anticipo»**: el anticipo a aplicar supera lo que el cliente
+  tiene disponible (pudo haberse usado en otro cobro). Baje el valor.
+- **El anticipo de un inmueble quedó con ⚠ «aún no aplicado»**: el abono inicial no se pudo cobrar
+  con la forma Anticipo. Use **Aplicar el anticipo (reintentar)** en el menú del inmueble.
+- **Una cuota «con la alícuota» no apareció en el recibo del mes**: el inmueble no tiene una
+  suscripción enlazada (pestaña Expensa) o la alícuota la paga otra persona. Esa cuota se emite
+  desde **Emitir aparte**.
 
 ## Historial de cambios
+
+- **1.8** — Pestaña **Cuotas extraordinarias**: obras aprobadas en asamblea pagadas a plazos, con
+  reparto en partes iguales o por % de alícuota, aplicación del anticipo de clientes (abono
+  inicial), número de cuotas por condómino, cuotas con la alícuota (Suscripciones) o aparte,
+  cobrado y saldo por inmueble, liquidación del saldo, cambio de plazo o de pagador, PDF y Excel.
+  Al vender un inmueble se pregunta si la deuda sigue con el inmueble o se liquida. El recargo
+  permanente que se sumaba a cada cuota vuelve a llamarse **Fondo de reserva** (pestaña
+  **Alícuota y fondo**).
 
 - **1.7** — El PDF de la factura o recibo que se envía por correo al cobrar usa la configuración del **establecimiento de la serie** del documento (decimales, dirección, leyendas), no la del primer establecimiento de la empresa. El logo propio del punto de emisión sigue mandando.
 - **1.6** — «Fondo de reserva» pasa a llamarse **Cuotas extraordinarias** (pestaña **Alícuota y

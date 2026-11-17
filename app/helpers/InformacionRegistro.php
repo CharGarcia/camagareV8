@@ -152,6 +152,15 @@ class InformacionRegistro
             'tabla'  => 'egresos_cabecera',
             'nombre' => 'el egreso',
         ],
+        // Configuración de condominios: el modal con pestaña Información es el de la cuota
+        // extraordinaria (condominios_aportes).
+        'modulos/condominios-config' => [
+            'tabla'  => 'condominios_aportes',
+            'nombre' => 'la cuota extraordinaria',
+            'nota'   => 'El historial muestra los cambios de la cuota extraordinaria (crear, modificar, cerrar). '
+                . 'Lo que pasa con el plan de cada inmueble (activación, anticipo, plazo, pagador, liquidación) '
+                . 'se registra en el log del sistema sobre su plan.',
+        ],
     ];
 
     /** ¿El usuario en sesión ve la pestaña? */
