@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.10** (17-11-2026). El historial está al final.
+Versión actual: **0.11** (17-11-2026). El historial está al final.
 
 ---
 
@@ -21,8 +21,9 @@ Versión actual: **0.10** (17-11-2026). El historial está al final.
 7. Reglas que no se rompen
 8. Evaluación final
 9. Lista de verificación para salir a vender
-10. Pendientes por definir
-11. Historial de versiones
+10. Metas y comisiones
+11. Pendientes por definir
+12. Historial de versiones
 
 ---
 
@@ -42,7 +43,8 @@ Al terminar la capacitación, el vendedor puede:
 
 ## 2. Programa de la capacitación
 
-Duración sugerida: **4 sesiones de 2 horas**. La dirección puede ajustarlo (P-C01).
+La capacitación la dicta **una persona externa**, **en línea**. Duración sugerida:
+**4 sesiones de 2 horas**.
 
 | Sesión | Tema | Material | Práctica |
 |---|---|---|---|
@@ -81,8 +83,9 @@ Duración sugerida: **4 sesiones de 2 horas**. La dirección puede ajustarlo (P-
 | «Tengo un taller» | Recepción con checklist, Tablero del taller, Estación en tablet. |
 | «Cobro mensualidades» | Suscripciones, Automatizaciones, cobro con tarjeta. |
 
-> **Pendiente:** confirmar la empresa y el usuario de demostración que usarán
-> los vendedores (P-C02 / P-31 de la presentación).
+> **Empresa de demostración:** la demo se hace siempre en la empresa de
+> demostración, con el **usuario y la clave de demo** que entrega la dirección
+> (no se escriben en este documento).
 
 ---
 
@@ -250,27 +253,53 @@ El vendedor está listo cuando:
 - [ ] Dio una demo completa de 20 minutos ante el capacitador.
 - [ ] Resolvió los 4 ejercicios del Cotizador sin errores.
 - [ ] Tiene usuario en el sistema con permiso en **CRM** y **Cotizador de Planes** (y crear en **Proformas**).
-- [ ] Sabe entrar a la empresa de demostración.
+- [ ] Tiene el usuario y la clave de demo y sabe entrar a la empresa de demostración.
+- [ ] Conoce sus metas y comisiones (sección 10).
 - [ ] Tiene la presentación para vendedores en su última versión.
 
 ---
 
-## 10. Pendientes por definir
+## 10. Metas y comisiones
+
+La comisión se calcula por **empresas vendidas en el mes**:
+
+| Empresas vendidas en el mes | Recibe |
+|---|---|
+| **0** | Nada. |
+| **1** | **20 % de esa venta**, sin sueldo base. |
+| **2** (cada una con un valor de **$250**) | **$450 de base**. |
+| **3 o más** | **$450 de base** + **20 % de la venta** de la tercera empresa en adelante. |
+
+**Ejemplos** *(valores ilustrativos)*:
+- Vende 1 empresa de $300 → recibe **$60** (20 % de $300).
+- Vende 2 empresas → recibe **$450**.
+- Vende 3 empresas; la tercera, de $400 → recibe $450 + $80 = **$530**.
+
+> **Por confirmar con la dirección (P-C06):** si los $250 son el valor
+> **mínimo** de cada empresa para contar en la meta; si «la venta» es el valor
+> **sin IVA** y de qué modalidad (anual, semestral o mensual); y si cuenta al
+> aprobarse la proforma o cuando el cliente **paga**.
+
+---
+
+## 11. Pendientes por definir
 
 | # | Pendiente |
 |---|---|
-| P-C01 | Duración y modalidad de la capacitación (presencial / en línea) y quién la dicta. |
-| P-C02 | Empresa y usuario de **demostración** para los vendedores (igual que P-31 de la presentación). |
-| P-C03 | **Metas** de venta y **comisiones** de los vendedores (no se incluyen aquí hasta que la dirección las defina). |
+| P-C01 | ✅ **Resuelto (17-11-2026):** la dicta una persona externa, en línea. |
+| P-C02 | ✅ **Resuelto (17-11-2026):** hay empresa de demostración con usuario y clave de demo. |
+| P-C03 | ✅ **Resuelto (17-11-2026):** metas y comisiones en la sección 10. |
+| P-C06 | Detalles de la comisión: ¿$250 es el mínimo por empresa? ¿«La venta» es sin IVA y de qué modalidad? ¿Cuenta al aprobar la proforma o al pagar el cliente? |
 | P-C04 | ✅ **Resuelto (17-11-2026):** emprendedores, comercios y empresas obligadas a llevar contabilidad, en todo el Ecuador (sección 2.6 de la presentación). |
 | P-C05 | Precios reales cargados en el Cotizador para practicar con valores verdaderos (los carga la dirección en el catálogo de precios). |
 
 ---
 
-## 11. Historial de versiones
+## 12. Historial de versiones
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.11 | 17-11-2026 | Nueva sección 10 «Metas y comisiones». Capacitación externa en línea; empresa de demostración. P-C01, P-C02 y P-C03 resueltos; nuevo P-C06 |
 | 0.10 | 17-11-2026 | Regla 2: el precio puede subir o bajar en la renovación. |
 | 0.9 | 17-11-2026 | Descuento comercial hasta 10 % en las reglas. |
 | 0.8 | 17-11-2026 | Perfiles prioritarios y zona definidos (P-C04). |

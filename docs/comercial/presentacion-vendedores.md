@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.31** (17-11-2026). El historial de cambios está al final.
+Versión actual: **0.32** (17-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -28,12 +28,22 @@ Al final: **Pendientes por definir** (lista única) e **Historial de versiones**
 
 ### 1.1 Nombre
 
-**CaMaGaRe** — sistema de gestión empresarial en la nube para empresas del
+**CaMaGaRe ERP** — sistema de gestión empresarial en la nube para empresas del
 Ecuador.
 
-> **Pendiente:** ¿qué significa el nombre? ¿Hay una historia detrás que el
-> vendedor pueda contar (quién lo creó, desde cuándo, por qué)? Una historia
-> real de origen genera confianza en la primera reunión.
+**Qué significa el nombre:** cada sílaba es una de las cuatro cosas que hace
+el sistema por la empresa.
+
+| Sílaba | Significa |
+|---|---|
+| **Ca** | **C**ontrol **A**dministrativo |
+| **Ma** | **M**anejo **A**utomatizado |
+| **Ga** | **G**estión **A**nalítica |
+| **Re** | **R**esultados **E**mpresariales |
+
+> **Para decirlo en la reunión:** *«CaMaGaRe quiere decir Control
+> Administrativo, Manejo Automatizado, Gestión Analítica y Resultados
+> Empresariales: eso es lo que hace por su negocio.»*
 
 ### 1.2 Misión ✅
 
@@ -694,7 +704,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | **Ayuda dentro del sistema** | Manual en línea, asistente con IA y novedades. | Sección 5.3 |
 | **App móvil** | Android e iPhone/iPad (en iPhone, empresas con 2 o más usuarios). | Sección 5.1 |
 | **Aviso de mantenimientos** | Los mantenimientos programados se avisan con anticipación. | Contrato, QUINTA |
-| **Mejoras del sistema** | *Por definir:* ¿las mejoras y módulos nuevos de lo contratado van incluidos sin costo? | P-28 |
+| **Mejoras del sistema** | Las mejoras y novedades de los módulos contratados van **incluidas, sin costo**. | P-28 |
 
 ### 7.2 Lo que NO cubre la membresía (se cobra aparte o lo pone el cliente)
 
@@ -705,8 +715,8 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | **Firma electrónica** | La emite una entidad certificadora. CaMaGaRe también la vende aparte (módulo Firmas electrónicas). |
 | **Servicio contable y declaraciones** | El sistema prepara la información; la contabilidad y las declaraciones las hace el cliente o su contador. |
 | **Computadores, impresoras, internet** | Equipos y conexión los pone el cliente. |
-| **Costos de terceros** | Comisiones de pasarelas de pago (Payphone, Nuvei, Kushki) y, si aplica, costos de WhatsApp de Meta. *Confirmar* (P-29). |
-| **Desarrollos a la medida** | *Por definir* si se ofrecen y cómo se cobran (P-30). |
+| **Costos de terceros** | Comisiones de pasarelas de pago (Payphone, Nuvei, Kushki) y costos de WhatsApp de Meta **tienen costo**. Los pone el **usuario administrador** de la empresa cliente. |
+| **Desarrollos a la medida** | **Sí se ofrecen**, con una **cotización aparte**, fuera de la suscripción. |
 
 ---
 
@@ -805,7 +815,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 |---|---|---|---|
 | 1 | **Prospección** | Identifica clientes de los perfiles prioritarios: emprendedores, comercios y empresas obligadas a llevar contabilidad (sección 2.6), en todo el Ecuador. Registra el contacto. | CRM (contactos, Bandeja social) |
 | 2 | **Descubrimiento** | Hace las preguntas de la sección 2.3 y anota el problema principal. | CRM (actividad o nota) |
-| 3 | **Demo** | Empieza por el problema del cliente, no por la lista de módulos. Muestra 2 o 3 cosas que lo resuelven. | Sistema (empresa de demostración) |
+| 3 | **Demo** | Empieza por el problema del cliente, no por la lista de módulos. Muestra 2 o 3 cosas que lo resuelven. | Sistema: **empresa de demostración** con usuario y clave de demo (los entrega la dirección; no van en este documento) |
 | 4 | **Cotización** | Arma el precio con el RUC, los locales, los módulos y los usuarios. Muestra anual y mensual. | Cotizador de Planes |
 | 5 | **Proforma** | La genera desde la cotización y la envía por correo o WhatsApp; el cliente la aprueba con un botón. | Cotizador → Proformas |
 | 6 | **Seguimiento** | Agenda actividades con fecha (llamar, reunión) hasta la respuesta. | CRM (oportunidad y actividades) |
@@ -831,7 +841,7 @@ actualiza su sección y se tacha aquí.
 ### A. Identidad
 | # | Pendiente | Sección |
 |---|---|---|
-| P-01 | Significado del nombre **CaMaGaRe** y su historia de origen (quién lo creó, desde cuándo, por qué). | 1.1 |
+| P-01 | ✅ **Resuelto (17-11-2026):** CaMaGaRe ERP = Control Administrativo · Manejo Automatizado · Gestión Analítica · Resultados Empresariales. | 1.1 |
 | P-02 | ✅ **Resuelto (16-11-2026):** discurso ajustado a lo definido (puesta en marcha por CaMaGaRe, capacitación en línea, soporte de lunes a viernes). | 1.5 |
 
 ### B. Cliente y mercado
@@ -882,10 +892,10 @@ actualiza su sección y se tacha aquí.
 ### G. Nuevos (v0.17)
 | # | Pendiente | Sección |
 |---|---|---|
-| P-28 | ¿Las **mejoras y módulos nuevos** de lo contratado van incluidos en la suscripción sin costo? | 7.1 |
-| P-29 | Confirmar **costos de terceros** que paga el cliente: comisiones de pasarelas de pago y costos de WhatsApp de Meta. | 7.2 |
-| P-30 | ¿Se ofrecen **desarrollos a la medida**? ¿Cómo se cobran? | 7.2 |
-| P-31 | ¿Hay una **empresa de demostración** para las demos de los vendedores? ¿Con qué usuario? | 10 |
+| P-28 | ✅ **Resuelto (17-11-2026):** las mejoras de lo contratado van incluidas sin costo. | 7.1 |
+| P-29 | ✅ **Resuelto (17-11-2026):** los servicios de terceros tienen costo; los configura el usuario administrador de la empresa cliente. | 7.2 |
+| P-30 | ✅ **Resuelto (17-11-2026):** sí, con cotización aparte. | 7.2 |
+| P-31 | ✅ **Resuelto (17-11-2026):** hay empresa de demostración con usuario y clave de demo (los entrega la dirección). | 10 |
 | P-32 | Activar en los usuarios del cliente los módulos vendidos (propuesta en `docs/diseno/cotizador-planes-fase1.md` §7.1, aplazada). | 5.2 |
 | P-33 | Incluir en el **Contrato de uso** que el precio puede **subir o bajar en cada renovación**. El texto inicial de la cláusula TERCERA solo dice «el valor y la periodicidad acordados». Revisarlo junto con P-27. | 5.4, 8 |
 
@@ -895,6 +905,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.32 | 17-11-2026 | Significado del nombre (CaMaGaRe ERP), mejoras incluidas, costos de terceros, desarrollos a la medida y empresa de demostración. P-01, P-28, P-29, P-30 y P-31 resueltos |
 | 0.31 | 17-11-2026 | P-16 se resuelve en el Cotizador; los cupos de usuarios los controla un usuario nivel 3 (6.2). Bloque Precios cerrado |
 | 0.30 | 17-11-2026 | En la próxima renovación el precio puede subir o bajar: secciones 5.4, 6.2, 8.3 y preguntas frecuentes. Nuevo P-33 (incluirlo en el contrato) |
 | 0.29 | 17-11-2026 | Precios, dependencias y base/adicional se definen en el Cotizador; descuento comercial del vendedor hasta 10 %. P-13, P-14, P-15 y P-18 resueltos |
