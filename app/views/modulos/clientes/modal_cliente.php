@@ -279,6 +279,12 @@ if (!defined('LEAFLET_LOADED')) {
                                         <h6 class="mb-0 fw-bold text-danger" id="stat_anuladas">0</h6>
                                     </div>
                                 </div>
+                                <div class="col-12 mt-3">
+                                    <label for="cliente_observaciones" class="form-label small fw-bold"><i class="bi bi-chat-left-text me-1"></i>Observaciones</label>
+                                    <textarea class="form-control form-control-sm" name="observaciones" id="cliente_observaciones"
+                                              rows="4" maxlength="1000" autocomplete="off"
+                                              placeholder="Ej.: quién solicitó crear el cliente, cliente VIP, indicaciones de trato…"></textarea>
+                                    <div class="form-text text-muted" style="font-size: 10px;">Nota interna: no sale en facturas ni en otros documentos.</div>                                </div>
                             </div>
                         </div>
 

@@ -1279,6 +1279,8 @@ class ClientesController extends BaseModuloController
             'monto_maximo_auto_cobro' => isset($_POST['monto_maximo_auto_cobro']) && $_POST['monto_maximo_auto_cobro'] !== '' ? (float)$_POST['monto_maximo_auto_cobro'] : null,
             'latitud'          => isset($_POST['latitud']) && $_POST['latitud'] !== '' ? (float)$_POST['latitud'] : null,
             'longitud'         => isset($_POST['longitud']) && $_POST['longitud'] !== '' ? (float)$_POST['longitud'] : null,
+            // Observaciones internas del cliente (pestaña Comercial): texto libre, tope 1000.
+            'observaciones'    => trim($_POST['observaciones'] ?? '') !== '' ? mb_substr(trim($_POST['observaciones']), 0, 1000) : null,
         ] + $this->recogerDatosVisita();
     }
 

@@ -563,7 +563,7 @@ class ClienteRepository extends BaseRepository
                     monto_minimo_auto_cobro, monto_maximo_auto_cobro, id_ingreso_concepto_predeterminado,
                     latitud, longitud, geocodificado_en,
                     dias_visita, frecuencia_visita, semanas_visita, orden_visita,
-                    hora_visita_desde, hora_visita_hasta, observacion_visita,
+                    hora_visita_desde, hora_visita_hasta, observacion_visita, observaciones,
                     created_by, created_at, eliminado
                 ) VALUES (
                     :id_empresa, :id_usuario, :nombre, :tipo_id, :identificacion, :telefono, :email,
@@ -572,7 +572,7 @@ class ClienteRepository extends BaseRepository
                     :monto_minimo_auto_cobro, :monto_maximo_auto_cobro, :id_ingreso_concepto_predeterminado,
                     :latitud::numeric, :longitud::numeric, :geocodificado_en::timestamp,
                     :dias_visita::smallint[], :frecuencia_visita, :semanas_visita::smallint[], :orden_visita,
-                    :hora_visita_desde::time, :hora_visita_hasta::time, :observacion_visita,
+                    :hora_visita_desde::time, :hora_visita_hasta::time, :observacion_visita, :observaciones,
                     :id_u, CURRENT_TIMESTAMP, false
                 )";
         $st = $this->db->prepare($sql);
@@ -610,6 +610,7 @@ class ClienteRepository extends BaseRepository
             ':hora_visita_desde' => $data['hora_visita_desde'] ?? null,
             ':hora_visita_hasta' => $data['hora_visita_hasta'] ?? null,
             ':observacion_visita' => $data['observacion_visita'] ?? null,
+            ':observaciones'      => $data['observaciones'] ?? null,
             ':id_u'             => $data['id_usuario']
         ]);
         return (int) $this->db->lastInsertId('clientes_id_seq');
@@ -626,6 +627,12 @@ class ClienteRepository extends BaseRepository
         $campoCodificado = $tieneCoordenadas
             ? "geocodificado_en = CURRENT_TIMESTAMP,"
             : "";
+
+        // Observaciones: solo se toca si el llamador la envía (la ficha del cliente).
+        // La app móvil y otros módulos que actualizan clientes no la mandan y no deben borrarla.
+        $tocaObservaciones = array_key_exists('observaciones', $data);
+        $campoObservaciones = $tocaObservaciones ? "observaciones = :observaciones," : "";
+        $paramsObs = $tocaObservaciones ? [':observaciones' => $data['observaciones']] : [];
 
         $sql = "UPDATE {$this->table} SET
                 nombre = :nombre,
@@ -654,13 +661,14 @@ class ClienteRepository extends BaseRepository
                 hora_visita_desde = :hora_visita_desde::time,
                 hora_visita_hasta = :hora_visita_hasta::time,
                 observacion_visita = :observacion_visita,
+                {$campoObservaciones}
                 {$campoCodificado}
                 updated_by = :id_u,
                 updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
 
         $st = $this->db->prepare($sql);
-        return $st->execute([
+        return $st->execute($paramsObs + [
             ':nombre'           => $data['nombre'],
             ':tipo_id'          => $data['tipo_id'],
             ':identificacion'   => $data['identificacion'],

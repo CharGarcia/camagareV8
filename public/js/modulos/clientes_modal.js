@@ -1086,6 +1086,7 @@
         setV('cliente_monto_maximo_auto_cobro', data.monto_maximo_auto_cobro);
 
         cliAplicarConceptoIngreso(data.id_ingreso_concepto_predeterminado);
+        setV('cliente_observaciones', data.observaciones);
 
         cliPoblarVisitas(data);
 

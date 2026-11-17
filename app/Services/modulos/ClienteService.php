@@ -267,6 +267,8 @@ class ClienteService
                 // El orden sí es relativo a la ruta de un vendedor concreto y el
                 // vendedor no se copia (queda null), así que arrancaría desfasado.
                 'orden_visita'       => null,
+                // Las observaciones son notas internas de la empresa origen: no se copian.
+                'observaciones'      => null,
             ];
 
             $this->rules->validar($nuevo);
