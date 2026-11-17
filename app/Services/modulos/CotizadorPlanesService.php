@@ -19,6 +19,9 @@ use App\Services\LogSistemaService;
  */
 class CotizadorPlanesService
 {
+    /** Condición de precio en la renovación: va igual en el PDF de la cotización y en el anexo de la proforma. */
+    public const CONDICION_RENOVACION = 'Los precios valen para el periodo contratado. En la próxima renovación se aplican los precios vigentes en ese momento, que pueden subir o bajar.';
+
     public const MODULO_GUARDADO = 'cotizador_planes';
 
     public function __construct(
@@ -1012,6 +1015,7 @@ class CotizadorPlanesService
               . $this->pct($p['recargo_mensual_pct']) . ' más. '
               . 'El descuento por establecimiento adicional (' . $this->pct($p['descuento_establecimiento_pct']) . ') aplica solo en el plan anual; '
               . 'el establecimiento con el plan base de mayor valor paga el precio completo.</p>';
+        $out .= '<p>' . htmlspecialchars(self::CONDICION_RENOVACION, ENT_QUOTES, 'UTF-8') . '</p>';
         return $out;
     }
 

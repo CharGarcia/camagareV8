@@ -425,6 +425,7 @@ class CotizadorPlanesPdfService
                 . ' de descuento en sus módulos base, solo en plan anual; el establecimiento con los módulos base de mayor valor paga el precio completo.',
             'Incluye ' . (int) ($p['usuarios_por_establecimiento'] ?? 0) . ' usuarios por establecimiento, compartidos en el RUC. Usuario adicional: '
                 . $this->money((float) ($p['precio_usuario_adicional_anual'] ?? 0)) . ' al año.',
+            CotizadorPlanesService::CONDICION_RENOVACION,
         ];
         if (trim((string) ($c['observaciones'] ?? '')) !== '') {
             $notas[] = trim((string) $c['observaciones']);

@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, paquetes, paquete, precio fijo del paquete, modulo incluido, incluido, sin costo, modulo gratis, dependencia sin costo, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.10
+version: 1.11
 orden: 0
 estado: activo
 ---
@@ -108,7 +108,8 @@ el usuario y en el vendedor). Sin ese vínculo no puede guardar cotizaciones.
    - Con el botón **PDF** (barra superior de la ventana) se obtiene la
      cotización en PDF, con el logo y el diseño de los demás documentos:
      cliente, establecimientos con sus módulos, resumen anual y mensual, pago
-     único y condiciones. Si hay cambios sin guardar, primero se guardan. Al
+     único y condiciones (entre ellas, que en la próxima renovación los
+     precios pueden subir o bajar). Si hay cambios sin guardar, primero se guardan. Al
      pulsarlo pregunta si imprimir, descargar o ver.
 6. Pulse **Generar proforma** y elija la serie. El sistema:
    - registra al cliente en *Clientes* si todavía no existe;
@@ -213,7 +214,8 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
   vendedor. Si el CRM no está instalado, la proforma se crea igual y se avisa.
 - **Proformas**: una línea resumen con el producto del plan, las líneas de
   pago único y el detalle completo en el **anexo de condiciones**, que viaja
-  con el correo de la proforma.
+  con el correo de la proforma. El anexo y el PDF avisan que los precios valen
+  para el periodo contratado y que en la renovación pueden subir o bajar.
 - Toda acción queda en el registro de auditoría; la pestaña **Información**
   (niveles 2 y 3) muestra quién creó y modificó la cotización.
 
@@ -258,3 +260,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.8** — El detalle de un paquete también se abre en su propia ventana.
 - **1.9** — Toda cotización queda atada a un **vendedor** (obligatorio): nivel 1, el vinculado a su usuario y fijo; niveles 2 y 3 lo eligen. El listado y el PDF muestran ese vendedor.
 - **1.10** — El vendedor viene puesto por defecto y solo el superadministrador (nivel 3) lo cambia; los niveles 1 y 2 cotizan a nombre de su vendedor.
+- **1.11** — El PDF de la cotización y el anexo de la proforma avisan que en la próxima renovación los precios pueden subir o bajar.
