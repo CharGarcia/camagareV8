@@ -407,6 +407,39 @@ class FormaPagoRepository extends BaseRepository
      * no tienen orden van al final, por nombre). Lo piden Ingresos y Egresos; el resto de módulos
      * sigue listando por nombre.
      */
+    /** Nombre de la forma interna con la que se registra el traslado de un saldo a favor a anticipo. */
+    public const NOMBRE_FORMA_TRASLADO_SALDO_FAVOR = 'Saldo a favor de factura (traslado a anticipo)';
+
+    /**
+     * Forma de cobro INTERNA del traslado de saldo a favor de una factura al anticipo del
+     * cliente (SaldoFavorVentaService::pasarAAnticipo). Un ingreso exige una forma de cobro,
+     * pero aquí no entra dinero: es tipo OTRO (no monetaria, no cuenta en caja ni bancos) y
+     * queda INACTIVA para que no aparezca en los selectores de cobro. No necesita cuenta
+     * contable: el asiento del traslado no usa la forma (AsientoBuilderService::
+     * asientoTrasladoSaldoFavor). Se crea sola la primera vez que la empresa la necesita.
+     */
+    public function getIdFormaTrasladoSaldoFavor(int $idEmpresa, int $idUsuario): int
+    {
+        $st = $this->db->prepare(
+            "SELECT id FROM {$this->table}
+             WHERE id_empresa = :e AND eliminado = FALSE AND tipo = 'OTRO' AND nombre = :n
+             ORDER BY id ASC LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':n' => self::NOMBRE_FORMA_TRASLADO_SALDO_FAVOR]);
+        $id = $st->fetchColumn();
+        if ($id !== false) {
+            return (int) $id;
+        }
+        return $this->create([
+            'id_empresa' => $idEmpresa,
+            'nombre'     => self::NOMBRE_FORMA_TRASLADO_SALDO_FAVOR,
+            'tipo'       => 'OTRO',
+            'aplica_en'  => 'INGRESO',
+            'activo'     => false,
+            'usuario_id' => $idUsuario,
+        ]);
+    }
+
     public function getFormasFiltradas(int $idEmpresa, string $flujo, bool $ordenConfigurado = false): array
     {
         $orderBy = ($ordenConfigurado && $this->tieneColumnasPresentacion())

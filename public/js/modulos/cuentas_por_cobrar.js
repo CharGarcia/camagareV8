@@ -397,7 +397,10 @@ function CXC_filaHtml(r, cols) {
     const selec    = CXC_seleccionados.has(key);
 
     let badgeHtml, rowClass = '';
-    if (saldo <= 0) {
+    if (saldo <= -0.005) {
+        // Cobros + retenciones + notas de crédito superan el total: saldo a favor del cliente.
+        badgeHtml = `<span class="badge badge-afavor rounded-pill small px-2" title="Lo abonado supera el total del documento: saldo a favor del cliente de $${Math.abs(saldo).toFixed(2)}">Saldo a favor</span>`;
+    } else if (saldo <= 0) {
         badgeHtml = `<span class="badge badge-pagada rounded-pill small px-2">Pagada</span>`;
     } else if (dias > 90) {
         badgeHtml = `<span class="badge badge-vencida rounded-pill small px-2">+90d vencida</span>`;

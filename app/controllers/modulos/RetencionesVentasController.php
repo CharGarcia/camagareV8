@@ -731,7 +731,21 @@ class RetencionesVentasController extends BaseModuloController
                 $mensaje = 'Retención registrada exitosamente.';
             }
 
-            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
+            // Si con esta retención alguna factura queda cobrada de más (ya estaba cobrada o
+            // tiene nota de crédito), se avisa el saldo a favor del cliente. No bloquea.
+            $numerosSustento = [];
+            foreach ((array) ($data['lineas'] ?? []) as $linea) {
+                if (!empty($linea['num_doc_sustento'])) {
+                    $numerosSustento[] = (string) $linea['num_doc_sustento'];
+                }
+            }
+            $avisoFavor = (new \App\Services\modulos\SaldoFavorVentaService())->aviso(
+                (int) $data['id_empresa'],
+                !empty($data['id_venta']) ? [(int) $data['id_venta']] : [],
+                $numerosSustento
+            );
+
+            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id, 'aviso_saldo_favor' => $avisoFavor]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

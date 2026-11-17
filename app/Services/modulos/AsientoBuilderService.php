@@ -4713,6 +4713,13 @@ class AsientoBuilderService
         $sinConceptoCabecera = ($ingreso['concepto_nombre'] ?? null) === null;
         $respaldoLineas = $sinConceptoCabecera ? $this->conceptoMigracionRespaldo($db, $idEmpresa, 'ingreso') : null;
 
+        // Traslado del saldo a favor de una factura al anticipo del cliente: no entra dinero,
+        // así que no hay pata banco/caja. Debe Cuentas por Cobrar / Haber Anticipo de clientes.
+        $traslado = $this->asientoTrasladoSaldoFavor($db, $idEmpresa, $idIngreso, $ingreso, $conceptoIdCuenta);
+        if ($traslado !== null) {
+            return $traslado;
+        }
+
         // ── DEBE: formas de cobro (banco/caja) → config Cobros/Pagos ──
         [$detalles, $totalMovido] = $this->lineasFormas($idEmpresa, $idIngreso, 'ingreso');
         if ($totalMovido <= 0) {
@@ -4793,6 +4800,128 @@ class AsientoBuilderService
                     'referencia_detalle' => $linea['referencia'],
                 ];
             }
+        }
+
+        return $detalles;
+    }
+
+    /**
+     * Asiento de un ingreso que TRASLADA el saldo a favor de una factura (cobrada de más: sus
+     * cobros + retenciones + notas de crédito superan el total) al anticipo del cliente. Se
+     * reconoce por sus líneas `SALDO_FAVOR` (AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR; lo
+     * crea SaldoFavorVentaService::pasarAAnticipo). No mueve dinero:
+     *   DEBE : Cuentas por Cobrar de la factura — la misma distribución que la factura cargó
+     *          en su propio asiento (como hace el cobro, pero al revés: aquí la cartera, que
+     *          quedó en negativo, vuelve a cero). Sin asiento propio: la cuenta oficial.
+     *   HABER: cuenta del concepto del ingreso (Anticipo de clientes), por el total.
+     * La forma de cobro del ingreso es solo un marcador y no interviene.
+     *
+     * Devuelve null si el ingreso no es un traslado. Si falta alguna cuenta, las líneas salen
+     * descuadradas a propósito (con su motivo) para que el asiento no se genere.
+     */
+    private function asientoTrasladoSaldoFavor(\PDO $db, int $idEmpresa, int $idIngreso, array $ingreso, int $conceptoIdCuenta): ?array
+    {
+        $st = $db->prepare(
+            "SELECT d.id_referencia_documento AS id_venta, SUM(d.monto_cobrado) AS monto,
+                    MAX(d.numero_documento) AS numero_documento, v.id_cliente
+             FROM ingresos_detalle d
+             LEFT JOIN ventas_cabecera v ON v.id = d.id_referencia_documento
+             WHERE d.id_ingreso = :id AND d.tipo_documento = :tipo
+             GROUP BY d.id_referencia_documento, v.id_cliente"
+        );
+        $st->execute([':id' => $idIngreso, ':tipo' => \App\Helpers\AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR]);
+        $docs = $st->fetchAll(\PDO::FETCH_ASSOC);
+        if (empty($docs)) {
+            return null;
+        }
+
+        $detalles = [];
+        $total    = 0.0;
+        $numeros  = [];
+        foreach ($docs as $doc) {
+            $monto = round((float) $doc['monto'], 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $total     = round($total + $monto, 2);
+            $idCliente = (int) ($doc['id_cliente'] ?? 0);
+            $numCorto  = self::secuencialCorto((string) ($doc['numero_documento'] ?? ''));
+            if ($numCorto !== '') {
+                $numeros[$numCorto] = true;
+            }
+
+            // Cuentas de cartera que la factura cargó en su propio asiento.
+            $stDebe = $db->prepare(
+                "SELECT d.id_cuenta_contable, SUM(d.debe) AS monto
+                 FROM asientos_contables_cabecera c
+                 INNER JOIN asientos_contables_detalle d ON d.id_asiento = c.id
+                 WHERE c.modulo_origen = 'factura_venta' AND c.id_referencia_origen = :id_doc
+                   AND c.id_empresa = :emp AND c.eliminado = false AND c.estado != 'anulado'
+                   AND d.eliminado = false AND d.debe > 0
+                 GROUP BY d.id_cuenta_contable"
+            );
+            $stDebe->execute([':id_doc' => (int) $doc['id_venta'], ':emp' => $idEmpresa]);
+            $cartera = $this->soloLineasDeCartera(
+                $db, $idEmpresa, $stDebe->fetchAll(\PDO::FETCH_ASSOC), self::SLOT_CARTERA_VENTAS['FACTURA']
+            );
+            $totalCartera = round((float) array_sum(array_column($cartera, 'monto')), 2);
+
+            if (empty($cartera) || $totalCartera <= 0) {
+                // Factura sin asiento propio (migrada o aún sin contabilizar): cuenta oficial.
+                $oficial  = $this->programadoRepo->getCuentaOficialPorComportamiento($idEmpresa, 'FACTURA_VENTA', $idCliente ?: null, 'cliente');
+                $idCuenta = (int) ($oficial['id_cuenta'] ?? 0);
+                if ($idCuenta <= 0) {
+                    $this->registrarFaltanteContrapartida('ingreso', 'FACTURA_VENTA', (string) ($ingreso['concepto_nombre'] ?? ''));
+                    continue; // sin cuenta → descuadre intencional
+                }
+                $cartera      = [['id_cuenta_contable' => $idCuenta, 'monto' => 1]];
+                $totalCartera = 1.0;
+            }
+
+            $ref       = 'Saldo a favor de factura de venta ' . ($numCorto !== '' ? $numCorto : (string) $doc['id_venta']) . ' pasado a anticipo';
+            $acumulado = 0.0;
+            $ultima    = null;
+            foreach ($cartera as $c) {
+                $parte = round($monto * (round((float) $c['monto'], 2) / $totalCartera), 2);
+                $linea = [
+                    'id_cuenta_contable' => (int) $c['id_cuenta_contable'],
+                    'debe'               => $parte,
+                    'haber'              => 0.0,
+                    'referencia_detalle' => $ref,
+                ];
+                if ($idCliente > 0) {
+                    $linea['id_entidad']   = $idCliente;
+                    $linea['tipo_entidad'] = 'cliente';
+                }
+                $detalles[] = $linea;
+                $ultima     = array_key_last($detalles);
+                $acumulado  = round($acumulado + $parte, 2);
+            }
+            // El redondeo del reparto lo absorbe la última línea de esta factura.
+            $dif = round($monto - $acumulado, 2);
+            if ($dif != 0.0 && $ultima !== null) {
+                $detalles[$ultima]['debe'] = round($detalles[$ultima]['debe'] + $dif, 2);
+            }
+        }
+        if ($total <= 0) {
+            return [];
+        }
+
+        if ($conceptoIdCuenta > 0) {
+            $detalles[] = [
+                'id_cuenta_contable' => $conceptoIdCuenta,
+                'debe'               => 0.0,
+                'haber'              => $total,
+                'referencia_detalle' => 'Anticipo del cliente por saldo a favor de factura'
+                    . (count($numeros) > 1 ? 's' : '') . ' de venta ' . implode(', ', array_keys($numeros)),
+            ];
+        } else {
+            $this->registrarFaltanteContrapartida(
+                'ingreso',
+                (string) ($ingreso['concepto_comportamiento'] ?? ''),
+                (string) ($ingreso['concepto_nombre'] ?? ''),
+                strtoupper(trim((string) ($ingreso['concepto_estado'] ?? 'ACTIVO'))) === 'INACTIVO'
+            );
         }
 
         return $detalles;

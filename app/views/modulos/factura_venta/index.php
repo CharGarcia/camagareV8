@@ -258,6 +258,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     ['v' => 'pendiente', 'l' => 'Pendiente'],
                     ['v' => 'abonada',   'l' => 'Abonada'],
                     ['v' => 'pagada',    'l' => 'Pagada'],
+                    ['v' => 'favor',     'l' => 'Saldo a favor'],
                 ]],
                 ['tab' => $tF, 'key' => 'correo',  'label' => 'Correo',           'icon' => 'bi-envelope',       'type' => 'select',     'grupo' => 'Documento', 'col' => 2, 'options' => [
                     ['v' => 'enviado',   'l' => 'Enviado'],
@@ -492,9 +493,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                             $nc           = (float)($r['total_nc'] ?? 0);
                             $retencion    = (float)($r['total_retencion'] ?? 0);
                             $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
+                            // Cobrada de más (p. ej. retención + NC por el total): saldo a favor del cliente.
+                            $aFavor       = \App\controllers\modulos\FacturaVentaController::saldoAFavorFila($r);
 
                             if ($estado === 'anulado') {
                                 $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>';
+                            } elseif ($aFavor > 0) {
+                                $estadoPagoBadge = \App\controllers\modulos\FacturaVentaController::badgeSaldoAFavor($aFavor);
                             } elseif (round($saldo, 2) <= 0) {
                                 $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
                             } elseif (($cobrado + $nc + $retencion) > 0) {
@@ -518,7 +523,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <td class="text-end" data-col="propina">$<?= number_format((float)($r['propina'] ?? 0), 2) ?></td>
                                 <td class="text-end fw-bold" data-col="importe_total">$<?= number_format((float)($r['importe_total'] ?? 0), 2) ?></td>
                                 <?php $saldoMostrar = $estado === 'anulado' ? 0.0 : $saldo; ?>
+                                <?php if ($aFavor > 0): ?>
+                                <td class="text-end fw-bold text-primary" data-col="saldo_pendiente" title="Saldo a favor del cliente">-$<?= number_format($aFavor, 2) ?></td>
+                                <?php else: ?>
                                 <td class="text-end fw-bold <?= round($saldoMostrar, 2) > 0 ? 'text-danger' : 'text-success' ?>" data-col="saldo_pendiente">$<?= number_format($saldoMostrar, 2) ?></td>
+                                <?php endif; ?>
                                 <td data-col="vendedor_nombre"><?= htmlspecialchars($r['vendedor_nombre'] ?? '-') ?></td>
                                 <td data-col="observaciones" class="text-truncate" style="max-width:180px"><?= htmlspecialchars($r['observaciones'] ?? '') ?></td>
                                 <td data-col="usuario_nombre"><?= htmlspecialchars($r['usuario_nombre'] ?? '-') ?></td>
@@ -1007,9 +1016,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         </div>
                                     </div>
                                     <div class="col">
-                                        <div class="border rounded-3 p-2 bg-danger bg-opacity-10 border-danger border-opacity-25 text-center shadow-sm">
-                                            <div class="text-danger mb-0 fw-semibold text-nowrap" style="font-size: 0.72rem;">Saldo Pendiente</div>
-                                            <div class="fw-bold text-danger mb-0" style="font-size: 1.1rem;">$ <span id="fvPagoSaldoPendiente">0.00</span></div>
+                                        <!-- Pasa a «Saldo a favor» (azul) cuando cobros + retenciones + NC superan el total: ver _fvSetTarjetas() -->
+                                        <div class="border rounded-3 p-2 bg-danger bg-opacity-10 border-danger border-opacity-25 text-center shadow-sm" id="fvPagoSaldoCard">
+                                            <div class="text-danger mb-0 fw-semibold text-nowrap" style="font-size: 0.72rem;" id="fvPagoSaldoLabel">Saldo Pendiente</div>
+                                            <div class="fw-bold text-danger mb-0" style="font-size: 1.1rem;" id="fvPagoSaldoValor">$ <span id="fvPagoSaldoPendiente">0.00</span></div>
                                         </div>
                                     </div>
                                 </div>
@@ -1172,6 +1182,18 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                             <i class="bi bi-check-circle-fill fs-2 mb-2 text-success d-block"></i>
                                             <h6 class="fw-bold mb-1 text-success">¡Factura Completamente Cobrada!</h6>
                                             <p class="text-muted mb-0" style="font-size: 0.75rem;">El saldo pendiente de esta factura es de $0.00.</p>
+                                        </div>
+
+                                        <!-- Cobrada de más: saldo a favor del cliente -->
+                                        <div class="alert alert-primary border-primary border-opacity-25 text-center py-4 shadow-sm mb-0 d-none" id="fvPagoAlertaFavor">
+                                            <i class="bi bi-arrow-left-right fs-2 mb-2 text-primary d-block"></i>
+                                            <h6 class="fw-bold mb-1 text-primary">Saldo a favor del cliente: $ <span id="fvPagoFavorMonto">0.00</span></h6>
+                                            <p class="text-muted mb-2" style="font-size: 0.75rem;" id="fvPagoFavorDetalle"></p>
+                                            <p class="text-muted mb-2" style="font-size: 0.75rem;">Ese valor debe devolverse al cliente o aplicarse a otra factura. Si el cliente anuló su comprobante de retención, elimine la retención y el saldo a favor desaparece.</p>
+                                            <button type="button" class="btn btn-primary btn-sm fw-bold shadow-sm" id="fvPagoBtnFavorAnticipo" onclick="fvPasarSaldoFavorAnticipo()"
+                                                    title="Registra un ingreso de anticipo del cliente por este valor, sin movimiento de dinero, para aplicarlo después a otra factura">
+                                                <i class="bi bi-arrow-right-circle me-1"></i>Pasar a anticipo del cliente
+                                            </button>
                                         </div>
 
                                         <!-- Factura anulada -->
@@ -3073,6 +3095,7 @@ $totalPages = $totalPagesOriginal;
         if (elTotalND) elTotalND.textContent = '0.00';
         const elSaldo = document.getElementById('fvPagoSaldoPendiente');
         if (elSaldo) elSaldo.textContent = '0.00';
+        if (typeof _fvPintarSaldoFavor === 'function') _fvPintarSaldoFavor(0, 0, 0, 0, 0, 0);
 
         const cardReg = document.getElementById('fvPagoCardRegistro');
         if (cardReg) cardReg.classList.add('d-none');
@@ -7699,13 +7722,46 @@ $totalPages = $totalPagesOriginal;
     let _fvSaldoPendiente     = 0;          // saldo disponible de la factura activa
     const _fvAjaxHeaders = { 'X-Requested-With': 'XMLHttpRequest' };
 
-    function _fvSetTarjetas(totalFact, totalCob, totalRet, totalNC, totalND, saldo) {
+    function _fvSetTarjetas(totalFact, totalCob, totalRet, totalNC, totalND, saldo, aFavor) {
         document.getElementById('fvPagoTotalFactura').textContent      = totalFact.toFixed(2);
         document.getElementById('fvPagoTotalCobrado').textContent      = totalCob.toFixed(2);
         document.getElementById('fvPagoTotalRetenciones').textContent  = totalRet.toFixed(2);
         document.getElementById('fvPagoTotalNC').textContent           = totalNC.toFixed(2);
         document.getElementById('fvPagoTotalND').textContent           = totalND.toFixed(2);
         document.getElementById('fvPagoSaldoPendiente').textContent    = saldo.toFixed(2);
+        _fvPintarSaldoFavor(aFavor || 0, totalFact, totalCob, totalRet, totalNC, totalND);
+    }
+
+    // Cobros + retenciones + notas de crédito por encima del total (más notas de débito):
+    // la tarjeta deja de decir «Saldo Pendiente $0.00» y muestra el saldo a favor del cliente.
+    // aFavor = 0 la devuelve a su estado normal.
+    function _fvPintarSaldoFavor(aFavor, totalFact, totalCob, totalRet, totalNC, totalND) {
+        const hayFavor = aFavor > 0;
+        const card  = document.getElementById('fvPagoSaldoCard');
+        const label = document.getElementById('fvPagoSaldoLabel');
+        const valor = document.getElementById('fvPagoSaldoValor');
+        if (card && label && valor) {
+            ['bg-danger', 'border-danger'].forEach(c => card.classList.toggle(c, !hayFavor));
+            ['bg-primary', 'border-primary'].forEach(c => card.classList.toggle(c, hayFavor));
+            [label, valor].forEach(el => {
+                el.classList.toggle('text-danger', !hayFavor);
+                el.classList.toggle('text-primary', hayFavor);
+            });
+            label.textContent = hayFavor ? 'Saldo a favor' : 'Saldo Pendiente';
+            if (hayFavor) document.getElementById('fvPagoSaldoPendiente').textContent = aFavor.toFixed(2);
+        }
+        const alerta = document.getElementById('fvPagoAlertaFavor');
+        if (!alerta) return;
+        alerta.classList.toggle('d-none', !hayFavor);
+        if (!hayFavor) return;
+        document.getElementById('fvPagoFavorMonto').textContent = aFavor.toFixed(2);
+        const partes = [];
+        if (totalCob > 0) partes.push('cobros $' + totalCob.toFixed(2));
+        if (totalRet > 0) partes.push('retenciones $' + totalRet.toFixed(2));
+        if (totalNC  > 0) partes.push('notas de crédito $' + totalNC.toFixed(2));
+        document.getElementById('fvPagoFavorDetalle').textContent =
+            partes.join(' + ') + ' superan el total de la factura'
+            + (totalND > 0 ? ' más notas de débito' : '') + ' ($' + (totalFact + totalND).toFixed(2) + ').';
     }
 
     // opts.sinMonto: tras registrar un cobro el monto queda VACÍO (no se precarga el saldo
@@ -8074,9 +8130,53 @@ $totalPages = $totalPagesOriginal;
 
             // Saldo = Factura + Notas de Débito − Cobrado − Retenciones − Notas de Crédito − Pagos tarjeta aprobados
             totalCobrado += totalPagadoTarjeta + totalPagadoNuvei;
-            const saldo = esAnuladaFV ? 0 : Math.max(0, totalFactura + totalND - totalCobrado - totalRetenciones - totalNC);
+            // Saldo a favor que ya se pasó al anticipo del cliente: aparece en el historial y
+            // vuelve a sumar al saldo (la factura queda en cero en vez de seguir «a favor»).
+            const totalTrasladado = parseFloat(jCob.total_trasladado || 0);
+            const traslados = jCob.traslados || [];
+            if (traslados.length) {
+                if (!(jCob.cobros && jCob.cobros.length)) tbody.innerHTML = '';
+                traslados.forEach(t => {
+                    const anulado = (t.estado || '').toLowerCase() === 'anulado';
+                    const tr = document.createElement('tr');
+                    if (anulado) tr.classList.add('table-danger', 'text-decoration-line-through', 'opacity-50');
+                    const f = t.fecha_emision ? String(t.fecha_emision).slice(0, 10).split('-').reverse().join('/') : '—';
+                    const celda = (txt, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = txt; return td; };
+                    tr.appendChild(celda(f, 'ps-3'));
+                    const tdNum = document.createElement('td');
+                    const code = document.createElement('code');
+                    code.className = 'text-primary fw-bold';
+                    code.textContent = t.numero_ingreso || '';
+                    tdNum.appendChild(code);
+                    tr.appendChild(tdNum);
+                    const tdUsr = document.createElement('td');
+                    const dU = document.createElement('div'); dU.className = 'fw-medium'; dU.textContent = t.usuario_nombre || '—';
+                    const sU = document.createElement('small'); sU.className = 'text-primary'; sU.style.fontSize = '0.65rem'; sU.textContent = 'Saldo a favor pasado a anticipo del cliente';
+                    tdUsr.append(dU, sU);
+                    tr.appendChild(tdUsr);
+                    tr.appendChild(celda('-$ ' + parseFloat(t.monto || 0).toFixed(2), 'text-end fw-bold text-primary'));
+                    const tdPdf = document.createElement('td');
+                    tdPdf.className = 'text-center pe-3';
+                    const a = document.createElement('a');
+                    a.href = `${B_URL}/modulos/ingresos/pdf?id=${parseInt(t.id) || 0}`;
+                    a.setAttribute('data-pdf-documento', '');
+                    a.className = 'btn btn-link btn-sm p-0 text-danger';
+                    a.title = 'Ver PDF del ingreso de anticipo';
+                    a.innerHTML = '<i class="bi bi-file-earmark-pdf"></i>';
+                    a.addEventListener('click', e => e.stopPropagation());
+                    tdPdf.appendChild(a);
+                    tr.appendChild(tdPdf);
+                    tbody.appendChild(tr);
+                });
+            }
+
+            const saldoReal = CMG_r2(totalFactura + totalND - totalCobrado - totalRetenciones - totalNC + totalTrasladado);
+            const saldo = esAnuladaFV ? 0 : Math.max(0, saldoReal);
+            // Saldo a favor del cliente: lo abonado supera el total (p. ej. retención + NC por
+            // el total, o factura cobrada a la que luego llega una NC). Antes se veía como $0.00.
+            const aFavor = (!esAnuladaFV && saldoReal <= -0.01) ? -saldoReal : 0;
             _fvSaldoPendiente = saldo;                       // guardar para validación
-            _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, totalND, saldo);
+            _fvSetTarjetas(totalFactura, totalCobrado, totalRetenciones, totalNC, totalND, saldo, aFavor);
 
             const alertaAnulada = document.getElementById('fvPagoAlertaAnulada');
 
@@ -8088,7 +8188,8 @@ $totalPages = $totalPagesOriginal;
                 cardReg.classList.add('d-none');
             } else if (Math.round(saldo * 100) <= 0) {
                 if (alertaAnulada) alertaAnulada.classList.add('d-none');
-                alertaPagada.classList.remove('d-none');
+                // Con saldo a favor se muestra su propia alerta (fvPagoAlertaFavor), no «Completamente Cobrada».
+                alertaPagada.classList.toggle('d-none', aFavor > 0);
                 cardReg.classList.add('d-none');
             } else {
                 if (alertaAnulada) alertaAnulada.classList.add('d-none');
@@ -8330,6 +8431,60 @@ $totalPages = $totalPagesOriginal;
             btn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Registrar Cobro';
         }
     }
+
+    // Pasa el saldo a favor de la factura (cobrada de más) al anticipo del cliente. El monto
+    // lo calcula el servidor bajo candado; aquí solo se confirma. Bandera «en curso» antes del
+    // primer await y el botón no se reactiva hasta que el panel ya muestra el traslado (§8).
+    let _fvPasandoFavor = false;
+    window.fvPasarSaldoFavorAnticipo = async function () {
+        if (_fvPasandoFavor) return;
+        const btn = document.getElementById('fvPagoBtnFavorAnticipo');
+        const idFact = parseInt(FV_ID_ACTIVO) || 0;
+        if (!idFact || !btn) return;
+        _fvPasandoFavor = true;
+        btn.disabled = true;
+        const htmlBtn = btn.innerHTML;
+        const modalEl = document.getElementById('modalNuevaFactura') || 'body';
+        try {
+            const selPto = document.getElementById('fvPagoPuntoEmision');
+            const idPunto = selPto ? selPto.value : '';
+            if (!idPunto) {
+                throw new Error('No hay una serie (punto de emisión) con el secuencial de Ingresos configurado. Configúrelo en Empresa → Secuenciales.');
+            }
+            const serie = selPto.options[selPto.selectedIndex]?.textContent || '';
+            const monto = document.getElementById('fvPagoFavorMonto')?.textContent || '0.00';
+            const ok = await Swal.fire({
+                icon: 'question',
+                title: 'Pasar a anticipo del cliente',
+                html: `Se registrará un <b>ingreso de anticipo</b> por <b>$${monto}</b> a nombre del cliente, con la serie <b>${serie}</b>.`
+                    + '<br><small class="text-muted">No ingresa dinero: la factura queda en saldo $0.00 y el cliente con ese anticipo disponible para otra factura. Para deshacerlo, anule ese ingreso.</small>',
+                showCancelButton: true,
+                confirmButtonText: '<i class="bi bi-arrow-right-circle me-1"></i> Pasar a anticipo',
+                cancelButtonText: 'Cancelar',
+                focusCancel: true,
+                target: modalEl,
+            });
+            if (!ok.isConfirmed) return;
+
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Registrando...';
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/pasarSaldoFavorAnticipoAjax`, {
+                method : 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                body   : JSON.stringify({ id_factura: idFact, id_punto_emision: idPunto })
+            });
+            const res = await resp.json();
+            if (!res.ok) throw new Error(res.mensaje || 'No se pudo pasar el saldo a favor a anticipo.');
+            Swal.fire({ icon: 'success', title: 'Anticipo registrado', text: res.mensaje, target: modalEl });
+            await fvCargarCobrosTab();
+            if (typeof window.FV_fetchSearch === 'function') window.FV_fetchSearch(window.FV_currentPage || 1);
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Error', text: err.message, target: modalEl });
+        } finally {
+            _fvPasandoFavor = false;
+            btn.disabled = false;
+            btn.innerHTML = htmlBtn;
+        }
+    };
 
     document.getElementById('tab-fv-pagos-btn')?.addEventListener('shown.bs.tab', function() {
         fvCargarCobrosTab();

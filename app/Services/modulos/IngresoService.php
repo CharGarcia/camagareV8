@@ -376,6 +376,15 @@ class IngresoService
             $data[$campo] = $original[$campo] ?? null;
         }
 
+        // Traslado de saldo a favor de una factura al anticipo del cliente: su monto lo fija el
+        // sistema (el saldo a favor, validado bajo candado). Editarlo a mano lo desligaría de
+        // la factura; para corregirlo se anula y se vuelve a generar desde la factura.
+        foreach ($original['detalles'] ?? [] as $det) {
+            if (($det['tipo_documento'] ?? '') === \App\Helpers\AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR) {
+                throw new \Exception('Este ingreso es el traslado del saldo a favor de una factura al anticipo del cliente y no se puede modificar. Si hay que corregirlo, anúlelo y vuelva a generarlo desde la pestaña Pagos de la factura.');
+            }
+        }
+
         // 1. Validar Secuencial (excluyendo el ID actual)
         $this->validarSecuencial($data, $id);
 

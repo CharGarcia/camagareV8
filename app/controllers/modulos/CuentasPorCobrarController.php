@@ -568,7 +568,7 @@ class CuentasPorCobrarController extends BaseModuloController
                         round($saldo, 2),
                         max(0, (int)($r['dias_transcurridos'] ?? 0)),
                         ...($sinAsesor ? [] : [(string)($r['vendedor_nombre'] ?? '')]),
-                        $saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE'),
+                        $saldo <= -0.01 ? 'SALDO A FAVOR' : ($saldo <= 0 ? 'PAGADA' : ($dias > 0 ? "VENCIDA ({$dias} días)" : 'VIGENTE')),
                     ];
                 }
 
@@ -968,6 +968,7 @@ class CuentasPorCobrarController extends BaseModuloController
                 'VENCIDAS'   => $pend > 0 && $venc,
                 'AL_DIA'     => $pend > 0 && !$venc,
                 'PAGADAS'    => $pend <= 0,
+                'A_FAVOR'    => $pend <= -0.01, // retenciones + NC por encima del saldo inicial
                 default      => true, // TODOS
             };
             if (!$incluir) continue;
@@ -2519,7 +2520,7 @@ $plantillasFiltradas = [];
                         'fecha_emision'     => $r['fecha_emision'] ? date('d-m-Y', strtotime($r['fecha_emision'])) : '',
                         'fecha_vencimiento' => $r['fecha_vencimiento'] ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '',
                         'dias'              => $v['dias'],
-                        'estado'            => $v['dias_vencido'] > 0 ? "VENCIDA ({$v['dias_vencido']} días)" : 'VIGENTE',
+                        'estado'            => (float) ($r['saldo'] ?? 0) <= -0.01 ? 'SALDO A FAVOR' : ($v['dias_vencido'] > 0 ? "VENCIDA ({$v['dias_vencido']} días)" : 'VIGENTE'),
                         default             => round((float) ($v[$clave] ?? 0), 2),
                     };
                 }
@@ -2633,7 +2634,10 @@ $plantillasFiltradas = [];
             foreach ($filas as $r) {
                 $v    = $this->valoresDetalle($r);
                 $dias = $v['dias_vencido'];
-                $badge = $dias > 0 ? "<small style='font-weight:bold;'> ({$dias}d vencida)</small>" : "<small>Vigente</small>";
+                // Cobrada de más (cobros + retenciones + NC superan el total): saldo a favor del cliente.
+                $aFavorFila = (float) ($r['saldo'] ?? 0) <= -0.01;
+                $badge = $aFavorFila ? "<small style='font-weight:bold;'> (saldo a favor)</small>"
+                    : ($dias > 0 ? "<small style='font-weight:bold;'> ({$dias}d vencida)</small>" : "<small>Vigente</small>");
                 $fVenc = !empty($r['fecha_vencimiento']) ? date('d-m-Y', strtotime($r['fecha_vencimiento'])) : '—';
                 $fEmis = !empty($r['fecha_emision']) ? date('d-m-Y', strtotime($r['fecha_emision'])) : '—';
 
@@ -2658,7 +2662,8 @@ $plantillasFiltradas = [];
                             'fecha_emision'     => $fEmis,
                             'fecha_vencimiento' => $fVenc . ($conEstado ? '' : " {$badge}"),
                             'dias'              => (string) $v['dias'],
-                            'estado'            => $dias > 0 ? "<small style='font-weight:bold;'>{$dias}d vencida</small>" : '<small>Vigente</small>',
+                            'estado'            => $aFavorFila ? "<small style='font-weight:bold;'>Saldo a favor</small>"
+                                : ($dias > 0 ? "<small style='font-weight:bold;'>{$dias}d vencida</small>" : '<small>Vigente</small>'),
                             default             => '',
                         };
                     }
@@ -3024,6 +3029,7 @@ $plantillasFiltradas = [];
             'VENCIDAS'   => 'Vencidas',
             'AL_DIA'     => 'Al día',
             'PAGADAS'    => 'Pagadas',
+            'A_FAVOR'    => 'Saldo a favor del cliente',
             'TODOS'      => 'Todos',
         ];
 

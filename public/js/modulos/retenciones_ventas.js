@@ -365,7 +365,20 @@
             });
             const data = await res.json();
             if (data.ok) {
-                mostrarAlerta(data.mensaje, 'success');
+                // La factura ya estaba cobrada o tiene nota de crédito y con esta retención
+                // queda cobrada de más: se avisa el saldo a favor del cliente (solo informa).
+                if (data.aviso_saldo_favor && typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Saldo a favor del cliente',
+                        html: '<div class="text-start small">' + String(data.aviso_saldo_favor)
+                            .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+                            .replace(/\n/g, '<br><br>') + '</div>',
+                        confirmButtonText: 'Entendido'
+                    });
+                } else {
+                    mostrarAlerta(data.mensaje, 'success');
+                }
                 retvIdActual = data.id || retvIdActual;
                 if (modalRetV) modalRetV.hide();
                 setTimeout(() => RETV_fetchSearch(1), 300);

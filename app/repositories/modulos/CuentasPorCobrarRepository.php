@@ -116,13 +116,18 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $filtroFecha = $fechaHasta ? "AND ic2.fecha_emision <= :cobrado_hasta" : '';
         $tipoDoc     = $tipoDoc === 'RECIBO' ? 'RECIBO' : 'FACTURA'; // literal seguro
+        // Facturas: el saldo a favor que ya se pasó al anticipo del cliente (línea SALDO_FAVOR,
+        // ver AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR) RESTA de lo cobrado, para que la
+        // factura quede en cero en vez de seguir mostrando un saldo a favor ya trasladado.
+        $traslado = \App\Helpers\AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR;
+        $tipos    = $tipoDoc === 'FACTURA' ? "IN ('FACTURA', '{$traslado}')" : "= '{$tipoDoc}'";
         return "
             SELECT id2.id_referencia_documento AS id_venta,
-                   SUM(id2.monto_cobrado)       AS total_cobrado
+                   SUM(CASE WHEN id2.tipo_documento = '{$traslado}' THEN -id2.monto_cobrado ELSE id2.monto_cobrado END) AS total_cobrado
             FROM ingresos_detalle id2
             INNER JOIN ingresos_cabecera ic2
                    ON ic2.id = id2.id_ingreso
-            WHERE id2.tipo_documento = '{$tipoDoc}'
+            WHERE id2.tipo_documento {$tipos}
               AND ic2.estado    != 'anulado'
               AND ic2.eliminado  = false
               AND ic2.id_empresa IN ({$this->sqlIn($idsEmpresa)})
@@ -475,6 +480,10 @@ class CuentasPorCobrarRepository extends BaseRepository
             $condSaldo = "{$saldo} > 0";
         } elseif ($estado === 'PAGADAS') {
             $condSaldo = "{$saldo} <= 0";
+        } elseif ($estado === 'A_FAVOR') {
+            // Cobrada de más: cobros + retenciones + NC superan el total más notas de débito
+            // (saldo a favor del cliente). Subconjunto de PAGADAS.
+            $condSaldo = "{$saldo} <= -0.01";
         }
 
         return "
@@ -787,6 +796,8 @@ class CuentasPorCobrarRepository extends BaseRepository
                         AND {$this->sqlVencimiento($filtros)} >= CURRENT_DATE";
         } elseif ($estado === 'PAGADAS') {
             $where .= " AND {$saldoExpr} <= 0";
+        } elseif ($estado === 'A_FAVOR') {
+            $where .= " AND {$saldoExpr} <= -0.01";
         }
         // TODOS → sin filtro extra
 

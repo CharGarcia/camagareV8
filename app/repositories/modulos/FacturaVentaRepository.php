@@ -242,6 +242,10 @@ class FacturaVentaRepository extends BaseRepository
                 $v2 = strtolower(trim((string)$val));
                 if (in_array($v2, ['pagada', 'pagado', 'pagadas', 'cobrada', 'cobrado'], true)) {
                     $conds[] = "$saldo <= 0";
+                } elseif (in_array($v2, ['favor', 'afavor', 'saldofavor', 'saldoafavor', 'excedente', 'exceso'], true)) {
+                    // Cobrada de más: cobros + NC + retenciones superan el total más notas de
+                    // débito (saldo a favor del cliente). Es un subconjunto de «pagada».
+                    $conds[] = "(v.estado <> 'anulado' AND (v.importe_total + ab.total_nd - ab.abonos) <= -0.01)";
                 } elseif (in_array($v2, ['abonada', 'abonado', 'abonadas', 'parcial', 'abono'], true)) {
                     $conds[] = "($saldo > 0 AND $sqlAbonos > 0)";
                 } elseif (in_array($v2, ['pendiente', 'pendientes', 'falta', 'sinpago', 'impaga', 'impagada'], true)) {
@@ -342,14 +346,15 @@ class FacturaVentaRepository extends BaseRepository
         // columnas Total cobrado/NC/ND/Retención: antes de este cambio esas 4 también
         // se evaluaban aparte de la del texto libre/orden, aunque fueran el mismo dato.
         $lateralAbonos = "LEFT JOIN LATERAL (
-                SELECT x.total_cobrado, x.total_nc, x.total_nd, x.total_retencion,
-                       (x.total_cobrado + x.total_nc + x.total_retencion) AS abonos
+                SELECT x.total_cobrado, x.total_nc, x.total_nd, x.total_retencion, x.total_trasladado,
+                       (x.total_cobrado + x.total_nc + x.total_retencion - x.total_trasladado) AS abonos
                 FROM (
                     SELECT
                         (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
                         " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " AS total_nc,
                         " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . " AS total_nd,
-                        " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion
+                        " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion,
+                        " . AbonosVentaSql::subTrasladadoFactura('v') . " AS total_trasladado
                 ) x
             ) ab ON true";
 
@@ -428,6 +433,7 @@ class FacturaVentaRepository extends BaseRepository
                        ab.total_cobrado,
                        ab.total_nc,
                        ab.total_nd,
+                       ab.total_trasladado,
                        ab.total_retencion,
                        chq.cheque_posfechado_pendiente" . ($soloEliminadas ? ",
                        -- Último paso por el SRI (null = nunca se envió): la fila eliminada lo muestra.
@@ -1450,6 +1456,100 @@ class FacturaVentaRepository extends BaseRepository
     {
         // Retornar una estructura básica de impuestos si es necesario, por ahora similar a tarifasIva
         return $this->getTarifasIva();
+    }
+
+    /**
+     * Saldo REAL de una factura, sin recortar a cero:
+     *   total + notas de débito − cobros − retenciones − notas de crédito.
+     *   + lo ya trasladado al anticipo del cliente (AbonosVentaSql::subTrasladadoFactura).
+     * Negativo = saldo a favor del cliente (p. ej. retención + nota de crédito por el total,
+     * o factura ya cobrada a la que luego llega una NC o una retención).
+     * Mismas sumatorias que el listado (AbonosVentaSql). Null si la factura no existe.
+     *
+     * @return array{id:int,numero:string,estado:string,importe_total:float,total_cobrado:float,
+     *               total_nc:float,total_nd:float,total_retencion:float,saldo:float}|null
+     */
+    public function getSaldoReal(int $idVenta, int $idEmpresa): ?array
+    {
+        $sql = "SELECT v.id, v.estado, v.importe_total, v.id_cliente, v.fecha_emision,
+                       " . AbonosVentaSql::subTrasladadoFactura('v') . " AS total_trasladado,
+                       (v.establecimiento || '-' || v.punto_emision || '-' || v.secuencial) AS numero,
+                       (SELECT COALESCE(SUM(ind.monto_cobrado), 0) FROM ingresos_detalle ind INNER JOIN ingresos_cabecera inc ON ind.id_ingreso = inc.id WHERE ind.id_referencia_documento = v.id AND ind.tipo_documento = 'FACTURA' AND inc.estado != 'anulado' AND inc.eliminado = false) AS total_cobrado,
+                       " . AbonosVentaSql::subNotasFactura('notas_credito_cabecera', 'v') . " AS total_nc,
+                       " . AbonosVentaSql::subNotasFactura('nota_debito_cabecera', 'v') . " AS total_nd,
+                       " . AbonosVentaSql::subRetenidoFactura('v') . " AS total_retencion
+                FROM ventas_cabecera v
+                WHERE v.id = ? AND v.id_empresa = ? AND v.eliminado = FALSE";
+        $r = $this->query($sql, [$idVenta, $idEmpresa])->fetch();
+        if (!$r) {
+            return null;
+        }
+        $out = [
+            'id'              => (int) $r['id'],
+            'numero'          => (string) $r['numero'],
+            'estado'          => (string) ($r['estado'] ?? ''),
+            'importe_total'   => (float) $r['importe_total'],
+            'total_cobrado'   => (float) $r['total_cobrado'],
+            'total_nc'        => (float) $r['total_nc'],
+            'total_nd'        => (float) $r['total_nd'],
+            'total_retencion' => (float) $r['total_retencion'],
+            // Saldo a favor ya pasado al anticipo del cliente: vuelve a sumar al saldo.
+            'total_trasladado' => (float) $r['total_trasladado'],
+            'id_cliente'       => (int) $r['id_cliente'],
+            'fecha_emision'    => substr((string) $r['fecha_emision'], 0, 10),
+        ];
+        $out['saldo'] = round(
+            $out['importe_total'] + $out['total_nd'] - $out['total_cobrado'] - $out['total_retencion'] - $out['total_nc']
+                + $out['total_trasladado'],
+            2
+        );
+        return $out;
+    }
+
+    /**
+     * Ingresos que trasladaron el saldo a favor de la factura al anticipo del cliente
+     * (línea SALDO_FAVOR; ver SaldoFavorVentaService::pasarAAnticipo). Incluye los anulados,
+     * para mostrarlos tachados en el historial de la pestaña Pagos.
+     */
+    public function getTrasladosSaldoFavor(int $idVenta, int $idEmpresa): array
+    {
+        $sql = "SELECT ic.id, ic.numero_ingreso, ic.fecha_emision, ic.estado,
+                       SUM(d.monto_cobrado) AS monto, u.nombre AS usuario_nombre
+                FROM ingresos_detalle d
+                INNER JOIN ingresos_cabecera ic ON ic.id = d.id_ingreso
+                LEFT  JOIN usuarios u ON u.id = ic.id_usuario
+                WHERE d.tipo_documento = ? AND d.id_referencia_documento = ?
+                  AND ic.id_empresa = ? AND ic.eliminado = false
+                GROUP BY ic.id, ic.numero_ingreso, ic.fecha_emision, ic.estado, u.nombre
+                ORDER BY ic.fecha_emision DESC, ic.id DESC";
+        return $this->query($sql, [AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR, $idVenta, $idEmpresa])->fetchAll();
+    }
+
+    /**
+     * Ids de las facturas de la empresa cuyo número coincide con alguno de los dados
+     * (cualquier formato: se comparan normalizados a 15 dígitos, como AbonosVentaSql).
+     *
+     * @param string[] $numeros
+     * @return int[]
+     */
+    public function getIdsPorNumeros(array $numeros, int $idEmpresa): array
+    {
+        $norm = [];
+        foreach ($numeros as $n) {
+            $v = AbonosVentaSql::normalizarValor((string) $n);
+            if ($v !== '') {
+                $norm[$v] = true;
+            }
+        }
+        if (!$norm) {
+            return [];
+        }
+        $norm = array_slice(array_keys($norm), 0, 50);
+        $marcas = implode(',', array_fill(0, count($norm), '?'));
+        $sql = "SELECT v.id FROM ventas_cabecera v
+                WHERE v.id_empresa = ? AND v.eliminado = FALSE
+                  AND " . AbonosVentaSql::numFactura('v') . " IN ($marcas)";
+        return array_map('intval', $this->query($sql, array_merge([$idEmpresa], $norm))->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     public function getPorNumeroCompleto(string $numero, int $idEmpresa): ?array

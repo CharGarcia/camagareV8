@@ -11,6 +11,7 @@
     .badge-vigente  { background:rgba(25,135,84,.12);  color:#198754; border:1px solid rgba(25,135,84,.25); }
     .badge-proxima  { background:rgba(255,193,7,.15);  color:#856404; border:1px solid rgba(255,193,7,.35); }
     .badge-pagada   { background:rgba(108,117,125,.12);color:#6c757d; border:1px solid rgba(108,117,125,.25); }
+    .badge-afavor   { background:rgba(13,110,253,.12); color:#0d6efd; border:1px solid rgba(13,110,253,.25); }
     /* Vista "Por cliente": arranca plegada (una línea por cliente con sus totales y su
        saldo) y, al desplegar, se lee como el mayor de una cuenta: los documentos del
        cliente y, al final del listado, el TOTAL GENERAL. */
@@ -69,6 +70,7 @@
                         <option value="VENCIDAS">Vencidas</option>
                         <option value="AL_DIA">Al Día</option>
                         <option value="PAGADAS">Pagadas</option>
+                        <option value="A_FAVOR">Saldo a favor</option>
                         <option value="TODOS">Todos</option>
                     </select>
                 </div>

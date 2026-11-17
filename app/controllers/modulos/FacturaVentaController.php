@@ -1044,13 +1044,22 @@ class FacturaVentaController extends BaseModuloController
     }
 
     /**
-     * Calcula el saldo pendiente de cobro de una factura (total - cobrado vía ingresos
+     * Calcula el saldo pendiente de cobro de una factura (total + notas de débito
+     * - retenciones - notas de crédito - cobrado vía ingresos
      * - pagos con tarjeta/Payphone/Nuvei aprobados que aún no generaron ingreso). Usado
      * tanto por el envío del enlace de pago por correo como por WhatsApp.
      */
     private function calcularSaldoPendienteTarjeta(array $factura, int $idFactura): float
     {
         $total = (float) ($factura['importe_total'] ?? 0);
+
+        // Retenciones y notas de crédito bajan lo que el cliente debe; las notas de débito lo
+        // suben. Antes no se consideraban y el enlace de pago podía salir por más de lo
+        // adeudado (factura con retención o NC parcial), provocando un cobro en exceso.
+        $real = $this->repository->getSaldoReal($idFactura, (int) $factura['id_empresa']);
+        if ($real) {
+            $total += $real['total_nd'] - $real['total_retencion'] - $real['total_nc'] + $real['total_trasladado'];
+        }
 
         $stCob = $this->db->prepare(
             "SELECT COALESCE(SUM(id2.monto_cobrado), 0)
@@ -1450,11 +1459,39 @@ class FacturaVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Saldo a favor del cliente de una fila del listado (0 si no hay): cobros + notas de
+     * crédito + retenciones por encima del total más notas de débito. Lo usan el badge del
+     * listado (vista y filas AJAX) y las exportaciones, para que no se desalineen.
+     */
+    public static function saldoAFavorFila(array $r): float
+    {
+        if (($r['estado'] ?? '') === 'anulado') {
+            return 0.0;
+        }
+        // total_trasladado: saldo a favor que ya se pasó al anticipo del cliente (deja de serlo aquí).
+        return \App\Services\modulos\SaldoFavorVentaService::aFavor(
+            (float) ($r['importe_total'] ?? 0) + (float) ($r['total_nd'] ?? 0)
+            - (float) ($r['total_cobrado'] ?? 0) - (float) ($r['total_nc'] ?? 0) - (float) ($r['total_retencion'] ?? 0)
+            + (float) ($r['total_trasladado'] ?? 0)
+        );
+    }
+
+    /** Badge «Saldo a favor» del listado (reemplaza a «Pagada» cuando la factura está cobrada de más). */
+    public static function badgeSaldoAFavor(float $aFavor): string
+    {
+        return '<span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25" title="Cobros, retenciones y notas de crédito superan el total: saldo a favor del cliente de $'
+            . number_format($aFavor, 2) . '">Saldo a favor</span>';
+    }
+
     /** Texto del estado de pago calculado (mismo criterio que el badge del listado). */
     private function estadoPagoTexto(array $r): string
     {
         if (($r['estado'] ?? '') === 'anulado') {
             return 'Anulado';
+        }
+        if (self::saldoAFavorFila($r) > 0) {
+            return 'Saldo a favor';
         }
         $abonos = (float) ($r['total_cobrado'] ?? 0) + (float) ($r['total_nc'] ?? 0) + (float) ($r['total_retencion'] ?? 0);
         $saldo  = max(0, (float) ($r['importe_total'] ?? 0) - $abonos);
@@ -2508,8 +2545,19 @@ class FacturaVentaController extends BaseModuloController
             $stNV->execute([$idEmpresa, $id]);
             $pagosNuvei = $stNV->fetchAll(\PDO::FETCH_ASSOC);
 
+            // ── Saldo a favor ya pasado al anticipo del cliente (ingresos de traslado) ──
+            $traslados = $this->repository->getTrasladosSaldoFavor($id, $idEmpresa);
+            $totalTrasladado = 0.0;
+            foreach ($traslados as $t) {
+                if (strtolower((string) ($t['estado'] ?? '')) !== 'anulado') {
+                    $totalTrasladado += (float) $t['monto'];
+                }
+            }
+
             echo json_encode([
                 'ok'                => true,
+                'traslados'         => $traslados,
+                'total_trasladado'  => round($totalTrasladado, 2),
                 'factura'           => $factura,
                 'cobros'            => $cobros,
                 'total_retenciones' => round($totalRetenciones, 2),
@@ -2735,6 +2783,50 @@ class FacturaVentaController extends BaseModuloController
             echo json_encode(['ok' => true, 'msg' => 'Cobro registrado con éxito.', 'id_ingreso' => $idIngreso]);
         } catch (\Throwable $e) {
             if (isset($db) && $db->inTransaction()) $db->rollBack();
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Pasa el saldo a favor de la factura (cobrada de más) al anticipo del cliente. El monto
+     * lo calcula el servidor; ver SaldoFavorVentaService::pasarAAnticipo(). Mismo permiso que
+     * registrar un cobro desde la factura.
+     */
+    public function pasarSaldoFavorAnticipoAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json');
+
+        $data      = json_decode((string) file_get_contents('php://input'), true) ?: $_POST;
+        $idFactura = (int) ($data['id_factura'] ?? 0);
+        $idPunto   = (int) ($data['id_punto_emision'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+
+        try {
+            if ($idFactura <= 0) {
+                throw new \Exception('Factura no indicada.');
+            }
+            // Registros propios (§6): sin acceso total solo sobre las facturas que el usuario creó.
+            $perm = $this->getPermisos();
+            if (empty($perm['todo']) && (int) ($_SESSION['nivel'] ?? 1) !== 3) {
+                $fac = $this->repository->getPorId($idFactura);
+                if (!$fac || (int) ($fac['id_empresa'] ?? 0) !== $idEmpresa || (int) ($fac['created_by'] ?? 0) !== $idUsuario) {
+                    throw new \Exception('Factura no encontrada.');
+                }
+            }
+
+            $r = (new \App\Services\modulos\SaldoFavorVentaService($this->repository))
+                ->pasarAAnticipo($idFactura, $idEmpresa, $idUsuario, $idPunto);
+
+            echo json_encode([
+                'ok'         => true,
+                'id_ingreso' => $r['id_ingreso'],
+                'mensaje'    => 'Se pasaron $' . number_format($r['monto'], 2) . ' al anticipo del cliente con el ingreso ' . $r['numero'] . '.',
+            ]);
+        } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         }
@@ -3554,9 +3646,12 @@ class FacturaVentaController extends BaseModuloController
         $nc           = (float)($r['total_nc'] ?? 0);
         $retencion    = (float)($r['total_retencion'] ?? 0);
         $saldo        = max(0, $importeTotal - $cobrado - $nc - $retencion);
+        $aFavor       = self::saldoAFavorFila($r);
 
         if ($estado === 'anulado') {
             $estadoPagoBadge = '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25">Anulado</span>';
+        } elseif ($aFavor > 0) {
+            $estadoPagoBadge = self::badgeSaldoAFavor($aFavor);
         } elseif (round($saldo, 2) <= 0) {
             $estadoPagoBadge = '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Pagada</span>';
         } elseif (($cobrado + $nc + $retencion) > 0) {
@@ -3579,7 +3674,9 @@ class FacturaVentaController extends BaseModuloController
                 <td class="text-end" data-col="total_ice">$' . number_format((float)($r['total_ice'] ?? 0), 2) . '</td>
                 <td class="text-end" data-col="propina">$' . number_format((float)($r['propina'] ?? 0), 2) . '</td>
                 <td class="text-end fw-bold" data-col="importe_total">$' . number_format((float)($r['importe_total'] ?? 0), 2) . '</td>
-                <td class="text-end fw-bold ' . (round($estado === 'anulado' ? 0.0 : $saldo, 2) > 0 ? 'text-danger' : 'text-success') . '" data-col="saldo_pendiente">$' . number_format($estado === 'anulado' ? 0.0 : $saldo, 2) . '</td>
+                ' . ($aFavor > 0
+                    ? '<td class="text-end fw-bold text-primary" data-col="saldo_pendiente" title="Saldo a favor del cliente">-$' . number_format($aFavor, 2) . '</td>'
+                    : '<td class="text-end fw-bold ' . (round($estado === 'anulado' ? 0.0 : $saldo, 2) > 0 ? 'text-danger' : 'text-success') . '" data-col="saldo_pendiente">$' . number_format($estado === 'anulado' ? 0.0 : $saldo, 2) . '</td>') . '
                 <td data-col="vendedor_nombre"><span class="text-muted">' . htmlspecialchars($r['vendedor_nombre'] ?? '') . '</span></td>
                 <td data-col="observaciones" class="text-truncate" style="max-width:180px">' . htmlspecialchars($r['observaciones'] ?? '') . '</td>
                 <td data-col="usuario_nombre">' . htmlspecialchars($r['usuario_nombre'] ?? '') . '</td>

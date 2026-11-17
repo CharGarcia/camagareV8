@@ -1854,6 +1854,18 @@
                 } else if (typeof window.refrescarDesdeModuloHijo === 'function') {
                     window.refrescarDesdeModuloHijo();
                 }
+                // La factura ya tenía cobros o retención y con esta NC queda cobrada de más:
+                // se avisa el saldo a favor del cliente (solo informa; la NC ya se guardó).
+                if (data.aviso_saldo_favor) {
+                    await Swal.fire({
+                        icon: 'warning',
+                        title: 'Saldo a favor del cliente',
+                        html: '<div class="text-start small">' + String(data.aviso_saldo_favor)
+                            .replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+                            .replace(/\n/g, '<br><br>') + '</div>',
+                        confirmButtonText: 'Entendido'
+                    });
+                }
                 if (eraNueva && !embebida && idGuardado > 0) {
                     NC_preguntarRegistrarOtra(data.mensaje);
                 } else {

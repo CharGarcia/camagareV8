@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: reusar secuencial no autorizado, numero no autorizado, volver a usar numero, ver facturas eliminadas, estado:eliminada, listado de eliminadas, factura borrada, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, secuencial inicial, restaurar factura, recuperar factura eliminada, revivir factura, deshacer eliminar, factura eliminada, error 45, secuencial registrado, agregar item a factura de consignacion, servicio de envio, flete, agregar servicio, no me deja agregar producto, factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, guardada con otro numero, cambio el numero de la factura, numero distinto, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, adicional cortado, columna adicional, ancho del adicional, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, espacio en blanco abajo, margen inferior, aprovechar la hoja, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador, descuento global, descuento a toda la factura, descuento general, repartir descuento, prorratear descuento, aplicar a todos los items, no se puede anular la factura, tiene notas de credito vigentes, eliminar factura con nota de credito, stock duplicado al anular, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, forma de pago sri por defecto, cambia la forma de pago, se cambio la forma de pago al cambiar de cliente, forma de pago equivocada, otros con utilizacion del sistema financiero, sin utilizacion del sistema financiero, dinero electronico, tarjeta de credito, anular fuera de plazo, plazo para anular, dia 7, consumidor final no se anula, fuera de las reglas de anulacion, motivo de la excepcion, direccion cortada, correo cortado, direccion muy larga, correo muy largo, editar cliente desde la factura, corregir datos del cliente, cambiar correo del cliente, abrir ficha del cliente
-version: 2.65
+etiquetas: reusar secuencial no autorizado, numero no autorizado, volver a usar numero, ver facturas eliminadas, estado:eliminada, listado de eliminadas, factura borrada, numero saltado, se salto un numero, falta un numero, no sigue el secuencial, secuencial no consecutivo, secuencial inicial, restaurar factura, recuperar factura eliminada, revivir factura, deshacer eliminar, factura eliminada, error 45, secuencial registrado, agregar item a factura de consignacion, servicio de envio, flete, agregar servicio, no me deja agregar producto, factura, facturar, venta, buscar factura, buscador, aparecen facturas que no busque, resultados que no corresponden, la busqueda trae otras facturas, buscar por clave de acceso, filtros, filtrar facturas, buscar por producto vendido, buscar por forma de pago, filtro de fechas, saldo pendiente, chips, ordenar por dos columnas, ordenar por estado de pago, ordenar por cliente y fecha, sri, comprobante electronico, xml, excel, anular, nota de credito, whatsapp, link de pago, payphone, nuvei, serie vacia, sin puntos de emision, secuencial repetido, secuencial ya existe, guardada con otro numero, cambio el numero de la factura, numero distinto, punto de emision, ambiente, pruebas, produccion, cambio de ambiente, clave de acceso en procesamiento, error 70, comprobante devuelto, reintento automatico, saldo, stock, existencias, cuanto queda, disponible, buscador de productos, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, pdf, ride, columnas del pdf, subsidio, irbpnr, servicio, propina, codigo cortado, detalle adicional, forma de pago, plazo, dias credito, unidad de tiempo, meses, anios, informacion adicional, vendedor, cajero, no sale el vendedor, falta informacion en el pdf, se cierra el modal, autorizar, bloquear factura, no puedo editar, letra pequena, tamano de letra, fuente del pdf, letra del pdf, no se lee el pdf, ancho de columna, agrandar columna, ensanchar, codigo cortado en el modal, descripcion cortada, adicional cortado, columna adicional, ancho del adicional, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, columna descuento, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, informacion adicional larga, limite de caracteres, maximo 300 caracteres, value too long, no se pudo guardar la factura, imprimir, impresora, iva al subtotal, iva sobre el subtotal, iva linea por linea, calculo del iva, iva no cuadra, iva mal calculado, centavos de diferencia, factura grande, muchas lineas, muchos items, factura lenta, tarda en abrir, tarda en cargar, peso del xml, tamano del xml, 320 kb, crear cliente desde la factura, nuevo cliente, crear producto desde la factura, nuevo producto, no aparece el boton de crear cliente, falta el boton nuevo producto, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, iva del listado, iva diferente, iva no coincide, iva distinto al documento, iva con descuento, columna iva, filas por pagina, registros por pagina, cuantas filas, mostrar mas filas, paginador, 25 50 75 100, sin saldo, sin stock, producto sin existencias, productos similares, productos equivalentes, equivalencias, otra marca, sugerir otro producto, misma categoria, reemplazar producto, usar este, mantener el producto, pdf en dos hojas, segunda hoja casi vacia, espacio en blanco abajo, margen inferior, aprovechar la hoja, totales en otra pagina, el pdf corta la pagina, hoja de mas, direccion del cliente en el xml, xml sin direccion, direccion del comprador, direccionComprador, descuento global, descuento a toda la factura, descuento general, repartir descuento, prorratear descuento, aplicar a todos los items, no se puede anular la factura, tiene notas de credito vigentes, eliminar factura con nota de credito, stock duplicado al anular, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, forma de pago sri por defecto, cambia la forma de pago, se cambio la forma de pago al cambiar de cliente, forma de pago equivocada, otros con utilizacion del sistema financiero, sin utilizacion del sistema financiero, dinero electronico, tarjeta de credito, anular fuera de plazo, plazo para anular, dia 7, consumidor final no se anula, fuera de las reglas de anulacion, motivo de la excepcion, direccion cortada, correo cortado, direccion muy larga, correo muy largo, editar cliente desde la factura, corregir datos del cliente, cambiar correo del cliente, abrir ficha del cliente, saldo a favor, saldo a favor del cliente, pago en exceso, cobrado de mas, pago supera la deuda, el pago supera el total, retencion y nota de credito, saldo negativo, devolver al cliente, enlace de pago por mas de lo que debe, pasar a anticipo, anticipo del cliente, saldo a favor a anticipo, registrar anticipo desde la factura
+version: 2.66
 orden: 20
 estado: activo
 ---
@@ -409,6 +409,63 @@ En la pestaña **Pagos** de la factura se registran cobros totales o parciales
   en Cuentas por Cobrar, salvo que el cliente tenga configurado el
   [cobro automático](clientes.md).
 
+### Saldo a favor del cliente (factura cobrada de más)
+
+A veces lo abonado a una factura supera lo que el cliente debe. Pasa cuando llega
+un documento **después** de que la factura ya estaba cubierta:
+
+| Caso | Saldo a favor |
+|---|---|
+| El cliente hizo la retención y luego se emite una nota de crédito por el total | El valor de la retención |
+| La factura ya estaba cobrada y luego se emite una nota de crédito | El valor de la nota de crédito |
+| La factura ya estaba cobrada completa y luego llega la retención | El valor de la retención |
+
+El sistema lo calcula así: **total de la factura + notas de débito − cobros −
+retenciones − notas de crédito**. Si el resultado es negativo, ese valor es
+dinero que la empresa le debe al cliente.
+
+- En la pestaña **Pagos**, la última tarjeta deja de decir *Saldo Pendiente
+  $0.00* y muestra **Saldo a favor** en azul, con un recuadro que explica de
+  dónde sale (cuánto en cobros, retenciones y notas de crédito).
+- En el **listado**, la columna **Pago** dice **Saldo a favor** (en vez de
+  *Pagada*) y la columna **Saldo** muestra el valor en azul con signo menos.
+  Se filtra con `pago:favor` o desde el embudo, *Estado de pago → Saldo a favor*.
+  Las exportaciones a PDF y Excel también dicen *Saldo a favor*.
+- Al **guardar una nota de crédito o una retención** que deja la factura con
+  saldo a favor, aparece un aviso con el valor. Es solo informativo: el
+  documento se guarda igual, porque puede ser obligatorio emitirlo.
+
+Qué hacer con ese valor: devolverlo al cliente o dejarlo como anticipo para otra
+factura. Si el cliente **anuló su comprobante de retención**, elimine la
+retención en *Retenciones de Ventas* y el saldo a favor desaparece.
+
+### Pasar el saldo a favor a anticipo del cliente
+
+En la pestaña **Pagos**, el recuadro del saldo a favor tiene el botón **Pasar a
+anticipo del cliente**. Al confirmarlo:
+
+- Se registra un **ingreso de anticipo** a nombre del cliente por el valor del
+  saldo a favor, con la serie de cobros de la pestaña. **No ingresa dinero**: no
+  afecta caja ni bancos.
+- La factura queda en **saldo $0.00** (vuelve a verse *Pagada*) y el traslado
+  aparece en el historial de la pestaña, en azul y con signo menos.
+- El cliente queda con ese **anticipo disponible**: se aplica a otra factura
+  desde *Ingresos*, eligiendo la forma de cobro de tipo Anticipo.
+- El asiento es **Debe Cuentas por Cobrar / Haber Anticipo de clientes**.
+
+El valor lo calcula el sistema en el momento; no se escribe. Ese ingreso **no se
+puede modificar**: para deshacer el traslado se **anula** en *Ingresos* y la
+factura vuelve a mostrar el saldo a favor.
+
+Requisitos: un concepto activo de tipo **Anticipo de cliente** en *Opciones de
+Ingresos y Egresos* (con su cuenta contable, o el asiento queda pendiente) y una
+serie con el secuencial de Ingresos. El permiso es el mismo que para registrar
+un cobro desde la factura.
+
+Si después de pasar el saldo a anticipo se anula la nota de crédito o se elimina
+la retención que lo originó, anule también ese ingreso de anticipo: de lo
+contrario el cliente conservaría un anticipo que ya no le corresponde.
+
 ## Enviar la factura y el enlace de pago por WhatsApp
 
 El botón de WhatsApp pide la plantilla aprobada y el número del cliente. Con las
@@ -629,7 +686,7 @@ solo con la X, Cancelar, Aplicar o Limpiar filtros.
 
 | Bloque | Filtros |
 |--------|---------|
-| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, estado de pago (pendiente / abonada / pagada), correo, serie, Nº de factura, secuencial, fecha de autorización, origen (directa, desde proforma, desde pedido, POS / caja, cotización de publicidad), con o sin asiento contable, ambiente, días de crédito |
+| Documento | Fecha de emisión (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado, estado de pago (pendiente / abonada / pagada / saldo a favor), correo, serie, Nº de factura, secuencial, fecha de autorización, origen (directa, desde proforma, desde pedido, POS / caja, cotización de publicidad), con o sin asiento contable, ambiente, días de crédito |
 | Valores | Total, saldo pendiente, subtotal, descuento, IVA, ICE, propina (cada uno con mínimo y máximo) |
 | Tercero | Cliente, RUC / cédula, vendedor, usuario que registró, observaciones, placa, guía de remisión, clave de acceso |
 
@@ -784,6 +841,7 @@ la operación de inmediato.
 
 ## Historial de cambios
 
+- **2.66** — **Saldo a favor del cliente.** Cuando cobros, retenciones y notas de crédito superan el total de la factura (por ejemplo, retención y luego nota de crédito por el total), la pestaña **Pagos** muestra el **Saldo a favor** en lugar de *Saldo Pendiente $0.00*; el listado lo marca en la columna **Pago** y se filtra con `pago:favor`. Ver *Saldo a favor del cliente (factura cobrada de más)*. Con el botón **Pasar a anticipo del cliente** ese valor se registra como anticipo, sin movimiento de dinero, para aplicarlo a otra factura. Ver *Pasar el saldo a favor a anticipo del cliente*. Además, el **enlace de pago con tarjeta** (correo y WhatsApp) ya descuenta retenciones y notas de crédito y suma notas de débito: antes podía salir por más de lo que el cliente debía.
 - **2.65** — En el listado, la columna que muestra el estado ante el SRI (borrador, autorizado, anulado…) se llama ahora **Estado SRI** (antes solo «Estado»), igual en el selector de columnas, el filtro y las exportaciones a PDF y Excel, para no confundirla con el estado de pago o de correo.
 - **2.64** — La línea de datos del cliente (bajo el buscador) ocupa siempre **un renglón**: la dirección y el correo largos se recortan con «…» y se ven completos al dejar el puntero encima. Antes una dirección larga partía la línea en varios renglones y empujaba las Observaciones. Ver *Tipo de identificación del cliente*. Además, **Editar** abre ahora la **ficha completa del cliente** (antes era una ventana con solo teléfono, dirección y correo). Ver *Editar el cliente sin salir de la factura*. **Editar** está disponible también en facturas **autorizadas** (antes se ocultaba).
 - **2.63** — Nueva pestaña **Información** en la ventana de la factura (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, sus acciones registradas y los movimientos de inventario que generó. Ver la guía *Pestaña Información*.

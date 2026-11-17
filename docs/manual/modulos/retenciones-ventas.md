@@ -6,7 +6,7 @@ ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: retencion de venta, eliminar retencion, retencion anulada en el sri, emitida por error, no volver a descargar, claves a no registrar, documentos para no descargar, otro establecimiento, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.18
+version: 1.19
 orden: 40
 estado: activo
 ---
@@ -196,6 +196,7 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.19** — Al guardar una retención sobre una factura que ya estaba cobrada o tiene nota de crédito, si la factura queda cobrada de más aparece el aviso **Saldo a favor del cliente** con el valor. Es informativo: la retención se guarda igual. Las retenciones que llegan por Descargas SRI no muestran el aviso; la factura queda marcada *Saldo a favor* en su listado. Ver *Saldo a favor del cliente* en [Facturas de Venta](factura-venta.md).
 - **1.18** — La pestaña de Descargas SRI donde quedan las retenciones eliminadas (antes *Documentos para no descargar*) ahora se llama **Claves a no registrar**; los avisos al eliminar usan el nombre nuevo.
 - **1.17** — Al **eliminar una retención electrónica** se pregunta el motivo: *anulada en el SRI o emitida por error* (no se vuelve a descargar en ningún establecimiento), *la voy a registrar en otro establecimiento* (no se vuelve a descargar solo en este) o *solo eliminar*. Las dos primeras la agregan a *Documentos para no descargar* de Descargas SRI. Si el período contable de la retención está cerrado, la eliminación se rechaza y no se agrega nada a la lista. Requiere `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Retención electrónica: que no se vuelva a descargar*.
 - **1.16** — Nueva pestaña **Información** en la ventana de la retención (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.

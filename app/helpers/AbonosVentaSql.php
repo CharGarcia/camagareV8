@@ -321,6 +321,31 @@ final class AbonosVentaSql
     }
 
     /**
+     * `ingresos_detalle.tipo_documento` de la línea que traslada el SALDO A FAVOR de una
+     * factura (cobrada de más) al anticipo del cliente. El ingreso es un anticipo normal
+     * (opción ANTICIPO_CLIENTE); esta línea lo enlaza con la factura de la que salió el valor
+     * (`id_referencia_documento`). NO es un cobro: no suma a lo cobrado de la factura, al
+     * contrario, le devuelve ese valor al saldo. Ver SaldoFavorVentaService::pasarAAnticipo().
+     */
+    public const TIPO_TRASLADO_SALDO_FAVOR = 'SALDO_FAVOR';
+
+    /**
+     * Subconsulta escalar (correlacionada con la factura `$alias`) con lo que ya se trasladó
+     * de su saldo a favor al anticipo del cliente (ingresos vigentes). Se SUMA al saldo:
+     *   saldo = total + ND − cobros − retenciones − NC + trasladado.
+     */
+    public static function subTrasladadoFactura(string $alias = 'v'): string
+    {
+        return "(SELECT COALESCE(SUM(tsf.monto_cobrado), 0)
+                 FROM ingresos_detalle tsf
+                 INNER JOIN ingresos_cabecera tsc ON tsc.id = tsf.id_ingreso
+                 WHERE tsf.tipo_documento = '" . self::TIPO_TRASLADO_SALDO_FAVOR . "'
+                   AND tsf.id_referencia_documento = {$alias}.id
+                   AND tsc.id_empresa = {$alias}.id_empresa
+                   AND tsc.estado != 'anulado' AND tsc.eliminado = false)";
+    }
+
+    /**
      * Subconsulta escalar (correlacionada con la factura `$alias`) con el total
      * de notas de crédito o débito aplicadas a esa factura (enlace por dígitos).
      */

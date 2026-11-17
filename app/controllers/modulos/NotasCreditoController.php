@@ -719,7 +719,14 @@ class NotasCreditoController extends BaseModuloController
                 $mensaje = 'Nota de crédito guardada exitosamente.';
             }
 
-            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id]);
+            // Si con esta NC la factura queda cobrada de más (ya tenía cobros o retención),
+            // se avisa el saldo a favor del cliente. No bloquea: la NC puede ser obligatoria.
+            $avisoFavor = !empty($data['num_doc_modificado'])
+                ? (new \App\Services\modulos\SaldoFavorVentaService())
+                    ->aviso((int) $data['id_empresa'], [], [(string) $data['num_doc_modificado']])
+                : null;
+
+            echo json_encode(['ok' => true, 'mensaje' => $mensaje, 'id' => $id, 'aviso_saldo_favor' => $avisoFavor]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
