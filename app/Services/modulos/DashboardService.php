@@ -630,6 +630,7 @@ class DashboardService
                  WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado'
                    AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND efp.tipo = 'ANTICIPO' AND UPPER(efp.aplica_en) = 'INGRESO'"
+                 . \App\Helpers\AbonosVentaSql::sinTrasladoSaldoFavor('ic')
             );
         }
         $apl->execute([':e' => $e]);

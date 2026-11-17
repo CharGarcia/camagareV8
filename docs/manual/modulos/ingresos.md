@@ -622,7 +622,7 @@ misma revisión al guardar:
 
 ## Historial de cambios
 
-- **3.30** — Nuevo tipo de ingreso que crea el sistema: el **traslado del saldo a favor de una factura al anticipo del cliente** (botón *Pasar a anticipo del cliente* en la pestaña Pagos de la factura). Es un ingreso de *Anticipo Cliente* que no mueve dinero: su forma de cobro es la interna *Saldo a favor de factura (traslado a anticipo)*, que no aparece en los selectores. **No se puede modificar**; para deshacerlo se anula. Ver *Pasar el saldo a favor a anticipo del cliente* en [Facturas de Venta](factura-venta.md).
+- **3.30** — Nuevo tipo de ingreso que crea el sistema: el **traslado del saldo a favor de una factura al anticipo del cliente** (botón *Pasar a anticipo del cliente* en la pestaña Pagos de la factura). Es un ingreso de *Anticipo Cliente*, en positivo, que no mueve dinero: su forma de cobro es la de tipo **Anticipo** de clientes, y en este caso suma al anticipo del cliente en lugar de consumirlo. **No se puede modificar**; para deshacerlo se anula. Ver *Pasar el saldo a favor a anticipo del cliente* en [Facturas de Venta](factura-venta.md).
 - **3.29** — El modal del ingreso tiene la pestaña **Información** (solo
   administradores): quién lo registró, quién lo modificó por última vez y la
   línea de tiempo de sus acciones (creación, ediciones, anulación), con fecha y

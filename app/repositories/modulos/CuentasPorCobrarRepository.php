@@ -116,14 +116,17 @@ class CuentasPorCobrarRepository extends BaseRepository
     {
         $filtroFecha = $fechaHasta ? "AND ic2.fecha_emision <= :cobrado_hasta" : '';
         $tipoDoc     = $tipoDoc === 'RECIBO' ? 'RECIBO' : 'FACTURA'; // literal seguro
-        // Facturas: el saldo a favor que ya se pasó al anticipo del cliente (línea SALDO_FAVOR,
-        // ver AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR) RESTA de lo cobrado, para que la
-        // factura quede en cero en vez de seguir mostrando un saldo a favor ya trasladado.
+        // Facturas: además de lo cobrado, trae aparte el saldo a favor que ya se pasó al anticipo
+        // del cliente (total_trasladado, línea SALDO_FAVOR). La columna Cobrado muestra SOLO cobros
+        // reales; el traslado se suma al saldo en cada consulta (… + cb.total_trasladado), para
+        // que la factura quede en cero en vez de seguir mostrando un saldo a favor ya trasladado.
+        // Ver AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR.
         $traslado = \App\Helpers\AbonosVentaSql::TIPO_TRASLADO_SALDO_FAVOR;
         $tipos    = $tipoDoc === 'FACTURA' ? "IN ('FACTURA', '{$traslado}')" : "= '{$tipoDoc}'";
         return "
             SELECT id2.id_referencia_documento AS id_venta,
-                   SUM(CASE WHEN id2.tipo_documento = '{$traslado}' THEN -id2.monto_cobrado ELSE id2.monto_cobrado END) AS total_cobrado
+                   SUM(CASE WHEN id2.tipo_documento = '{$traslado}' THEN 0 ELSE id2.monto_cobrado END) AS total_cobrado,
+                   SUM(CASE WHEN id2.tipo_documento = '{$traslado}' THEN id2.monto_cobrado ELSE 0 END) AS total_trasladado
             FROM ingresos_detalle id2
             INNER JOIN ingresos_cabecera ic2
                    ON ic2.id = id2.id_ingreso
@@ -466,11 +469,11 @@ class CuentasPorCobrarRepository extends BaseRepository
 
         $estado    = $filtros['estado'] ?? 'PENDIENTES';
         $venc      = $this->sqlVencimiento($filtros);
-        $saldo     = "(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0))";
+        $saldo     = "(v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) + COALESCE(cb.total_trasladado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0))";
         $prefiltro = '';
         $condSaldo = 'true'; // TODOS → sin filtro extra
         if (in_array($estado, ['PENDIENTES', 'VENCIDAS', 'AL_DIA'], true)) {
-            $prefiltro = " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) > 0"
+            $prefiltro = " AND (v.importe_total - COALESCE(cb.total_cobrado, 0) + COALESCE(cb.total_trasladado, 0) > 0"
                        . $this->condFacturasConNotaDebito($ids, $fh, $params) . ")";
             if ($estado === 'VENCIDAS') {
                 $prefiltro .= " AND {$venc} < CURRENT_DATE";
@@ -513,6 +516,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(rt.total_retenido, 0)                                                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                    AS total_nc,
                 COALESCE(nd.total_nd, 0)                                                                                    AS total_nd,
+                COALESCE(cb.total_trasladado, 0)                                                                            AS total_trasladado, -- saldo a favor pasado a anticipo
                 {$saldo} AS saldo,
                 {$venc}::timestamp AS fecha_vencimiento, -- mismo tipo que antes (fecha + intervalo)
                 {$this->sqlDiasCredito($filtros)} AS dias_credito,
@@ -1230,7 +1234,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(rt.total_retenido, 0)                                                                               AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                                                     AS total_nc,
                 COALESCE(nd.total_nd, 0)                                                                                     AS total_nd,
-                v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
+                v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) + COALESCE(cb.total_trasladado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0) AS saldo,
                 CONCAT(v.establecimiento,'-',v.punto_emision,'-',v.secuencial) AS numero_factura
             FROM cand
             JOIN ventas_cabecera v ON v.id = cand.id
@@ -1377,7 +1381,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                        AND v.eliminado  = false
                        AND v.estado    IN ('autorizado','autorizada')
                        AND v.tipo_ambiente = '2'
-                       AND (v.importe_total - COALESCE(cb.total_cobrado, 0) > 0"
+                       AND (v.importe_total - COALESCE(cb.total_cobrado, 0) + COALESCE(cb.total_trasladado, 0) > 0"
                        . $this->condFacturasConNotaDebito([$idEmpresa], null, $params) . ")
                  ),
                  retenido AS (" . $this->getCteRetenido([$idEmpresa]) . "),
@@ -1398,7 +1402,7 @@ class CuentasPorCobrarRepository extends BaseRepository
                 COALESCE(cb.total_cobrado, 0)                                               AS total_cobrado,
                 COALESCE(rt.total_retenido, 0)                                              AS total_retenido,
                 COALESCE(nc.total_nc, 0)                                                    AS total_nc,
-                (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS saldo
+                (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) + COALESCE(cb.total_trasladado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) AS saldo
             FROM cand
             JOIN ventas_cabecera v ON v.id = cand.id
             JOIN clientes c ON c.id = v.id_cliente
@@ -1406,7 +1410,7 @@ class CuentasPorCobrarRepository extends BaseRepository
             LEFT JOIN retenido rt ON rt.id_venta = v.id
             LEFT JOIN nc_aplic nc ON nc.id_venta = v.id
             LEFT JOIN nd_aplic nd ON nd.id_venta = v.id
-            WHERE (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
+            WHERE (v.importe_total + COALESCE(nd.total_nd, 0) - COALESCE(cb.total_cobrado, 0) + COALESCE(cb.total_trasladado, 0) - COALESCE(rt.total_retenido, 0) - COALESCE(nc.total_nc, 0)) > 0
         ";
 
         if ($soloVencidas || $diasMin > 0) {

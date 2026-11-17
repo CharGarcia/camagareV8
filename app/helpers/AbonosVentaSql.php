@@ -330,6 +330,21 @@ final class AbonosVentaSql
     public const TIPO_TRASLADO_SALDO_FAVOR = 'SALDO_FAVOR';
 
     /**
+     * Condición (empieza con `AND`) que deja fuera los ingresos de TRASLADO de saldo a favor,
+     * sobre el alias de `ingresos_cabecera`. Va en toda consulta que sume el anticipo
+     * APLICADO (pagos con una forma de cobro tipo ANTICIPO): el traslado usa esa forma para
+     * que el documento diga "Anticipo clientes", pero no consume anticipo, lo genera (por su
+     * concepto ANTICIPO_CLIENTE). Sin esta condición contaría a la vez como generado y como
+     * aplicado, y el anticipo del cliente quedaría en cero.
+     */
+    public static function sinTrasladoSaldoFavor(string $aliasCabecera = 'ic'): string
+    {
+        return " AND NOT EXISTS (SELECT 1 FROM ingresos_detalle tsx
+                                 WHERE tsx.id_ingreso = {$aliasCabecera}.id
+                                   AND tsx.tipo_documento = '" . self::TIPO_TRASLADO_SALDO_FAVOR . "')";
+    }
+
+    /**
      * Subconsulta escalar (correlacionada con la factura `$alias`) con lo que ya se trasladó
      * de su saldo a favor al anticipo del cliente (ingresos vigentes). Se SUMA al saldo:
      *   saldo = total + ND − cobros − retenciones − NC + trasladado.

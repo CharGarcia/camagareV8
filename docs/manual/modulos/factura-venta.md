@@ -445,10 +445,12 @@ En la pestaña **Pagos**, el recuadro del saldo a favor tiene el botón **Pasar 
 anticipo del cliente**. Al confirmarlo:
 
 - Se registra un **ingreso de anticipo** a nombre del cliente por el valor del
-  saldo a favor, con la serie de cobros de la pestaña. **No ingresa dinero**: no
-  afecta caja ni bancos.
+  saldo a favor (en positivo), con la serie de cobros de la pestaña y la forma
+  de cobro de tipo **Anticipo** de clientes. **No ingresa dinero**: no afecta
+  caja ni bancos.
 - La factura queda en **saldo $0.00** (vuelve a verse *Pagada*) y el traslado
-  aparece en el historial de la pestaña, en azul y con signo menos.
+  aparece en el historial de la pestaña, en azul, con la leyenda *Saldo a favor
+  pasado a anticipo del cliente*.
 - El cliente queda con ese **anticipo disponible**: se aplica a otra factura
   desde *Ingresos*, eligiendo la forma de cobro de tipo Anticipo.
 - El asiento es **Debe Cuentas por Cobrar / Haber Anticipo de clientes**.
@@ -458,8 +460,9 @@ puede modificar**: para deshacer el traslado se **anula** en *Ingresos* y la
 factura vuelve a mostrar el saldo a favor.
 
 Requisitos: un concepto activo de tipo **Anticipo de cliente** en *Opciones de
-Ingresos y Egresos* (con su cuenta contable, o el asiento queda pendiente) y una
-serie con el secuencial de Ingresos. El permiso es el mismo que para registrar
+Ingresos y Egresos* (con su cuenta contable, o el asiento queda pendiente), una
+forma de cobro de tipo **Anticipo** para clientes en *Formas de Cobros y Pagos*
+y una serie con el secuencial de Ingresos. El permiso es el mismo que para registrar
 un cobro desde la factura.
 
 Si después de pasar el saldo a anticipo se anula la nota de crédito o se elimina

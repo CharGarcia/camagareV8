@@ -338,6 +338,26 @@ class FormaPagoRepository extends BaseRepository
     }
 
     /**
+     * Forma de cobro tipo ANTICIPO (de clientes) con la que se registra el traslado del saldo
+     * a favor de una factura al anticipo del cliente (SaldoFavorVentaService::pasarAAnticipo).
+     * Prefiere una activa y de aplica_en = INGRESO (la que usan el saldo de anticipos y el
+     * dashboard); si no, una de AMBAS. Null si la empresa no tiene ninguna.
+     */
+    public function getFormaAnticipoCobro(int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, nombre FROM {$this->table}
+             WHERE id_empresa = :e AND eliminado = FALSE AND tipo = 'ANTICIPO'
+               AND UPPER(aplica_en) IN ('INGRESO', 'AMBAS')
+             ORDER BY activo DESC, (UPPER(aplica_en) = 'INGRESO') DESC, id ASC
+             LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return $row ?: null;
+    }
+
+    /**
      * Formas de ANTICIPO del flujo indicado (INGRESO = cobro / EGRESO = pago) que aún NO tienen
      * cuenta contable asignada. Incluye las de aplica_en = 'AMBAS'. Se usa para propagar la cuenta
      * del concepto de anticipo (Ingresos/Egresos) a su forma de Cobro/Pago sin pisar una ya puesta.
@@ -407,39 +427,6 @@ class FormaPagoRepository extends BaseRepository
      * no tienen orden van al final, por nombre). Lo piden Ingresos y Egresos; el resto de módulos
      * sigue listando por nombre.
      */
-    /** Nombre de la forma interna con la que se registra el traslado de un saldo a favor a anticipo. */
-    public const NOMBRE_FORMA_TRASLADO_SALDO_FAVOR = 'Saldo a favor de factura (traslado a anticipo)';
-
-    /**
-     * Forma de cobro INTERNA del traslado de saldo a favor de una factura al anticipo del
-     * cliente (SaldoFavorVentaService::pasarAAnticipo). Un ingreso exige una forma de cobro,
-     * pero aquí no entra dinero: es tipo OTRO (no monetaria, no cuenta en caja ni bancos) y
-     * queda INACTIVA para que no aparezca en los selectores de cobro. No necesita cuenta
-     * contable: el asiento del traslado no usa la forma (AsientoBuilderService::
-     * asientoTrasladoSaldoFavor). Se crea sola la primera vez que la empresa la necesita.
-     */
-    public function getIdFormaTrasladoSaldoFavor(int $idEmpresa, int $idUsuario): int
-    {
-        $st = $this->db->prepare(
-            "SELECT id FROM {$this->table}
-             WHERE id_empresa = :e AND eliminado = FALSE AND tipo = 'OTRO' AND nombre = :n
-             ORDER BY id ASC LIMIT 1"
-        );
-        $st->execute([':e' => $idEmpresa, ':n' => self::NOMBRE_FORMA_TRASLADO_SALDO_FAVOR]);
-        $id = $st->fetchColumn();
-        if ($id !== false) {
-            return (int) $id;
-        }
-        return $this->create([
-            'id_empresa' => $idEmpresa,
-            'nombre'     => self::NOMBRE_FORMA_TRASLADO_SALDO_FAVOR,
-            'tipo'       => 'OTRO',
-            'aplica_en'  => 'INGRESO',
-            'activo'     => false,
-            'usuario_id' => $idUsuario,
-        ]);
-    }
-
     public function getFormasFiltradas(int $idEmpresa, string $flujo, bool $ordenConfigurado = false): array
     {
         $orderBy = ($ordenConfigurado && $this->tieneColumnasPresentacion())
@@ -614,6 +601,7 @@ class FormaPagoRepository extends BaseRepository
                    AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                    AND ip.id_forma_cobro = :forma
                    AND ic.id_cliente = :t"
+                 . \App\Helpers\AbonosVentaSql::sinTrasladoSaldoFavor('ic')
             );
         }
         $stA->execute([':e' => $idEmpresa, ':forma' => $idForma, ':t' => $idTercero]);
@@ -704,7 +692,8 @@ class FormaPagoRepository extends BaseRepository
             INNER JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
             INNER JOIN empresa_formas_pago fp ON fp.id = ip.id_forma_cobro AND fp.tipo = 'ANTICIPO'
             WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
-              AND ic.id_cliente = :t";
+              AND ic.id_cliente = :t"
+            . \App\Helpers\AbonosVentaSql::sinTrasladoSaldoFavor('ic');
     }
 
     /**
@@ -1100,7 +1089,8 @@ class FormaPagoRepository extends BaseRepository
                      FROM ingresos_pagos ip
                      JOIN ingresos_cabecera ic ON ic.id = ip.id_ingreso
                      JOIN {$this->table} fp ON fp.id = ip.id_forma_cobro AND fp.tipo = 'ANTICIPO'
-                     WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)";
+                     WHERE ic.id_empresa = :e AND ic.eliminado = FALSE AND ic.estado <> 'anulado' AND ic.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)"
+                     . \App\Helpers\AbonosVentaSql::sinTrasladoSaldoFavor('ic');
             $tipo = 'ingreso';
             $tabla = 'ingresos_cabecera';
             $numero = 'x.numero_ingreso';

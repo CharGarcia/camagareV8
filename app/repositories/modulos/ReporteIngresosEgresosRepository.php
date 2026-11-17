@@ -917,7 +917,7 @@ class ReporteIngresosEgresosRepository extends BaseRepository
                             FROM ingresos_pagos p
                             INNER JOIN empresa_formas_pago fp ON fp.id = p.id_forma_cobro AND fp.tipo = 'ANTICIPO'
                             INNER JOIN ingresos_cabecera c ON c.id = p.id_ingreso
-                            WHERE $vig";
+                            WHERE $vig" . \App\Helpers\AbonosVentaSql::sinTrasladoSaldoFavor('c');
             } else {
                 $vig = "c.id_empresa = :id_empresa AND c.eliminado = false AND c.tipo_ambiente = " . self::AMB
                      . " AND LOWER(COALESCE(c.estado, '')) <> 'anulado'";

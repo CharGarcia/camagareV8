@@ -8154,7 +8154,8 @@ $totalPages = $totalPagesOriginal;
                     const sU = document.createElement('small'); sU.className = 'text-primary'; sU.style.fontSize = '0.65rem'; sU.textContent = 'Saldo a favor pasado a anticipo del cliente';
                     tdUsr.append(dU, sU);
                     tr.appendChild(tdUsr);
-                    tr.appendChild(celda('-$ ' + parseFloat(t.monto || 0).toFixed(2), 'text-end fw-bold text-primary'));
+                    // En positivo, como se registró: la leyenda dice que es un traslado, no un cobro.
+                    tr.appendChild(celda('$ ' + parseFloat(t.monto || 0).toFixed(2), 'text-end fw-bold text-primary'));
                     const tdPdf = document.createElement('td');
                     tdPdf.className = 'text-center pe-3';
                     const a = document.createElement('a');

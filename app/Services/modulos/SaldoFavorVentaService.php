@@ -68,7 +68,7 @@ class SaldoFavorVentaService
      * de sus fórmulas. Su única línea es de tipo SALDO_FAVOR y apunta a la factura: con eso
      * la factura vuelve a saldo cero (AbonosVentaSql::subTrasladadoFactura) y el asiento sale
      * Debe Cuentas por Cobrar / Haber Anticipo de clientes. No entra dinero: la forma de cobro
-     * es una interna, no monetaria. Anular ese ingreso deshace el traslado.
+     * es la de tipo Anticipo (no monetaria). Anular ese ingreso deshace el traslado.
      *
      * El monto NO viene del navegador: se calcula aquí, con el cobro de la factura bloqueado
      * (mismo candado que usan los cobros, §8), así un doble clic o dos usuarios a la vez no
@@ -103,6 +103,15 @@ class SaldoFavorVentaService
             throw new \Exception('No hay un concepto de ingreso activo de tipo «Anticipo de cliente». Créelo en Opciones de Ingresos y Egresos para poder pasar el saldo a favor a anticipo.');
         }
 
+        // Forma de cobro: la de tipo Anticipo (de clientes). El ingreso no mueve dinero y ese
+        // tipo ya es no monetario. Las consultas del anticipo APLICADO dejan fuera este ingreso
+        // (AbonosVentaSql::sinTrasladoSaldoFavor): aquí el anticipo se genera, no se consume.
+        $forma = (new \App\repositories\modulos\FormaPagoRepository())->getFormaAnticipoCobro($idEmpresa);
+        if ($forma === null) {
+            throw new \Exception('No hay una forma de cobro de tipo «Anticipo» para clientes. Créela en Formas de Cobros y Pagos para poder pasar el saldo a favor a anticipo.');
+        }
+        $idForma = (int) $forma['id'];
+
         $log            = new \App\Services\LogSistemaService();
         $ingresoService = new IngresoService($ingresoRepo, new \App\Rules\modulos\IngresoRules(), $log);
 
@@ -121,8 +130,6 @@ class SaldoFavorVentaService
             if ($monto <= 0) {
                 throw new \Exception('Esta factura ya no tiene saldo a favor del cliente. Vuelva a abrir la pestaña Pagos para ver su estado actual.');
             }
-
-            $idForma = (new \App\repositories\modulos\FormaPagoRepository())->getIdFormaTrasladoSaldoFavor($idEmpresa, $idUsuario);
 
             $fecha  = date('Y-m-d');
             $secRes = (new \App\Services\SecuencialService())->obtenerSiguienteSecuencial($idPuntoEmision, 'Ingresos', $fecha);

@@ -4814,7 +4814,7 @@ class AsientoBuilderService
      *          en su propio asiento (como hace el cobro, pero al revés: aquí la cartera, que
      *          quedó en negativo, vuelve a cero). Sin asiento propio: la cuenta oficial.
      *   HABER: cuenta del concepto del ingreso (Anticipo de clientes), por el total.
-     * La forma de cobro del ingreso es solo un marcador y no interviene.
+     * La forma de cobro del ingreso (tipo Anticipo) no interviene: su cuenta no se usa.
      *
      * Devuelve null si el ingreso no es un traslado. Si falta alguna cuenta, las líneas salen
      * descuadradas a propósito (con su motivo) para que el asiento no se genere.

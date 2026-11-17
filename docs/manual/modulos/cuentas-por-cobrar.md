@@ -78,7 +78,10 @@ cobrada.
 Ese valor debe devolverse al cliente o pasarse a anticipo. Desde la pestaña
 Pagos de la factura, el botón **Pasar a anticipo del cliente** lo registra como
 anticipo; a partir de ahí el documento deja de aparecer con saldo a favor y
-vuelve a *Pagada*. Más detalle en *Saldo a favor del cliente* de
+vuelve a *Pagada*, con saldo 0.00. La columna **Cobrado** sigue mostrando solo
+los cobros reales: lo pasado a anticipo no se resta ahí, sino que se suma
+directamente al saldo. Por eso, en esos documentos, total − cobrado −
+retenciones − notas de crédito da el valor trasladado y no cero. Más detalle en *Saldo a favor del cliente* de
 [Facturas de Venta](factura-venta.md).
 
 ### Cómo se enlazan las retenciones y las notas con la factura
