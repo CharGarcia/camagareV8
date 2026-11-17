@@ -144,7 +144,10 @@
                 const idCuenta = parseInt(id || json.id, 10);
                 if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
                 // Sin centros de costo ni proyectos en la empresa no se incluye _dimensiones.php.
-                const dim = window.PCDIM_guardar ? await window.PCDIM_guardar(idCuenta) : { ok: true };
+                // Sin líneas en las pestañas: una cuenta nueva no tiene nada que guardar; una
+                // existente sí pasa por el servidor (puede haberse quitado la última línea).
+                const hayLineas = !!(window.PCDIM_hayLineas && window.PCDIM_hayLineas());
+                const dim = (window.PCDIM_guardar && (hayLineas || id)) ? await window.PCDIM_guardar(idCuenta) : { ok: true };
 
                 // El modal sigue abierto, ya sobre la cuenta guardada.
                 document.getElementById('tituloModalPC').textContent =
@@ -155,12 +158,15 @@
                     Swal.fire('Cuenta guardada', `Pero no se guardaron los centros de costo / proyectos: ${dim.error}`, 'warning');
                     return;
                 }
-                // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
-                if (parseInt(document.getElementById('pc_nivel_edit').value, 10) === 5 && window.PCDIM_cargar) {
-                    await window.PCDIM_cargar(idCuenta, false);
+                let avisado = false;
+                if (hayLineas) {
+                    // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
+                    if (parseInt(document.getElementById('pc_nivel_edit').value, 10) === 5 && window.PCDIM_cargar) {
+                        await window.PCDIM_cargar(idCuenta, false);
+                    }
+                    // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
+                    avisado = window.PCDIM_ofrecerRelleno ? await window.PCDIM_ofrecerRelleno(idCuenta) : false;
                 }
-                // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
-                const avisado = window.PCDIM_ofrecerRelleno ? await window.PCDIM_ofrecerRelleno(idCuenta) : false;
                 // La página que incluye el modal puede reaccionar (Estados Financieros regenera el
                 // reporte y muestra su propio aviso); si no, el aviso es de aquí.
                 if (window.onAccountSaved) window.onAccountSaved(json);

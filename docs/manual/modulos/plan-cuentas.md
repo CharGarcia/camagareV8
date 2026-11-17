@@ -6,7 +6,7 @@ ruta_modulo: modulos/plan-cuentas
 tipo: modulo
 visibilidad: todos
 etiquetas: plan de cuentas, cuentas contables, catalogo de cuentas, codigo de cuenta, nivel, mayor, auxiliar, plan modelo, cargar plan modelo, configuracion contable automatica, tipos de asiento, map asiento, iva por tarifa, cambiar codigo de cuenta, codigo sri, supercias, entidades de control, centro de costo, centro de costos, proyecto, proyectos, centro de costo por periodo, cambiar proyecto de una cuenta, vigencia, asignar centro de costo a asientos registrados, completar proyecto en asientos, pestañas de la cuenta, ocultar pestañas, eliminar cuenta, cuenta eliminada, balance no cuadra, descuadre
-version: 1.6
+version: 1.7
 orden: 10
 estado: activo
 ---
@@ -308,6 +308,10 @@ pendiente y el aviso de asientos pendientes indica qué cuenta revisar.
 
 ## Historial de cambios
 
+- **1.7** — Guardar una cuenta es más rápido y el botón muestra **Guardando...**
+  mientras termina. Antes el botón solo se apagaba, sin ningún aviso, y el
+  guardado esperaba varios pasos uno tras otro (recargar el árbol, revisar
+  centros de costo y proyectos) aunque la cuenta no tuviera ninguno.
 - **1.6** — La ficha de la cuenta se organiza en pestañas: General, Centro de
   costos, Proyectos, SRI y Supercias (las de centro y proyecto solo si hay
   registros activos). El centro de costo y el proyecto se registran **por

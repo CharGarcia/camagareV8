@@ -103,8 +103,14 @@ class PlanCuentasController extends BaseModuloController
         $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
+        // El árbol de la pantalla solo usa data_raw: con arbol=1 no se arma (ni se envía) el
+        // HTML de filas, que duplicaba el tamaño de la respuesta con todo el plan.
+        $soloDatos = !empty($_GET['arbol']);
+
         ob_start();
-        if (empty($rows)) {
+        if ($soloDatos) {
+            // nada
+        } elseif (empty($rows)) {
             echo '<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-list-columns fs-3 d-block mb-2"></i>No se encontraron cuentas.</td></tr>';
         } else {
             foreach ($rows as $r) {

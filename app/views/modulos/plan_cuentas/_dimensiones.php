@@ -240,6 +240,16 @@ $pcdimFecha    = static fn($v) => !empty($v) ? substr((string) $v, 0, 10) : '';
         return true;
     };
 
+    /**
+     * ¿Las pestañas tienen alguna línea (guardada o nueva)? Sin líneas no hay nada que
+     * recargar ni asientos que completar, y en una cuenta nueva tampoco nada que guardar:
+     * el modal se ahorra esas peticiones al servidor.
+     */
+    window.PCDIM_hayLineas = function () {
+        asegurarBloques();
+        return activo && disponible && bloques.some(b => b.lineas().length > 0);
+    };
+
     /** La cuenta abierta no es de nivel 5: no hay líneas que guardar. */
     window.PCDIM_desactivar = function () { activo = false; };
 

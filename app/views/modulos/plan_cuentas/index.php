@@ -315,7 +315,7 @@ $proyectos  = $proyectos ?? [];
 
         window.fetchTree = async function() {
             const buscar = document.getElementById('buscarPC').value;
-            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=1&perPage=1000`; // Traer todos para armar el árbol
+            const url = `${urlBase}/searchAjax?b=${encodeURIComponent(buscar)}&page=1&perPage=1000&arbol=1`; // Traer todos para armar el árbol (solo datos, sin el HTML de filas)
             const expandedCodes = getExpandedCodes();
             const scrollEl = document.getElementById('pc-accordion-container');
             const scrollTop = scrollEl ? scrollEl.scrollTop : 0;
@@ -535,33 +535,46 @@ $proyectos  = $proyectos ?? [];
             const btn = document.getElementById('btnGuardar');
             document.getElementById('modalAlert').classList.add('d-none');
             btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
             try {
                 const fd = new FormData(form);
                 const resp = await fetch(id ? `${urlBase}/update` : `${urlBase}/store`, { method: 'POST', body: fd });
                 const json = await resp.json();
                 if (!json.ok) { Swal.fire('No se pudo guardar', json.error || 'Error al guardar la cuenta.', 'warning'); return; }
 
-                // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
                 const idCuenta = parseInt(id || json.id, 10);
                 if (!id && json.id) document.getElementById('pc_id').value = json.id; // un nuevo Guardar no crea otra cuenta
-                // Sin centros de costo ni proyectos en la empresa no se incluye _dimensiones.php.
-                const dim = window.PCDIM_guardar ? await window.PCDIM_guardar(idCuenta) : { ok: true };
 
+                // El árbol se refresca EN PARALELO con lo demás (antes se esperaba cada paso en fila).
                 // El modal sigue abierto, ya sobre la cuenta guardada.
-                await fetchTree();
-                quedarEnCuentaGuardada(idCuenta);
+                const arbol = fetchTree().then(() => quedarEnCuentaGuardada(idCuenta));
+
+                // Luego las líneas de Centro de costos / Proyectos (con el id de la cuenta ya guardada).
+                // Sin centros de costo ni proyectos en la empresa no se incluye _dimensiones.php.
+                // Sin líneas en las pestañas: una cuenta nueva no tiene nada que guardar; una
+                // existente sí pasa por el servidor (puede haberse quitado la última línea).
+                const hayLineas = !!(window.PCDIM_hayLineas && window.PCDIM_hayLineas());
+                const dim = (window.PCDIM_guardar && (hayLineas || id)) ? await window.PCDIM_guardar(idCuenta) : { ok: true };
                 if (!dim.ok) {
+                    await arbol;
                     Swal.fire('Cuenta guardada', `Pero no se guardaron los centros de costo / proyectos: ${dim.error}`, 'warning');
                     return;
                 }
-                // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
-                const nivel = document.getElementById('pc_nivel_edit').value;
-                if (parseInt(nivel, 10) === 5 && window.PCDIM_cargar) await window.PCDIM_cargar(idCuenta, false);
-                // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
-                if (window.PCDIM_ofrecerRelleno && await window.PCDIM_ofrecerRelleno(idCuenta)) return;
+                if (hayLineas) {
+                    // Las líneas nuevas ya tienen id: se recargan para que otro Guardar no las duplique.
+                    const nivel = document.getElementById('pc_nivel_edit').value;
+                    if (parseInt(nivel, 10) === 5 && window.PCDIM_cargar) await window.PCDIM_cargar(idCuenta, false);
+                    // Asientos ya registrados con centro / proyecto vacío dentro de los periodos: se ofrece completarlos.
+                    if (window.PCDIM_ofrecerRelleno && await window.PCDIM_ofrecerRelleno(idCuenta)) return;
+                }
+                await arbol;
                 Swal.fire({ icon: 'success', title: 'Guardado', text: json.msg, timer: 1800, showConfirmButton: false });
             } catch (err) { console.error(err); Swal.fire('Error', 'Error de red', 'error'); }
-            finally { btn.disabled = false; guardandoPC = false; }
+            finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i> Guardar';
+                guardandoPC = false;
+            }
         });
 
         /**
