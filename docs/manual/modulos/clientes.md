@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, observaciones, observacion del cliente, notas del cliente, cliente vip, quien solicito el cliente, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver factura, ver documento, detalle de la factura
-version: 3.7
+version: 3.8
 orden: 10
 estado: activo
 ---
@@ -41,6 +41,9 @@ La pestaña **General** está ordenada en cuatro filas:
 
 Para modificar un cliente existente, haga clic sobre su fila en el listado.
 
+**Estado** es un interruptor: encendido (**Activo**) el cliente está activo;
+apagado, inactivo.
+
 **Valores por defecto (estrella de favoritos).** Junto a *Tipo de
 identificación*, *Estado*, *Provincia*, *Plazo (días)*, *Vendedor
 asignado* y *Frecuencia de visita* hay una estrella. Escriba o seleccione el valor que usa casi siempre
@@ -50,7 +53,9 @@ es por usuario y por empresa.
 
 Al guardar desde el listado de Clientes, la ficha **no se cierra**: se queda
 abierta y se refresca con lo que quedó realmente grabado, para que siga
-completando pestañas sin volver a buscar el cliente.
+completando pestañas sin volver a buscar el cliente. Mientras se guarda aparece
+el aviso **Guardando cliente...** (o **Actualizando cliente...** si ya existía);
+espere a que termine.
 
 ## Crear un cliente desde un documento (factura, nota, pedido…)
 
@@ -537,6 +542,7 @@ cambios del cliente y **no se copia** al replicar el cliente a otra empresa.
 
 ## Historial de cambios
 
+- **3.8** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando cliente...* mientras el servidor responde.
 - **3.7** — Nuevo campo **Observaciones** en la pestaña *Comercial* de la ficha: nota interna del cliente (quién pidió crearlo, cliente VIP, cómo atenderlo). Sus cambios quedan en el historial del cliente (quién, cuándo, antes y después).
 - **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático). El **Concepto de ingreso predeterminado** ahora se llena solo con el de facturas de venta cada vez que se abre la ficha; antes quedaba vacío desde la segunda ficha abierta.
 - **3.5** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`). Igual que en la ficha de proveedores.

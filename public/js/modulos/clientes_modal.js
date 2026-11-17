@@ -940,10 +940,39 @@
         el.setAttribute('title', limpio);
     }
 
+    // ─── Interruptor de Estado ───────────────────────────────────────────────
+    // El valor real va en el oculto #cliente_status (1/0), que es el que leen la
+    // estrella de favorito (favoritos.js trabaja con .value) y el guardado. El
+    // interruptor #cliente_status_switch solo lo muestra y lo cambia.
+    function cliSincronizarStatusSwitch() {
+        const oculto = document.getElementById('cliente_status');
+        const sw     = document.getElementById('cliente_status_switch');
+        if (oculto && sw) sw.checked = String(oculto.value) !== '0';
+    }
+
+    function cliInitStatusSwitch() {
+        const oculto = document.getElementById('cliente_status');
+        const sw     = document.getElementById('cliente_status_switch');
+        if (!oculto || !sw || sw.dataset.iniciado === '1') return;
+        sw.dataset.iniciado = '1';
+        sw.addEventListener('change', () => {
+            oculto.value = sw.checked ? '1' : '0';
+            oculto.dispatchEvent(new Event('change')); // actualiza la estrella de favorito
+        });
+        // aplicarFavoritosModal() fija el oculto y dispara 'change'.
+        oculto.addEventListener('change', cliSincronizarStatusSwitch);
+    }
+
     // ─── Reset formulario ────────────────────────────────────────────────────
     function resetFormulario() {
         const form = document.getElementById('formCliente');
         if (form) form.reset();
+
+        // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
+        cliInitStatusSwitch();
+        const statusOculto = document.getElementById('cliente_status');
+        if (statusOculto) statusOculto.value = '1';
+        cliSincronizarStatusSwitch();
 
         // form.reset() deja vacío el concepto de ingreso: volver al de facturas de venta.
         cliAplicarConceptoIngreso(null);
@@ -1068,6 +1097,7 @@
         // mostraba como Activo y al guardar se reactivaba solo.
         const statusVal = (data.status === 0 || data.status === '0' || data.status === false || data.status === 'false') ? '0' : '1';
         setV('cliente_status', statusVal);
+        cliSincronizarStatusSwitch();
 
         if (data.provincia) {
             const selProv = document.getElementById('cliente_provincia');
@@ -1103,12 +1133,18 @@
      * un alta y actualiza el resumen comercial.
      */
     async function cliRefrescarModalTrasGuardar(json, eraNuevo) {
+        // El id manda siempre: sin él el siguiente guardado crearía un duplicado.
+        // Se fija ANTES de repoblar, por si la recarga de campos falla.
+        const elId = document.getElementById('cliente_id');
+        if (elId && json.id) elId.value = json.id;
+        if (eraNuevo && json.id) {
+            const form = document.getElementById('formCliente');
+            if (form) form.action = urlBaseClientes + '/update';
+        }
+
         if (json.data) {
             await cliPoblarCampos(json.data);
         }
-
-        // El id manda siempre: sin él el siguiente guardado crearía un duplicado.
-        const elId = document.getElementById('cliente_id');
         if (elId && json.id) elId.value = json.id;
 
         const idCli = elId?.value || '';
@@ -1405,14 +1441,27 @@
 
         const form = document.getElementById('formCliente');
         if (form) {
+            // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
+            let guardandoCliente = false;
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
+                if (guardandoCliente) return;
                 if (!validarIdentificacion() || !validarEmails()) return;
+                guardandoCliente = true;
                     const btnSave = document.getElementById('btnGuardarCliente');
-                    btnSave.disabled = true; 
+                    btnSave.disabled = true;
                     btnSave.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Guardando...';
+                    const eraNuevo = !(document.getElementById('cliente_id')?.value);
+                    // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+                    Swal.fire({
+                        title: eraNuevo ? 'Guardando cliente...' : 'Actualizando cliente...',
+                        text: 'Por favor espere, no cierre esta ventana.',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false,
+                        showConfirmButton: false,
+                        didOpen: () => Swal.showLoading()
+                    });
                     try {
-                        const eraNuevo = !(document.getElementById('cliente_id')?.value);
                         const fd = new FormData(form);
                         const resp = await fetch(form.action, { method: 'POST', body: fd });
                         const json = await resp.json();
@@ -1471,8 +1520,10 @@
                         title: 'Error de Red',
                         text: 'No se pudo conectar con el servidor.'
                     });
-                    btnSave.disabled = false; 
-                    btnSave.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar'; 
+                    btnSave.disabled = false;
+                    btnSave.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+                } finally {
+                    guardandoCliente = false;
                 }
             });
         }

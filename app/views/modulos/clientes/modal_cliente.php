@@ -200,10 +200,15 @@ if (!defined('LEAFLET_LOADED')) {
                                 </div>
                                 <div class="col-md-2">
                                     <label class="form-label small fw-bold d-flex align-items-center">Estado <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('clientes', 'cliente_status', 'status') ?></label>
-                                    <select class="form-select form-select-sm" name="status" id="cliente_status">
-                                        <option value="1">Activo</option>
-                                        <option value="0">Inactivo</option>
-                                    </select>
+                                    <!-- El valor real (1/0) viaja en el oculto: lo leen la estrella de
+                                         favorito y el guardado. El interruptor solo lo refleja. -->
+                                    <input type="hidden" name="status" id="cliente_status" value="1">
+                                    <div class="form-check form-switch mb-0 d-flex align-items-center" style="min-height:31px">
+                                        <input class="form-check-input" type="checkbox" id="cliente_status_switch" checked>
+                                        <label class="form-check-label small fw-semibold ms-2" for="cliente_status_switch">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                        </label>
+                                    </div>
                                 </div>
                                 <!-- Fila 2: razón social -->
                                 <div class="col-md-12">
