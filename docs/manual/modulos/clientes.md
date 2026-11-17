@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver factura, ver documento, detalle de la factura
-version: 3.5
+version: 3.6
 orden: 10
 estado: activo
 ---
@@ -197,13 +197,16 @@ que registrar el ingreso a mano.
 
 | Campo | Para qué sirve |
 |-------|----------------|
-| Forma de cobro | Activa el cobro automático: sin ella no se genera ningún ingreso solo |
+| Forma de cobro | Activa el cobro automático. Con **Ninguna** no se genera ningún ingreso solo |
 | Operación bancaria | Solo si la forma es de tipo banco: depósito, transferencia o cheque |
 | Concepto de ingreso | Concepto contable con el que se registra el cobro |
 | Monto mínimo / máximo | Rango dentro del cual el saldo del documento entra en el cobro automático |
 | Días de crédito | Difiere la fecha de cobro: fecha de emisión del documento + estos días |
 
 Deje vacío el mínimo o el máximo para no aplicar ese límite.
+
+La **Forma de Pago SRI (Predeterminada)** del cliente ya no está en esta pestaña:
+se elige en la pestaña **SRI** de la misma ficha.
 
 ### Al autorizar una factura
 
@@ -518,6 +521,7 @@ usuario y la fecha.
 
 ## Historial de cambios
 
+- **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático).
 - **3.5** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`). Igual que en la ficha de proveedores.
 - **3.4** — La pestaña **Estado de cuenta** del cliente carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
 - **3.3** — Nueva pestaña **Información** en la ventana del cliente (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.

@@ -324,7 +324,7 @@
 
         const selFc = document.getElementById('cliente_id_forma_cobro_predeterminada');
         if (selFc && datosCatalogos.formas_cobros_pagos) {
-            selFc.innerHTML = '<option value="">— Seleccione forma de cobro —</option>';
+            selFc.innerHTML = '<option value="">Ninguna</option>';
             datosCatalogos.formas_cobros_pagos.forEach(f => {
                 const opt = document.createElement('option');
                 opt.value = f.id;

@@ -113,6 +113,9 @@ if (!defined('LEAFLET_LOADED')) {
                                 <a class="nav-link py-2 small" id="tab-cobros-btn" data-bs-toggle="tab" data-bs-target="#pane-cobros" href="#pane-cobros" role="tab"><i class="bi bi-cash-coin me-1"></i>Cobros</a>
                             </li>
                             <li class="nav-item" role="presentation">
+                                <a class="nav-link py-2 small" id="tab-sri-btn" data-bs-toggle="tab" data-bs-target="#pane-sri" href="#pane-sri" role="tab"><i class="bi bi-receipt me-1"></i>SRI</a>
+                            </li>
+                            <li class="nav-item" role="presentation">
                                 <a class="nav-link py-2 small" id="tab-visitas-btn" data-bs-toggle="tab" data-bs-target="#pane-visitas" href="#pane-visitas" role="tab"><i class="bi bi-calendar-week me-1"></i>Visitas</a>
                             </li>
                             <?php if ($cliVerContable): ?>
@@ -142,6 +145,7 @@ if (!defined('LEAFLET_LOADED')) {
                             }
                             $pestanasConfigCli += [
                                 'pane-cobros'    => 'Cobros',
+                                'pane-sri'       => 'SRI',
                                 'pane-visitas'   => 'Visitas',
                             ];
                             if ($cliVerContable) {
@@ -320,16 +324,10 @@ if (!defined('LEAFLET_LOADED')) {
                             </div>
 
                             <div class="row g-3">
-                                <div class="col-md-12">
-                                    <label for="cliente_id_forma_pago_sri" class="form-label small fw-bold">Forma de Pago SRI (Predeterminada)</label>
-                                    <select class="form-select form-select-sm" name="id_forma_pago_sri" id="cliente_id_forma_pago_sri">
-                                        <option value="">- Seleccione -</option>
-                                    </select>
-                                </div>
                                 <div class="col-md-6">
                                     <label for="cliente_id_forma_cobro_predeterminada" class="form-label small fw-bold">Forma de Cobro</label>
                                     <select class="form-select form-select-sm" name="id_forma_cobro_predeterminada" id="cliente_id_forma_cobro_predeterminada">
-                                        <option value="">- Seleccione -</option>
+                                        <option value="">Ninguna</option>
                                     </select>
                                 </div>
                                 <div class="col-md-6">
@@ -405,6 +403,18 @@ if (!defined('LEAFLET_LOADED')) {
                                         </div>
                                     </div>
                                 <?php endif; ?>
+                            </div>
+                        </div>
+
+                        <!-- Pestaña: SRI -->
+                        <div class="tab-pane fade" id="pane-sri" role="tabpanel">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label for="cliente_id_forma_pago_sri" class="form-label small fw-bold">Forma de Pago SRI (Predeterminada)</label>
+                                    <select class="form-select form-select-sm" name="id_forma_pago_sri" id="cliente_id_forma_pago_sri">
+                                        <option value="">- Seleccione -</option>
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
