@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.26** (17-11-2026). El historial de cambios está al final.
+Versión actual: **0.27** (17-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -161,11 +161,18 @@ cotización en el Cotizador de Planes:
 **Zona:** **todo el Ecuador**. El sistema funciona en la nube y la puesta en
 marcha y la capacitación son en línea, así que no hay ciudades de enfoque.
 
-**Por definir:**
-- ¿Hay un **tamaño de empresa** ideal (número de facturas al mes, de empleados
-  o de establecimientos)?
-- ¿Se trabaja con **contadores como aliados o referidores**? ¿Tienen algún
-  beneficio por traer clientes?
+**Tamaño de empresa:** no hay un tamaño ideal. Se atiende a cualquier empresa
+dentro de los perfiles; el precio se ajusta solo con el Cotizador (locales,
+módulos y usuarios).
+
+**Aliados: contadores y referidos.** Sí trabajamos con **contadores** y con
+**referidos** que nos traen clientes. El contador es un aliado natural: lleva
+varias empresas, recibe la información completa y a tiempo, y puede recomendar
+el sistema a sus clientes.
+
+> **Por definir (P-06):** qué beneficio recibe el contador o el referido por
+> cada cliente que trae (comisión, descuento, uso sin costo, etc.). Hasta
+> tenerlo, no ofrecer beneficios.
 
 ---
 
@@ -644,14 +651,18 @@ en *Cotizador → Configuración → Paquetes*:
 15 % → $850 al año, en vez de $1.000. El mismo paquete con precio fijo de $800
 → $800 al año, con Facturas y Proformas incluidos.
 
-**Paquetes sugeridos** (nombres, módulos y % por definir — P-17):
+**Paquetes propuestos, uno por perfil prioritario** (precio fijo; módulos y
+precios por confirmar — P-17):
 
-| Paquete | Para quién | Módulos principales |
-|---|---|---|
-| **Facturación** | Emprendedores y profesionales | Facturación electrónica + Proformas |
-| **Comercial** | Negocios que compran, venden y manejan stock | Facturación + Proformas y pedidos + POS + Compras + Inventario + Tesorería |
-| **Empresarial** | Empresas obligadas a llevar contabilidad | Comercial + Contabilidad + Impuestos SRI + Conciliaciones + Nómina |
-| **Estudio contable** | Contadores que llevan varias empresas | Por definir |
+| Paquete | Perfil (sección 2.6) | Módulos principales | Precio anual |
+|---|---|---|---|
+| **Emprendedor** | Emprendedor o profesional independiente | Facturación electrónica (con lo que trae: clientes, productos, notas de crédito y débito, retenciones de venta, reportes de ventas) + Proformas | *Por definir* |
+| **Comercial** | Comercio y distribuidora | Emprendedor + Proformas y pedidos + POS + Compras + Inventario + Tesorería | *Por definir* |
+| **Empresarial** | Empresa obligada a llevar contabilidad | Comercial + Contabilidad + Impuestos SRI + Conciliaciones + Nómina | *Por definir* |
+| **Estudio contable** | Contadores aliados que llevan varias empresas | Por definir | *Por definir* |
+
+Cada paquete se crea en *Cotizador → Configuración → Paquetes* con **precio
+fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 
 ---
 
@@ -815,8 +826,8 @@ actualiza su sección y se tacha aquí.
 |---|---|---|
 | P-03 | ✅ **Resuelto (17-11-2026):** emprendedor o profesional independiente, comercio y distribuidora, y empresa obligada a llevar contabilidad. | 2.6 |
 | P-04 | ✅ **Resuelto (17-11-2026):** todo el Ecuador. | 2.6 |
-| P-05 | **Tamaño de empresa ideal** (facturas al mes, empleados, establecimientos). | 2.6 |
-| P-06 | ¿Trabajamos con **contadores como aliados o referidores**? ¿Con qué beneficio? | 2.6 |
+| P-05 | ✅ **Resuelto (17-11-2026):** no hay tamaño ideal; cualquier empresa dentro de los perfiles. | 2.6 |
+| P-06 | ✅ Sí trabajamos con **contadores y referidos** (17-11-2026). Falta: **qué beneficio** reciben por cliente traído. | 2.6 |
 
 ### C. Puesta en marcha y soporte
 | # | Pendiente | Sección |
@@ -870,6 +881,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.27 | 17-11-2026 | Sin tamaño ideal de empresa; aliados contadores y referidos (beneficio por definir); paquetes propuestos Emprendedor, Comercial y Empresarial con precio fijo, uno por perfil (6.5). P-05 resuelto, P-06 parcial |
 | 0.26 | 17-11-2026 | Perfiles prioritarios (emprendedor, comercio, obligados a contabilidad) y zona (todo el Ecuador): sección 2.6 y proceso de venta. P-03 y P-04 resueltos |
 | 0.25 | 16-11-2026 | Implementación sin costo; puesta en marcha desde 1 hora (hasta 1 día); capacitación de 3 sesiones de 1 hora; qué basta para empezar; contabilidad opcional al inicio; soporte en horario laboral. P-08, P-09 y P-10 resueltos |
 | 0.24 | 16-11-2026 | El cliente también puede configurar su empresa, firma electrónica, logo y demás en Configuración → Empresa: sección 5.2 y preguntas frecuentes |
