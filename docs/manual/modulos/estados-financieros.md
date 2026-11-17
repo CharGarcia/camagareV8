@@ -6,7 +6,7 @@ ruta_modulo: modulos/estados_financieros
 tipo: modulo
 visibilidad: todos
 etiquetas: estados financieros, cuadre con modulos, tarjetas por liquidar, cuenta puente de tarjetas, activos fijos vs contabilidad, depreciacion acumulada vs contabilidad, cuadre de caja, caja vs contabilidad, anticipos vs contabilidad, cuadre de anticipos, cuadrar contabilidad con modulos, contabilidad vs bancos, contabilidad vs cartera, contabilidad vs inventario, comprobar con contabilidad, no cuadra con el modulo, balance, estado de resultados, situacion financiera, perdidas y ganancias, activo pasivo patrimonio, reportes por periodos, comparativo mensual, horizontal por mes, editar cuenta desde el balance, codigo sri, supercias, entidades de control, pdf con logo, firma del contador, firma del representante legal, balances firmados, excel por niveles, columnas por nivel, exportar excel, establecimiento, varios establecimientos, sucursal, sucursales, mismo ruc, todos los establecimientos, matriz, asientos pendientes de otro establecimiento, balance descuadrado, no cuadra, partida doble, asiento descuadrado, donde esta la diferencia, diferencia del balance, cuenta eliminada, periodo cerrado, documentos sin asiento, balance incompleto
-version: 1.18
+version: 1.19
 orden: 50
 estado: activo
 ---
@@ -39,6 +39,16 @@ que se está procesando, cuántos documentos lleva de ese módulo (por ejemplo
 transcurrido. Los módulos con muchos documentos se procesan por partes, así
 que la barra avanza aunque haya miles. **Cancelar** detiene el proceso al
 terminar la parte en curso y conserva lo ya generado.
+
+### Descargar el aviso en PDF
+
+Si al terminar quedan asientos sin generar, el aviso final dice qué falta
+configurar, en qué documentos y qué cuentas. El botón **Descargar PDF** de ese
+aviso lo entrega completo (todos los grupos de documentos, no solo los primeros
+que caben en la ventana) para **imprimirlo, descargarlo o verlo**. Así puede ir
+a Configuración Contable con la lista a la vista, sin volver a generar solo para
+leer el aviso otra vez. Al cerrar el PDF el aviso sigue en pantalla. El mismo
+botón está en Asientos Contables, Balance de Comprobación y Mayores.
 
 Si continúa sin generarlos, los informes saldrán sin esos movimientos. Es válido
 para una consulta rápida, pero no para presentar nada.
@@ -480,6 +490,8 @@ los otros módulos.
 
 ## Historial de cambios
 
+- **1.19** — El aviso que queda al terminar de generar asientos tiene el botón **Descargar PDF**:
+  lista completa de lo que falta configurar, para no volver a generar solo para leerla.
 - **1.18** — Aviso sobre el reporte cuando sus fechas incluyen documentos sin asiento de
   períodos contables cerrados (también en el Consolidado por RUC).
 - **1.17** — Al abrir el módulo se muestra el aviso **Buscando asientos contables

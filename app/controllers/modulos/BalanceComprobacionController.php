@@ -10,6 +10,8 @@ use App\Services\ReportService;
 
 class BalanceComprobacionController extends BaseModuloController
 {
+    use \App\Traits\AvisoAsientosPdfTrait; // {ruta}/avisoAsientosPdf: PDF del aviso de asientos pendientes
+
     private BalanceComprobacionService $service;
 
     protected function getRutaModulo(): string

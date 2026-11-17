@@ -6,7 +6,7 @@ ruta_modulo: modulos/mayores
 tipo: modulo
 visibilidad: todos
 etiquetas: mayor, mayores, libro mayor, movimientos de cuenta, saldo de cuenta, auxiliar, cuadre, pdf mayor, imprimir mayor, mayor detallado, detalle del asiento, desglose, lineas agrupadas, expandir detalle
-version: 1.5
+version: 1.6
 orden: 40
 estado: activo
 ---
@@ -115,6 +115,7 @@ exportaciones quedan bloqueados.
 
 ## Historial de cambios
 
+- **1.6** — Botón **Descargar PDF** en el aviso que queda al terminar de generar asientos pendientes: lista completa de lo que falta configurar.
 - **1.5** — Flecha **▸** para ver, debajo de la fila, las líneas del ingreso o
   egreso que el asiento agrupó en una sola cuenta, y botón **Expandir detalle**
   para abrirlas todas.

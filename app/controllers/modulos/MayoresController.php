@@ -14,6 +14,8 @@ use App\Services\ReportService;
 
 class MayoresController extends BaseModuloController
 {
+    use \App\Traits\AvisoAsientosPdfTrait; // {ruta}/avisoAsientosPdf: PDF del aviso de asientos pendientes
+
     private MayoresService $service;
 
     protected function getRutaModulo(): string

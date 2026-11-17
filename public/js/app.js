@@ -475,7 +475,17 @@ window.CMG_Identificacion = (function () {
             });
         }
 
-        return fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' })
+        // opciones.cuerpo (objeto): el archivo se pide por POST con ese JSON, para los que se
+        // arman con datos que solo tiene la pantalla (p. ej. el aviso de asientos pendientes).
+        var peticion = { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' };
+        if (opciones.cuerpo) {
+            peticion.method = 'POST';
+            peticion.headers['Content-Type'] = 'application/json';
+            peticion.headers['X-Permitir-Repetido'] = '1'; // descargar dos veces el mismo PDF es válido
+            peticion.body = JSON.stringify(opciones.cuerpo);
+        }
+
+        return fetch(url, peticion)
             .then(function (response) {
                 var tipo = response.headers.get('Content-Type') || '';
                 if (tipo.indexOf('application/json') !== -1) {

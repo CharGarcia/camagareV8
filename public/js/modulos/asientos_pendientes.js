@@ -26,6 +26,9 @@
  * traídos por la migración solo se cuentan si el sistema anterior nunca los contabilizó (ver
  * SincronizadorAsientosService::construirExclusionMigracion()).
  *
+ * El resultado final se puede bajar con «Descargar PDF» (POST {urlBase}/avisoAsientosPdf, ver
+ * AvisoAsientosPdfTrait): sirve para configurar con el aviso a la vista, sin volver a generar.
+ *
  * Mientras se cuentan los pendientes se muestra un indicador abajo a la derecha, con el tiempo
  * transcurrido y un botón «Omitir» que corta la búsqueda y desbloquea el reporte.
  *   GET {urlBase}/sincronizarAjax             → (respaldo sin barra de progreso, solo si no hay SweetAlert2)
@@ -163,13 +166,22 @@
         }
 
         if (window.Swal) {
+            // «Descargar PDF»: el aviso no se guarda en el servidor, así que el PDF es la forma de
+            // tenerlo a mano mientras se configura, sin volver a generar para leerlo otra vez.
+            const conPdf = (hayPendientes || info.length > 0) && !!opts.urlBase
+                && typeof window.CMG_pdfDocumento === 'function';
             Swal.fire({
                 icon: interrumpido ? 'info' : (hayPendientes ? 'warning' : 'success'),
                 title: interrumpido ? 'Generación interrumpida' : (hayPendientes ? 'Generación completada con avisos' : 'Asientos generados'),
                 html: html,
                 width: (acciones.length || info.length) ? 640 : undefined,
                 confirmButtonText: 'Aceptar',
-            }).then(() => {
+                showDenyButton: conPdf,
+                denyButtonText: '<i class="bi bi-file-earmark-pdf me-1"></i> Descargar PDF',
+                denyButtonColor: '#dc3545',
+                allowOutsideClick: !conPdf,
+            }).then((res) => {
+                if (res.isDenied) { descargarPdf(opts); return; }
                 terminar();
                 if (typeof onGenerado === 'function') onGenerado();
             });
@@ -177,6 +189,33 @@
             terminar();
             if (typeof onGenerado === 'function') onGenerado();
         }
+    }
+
+    /**
+     * PDF del aviso (POST {urlBase}/avisoAsientosPdf con lo acumulado, ver AvisoAsientosPdfTrait).
+     * Lleva TODOS los grupos de detalle, no solo los primeros que caben en la ventana. Al cerrar
+     * la ventana del PDF el aviso vuelve a mostrarse: se puede descargar de nuevo o aceptar.
+     */
+    function descargarPdf(opts) {
+        const cuerpo = {
+            generados: opts.generados || 0,
+            pendientes: parseInt(opts.pendientes, 10) || 0,
+            interrumpido: !!opts.interrumpido,
+            acciones: (Array.isArray(opts.acciones) ? opts.acciones : []).map(a => ({
+                texto: a.texto,
+                detalles: Array.isArray(a.detalles) ? a.detalles : [],
+            })),
+            info: Array.isArray(opts.info) ? opts.info : [],
+        };
+        Promise.resolve(window.CMG_pdfDocumento(`${opts.urlBase}/avisoAsientosPdf`, {
+            nombre: 'PDF', archivo: 'Asientos_pendientes.pdf', cuerpo,
+        })).catch(() => null).then(() => {
+            const espera = setInterval(() => {
+                if (Swal.isVisible()) return; // sigue abierta «PDF listo» (o el error)
+                clearInterval(espera);
+                mostrarResultado(opts);
+            }, 300);
+        });
     }
 
     // ── Bloqueo de la generación de balances mientras el aviso no esté resuelto ────────────
@@ -416,6 +455,7 @@
             });
 
             mostrarResultado({
+                urlBase,
                 acciones, urlConfig: puedeConfigurar ? urlConfiguracion(urlBase) : null,
                 pendientes: pendientesReales,
                 info: acumInfo, generados, interrumpido, onGenerado,

@@ -639,9 +639,52 @@
         document.getElementById('nc_id_punto_emision')?.value, 'precio', window.nc_dec_p || 2
     );
 
+    // Decimales de cantidad, misma regla (respaldo: window.nc_dec_c).
+    window.NC_decCantidad = () => window.CMG_decimalesPunto(
+        document.getElementById('nc_id_punto_emision')?.value, 'cantidad', window.nc_dec_c || 2
+    );
+
+    // Cantidad y precio se muestran con los decimales de la configuración de facturación.
+    // `redondear` = true cuando el usuario escribe el valor (se ajusta a esos decimales);
+    // false al cargar una nota o las líneas de una factura: si el valor guardado trae más
+    // decimales significativos que la configuración, se muestra completo para no alterar
+    // el importe del documento.
+    function NC_fmtDec(valor, dec, redondear) {
+        const n = parseFloat(valor);
+        if (!isFinite(n)) return (0).toFixed(dec);
+        const f = Math.pow(10, dec);
+        const red = Math.round(parseFloat((n * f).toPrecision(12))) / f;
+        if (redondear || Math.abs(red - n) < 1e-9) return red.toFixed(dec);
+        return String(parseFloat(n.toFixed(6)));
+    }
+    const NC_cantCfg   = (v, redondear = false) => NC_fmtDec(v, window.NC_decCantidad(), redondear);
+    const NC_precioCfg = (v, redondear = false) => NC_fmtDec(v, window.NC_decPrecio(), redondear);
+
+    // Al salir del campo: cantidad y precio a los decimales configurados; descuento a 2.
+    window.NC_formatearCampo = (inp) => {
+        if (!inp || inp.value === '') return;
+        if (inp.name === 'det_cantidad[]') inp.value = NC_cantCfg(inp.value, true);
+        else if (inp.name === 'det_precio_unitario[]') inp.value = NC_precioCfg(inp.value, true);
+        else if (inp.name === 'det_descuento[]') inp.value = NC_fmtDec(inp.value, 2, true);
+        window.NC_calcFila(inp);
+    };
+
+    // Otra serie puede ser de otro establecimiento, con otros decimales: se vuelve a
+    // dar formato a las filas ya cargadas (sin recortar valores guardados).
+    function NC_reformatearFilas() {
+        if (!tableBody) return;
+        tableBody.querySelectorAll('tr.row-det').forEach(tr => {
+            const c = tr.querySelector('input[name="det_cantidad[]"]');
+            const p = tr.querySelector('input[name="det_precio_unitario[]"]');
+            if (c && c.value !== '') c.value = NC_cantCfg(c.value);
+            if (p && p.value !== '') p.value = NC_precioCfg(p.value);
+        });
+    }
+
     window.NC_cargarSecuencial = () => {
         const idPt = document.getElementById('nc_id_punto_emision').value;
         if (!idPt) return;
+        NC_reformatearFilas();
         // Otra serie puede ser de otro establecimiento, con otro modo de cálculo del IVA.
         window.NC_calcFila();
         // ...y con otra configuración de lotes / NUP (columnas del detalle).
@@ -1180,13 +1223,13 @@
                 <select name="det_nup[]" class="input-detalle" data-pre="${NC_escAttr(nupIni)}" onchange="window.NC_cambioLoteFila(this)"></select>
             </td>
             <td class="py-1">
-                <input type="number" name="det_cantidad[]" class="input-detalle text-center" value="${cantidad}" step="0.000001" ${sinNegativos} oninput="window.NC_calcFila(this)">
+                <input type="number" name="det_cantidad[]" class="input-detalle text-center" value="${NC_cantCfg(cantidad)}" step="any" ${sinNegativos} oninput="window.NC_calcFila(this)" onchange="window.NC_formatearCampo(this)">
             </td>
             <td class="py-1">
-                <input type="number" name="det_precio_unitario[]" class="input-detalle text-end" value="${precioUnitario}" step="0.000001" ${sinNegativos} oninput="window.NC_calcFila(this)">
+                <input type="number" name="det_precio_unitario[]" class="input-detalle text-end" value="${NC_precioCfg(precioUnitario)}" step="any" ${sinNegativos} oninput="window.NC_calcFila(this)" onchange="window.NC_formatearCampo(this)">
             </td>
             <td class="py-1">
-                <input type="number" name="det_descuento[]" class="input-detalle text-end" value="${descuento}" step="0.01" ${sinNegativos} oninput="window.NC_calcFila(this)">
+                <input type="number" name="det_descuento[]" class="input-detalle text-end" value="${NC_fmtDec(descuento, 2, false)}" step="any" ${sinNegativos} oninput="window.NC_calcFila(this)" onchange="window.NC_formatearCampo(this)">
             </td>
             <td class="py-1">
                 <select name="det_id_tarifa_iva[]" class="input-detalle text-center" onchange="window.NC_calcFila(this)">
@@ -1330,8 +1373,8 @@
         if (inpId)   inpId.value = p.id || '';
         if (inpCod)  inpCod.value = p.codigo || '';
         if (inpDesc) inpDesc.value = p.nombre || '';
-        if (inpCant && (!inpCant.value || parseFloat(inpCant.value) <= 0)) inpCant.value = 1;
-        if (inpPrec) inpPrec.value = parseFloat(p.precio_base || 0).toFixed(2);
+        if (inpCant && (!inpCant.value || parseFloat(inpCant.value) <= 0)) inpCant.value = NC_cantCfg(1);
+        if (inpPrec) inpPrec.value = NC_precioCfg(p.precio_base || 0, true);
 
         // Asignar tarifa IVA: por id directo y, como respaldo, por porcentaje.
         if (selIva) {
@@ -1515,7 +1558,8 @@
 
             // El subtotal de la línea muestra el neto (después de descuento, SIN IVA):
             // es el mismo valor que se guarda en precio_total_sin_impuesto.
-            const decP = window.NC_decPrecio();
+            // Importe: siempre 2 decimales (los decimales configurados son solo de cantidad y precio).
+            const decP = 2;
             const totalFilaEl = tr.querySelector('.nc-fila-total');
             if (totalFilaEl) {
                 totalFilaEl.textContent = baseConDesc.toFixed(decP);
@@ -1536,7 +1580,8 @@
             });
         }
 
-        const decP = window.NC_decPrecio();
+        // Subtotales, descuento, IVA y total: siempre 2 decimales.
+        const decP = 2;
 
         const updateLabel = (id, val, isHtml = false) => {
             const el = document.getElementById(id);

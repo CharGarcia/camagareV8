@@ -13,6 +13,8 @@ use Exception;
 
 class EstadosFinancierosController extends BaseModuloController
 {
+    use \App\Traits\AvisoAsientosPdfTrait; // {ruta}/avisoAsientosPdf: PDF del aviso de asientos pendientes
+
     private EstadosFinancierosService $service;
     private EmpresaService $empresaService;
 

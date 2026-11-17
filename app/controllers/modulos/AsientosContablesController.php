@@ -14,6 +14,8 @@ use App\models\Empresa;
 
 class AsientosContablesController extends BaseModuloController
 {
+    use \App\Traits\AvisoAsientosPdfTrait; // {ruta}/avisoAsientosPdf: PDF del aviso de asientos pendientes
+
     private AsientoContableService $service;
     private const RUTA_MODULO = 'modulos/asientos_contables';
 
