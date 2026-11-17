@@ -382,7 +382,7 @@
     // ── MODAL — ELIMINAR ─────────────────────────────────────────────────────────
 
     // Retención electrónica (clave de 49 dígitos): al eliminarla se pregunta el motivo
-    // para dejarla en «Documentos para no descargar» de Descargas SRI; si no, la próxima
+    // para dejarla en «Claves a no registrar» de Descargas SRI; si no, la próxima
     // descarga la volvería a registrar. El servidor revalida con la clave guardada
     // (RetencionVentaService::eliminar → DocumentoNoDescargarService).
     function dialogoEliminarElectronica() {

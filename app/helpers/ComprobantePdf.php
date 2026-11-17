@@ -65,6 +65,15 @@ final class ComprobantePdf
     /** Impuestos de una retención => código del XML del SRI. */
     public const IMPUESTOS_RETENCION = ['RENTA' => '1', 'IVA' => '2', 'ISD' => '6'];
 
+    /** Tipos de identificación del comprador / proveedor / sujeto retenido (tabla 6 del SRI). */
+    public const TIPOS_IDENTIFICACION = [
+        '04' => 'RUC',
+        '05' => 'Cédula',
+        '06' => 'Pasaporte',
+        '07' => 'Consumidor final',
+        '08' => 'Identificación del exterior',
+    ];
+
     /** Documentos de sustento habituales de una retención / documento modificado. */
     public const DOCS_SUSTENTO = [
         '01' => 'Factura',
@@ -278,7 +287,11 @@ final class ComprobantePdf
             'fecha_emision' => self::fecha($d['fecha_emision'] ?? ''),
             'receptor' => [
                 // Un pasaporte puede traer letras: solo se quitan los espacios.
-                'identificacion' => strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', (string) ($receptor['identificacion'] ?? ''))),
+                'identificacion' => $idRec = strtoupper((string) preg_replace('/[^0-9A-Za-z]/', '', (string) ($receptor['identificacion'] ?? ''))),
+                // El elegido en pantalla; si no viene (o no es válido), se deduce del número.
+                'tipo_identificacion' => isset(self::TIPOS_IDENTIFICACION[$tipoRec = (string) ($receptor['tipo_identificacion'] ?? '')])
+                    ? $tipoRec
+                    : ($idRec !== '' ? self::tipoIdentificacion($idRec) : ''),
                 'razon_social'   => self::texto($receptor['razon_social'] ?? ''),
                 'direccion'      => self::texto($receptor['direccion'] ?? ''),
             ],
@@ -316,6 +329,8 @@ final class ComprobantePdf
                 'codigo'          => self::texto($l['codigo'] ?? '', 25),
                 'codigo_auxiliar' => self::texto($l['codigo_auxiliar'] ?? '', 25),
                 'descripcion'     => $desc,
+                // Detalle adicional del ítem (columna «Adicional»): va a <detallesAdicionales>.
+                'adicional'       => self::texto($l['adicional'] ?? '', 300),
                 'cantidad'        => self::numero($l['cantidad'] ?? 0, 6),
                 'precio_unitario' => self::numero($l['precio_unitario'] ?? 0, 6),
                 'descuento'       => self::numero($l['descuento'] ?? 0),

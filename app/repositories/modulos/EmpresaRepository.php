@@ -828,6 +828,30 @@ class EmpresaRepository extends BaseModel
     }
 
     /**
+     * Modo de cálculo del IVA de cada serie de la empresa, por su código «001-001»
+     * (establecimiento-punto). Para pantallas donde la serie se digita en lugar de
+     * elegirse de una lista (ingreso manual de Descargas SRI).
+     *
+     * @return array<string, string|null> 'estab-pto' => calculo_iva_facturacion
+     */
+    public function getModosIvaPorSerie(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT LPAD(TRIM(e.codigo::text), 3, '0') || '-' || LPAD(TRIM(p.codigo_punto::text), 3, '0') AS serie,
+                    e.calculo_iva_facturacion
+               FROM empresa_punto_emision p
+               JOIN empresa_establecimiento e ON e.id = p.id_establecimiento AND e.eliminado = false
+              WHERE p.id_empresa = :id_empresa AND p.eliminado = false"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+            $out[(string) $r['serie']] = $r['calculo_iva_facturacion'];
+        }
+        return $out;
+    }
+
+    /**
      * Decimales de cantidad y precio de cada punto de emisión de la empresa, tomados del
      * establecimiento al que pertenece el punto (misma regla que el modo de IVA: la serie
      * con la que se emite manda, no el primer establecimiento).

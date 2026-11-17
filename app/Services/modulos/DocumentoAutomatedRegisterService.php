@@ -432,7 +432,9 @@ class DocumentoAutomatedRegisterService
                         'descuento' => (float)$d->descuento,
                         'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto,
                         'codigo_principal' => (string)$d->codigoPrincipal,
-                        'codigo_auxiliar' => (string)$d->codigoAuxiliar
+                        'codigo_auxiliar' => (string)$d->codigoAuxiliar,
+                        // Adicional del ítem (<detallesAdicionales>), igual que en las compras.
+                        'info_adicional' => \App\Helpers\DetalleAdicionalXmlHelper::texto($d)
                     ]);
 
                     // 3. Impuestos por detalle
@@ -467,6 +469,7 @@ class DocumentoAutomatedRegisterService
             // 5. Persistir XML original
             $db->prepare("UPDATE ventas_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idVenta]);
+            $this->guardarAutorizacionEmitido($this->ventaRepo, $idVenta, $idEmpresa, $claveAcceso);
 
             $this->registrarCarga($idUsuario, $idEmpresa, 'ventas_cabecera', $idVenta,
                 ['id_venta' => $idVenta], (string) $xml->infoTributaria->claveAcceso);
@@ -1391,7 +1394,9 @@ class DocumentoAutomatedRegisterService
                         'cantidad' => (float)$d->cantidad,
                         'precio_unitario' => (float)$d->precioUnitario,
                         'descuento' => (float)$d->descuento,
-                        'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto
+                        'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto,
+                        // Adicional del ítem (<detallesAdicionales>), igual que la venta y la compra.
+                        'info_adicional' => \App\Helpers\DetalleAdicionalXmlHelper::texto($d)
                     ]);
 
                     if (isset($d->impuestos->impuesto)) {
@@ -1424,6 +1429,7 @@ class DocumentoAutomatedRegisterService
             // Clave de acceso + XML en liquidaciones_cabecera
             $db->prepare("UPDATE liquidaciones_cabecera SET clave_acceso = ?, detalle_xml = ? WHERE id = ?")
                ->execute([(string)$it->claveAcceso, $xmlStr, $idLiq]);
+            $this->guardarAutorizacionEmitido($this->liquidacionRepo, $idLiq, $idEmpresa, (string)$it->claveAcceso);
 
             $this->registrarCarga($idUsuario, $idEmpresa, 'liquidaciones_cabecera', $idLiq,
                 ['id_liquidacion' => $idLiq], (string) $xml->infoTributaria->claveAcceso);
@@ -1553,6 +1559,7 @@ class DocumentoAutomatedRegisterService
                 'total_sin_impuestos' => (float)$info->totalSinImpuestos,
                 'total_descuento' => (float)($info->totalDescuento ?? 0),
                 'importe_total' => (float)$info->valorModificacion,
+                'cod_doc_modificado' => trim((string)$info->codDocModificado) ?: '01',
                 'num_doc_modificado' => (string)$info->numDocModificado,
                 'fecha_emision_docs_sustento' => $this->formatearFecha((string)$info->fechaEmisionDocSustento),
                 'motivo' => (string)$info->motivo,
@@ -1561,16 +1568,37 @@ class DocumentoAutomatedRegisterService
                 'tipo_ambiente' => $ambiente
             ]);
 
+            // Información adicional de la nota (igual que la venta).
+            if (isset($xml->infoAdicional->campoAdicional)) {
+                foreach ($xml->infoAdicional->campoAdicional as $ad) {
+                    $this->ncRepo->insertInfoAdicional([
+                        'id_nota_credito' => $idNC,
+                        'nombre' => (string)$ad['nombre'],
+                        'valor' => (string)$ad
+                    ]);
+                }
+            }
+
+            // Líneas de la factura que modifica (si está en el sistema), para ligar cada ítem de
+            // la nota a su línea, como hace el módulo de Notas de Crédito (id_venta_detalle).
+            $lineasFactura = $this->lineasFacturaModificada($idEmpresa, (string)$info->codDocModificado, (string)$info->numDocModificado);
+
             if (isset($xml->detalles->detalle)) {
                 foreach ($xml->detalles->detalle as $d) {
+                    $codigo = self::codigoDetalle($d);
+                    $idProducto = $this->getOrCreateProductoId($idEmpresa, $idUsuario, $codigo, (string)$d->descripcion, (float)$d->precioUnitario,
+                        isset($d->impuestos->impuesto) ? (string)$d->impuestos->impuesto[0]->codigoPorcentaje : '0');
                     $idDet = $this->ncRepo->insertDetalle([
                         'id_nota_credito' => $idNC,
+                        'id_producto' => $idProducto,
+                        'id_venta_detalle' => $this->tomarLineaFactura($lineasFactura, $idProducto),
                         'descripcion' => (string)$d->descripcion,
                         'cantidad' => (float)$d->cantidad,
                         'precio_unitario' => (float)$d->precioUnitario,
                         'descuento' => (float)$d->descuento,
                         'precio_total_sin_impuesto' => (float)$d->precioTotalSinImpuesto,
-                        'codigo_principal' => self::codigoDetalle($d)
+                        'codigo_principal' => $codigo,
+                        'codigo_auxiliar' => self::codigoAuxiliarDetalle($d)
                     ]);
                     if (isset($d->impuestos->impuesto)) {
                         foreach ($d->impuestos->impuesto as $imp) {
@@ -1590,6 +1618,7 @@ class DocumentoAutomatedRegisterService
             // Persistir XML original
             $db->prepare("UPDATE notas_credito_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idNC]);
+            $this->guardarAutorizacionEmitido($this->ncRepo, $idNC, $idEmpresa, (string)$it->claveAcceso);
 
             $this->registrarCarga($idUsuario, $idEmpresa, 'notas_credito_cabecera', $idNC,
                 ['id_nota_credito' => $idNC], (string) $xml->infoTributaria->claveAcceso);
@@ -1653,6 +1682,7 @@ class DocumentoAutomatedRegisterService
             // pero se guarda igual para consistencia)
             $db->prepare("UPDATE nota_debito_cabecera SET detalle_xml = ? WHERE id = ?")
                ->execute([$xmlStr, $idND]);
+            $this->guardarAutorizacionEmitido($this->ndRepo, $idND, $idEmpresa, (string)$it->claveAcceso);
 
             $this->registrarCarga($idUsuario, $idEmpresa, 'nota_debito_cabecera', $idND,
                 ['id_nota_debito' => $idND], (string) $xml->infoTributaria->claveAcceso);
@@ -1921,6 +1951,64 @@ class DocumentoAutomatedRegisterService
      * RespuestaAutorizacionComprobante > autorizaciones > autorizacion).
      * Devuelve null si el XML no viene dentro de un sobre de autorización.
      */
+    /**
+     * Líneas (id_venta_detalle => id_producto) de la factura que modifica una nota de crédito
+     * emitida, si esa factura está registrada en la empresa. Vacío si no es una factura o no existe.
+     *
+     * @return array<int, int>
+     */
+    private function lineasFacturaModificada(int $idEmpresa, string $codDoc, string $numDoc): array
+    {
+        if ((trim($codDoc) ?: '01') !== '01' || trim($numDoc) === '') {
+            return [];
+        }
+        $idVenta = (new \App\repositories\modulos\InventarioRepository())->getIdVentaPorNumero($idEmpresa, $numDoc);
+        if (!$idVenta) {
+            return [];
+        }
+        $lineas = [];
+        foreach ($this->ventaRepo->getDetalles($idVenta) as $l) {
+            if (!empty($l['id_producto'])) {
+                $lineas[(int) $l['id']] = (int) $l['id_producto'];
+            }
+        }
+        return $lineas;
+    }
+
+    /**
+     * Primera línea de la factura con el mismo producto que aún no se ligó a otro ítem de la
+     * nota (la saca de la lista para no repetirla). null si no hay ninguna.
+     *
+     * @param array<int, int> $lineas
+     */
+    private function tomarLineaFactura(array &$lineas, int $idProducto): ?int
+    {
+        foreach ($lineas as $idLinea => $prod) {
+            if ($prod === $idProducto && $idProducto > 0) {
+                unset($lineas[$idLinea]);
+                return $idLinea;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Comprobante EMITIDO (venta, liquidación, nota de crédito o débito): guarda el número y
+     * la fecha de autorización que trae el sobre del SRI. Antes solo la retención los tomaba
+     * y los demás quedaban sin fecha de autorización (RIDE, listados). Se llama dentro de la
+     * transacción del registro; sin sobre o sin estado AUTORIZADO no hace nada.
+     *
+     * @param object $repo Repositorio con actualizarAutorizacionImportada().
+     */
+    private function guardarAutorizacionEmitido(object $repo, int $id, int $idEmpresa, string $claveAcceso): void
+    {
+        $aut = $this->datosAutorizacionSobre();
+        if ($aut === null || $aut['estado'] !== 'AUTORIZADO') {
+            return;
+        }
+        $repo->actualizarAutorizacionImportada($id, $idEmpresa, $aut['numero_autorizacion'] ?: $claveAcceso, $aut['fecha_autorizacion']);
+    }
+
     private function datosAutorizacionSobre(): ?array
     {
         if (empty($this->xmlOriginal)) {

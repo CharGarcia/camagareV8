@@ -753,7 +753,7 @@ class RetencionesVentasController extends BaseModuloController
         $idUsuario = (int) $_SESSION['id_usuario'];
 
         try {
-            // Si se pidió, la deja en «Documentos para no descargar» de Descargas SRI
+            // Si se pidió, la deja en «Claves a no registrar» de Descargas SRI
             // (misma transacción; ver RetencionVentaService::eliminar).
             $this->service->eliminar(
                 $id, $idEmpresa, $idUsuario,

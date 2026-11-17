@@ -8,7 +8,7 @@ use App\core\Database;
 use PDO;
 
 /**
- * «Documentos para no descargar» (Descargas SRI): claves de acceso que la descarga
+ * «Claves a no registrar» (Descargas SRI): claves de acceso que la descarga
  * del SRI (manual, automática o carga de XML) no debe registrar.
  *
  * Alcance del bloqueo (columna solo_establecimiento, database/2026-11-15_documentos_ignorados_sri_alcance.sql):

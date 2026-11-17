@@ -130,9 +130,78 @@ class DescargaPdfService
      * Revalida los datos que el usuario tiene en pantalla (sin registrar nada):
      * la pantalla lo llama para refrescar avisos y opciones tras una corrección.
      */
-    public function revisar(array $docCrudo, int $idEmpresa): array
+    public function revisar(array $docCrudo, int $idEmpresa, bool $manual = false): array
     {
-        return $this->armarRespuesta(ComprobantePdf::normalizar($docCrudo), $this->empresa($idEmpresa), $idEmpresa);
+        return $this->armarRespuesta(ComprobantePdf::normalizar($docCrudo), $this->empresa($idEmpresa), $idEmpresa, $manual);
+    }
+
+    /**
+     * Buscador de clientes de la tarjeta «Comprador» (por nombre o identificación).
+     *
+     * @return list<array{id:int, identificacion:string, nombre:string, direccion:string}>
+     */
+    public function buscarClientes(int $idEmpresa, string $termino): array
+    {
+        $filas = (new \App\repositories\modulos\ClienteRepository())->buscarAutocomplete($idEmpresa, $termino, 15);
+        return array_map(static fn(array $c): array => [
+            'id'             => (int) $c['id'],
+            'identificacion' => (string) ($c['identificacion'] ?? ''),
+            'nombre'         => (string) ($c['nombre'] ?? ''),
+            'direccion'      => (string) ($c['direccion'] ?? ''),
+        ], $filas);
+    }
+
+    /**
+     * Buscador de productos del detalle (ingreso manual). Mismo buscador que Factura de
+     * Venta (nombre y códigos); $soloVenta = productos que se venden (factura, nota de
+     * crédito); false para la liquidación de compra.
+     *
+     * @return list<array{codigo:string, nombre:string, precio:float, cod_iva:string}>
+     */
+    public function buscarProductos(int $idEmpresa, string $termino, bool $soloVenta): array
+    {
+        $res = (new \App\repositories\modulos\ProductoRepository())
+            ->getListado($idEmpresa, $termino, 1, 15, 'nombre', 'ASC', null, $soloVenta ? 'venta' : null, true);
+        return array_map(static fn(array $p): array => [
+            'codigo'  => (string) ($p['codigo'] ?? ''),
+            'nombre'  => (string) ($p['nombre'] ?? ''),
+            'precio'  => (float) ($p['precio_base'] ?? 0),
+            // Código de porcentaje del SRI (tabla 17): el mismo que usa el detalle.
+            'cod_iva' => (string) ($p['codigo_iva_final'] ?? ''),
+        ], $res['rows'] ?? []);
+    }
+
+    /**
+     * Modo de cálculo del IVA por serie ('001-001' => 'subtotal' | 'linea_linea'), del
+     * establecimiento de cada punto de emisión (regla §9: la serie del documento manda).
+     */
+    public function modosIvaPorSerie(int $idEmpresa): array
+    {
+        $out = [];
+        foreach ($this->empresaRepo->getModosIvaPorSerie($idEmpresa) as $serie => $v) {
+            $out[$serie] = \App\Helpers\IvaSubtotal::modo(['calculo_iva_facturacion' => $v]);
+        }
+        return $out;
+    }
+
+    /**
+     * Datos del emisor para el ingreso manual: la propia empresa (el ingreso manual
+     * es solo para comprobantes emitidos por ella).
+     *
+     * @return array{ruc:string, razon_social:string, nombre_comercial:string, dir_matriz:string, dir_establecimiento:string, obligado_contabilidad:string}
+     */
+    public function emisorEmpresa(int $idEmpresa): array
+    {
+        $e = $this->empresaRepo->getEmisorConfig($idEmpresa) ?? [];
+        $dir = ComprobantePdf::texto($e['direccion'] ?? '');
+        return [
+            'ruc'                   => ComprobantePdf::digitos($e['ruc'] ?? ''),
+            'razon_social'          => ComprobantePdf::texto($e['nombre'] ?? ''),
+            'nombre_comercial'      => ComprobantePdf::texto($e['nombre_comercial'] ?? ''),
+            'dir_matriz'            => $dir,
+            'dir_establecimiento'   => $dir,
+            'obligado_contabilidad' => strtoupper(trim((string) ($e['obligado_contabilidad'] ?? ''))) === 'SI' ? 'SI' : 'NO',
+        ];
     }
 
     // ── Paso 2: registrar lo que el usuario aprobó ───────────────────────────
@@ -140,17 +209,24 @@ class DescargaPdfService
     /**
      * @param array  $docCrudo         Datos tal como quedaron en la pantalla de revisión.
      * @param bool   $confirmarAvisos  El usuario vio las diferencias y decidió registrar igual.
+     * @param bool   $manual           Ingreso manual (sin IA): solo comprobantes emitidos por la empresa.
+     * @param ?string $rutaPdfManual   Ingreso manual: PDF opcional que se guarda como respaldo (no se lee).
      * @return array {ok, estado_registro, mensaje, ...} o {ok:false, errores|avisos}
      */
-    public function registrar(array $docCrudo, string $tokenPdf, bool $confirmarAvisos, int $idEmpresa, int $idUsuario): array
+    public function registrar(array $docCrudo, string $tokenPdf, bool $confirmarAvisos, int $idEmpresa, int $idUsuario,
+                              bool $manual = false, ?string $rutaPdfManual = null): array
     {
         $empresa = $this->empresa($idEmpresa);
         $doc = ComprobantePdf::normalizar($docCrudo);
         if ($doc['numero_autorizacion'] === '') {
             $doc['numero_autorizacion'] = $doc['clave_acceso'];
         }
+        if ($manual && $rutaPdfManual !== null) {
+            $this->validarArchivo($rutaPdfManual);
+        }
 
-        $val = $this->rules->validar($doc, $empresa['ruc']);
+        $val = $this->rules->validar($doc, $empresa['ruc'], $manual);
+        $val['errores'] = array_merge($val['errores'], $this->erroresSerieManual($doc, $idEmpresa, $manual));
         if ($val['errores'] !== []) {
             return ['ok' => false, 'errores' => $val['errores'], 'avisos' => $val['avisos']];
         }
@@ -185,7 +261,7 @@ class DescargaPdfService
                         'mensaje' => $this->mensajeExiste($existe)] + $base;
             }
 
-            $xml = DescargaPdfXmlBuilder::construir($doc);
+            $xml = DescargaPdfXmlBuilder::construir($doc, $manual);
 
             $this->registro ??= new DocumentoAutomatedRegisterService();
             $res = $this->registro->procesarYRegistrar($xml, $idEmpresa, $idUsuario);
@@ -200,10 +276,14 @@ class DescargaPdfService
         }
 
         if (($res['estado_registro'] ?? '') === 'REGISTRADO') {
-            $archivo = $this->conservarPdf($tokenPdf, $idEmpresa, $doc['clave_acceso']);
-            $this->log->registrar($idUsuario, $idEmpresa, 'REGISTRAR_DESDE_PDF', 'descargas_sri',
+            $archivo = $manual
+                ? ($rutaPdfManual !== null ? $this->conservarPdfManual($rutaPdfManual, $idEmpresa, $doc['clave_acceso']) : null)
+                : $this->conservarPdf($tokenPdf, $idEmpresa, $doc['clave_acceso']);
+            $this->log->registrar($idUsuario, $idEmpresa, $manual ? 'REGISTRAR_MANUAL' : 'REGISTRAR_DESDE_PDF', 'descargas_sri',
                 isset($res['id']) ? (int) $res['id'] : null, null, [
-                    'origen'       => 'PDF (RIDE) leído con IA y aprobado por el usuario',
+                    'origen'       => $manual
+                        ? 'Comprobante emitido ingresado manualmente por el usuario'
+                        : 'PDF (RIDE) leído con IA y aprobado por el usuario',
                     'tipo'         => $base['tipo_nombre'],
                     'numero'       => $numero,
                     'clave_acceso' => $doc['clave_acceso'],
@@ -212,7 +292,7 @@ class DescargaPdfService
                     'archivo_pdf'  => $archivo,
                     'avisos_aceptados' => $val['avisos'],
                 ]);
-            $res['mensaje'] = trim((string) ($res['mensaje'] ?? '')) . ' | Origen: PDF.';
+            $res['mensaje'] = trim((string) ($res['mensaje'] ?? '')) . ($manual ? ' | Origen: ingreso manual.' : ' | Origen: PDF.');
         }
         $res['xml_base64'] = base64_encode($xml);
         return $res;
@@ -233,7 +313,27 @@ class DescargaPdfService
         ];
     }
 
-    private function armarRespuesta(array $doc, array $empresa, int $idEmpresa): array
+    /**
+     * Ingreso manual: la serie (establecimiento-punto) debe existir en la empresa. El registro
+     * desde XML crea el establecimiento/punto que no encuentra (útil en una descarga), así que
+     * un número mal digitado a mano dejaría una serie nueva y vacía en la empresa.
+     *
+     * @return list<string>
+     */
+    private function erroresSerieManual(array $doc, int $idEmpresa, bool $manual): array
+    {
+        if (!$manual || $doc['estab'] === '' || $doc['pto_emi'] === '') {
+            return [];
+        }
+        $serie = $doc['estab'] . '-' . $doc['pto_emi'];
+        if (array_key_exists($serie, $this->empresaRepo->getModosIvaPorSerie($idEmpresa))) {
+            return [];
+        }
+        return ["La serie {$serie} (establecimiento-punto de emisión) no existe en la empresa. "
+            . 'Revise el número del comprobante o cree la serie en Empresas.'];
+    }
+
+    private function armarRespuesta(array $doc, array $empresa, int $idEmpresa, bool $manual = false): array
     {
         // El código de retención casi nunca se imprime en el PDF: se proponen los del
         // catálogo con el mismo impuesto y porcentaje; si solo hay uno, se pone.
@@ -248,7 +348,8 @@ class DescargaPdfService
             $doc['numero_autorizacion'] = $doc['clave_acceso'];
         }
 
-        $val = $this->rules->validar($doc, $empresa['ruc']);
+        $val = $this->rules->validar($doc, $empresa['ruc'], $manual);
+        $val['errores'] = array_merge($val['errores'], $this->erroresSerieManual($doc, $idEmpresa, $manual));
         $existe = $val['rol'] !== '' ? $this->buscarExistente($doc, $val['rol'], $empresa, $idEmpresa) : null;
 
         return [
@@ -370,6 +471,17 @@ class DescargaPdfService
             throw new \InvalidArgumentException('No se pudo guardar el PDF para leerlo.');
         }
         return [$token, $ruta];
+    }
+
+    /** Ingreso manual: guarda como respaldo el PDF que adjuntó el usuario (no se lee). */
+    private function conservarPdfManual(string $rutaSubida, int $idEmpresa, string $clave): ?string
+    {
+        $dir = $this->carpeta($idEmpresa);
+        if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
+            return null;
+        }
+        $final = $dir . '/' . $clave . '.pdf';
+        return @copy($rutaSubida, $final) ? self::CARPETA . '/' . $idEmpresa . '/' . $clave . '.pdf' : null;
     }
 
     /** Deja el PDF original como respaldo del registro. Devuelve su ruta relativa o null. */

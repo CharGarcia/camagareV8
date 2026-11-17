@@ -44,14 +44,19 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                 </li>
                 <?php endif; ?>
                 <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-semibold text-muted" id="tab-manual-btn" data-bs-toggle="tab" data-bs-target="#tab-manual" type="button" role="tab" aria-controls="tab-manual" aria-selected="false">
+                        <i class="bi bi-pencil-square me-1"></i> Ingreso manual
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
                     <button class="nav-link fw-semibold text-muted" id="tab-ignorados-btn" data-bs-toggle="tab" data-bs-target="#tab-ignorados" type="button" role="tab" aria-controls="tab-ignorados" aria-selected="false" onclick="listarDocumentosIgnorados()">
-                        <i class="bi bi-slash-circle me-1"></i> Documentos para no descargar
+                        <i class="bi bi-slash-circle me-1"></i> Claves a no registrar
                     </button>
                 </li>
                 <!-- Se muestra solo si la recepción entre empresas está disponible (la muestra el JS). -->
                 <li class="nav-item d-none" role="presentation" id="tab-entre-empresas-item">
                     <button class="nav-link fw-semibold text-muted" id="tab-entre-empresas-btn" data-bs-toggle="tab" data-bs-target="#tab-entre-empresas" type="button" role="tab" aria-controls="tab-entre-empresas" aria-selected="false">
-                        <i class="bi bi-diagram-3 me-1"></i> Documentos de empresas del sistema
+                        <i class="bi bi-diagram-3 me-1"></i> Documentos del sistema
                     </button>
                 </li>
             </ul>
@@ -172,19 +177,31 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                 </div>
                             <?php endif; ?>
 
-                            <div class="table-responsive mt-3 d-none" id="pdf_cola_wrap">
-                                <table class="table table-sm align-middle mb-0" style="font-size:0.8rem;">
-                                    <thead class="bg-light">
-                                        <tr>
-                                            <th class="ps-2">Archivo</th>
-                                            <th>Documento</th>
-                                            <th class="text-center">Estado</th>
-                                            <th class="text-end pe-2"></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="pdf_cola_tbody"></tbody>
-                                </table>
+                            <!-- Mismo diseño que el detalle de Factura de Venta (y que la ventana de revisión). -->
+                            <div class="border rounded-3 overflow-hidden bg-white shadow-sm mt-3 d-none" id="pdf_cola_wrap">
+                                <div class="table-responsive" style="max-height: 350px;">
+                                    <table class="table table-sm table-detalle pdf-cola mb-0 align-middle">
+                                        <thead>
+                                            <tr class="table-light border-bottom">
+                                                <th class="ps-3 py-2 small fw-bold text-muted">Archivo</th>
+                                                <th class="py-2 small fw-bold text-muted">Documento</th>
+                                                <th class="py-2 small fw-bold text-muted text-center" style="width: 110px;">Estado</th>
+                                                <th class="py-2" style="width: 90px;"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="pdf_cola_tbody"></tbody>
+                                    </table>
+                                </div>
+                                <div class="p-2 border-top bg-light d-flex justify-content-between align-items-center">
+                                    <span class="small text-muted ps-1">Pulse <strong>Revisar</strong> en cada archivo para aprobarlo.</span>
+                                    <div class="small fw-bold text-muted pe-3">Archivos: <span id="pdf_cola_count">0</span></div>
+                                </div>
                             </div>
+                            <style>
+                                .pdf-cola th { font-size: 0.7rem; text-transform: uppercase; padding: 4px 8px; white-space: nowrap; }
+                                .pdf-cola td { font-size: 0.8rem; padding: 6px 8px; }
+                                .pdf-cola tbody tr:hover { background-color: rgba(13, 110, 253, 0.03); }
+                            </style>
                         </div>
                         <div class="col-md-6 border-start">
                             <div class="p-3 bg-light rounded text-muted small">
@@ -199,6 +216,36 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </div>
                 </div>
                 <?php endif; ?>
+
+                <!-- Tab: Ingreso manual. Solo comprobantes EMITIDOS por la empresa (el SRI no
+                     entrega su XML). Mismo formulario y registro que «Desde PDF», sin IA. -->
+                <div class="tab-pane fade" id="tab-manual" role="tabpanel" aria-labelledby="tab-manual-btn">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="d-flex flex-wrap align-items-start gap-2">
+                                <!-- El tipo de documento se elige en la ventana (o lo completa la clave de acceso). -->
+                                <div style="width:330px">
+                                    <label class="form-label fw-bold small text-muted d-block" for="manual_pdf_input">PDF de respaldo (opcional)</label>
+                                    <input type="file" class="form-control form-control-sm shadow-none" id="manual_pdf_input" accept="application/pdf,.pdf">
+                                </div>
+                            </div>
+                            <div class="form-text">El PDF no se lee: sirve para tenerlo a la vista mientras digita y queda guardado como respaldo.</div>
+
+                            <button type="button" class="btn btn-primary btn-sm mt-3 shadow-sm px-4" id="btnNuevoManual" onclick="rpNuevoManual()">
+                                <i class="bi bi-plus-lg me-1"></i> Nuevo comprobante
+                            </button>
+                        </div>
+                        <div class="col-md-6 border-start">
+                            <div class="p-3 bg-light rounded text-muted small">
+                                <h6 class="fw-bold"><i class="bi bi-info-circle me-1"></i>Instrucciones</h6>
+                                <p class="mb-1">1. Use esta opción para comprobantes <strong>emitidos por esta empresa</strong> cuyo XML no entrega el SRI (solo el PDF).</p>
+                                <p class="mb-1">2. Escriba primero la <strong>clave de acceso</strong>: el sistema completa el tipo, el número y la fecha. El emisor ya viene con los datos de la empresa.</p>
+                                <p class="mb-1">3. Complete el cliente o proveedor, el detalle, el IVA, los pagos o las retenciones, y pulse <strong>Aprobar y registrar</strong>.</p>
+                                <p class="mb-0">4. El comprobante queda registrado como <strong>autorizado</strong>. Antes se comprueba que no exista ya en el sistema.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
                 <!-- Tab: Documentos Ignorados -->
                 <div class="tab-pane fade" id="tab-ignorados" role="tabpanel" aria-labelledby="tab-ignorados-btn">
@@ -248,7 +295,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                     </div>
                 </div>
 
-                <!-- Tab: Documentos de empresas del sistema
+                <!-- Tab: Documentos del sistema (documentos de empresas del sistema)
                      (DocumentoEntreEmpresasService). El interruptor solo lo cambian
                      nivel 2 y 3; el endpoint lo revalida. -->
                 <div class="tab-pane fade" id="tab-entre-empresas" role="tabpanel" aria-labelledby="tab-entre-empresas-btn">
@@ -300,7 +347,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                                     <div class="fw-semibold mb-1">Reglas</div>
                                     <ul class="mb-2 ps-3">
                                         <li>Solo comprobantes de <strong>producción</strong>; los de pruebas no tienen validez tributaria.</li>
-                                        <li>Aplica las mismas reglas que una descarga: respeta los <em>Documentos para no descargar</em>,
+                                        <li>Aplica las mismas reglas que una descarga: respeta las <em>Claves a no registrar</em>,
                                             no registra en un periodo contable cerrado y genera la retención, el egreso y la
                                             aprobación de compras automáticos según su configuración.</li>
                                         <li><strong>Nunca se duplica</strong>: si luego descarga el mismo comprobante del SRI, aparece como
@@ -607,9 +654,8 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
 })();
 </script>
 
-<?php if (!empty($mostrarPdf)) { include __DIR__ . '/modal_pdf.php'; } ?>
+<?php // El formulario de revisión lo usan «Desde PDF» (con IA) e «Ingreso manual» (sin IA).
+include __DIR__ . '/modal_pdf.php'; ?>
 
 <script src="<?= BASE_URL ?>/js/modulos/descargas_sri.js?v=<?= asset_ver('/js/modulos/descargas_sri.js') ?>"></script>
-<?php if (!empty($mostrarPdf)): ?>
 <script src="<?= BASE_URL ?>/js/modulos/descargas_sri_pdf.js?v=<?= asset_ver('/js/modulos/descargas_sri_pdf.js') ?>"></script>
-<?php endif; ?>

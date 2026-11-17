@@ -10,6 +10,41 @@ use Exception;
 class SriService
 {
     /**
+     * Fecha de emisión que trae la clave de acceso (dígitos 1-8, ddmmaaaa), o null si no es válida.
+     */
+    public static function fechaEmisionDeClave(string $claveAcceso): ?\DateTimeImmutable
+    {
+        $ddmmaaaa = substr(trim($claveAcceso), 0, 8);
+        if (!preg_match('/^\d{8}$/', $ddmmaaaa)) {
+            return null;
+        }
+        $fecha = \DateTimeImmutable::createFromFormat('!dmY', $ddmmaaaa);
+        if ($fecha === false || $fecha->format('dmY') !== $ddmmaaaa) {
+            return null;
+        }
+        return $fecha;
+    }
+
+    /**
+     * true si el documento de la clave tiene fecha de emisión de hace más de un mes: el web
+     * service de autorización del SRI no responde por esos documentos.
+     */
+    public static function claveFueraDePlazoConsulta(string $claveAcceso): bool
+    {
+        $fecha = self::fechaEmisionDeClave($claveAcceso);
+        if ($fecha === null) {
+            return false;
+        }
+        return $fecha < new \DateTimeImmutable('today -1 month');
+    }
+
+    /**
+     * Mensaje para el usuario cuando el SRI no devuelve un documento de hace más de un mes.
+     */
+    public const MENSAJE_FUERA_DE_PLAZO = 'El SRI no da respuesta a documentos con fecha mayor a un mes atrás. '
+        . 'Intente cargar con el XML en la pestaña Carga Masiva XML.';
+
+    /**
      * Consulta el documento autorizado al SRI mediante la clave de acceso 
      * y retorna el XML completo.
      *
@@ -52,7 +87,7 @@ class SriService
         // El comprobante crudo queda además en 'comprobante' por si se necesita por separado.
         if (!empty($resp['ok']) && !empty($resp['xml'])) {
             $resp['comprobante'] = $resp['xml'];
-            $resp['xml'] = $this->buildSobreAutorizacion(
+            $resp['xml'] = self::buildSobreAutorizacion(
                 (string)($resp['numero_autorizacion'] ?? $claveAcceso),
                 (string)($resp['fecha_autorizacion'] ?? ''),
                 ($ambienteDigit === '1') ? '1' : '2',
@@ -66,9 +101,10 @@ class SriService
     /**
      * Construye el sobre de autorización del SRI (mismo formato que el flujo de emisión) para
      * guardar TAL CUAL en detalle_xml: estado + numeroAutorizacion + fechaAutorizacion + ambiente
-     * + el comprobante intacto dentro de un CDATA.
+     * + el comprobante intacto dentro de un CDATA. Pública y estática: el ingreso manual y la
+     * lectura desde PDF de Descargas SRI (DescargaPdfXmlBuilder) arman el mismo sobre.
      */
-    private function buildSobreAutorizacion(string $numAut, string $fechaAut, string $tipoAmbiente, string $comprobante): string
+    public static function buildSobreAutorizacion(string $numAut, string $fechaAut, string $tipoAmbiente, string $comprobante): string
     {
         $ambiente = $tipoAmbiente === '2' ? 'PRODUCCION' : 'PRUEBAS';
         return implode("\n", [

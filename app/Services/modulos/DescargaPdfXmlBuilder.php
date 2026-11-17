@@ -23,9 +23,13 @@ use DOMElement;
 final class DescargaPdfXmlBuilder
 {
     public const MARCA = 'Generado por el sistema a partir del PDF (RIDE) del comprobante. No es el XML firmado por el emisor.';
+    public const MARCA_MANUAL = 'Generado por el sistema con los datos ingresados manualmente por el usuario. No es el XML firmado por el emisor.';
 
-    /** @param array $doc Documento normalizado y validado (ComprobantePdf::normalizar + DescargaPdfRules). */
-    public static function construir(array $doc): string
+    /**
+     * @param array $doc    Documento normalizado y validado (ComprobantePdf::normalizar + DescargaPdfRules).
+     * @param bool  $manual true si los datos los digitó el usuario (ingreso manual) y no salieron de un PDF.
+     */
+    public static function construir(array $doc, bool $manual = false): string
     {
         $comprobante = match ($doc['cod_doc']) {
             '01' => self::factura($doc),
@@ -40,21 +44,19 @@ final class DescargaPdfXmlBuilder
         $numAut = $doc['numero_autorizacion'] !== '' ? (string) $doc['numero_autorizacion'] : $clave;
         $partes = ComprobantePdf::desglosarClave($clave);
 
-        $dom = new DOMDocument('1.0', 'UTF-8');
-        $dom->formatOutput = true;
-        $dom->appendChild($dom->createComment(' ' . self::MARCA . ' '));
-        $aut = $dom->createElement('autorizacion');
-        $dom->appendChild($aut);
-        self::nodo($aut, 'estado', 'AUTORIZADO');
-        self::nodo($aut, 'numeroAutorizacion', $numAut);
-        self::nodo($aut, 'fechaAutorizacion', self::fechaIso($doc['fecha_autorizacion'] ?: $doc['fecha_emision']));
-        self::nodo($aut, 'ambiente', ($partes['ambiente'] ?? '2') === '1' ? 'PRUEBAS' : 'PRODUCCIÓN');
-        $comp = $dom->createElement('comprobante');
-        $comp->appendChild($dom->createCDATASection($comprobante));
-        $aut->appendChild($comp);
-        $aut->appendChild($dom->createElement('mensajes'));
+        // Mismo sobre que guardan las descargas del SRI (autorizaciones > autorizacion >
+        // estado, numeroAutorizacion, fechaAutorizacion, ambiente, comprobante en CDATA).
+        $sobre = \App\Services\SriService::buildSobreAutorizacion(
+            $numAut,
+            self::fechaIso($doc['fecha_autorizacion'] ?: $doc['fecha_emision']),
+            ($partes['ambiente'] ?? '2') === '1' ? '1' : '2',
+            $comprobante
+        );
 
-        return (string) $dom->saveXML();
+        // Única diferencia: un comentario XML (lo ignora quien lee el XML) que deja constancia
+        // de que el sobre no es el firmado por el SRI sino armado por el sistema.
+        $marca = '<!-- ' . ($manual ? self::MARCA_MANUAL : self::MARCA) . ' -->';
+        return (string) preg_replace('/^(<\?xml[^>]*\?>)\n/', "$1\n{$marca}\n", $sobre, 1);
     }
 
     // ── Comprobantes ─────────────────────────────────────────────────────────
@@ -68,7 +70,7 @@ final class DescargaPdfXmlBuilder
         self::nodo($info, 'fechaEmision', $d['fecha_emision']);
         self::nodoOpc($info, 'dirEstablecimiento', $d['emisor']['dir_establecimiento']);
         self::nodoOpc($info, 'obligadoContabilidad', $d['emisor']['obligado_contabilidad']);
-        self::nodo($info, 'tipoIdentificacionComprador', ComprobantePdf::tipoIdentificacion($d['receptor']['identificacion']));
+        self::nodo($info, 'tipoIdentificacionComprador', self::tipoId($d));
         self::nodo($info, 'razonSocialComprador', $d['receptor']['razon_social']);
         self::nodo($info, 'identificacionComprador', $d['receptor']['identificacion']);
         self::nodoOpc($info, 'direccionComprador', $d['receptor']['direccion']);
@@ -94,7 +96,7 @@ final class DescargaPdfXmlBuilder
         self::nodo($info, 'fechaEmision', $d['fecha_emision']);
         self::nodoOpc($info, 'dirEstablecimiento', $d['emisor']['dir_establecimiento']);
         self::nodoOpc($info, 'obligadoContabilidad', $d['emisor']['obligado_contabilidad']);
-        self::nodo($info, 'tipoIdentificacionProveedor', ComprobantePdf::tipoIdentificacion($d['receptor']['identificacion']));
+        self::nodo($info, 'tipoIdentificacionProveedor', self::tipoId($d));
         self::nodo($info, 'razonSocialProveedor', $d['receptor']['razon_social']);
         self::nodo($info, 'identificacionProveedor', $d['receptor']['identificacion']);
         self::nodoOpc($info, 'direccionProveedor', $d['receptor']['direccion']);
@@ -118,7 +120,7 @@ final class DescargaPdfXmlBuilder
         $info = self::hijo($raiz, 'infoNotaCredito');
         self::nodo($info, 'fechaEmision', $d['fecha_emision']);
         self::nodoOpc($info, 'dirEstablecimiento', $d['emisor']['dir_establecimiento']);
-        self::nodo($info, 'tipoIdentificacionComprador', ComprobantePdf::tipoIdentificacion($d['receptor']['identificacion']));
+        self::nodo($info, 'tipoIdentificacionComprador', self::tipoId($d));
         self::nodo($info, 'razonSocialComprador', $d['receptor']['razon_social']);
         self::nodo($info, 'identificacionComprador', $d['receptor']['identificacion']);
         self::nodoOpc($info, 'obligadoContabilidad', $d['emisor']['obligado_contabilidad']);
@@ -144,7 +146,7 @@ final class DescargaPdfXmlBuilder
         $info = self::hijo($raiz, 'infoNotaDebito');
         self::nodo($info, 'fechaEmision', $d['fecha_emision']);
         self::nodoOpc($info, 'dirEstablecimiento', $d['emisor']['dir_establecimiento']);
-        self::nodo($info, 'tipoIdentificacionComprador', ComprobantePdf::tipoIdentificacion($d['receptor']['identificacion']));
+        self::nodo($info, 'tipoIdentificacionComprador', self::tipoId($d));
         self::nodo($info, 'razonSocialComprador', $d['receptor']['razon_social']);
         self::nodo($info, 'identificacionComprador', $d['receptor']['identificacion']);
         self::nodoOpc($info, 'obligadoContabilidad', $d['emisor']['obligado_contabilidad']);
@@ -186,7 +188,7 @@ final class DescargaPdfXmlBuilder
         self::nodo($info, 'fechaEmision', $d['fecha_emision']);
         self::nodoOpc($info, 'dirEstablecimiento', $d['emisor']['dir_establecimiento']);
         self::nodoOpc($info, 'obligadoContabilidad', $d['emisor']['obligado_contabilidad']);
-        self::nodo($info, 'tipoIdentificacionSujetoRetenido', ComprobantePdf::tipoIdentificacion($d['receptor']['identificacion']));
+        self::nodo($info, 'tipoIdentificacionSujetoRetenido', self::tipoId($d));
         self::nodo($info, 'razonSocialSujetoRetenido', $d['receptor']['razon_social']);
         self::nodo($info, 'identificacionSujetoRetenido', $d['receptor']['identificacion']);
         self::nodo($info, 'periodoFiscal', $d['periodo_fiscal']);
@@ -311,6 +313,13 @@ final class DescargaPdfXmlBuilder
             self::nodo($det, 'precioUnitario', self::n($l['precio_unitario'], 6));
             self::nodo($det, 'descuento', self::n($l['descuento']));
             self::nodo($det, 'precioTotalSinImpuesto', self::n($l['subtotal']));
+            // Orden del XSD: detallesAdicionales va antes de impuestos.
+            if (($l['adicional'] ?? '') !== '') {
+                $ads = self::hijo($det, 'detallesAdicionales');
+                $ad = self::hijo($ads, 'detAdicional');
+                $ad->setAttribute('nombre', 'Detalle');
+                $ad->setAttribute('valor', $l['adicional']);
+            }
             $imps = self::hijo($det, 'impuestos');
             $imp = self::hijo($imps, 'impuesto');
             self::nodo($imp, 'codigo', '2');
@@ -336,6 +345,13 @@ final class DescargaPdfXmlBuilder
                 self::nodo($pago, 'unidadTiempo', $p['unidad_tiempo']);
             }
         }
+    }
+
+    /** Tipo de identificación del receptor: el elegido en pantalla o, si falta, el deducido del número. */
+    private static function tipoId(array $d): string
+    {
+        return (string) ($d['receptor']['tipo_identificacion'] ?? '')
+            ?: ComprobantePdf::tipoIdentificacion((string) $d['receptor']['identificacion']);
     }
 
     private static function infoAdicional(DOMElement $raiz, array $d): void

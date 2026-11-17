@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
-etiquetas: descargas sri, documentos para no descargar, lista negra, ignorar documento, no volver a descargar, documento anulado, factura anulada en el sri, emitida por error, otro establecimiento, alcance, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional, pdf, ride, leer pdf, cargar pdf, registrar desde pdf, comprobante sin xml, inteligencia artificial
-version: 1.17
+etiquetas: descargas sri, claves a no registrar, documentos para no descargar, lista negra, ignorar documento, no volver a descargar, documento anulado, factura anulada en el sri, emitida por error, otro establecimiento, alcance, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional, pdf, ride, leer pdf, cargar pdf, registrar desde pdf, comprobante sin xml, inteligencia artificial, clave de acceso, archivo txt, documento de más de un mes, sri no responde, no carga el documento, ingreso manual, registrar a mano, digitar comprobante, comprobante emitido sin xml, factura emitida en otro sistema, sin ia
+version: 1.19
 orden: 50
 estado: activo
 ---
@@ -30,7 +30,7 @@ El sistema evita registrar dos veces el mismo comprobante, aunque se descargue
 varias veces o dos personas lo hagan a la vez. Si un documento ya existe, no se
 duplica.
 
-## Documentos para no descargar
+## Claves a no registrar
 
 En esta pestaña se ponen los comprobantes que la descarga **no debe registrar**,
 aunque el SRI los siga entregando: un documento anulado, uno emitido a la empresa
@@ -162,6 +162,82 @@ sistema (*Registrar desde PDF*), con las diferencias que se hayan aceptado.
   tasas incluidas): no se leen desde el PDF; use el XML.
 - **Guías de remisión**: no se registran, igual que en el resto del módulo.
 
+## Registrar a mano un comprobante emitido por la empresa
+
+La pestaña **Ingreso manual** sirve para los comprobantes que **emitió la
+propia empresa** (por ejemplo, desde otro sistema de facturación) y de los que
+el SRI solo entrega el PDF, no el XML. **No usa inteligencia artificial**: está
+disponible para todas las empresas.
+
+### Cómo se usa
+
+1. Si quiere, adjunte el **PDF de respaldo**. No se lee: sirve para abrirlo con
+   el botón rojo de la ventana mientras digita y queda guardado con el registro.
+2. Pulse **Nuevo comprobante**. La ventana es la misma de *Desde PDF*, pero
+   vacía y **sin la tarjeta del emisor**: el emisor es la propia empresa y sus
+   datos (RUC, razón social, dirección) se toman de *Empresas*, no se digitan.
+3. Escriba primero la **clave de acceso**: el sistema completa el **tipo de
+   documento** (factura, liquidación de compra, nota de crédito, nota de débito
+   o comprobante de retención), la fecha, el establecimiento, el punto de
+   emisión y el secuencial. El tipo también se puede elegir en la misma ventana;
+   arranca en *Factura*.
+4. En la tarjeta del **Comprador** use **Buscar cliente** (por nombre o
+   identificación) para llenar sus datos, o escríbalos. El **Tipo de
+   identificación** se propone según el número (RUC, cédula, consumidor final o
+   pasaporte) y se puede cambiar, por ejemplo a *Identificación del exterior*.
+   En liquidaciones y retenciones el receptor es un proveedor y no hay buscador.
+5. Complete el detalle. Al escribir en **Código** o **Descripción** de una línea
+   aparece la lista de **Productos** (por nombre o código): al elegir uno se
+   ponen su código, nombre, precio y tarifa de IVA. La columna **Adicional** es
+   el detalle adicional del ítem (por ejemplo, color o serie) y se guarda en la
+   línea de la venta. En facturas, liquidaciones y notas de crédito, el
+   **subtotal de cada línea**, el **IVA por tarifa**, los **totales** y, si hay
+   una sola, la **forma de pago** se calculan solos con el detalle, con la
+   configuración de IVA del establecimiento de la serie (al subtotal o línea a
+   línea). Por eso la tabla *IVA por tarifa* no se muestra: su desglose aparece
+   en **Totales**. En la nota de débito (sin detalle de ítems) la tabla sí se
+   ve y el IVA se digita. Si el documento autorizado dice otra cosa, corrija los valores antes
+   de registrar. Complete también las formas de pago o las retenciones.
+   **Verificar datos** comprueba todo
+   sin registrar. La ventana separa en tarjetas el **Comprobante** y el
+   **Comprador** (a quien se emite; en *Desde PDF* también el **Emisor**); arriba
+   muestra la lista de lo que hace falta para registrar según el tipo, y los
+   campos obligatorios llevan un asterisco rojo.
+6. Pulse **Aprobar y registrar**.
+
+### Reglas
+
+- **Solo comprobantes emitidos por la empresa**: si el RUC del emisor no es el
+  de la empresa, el sistema no lo registra. Los comprobantes recibidos se cargan
+  con su XML, por clave de acceso o *Desde PDF*.
+- Se hacen las mismas comprobaciones que en *Desde PDF*: clave de acceso válida,
+  que no exista ya en el sistema y que las sumas cuadren.
+- La **serie** (establecimiento-punto de emisión del número) debe existir en la
+  empresa: si no, el sistema avisa y no registra (así un número mal digitado no
+  crea una serie nueva). Las facturas y liquidaciones de compra necesitan al
+  menos una **forma de pago**.
+- Queda registrado como **autorizado** en el módulo que le corresponde: la
+  factura en *Facturas de Venta*, la liquidación en *Liquidaciones de Compra*,
+  las notas en *Notas de Crédito* y *Notas de Débito* y la retención en
+  *Retenciones de Compras*. Guarda el **número y la fecha de autorización**
+  (el número es la clave de acceso; si no se indica la fecha de autorización,
+  se usa la de emisión), el cliente o proveedor (se crea si no existe), el
+  detalle con su IVA, las formas de pago y la información adicional. La nota de
+  crédito queda ligada, ítem por ítem, a la factura que modifica si esa factura
+  está en el sistema. El adicional de cada ítem se guarda en la factura y en la
+  liquidación; la nota de crédito no tiene dónde guardarlo.
+- Se registra en el **ambiente actual de la empresa**, igual que una descarga:
+  si la empresa está en pruebas, el documento queda en pruebas y no aparece en
+  los reportes, que muestran solo producción.
+- Los productos del detalle que no existen en el catálogo se crean con su
+  código y descripción. El registro **no mueve inventario**.
+- El XML guardado tiene **el mismo formato que el de las descargas del SRI**
+  (sobre de autorización con el comprobante adentro) y cumple el esquema oficial
+  del SRI de cada tipo. Lo arma el sistema con lo que usted digitó y lleva una
+  nota que lo indica. En el log del sistema queda como *Registrar manual*.
+- Tiene los mismos límites que *Desde PDF* (ICE, IRBPNR, reembolsos y rubros
+  de terceros no se pueden ingresar a mano).
+
 ## Documentos que le emiten otras empresas del sistema
 
 Si el emisor también usa este sistema, no hace falta descargar su comprobante
@@ -191,8 +267,8 @@ descargado aquí.
   conectadas y origen *empresa_sistema*. El detalle muestra cada documento y si
   se registró, ya existía, se ignoró o tuvo error.
 
-La pestaña **Documentos de empresas del sistema**, después de *Documentos para
-no descargar*, explica esta función y tiene el interruptor
+La pestaña **Documentos del sistema**, después de *Claves a no
+registrar*, explica esta función y tiene el interruptor
 *Registrar automáticamente lo que me emiten*. Viene **activado**; solo los
 administradores (nivel 2) y superadministradores (nivel 3) pueden cambiarlo, y
 el cambio vale para todas las empresas del mismo RUC. Si lo desactiva, esos
@@ -226,6 +302,17 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 - **No descarga nada**: revise las credenciales del SRI de la empresa y el rango
   de fechas.
+- **Por Clave de Acceso o Por Archivo TXT: "El SRI no da respuesta a documentos
+  con fecha mayor a un mes atrás"**: el SRI solo entrega por clave de acceso los
+  comprobantes de hasta un mes atrás (la fecha sale de los 8 primeros dígitos de
+  la clave). Descargue el XML del portal del SRI o pídaselo al emisor y cárguelo
+  en la pestaña **Carga Masiva XML**.
+- **Por Archivo TXT: "El archivo debe ser de tipo TXT (.txt)"**: solo se acepta
+  el archivo `.txt` que descarga del portal del SRI (Comprobantes Electrónicos
+  Recibidos). Si lo abrió y guardó en Excel, vuelva a descargarlo como TXT.
+- **Carga Masiva XML: "no son de tipo XML (.xml)"**: solo se procesan archivos
+  `.xml`. Si la carpeta tiene otros archivos (PDF, imágenes), se omiten y el
+  aviso final indica cuántos se dejaron fuera.
 - **No aparece la pestaña "Desde PDF"**: la empresa actual no tiene IA
   configurada y usted no es superadministrador. Configure Anthropic en
   *IA Soporte → Configuración*, o pida a un superadministrador que lea el PDF
@@ -357,6 +444,35 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.19** — Nueva pestaña **Ingreso manual**: registra a mano, sin
+  inteligencia artificial, los comprobantes **emitidos por la empresa** cuyo XML
+  no entrega el SRI. Usa la misma ventana de *Desde PDF*, con el emisor lleno y
+  la clave de acceso que completa tipo, número y fecha. Quedan como
+  **autorizados**. Ver *Registrar a mano un comprobante emitido por la empresa*.
+  La pestaña *Documentos para no descargar* pasa a llamarse **Claves a no
+  registrar**.
+  La pestaña *Documentos de empresas del sistema* pasa a llamarse **Documentos
+  del sistema**. En el ingreso manual, el detalle permite elegir **Productos**,
+  tiene la columna **Adicional** y calcula solo el IVA por tarifa y los totales.
+  Al registrar una **factura de venta emitida** (descargada, cargada por XML o
+  ingresada a mano), el adicional de cada ítem se guarda en la línea de la venta.
+  Las facturas, liquidaciones de compra y notas de crédito y de débito
+  **emitidas** que se registran desde su XML ahora guardan el **número y la
+  fecha de autorización** del sobre del SRI (antes solo la retención los
+  guardaba). El XML que arman *Desde PDF* y el ingreso manual usa el mismo sobre
+  que las descargas. El ingreso manual exige que la serie exista en la empresa
+  y, en facturas y liquidaciones, una forma de pago. La **nota de crédito
+  emitida** registrada desde su XML guarda ahora su información adicional, el
+  tipo de documento que modifica y el producto de cada ítem; si la factura que
+  modifica está en el sistema, cada ítem queda ligado a su línea (como cuando se
+  crea en *Notas de Crédito*). La **liquidación de compra** guarda el adicional
+  de cada ítem.
+- **1.18** — En **Por Clave de Acceso** y **Por Archivo TXT**, si el SRI no
+  entrega un comprobante con fecha de hace más de un mes, el mensaje lo explica
+  e indica cargar el XML en **Carga Masiva XML**, en lugar del error técnico de
+  la consulta. **Por Archivo TXT** solo acepta archivos `.txt` y **Carga Masiva
+  XML** solo procesa archivos `.xml` (los demás de la carpeta se omiten y se
+  avisa cuántos). Ver *Errores frecuentes*.
 - **1.17** — *Documentos para no descargar* tiene **alcance**: *todos los
   establecimientos* del RUC (como antes) o *solo este establecimiento*, para
   registrar el comprobante en otro. Nueva columna **Alcance** y selector **No

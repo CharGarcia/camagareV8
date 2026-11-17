@@ -25,8 +25,9 @@ class DescargaPdfRules
      * @param string $rucEmpresa RUC de la empresa activa (solo dígitos).
      * @return array{errores:list<string>, avisos:list<string>, rol:string}
      *         rol: 'emitido' (lo emitió la empresa), 'recibido' o '' si no le pertenece.
+     * @param bool   $soloEmitidos Ingreso manual: solo se aceptan comprobantes emitidos por la empresa.
      */
-    public function validar(array $doc, string $rucEmpresa): array
+    public function validar(array $doc, string $rucEmpresa, bool $soloEmitidos = false): array
     {
         $e = [];
         $a = [];
@@ -94,6 +95,18 @@ class DescargaPdfRules
         if ($doc['receptor']['razon_social'] === '') {
             $e[] = 'Falta el nombre o razón social del ' . $this->nombreReceptor($cod) . '.';
         }
+        // El tipo de identificación debe corresponder al número.
+        $tipoRec = (string) ($doc['receptor']['tipo_identificacion'] ?? '');
+        if ($idRec !== '' && $tipoRec !== '') {
+            $quien = $this->nombreReceptor($cod);
+            if ($tipoRec === '04' && !preg_match('/^\d{13}$/', $idRec)) {
+                $e[] = "El RUC del {$quien} debe tener 13 dígitos.";
+            } elseif ($tipoRec === '05' && !preg_match('/^\d{10}$/', $idRec)) {
+                $e[] = "La cédula del {$quien} debe tener 10 dígitos.";
+            } elseif ($tipoRec === '07' && $idRec !== '9999999999999') {
+                $e[] = 'Consumidor final se identifica con 9999999999999.';
+            }
+        }
 
         $rol = '';
         if ($rucEmpresa !== '' && $ruc === $rucEmpresa) {
@@ -104,6 +117,15 @@ class DescargaPdfRules
         } elseif ($ruc !== '' && $idRec !== '') {
             $e[] = "El comprobante no pertenece a la empresa: su RUC ({$rucEmpresa}) no es el del emisor ni el del "
                 . $this->nombreReceptor($cod) . '.';
+        }
+        if ($soloEmitidos && $rol !== 'emitido' && $ruc !== '') {
+            $e[] = "El ingreso manual es solo para comprobantes emitidos por la empresa: el RUC del emisor debe ser {$rucEmpresa}.";
+            $rol = '';
+        }
+        // Ingreso manual: la factura y la liquidación de compra se registran con sus formas de
+        // pago (la venta/liquidación las guarda y el SRI las exige en esos comprobantes).
+        if ($soloEmitidos && in_array($cod, ['01', '03'], true) && $doc['pagos'] === []) {
+            $e[] = 'Indique al menos una forma de pago.';
         }
 
         // ── Contenido según el tipo ──────────────────────────────────────────

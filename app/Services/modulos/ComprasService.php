@@ -1621,7 +1621,7 @@ class ComprasService
         );
     }
 
-    /** Aviso del último eliminar() sobre «Documentos para no descargar» (null = no aplicó). */
+    /** Aviso del último eliminar() sobre «Claves a no registrar» (null = no aplicó). */
     private ?string $avisoNoDescargar = null;
 
     public function getAvisoNoDescargar(): ?string
@@ -1632,7 +1632,7 @@ class ComprasService
     /**
      * Elimina la compra. Si es un comprobante electrónico y viene $motivoNoDescargar
      * (DocumentoIgnoradoRepository::MOTIVO_*), en la MISMA transacción la agrega a
-     * «Documentos para no descargar» de Descargas SRI (DocumentoNoDescargarService),
+     * «Claves a no registrar» de Descargas SRI (DocumentoNoDescargarService),
      * para que la próxima descarga no la vuelva a registrar.
      */
     public function eliminar(
@@ -1708,7 +1708,7 @@ class ComprasService
         }
     }
 
-    /** Agrega la compra eliminada a «Documentos para no descargar» (ver DocumentoNoDescargarService). */
+    /** Agrega la compra eliminada a «Claves a no registrar» (ver DocumentoNoDescargarService). */
     private function registrarNoDescargar(array $compra, string $motivo, string $observacion, int $idEmpresa, int $idUsuario): string
     {
         $numero = implode('-', array_filter([

@@ -2651,7 +2651,7 @@ window.CMG_guardar = async function() {
 
 
 // Comprobante electrónico = número de autorización de 49 dígitos (clave de acceso). Al
-// eliminarlo se pregunta el motivo para dejarlo en «Documentos para no descargar» de
+// eliminarlo se pregunta el motivo para dejarlo en «Claves a no registrar» de
 // Descargas SRI; si no, la próxima descarga del SRI lo volvería a registrar.
 // (El servidor vuelve a comprobar la clave guardada: ComprasService::eliminar.)
 function mcDialogoEliminarElectronico(titulo) {

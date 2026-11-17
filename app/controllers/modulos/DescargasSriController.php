@@ -54,6 +54,10 @@ class DescargasSriController extends BaseModuloController
             'empresasIa' => $this->empresasIaPrestables(),
             // La pestaña solo se pinta si la empresa tiene IA propia o el usuario es nivel 3.
             'mostrarPdf' => $this->puedeUsarPdf(),
+            // Pestaña «Ingreso manual» (sin IA, solo emitidos): datos de la empresa como emisor.
+            'emisorManual' => $this->emisorManual(),
+            // Modo de cálculo del IVA por serie (001-001), para calcular el IVA del ingreso manual.
+            'modosIvaSerie' => $this->modosIvaSerie(),
             // 'perm' => $this->getPermisos('descargas_sri')
         ]);
     }
@@ -133,6 +137,10 @@ class DescargasSriController extends BaseModuloController
                     $estadoRegistro = 'ERROR';
                     $mensaje = 'XML obtenido pero error en registro: ' . ($resRegistro['error'] ?? 'Error desconocido.');
                 }
+            } elseif (SriService::claveFueraDePlazoConsulta($clave)) {
+                // El SRI no responde por documentos de hace más de un mes: se indica la
+                // alternativa (Carga Masiva XML) en vez del error técnico de la consulta.
+                $mensaje = SriService::MENSAJE_FUERA_DE_PLAZO;
             } elseif (empty($mensaje)) {
                 $mensaje = 'Error al consultar el comprobante en el SRI.';
             }
@@ -218,6 +226,11 @@ class DescargasSriController extends BaseModuloController
 
         if (!isset($_FILES['archivo_txt']) || $_FILES['archivo_txt']['error'] !== UPLOAD_ERR_OK) {
             echo json_encode(['ok' => false, 'error' => 'No se pudo subir el archivo TXT.']);
+            return;
+        }
+
+        if (strtolower(pathinfo((string) $_FILES['archivo_txt']['name'], PATHINFO_EXTENSION)) !== 'txt') {
+            echo json_encode(['ok' => false, 'error' => 'El archivo debe ser de tipo TXT (.txt), el que descarga desde el portal del SRI.']);
             return;
         }
 
@@ -323,6 +336,14 @@ class DescargasSriController extends BaseModuloController
                     continue;
                 }
 
+                if (strtolower(pathinfo((string) $nombre, PATHINFO_EXTENSION)) !== 'xml') {
+                    $resultados[] = [
+                        'clave' => $nombre, 'estado' => 'ERROR', 'estado_registro' => 'ERROR',
+                        'mensaje' => 'El archivo no es de tipo XML (.xml); no se procesó.',
+                    ];
+                    continue;
+                }
+
                 $xmlContent = file_get_contents($tmp);
 
                 try {
@@ -376,6 +397,28 @@ class DescargasSriController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             return false;
+        }
+    }
+
+    /** Modo de cálculo del IVA por serie de la empresa activa (vacío si no se puede leer). */
+    private function modosIvaSerie(): array
+    {
+        try {
+            return (new DescargaPdfService())->modosIvaPorSerie((int) ($_SESSION['id_empresa'] ?? 0));
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return [];
+        }
+    }
+
+    /** Emisor (la propia empresa) con que se precarga el ingreso manual. */
+    private function emisorManual(): array
+    {
+        try {
+            return (new DescargaPdfService())->emisorEmpresa((int) ($_SESSION['id_empresa'] ?? 0));
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            return [];
         }
     }
 
@@ -458,9 +501,23 @@ class DescargasSriController extends BaseModuloController
         $this->requireCrear();
         header('Content-Type: application/json');
 
-        if (!$this->puedeUsarPdf()) {
+        // Ingreso manual: no usa IA (solo comprobantes emitidos por la empresa; lo valida
+        // DescargaPdfRules). El registro de un PDF leído con IA sí exige la IA.
+        $manual = ($_POST['origen'] ?? '') === 'manual';
+        if (!$manual && !$this->puedeUsarPdf()) {
             echo json_encode(['ok' => false, 'errores' => ['El registro desde PDF no está disponible: la empresa no tiene IA configurada.']]);
             return;
+        }
+
+        // PDF de respaldo opcional del ingreso manual (no se lee; solo se guarda).
+        $rutaPdfManual = null;
+        if ($manual && isset($_FILES['archivo_pdf']) && ($_FILES['archivo_pdf']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['archivo_pdf']['error'] !== UPLOAD_ERR_OK
+                || strtolower(pathinfo((string) $_FILES['archivo_pdf']['name'], PATHINFO_EXTENSION)) !== 'pdf') {
+                echo json_encode(['ok' => false, 'errores' => ['El respaldo debe ser un archivo PDF (.pdf) de menos de 5 MB.']]);
+                return;
+            }
+            $rutaPdfManual = (string) $_FILES['archivo_pdf']['tmp_name'];
         }
 
         $doc = json_decode((string) ($_POST['documento'] ?? ''), true);
@@ -476,14 +533,16 @@ class DescargasSriController extends BaseModuloController
         try {
             $service = new DescargaPdfService();
             if (!empty($_POST['solo_revisar'])) {
-                echo json_encode(['ok' => true] + $service->revisar($doc, $idEmpresa));
+                echo json_encode(['ok' => true] + $service->revisar($doc, $idEmpresa, $manual));
             } else {
                 echo json_encode($service->registrar(
                     $doc,
                     (string) ($_POST['token_pdf'] ?? ''),
                     !empty($_POST['confirmar_avisos']),
                     $idEmpresa,
-                    $idUsuario
+                    $idUsuario,
+                    $manual,
+                    $rutaPdfManual
                 ));
             }
         } catch (\InvalidArgumentException $e) {
@@ -491,6 +550,43 @@ class DescargasSriController extends BaseModuloController
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'errores' => ['No se pudo registrar el comprobante: ' . $e->getMessage()]]);
+        }
+        exit;
+    }
+
+    /** Buscador de productos del detalle (ingreso manual). */
+    public function buscarProductosAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $termino = mb_substr(trim((string) ($_GET['q'] ?? '')), 0, 100);
+            echo json_encode(['ok' => true, 'productos' => (new DescargaPdfService())->buscarProductos(
+                (int) ($_SESSION['id_empresa'] ?? 0),
+                $termino,
+                ($_GET['tipo'] ?? '') !== 'compra'
+            )]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo buscar productos.']);
+        }
+        exit;
+    }
+
+    /** Buscador de clientes de la ventana de registro (tarjeta «Comprador»). */
+    public function buscarClientesAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $termino = mb_substr(trim((string) ($_GET['q'] ?? '')), 0, 100);
+            echo json_encode(['ok' => true, 'clientes' => (new DescargaPdfService())->buscarClientes(
+                (int) ($_SESSION['id_empresa'] ?? 0),
+                $termino
+            )]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo buscar clientes.']);
         }
         exit;
     }

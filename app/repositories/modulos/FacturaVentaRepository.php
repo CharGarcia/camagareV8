@@ -1470,4 +1470,23 @@ class FacturaVentaRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_asiento' => $idAsiento, ':id' => $id]);
     }
+
+    /**
+     * Fecha de autorización de una factura registrada desde su XML (descarga del SRI, carga de
+     * XML o ingreso manual), tomada del sobre de autorización. No cambia el estado.
+     * ventas_cabecera no tiene numero_autorizacion: en la venta el número es la clave de acceso,
+     * así que $numero se recibe (misma firma que los demás documentos) pero no se guarda.
+     */
+    public function actualizarAutorizacionImportada(int $id, int $idEmpresa, string $numero, ?string $fecha): void
+    {
+        if ($fecha === null) {
+            return;
+        }
+        $st = $this->db->prepare(
+            "UPDATE ventas_cabecera
+                SET fecha_autorizacion = :fecha
+              WHERE id = :id AND id_empresa = :id_empresa"
+        );
+        $st->execute([':fecha' => $fecha, ':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
 }

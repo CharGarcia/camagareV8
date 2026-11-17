@@ -725,4 +725,19 @@ class LiquidacionCompraRepository extends BaseRepository
         );
         $st->execute([$xml, $id]);
     }
+
+    /**
+     * Número y fecha de autorización de un comprobante registrado desde su XML (descarga del
+     * SRI, carga de XML o ingreso manual), tomados del sobre de autorización. No cambia el estado.
+     */
+    public function actualizarAutorizacionImportada(int $id, int $idEmpresa, string $numero, ?string $fecha): void
+    {
+        $st = $this->db->prepare(
+            "UPDATE liquidaciones_cabecera
+                SET numero_autorizacion = :numero,
+                    fecha_autorizacion  = COALESCE(:fecha, fecha_autorizacion)
+              WHERE id = :id AND id_empresa = :id_empresa"
+        );
+        $st->execute([':numero' => $numero, ':fecha' => $fecha, ':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
 }

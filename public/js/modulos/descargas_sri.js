@@ -5,6 +5,14 @@ document.getElementById('archivo_txt_input').addEventListener('change', function
     const file = e.target.files[0];
     if (!file) return;
 
+    if (!/\.txt$/i.test(file.name)) {
+        Swal.fire('Atención', 'El archivo debe ser de tipo TXT (.txt), el que descarga desde el portal del SRI.', 'warning');
+        e.target.value = '';
+        document.getElementById('txt_claves_detectadas').classList.add('d-none');
+        clavesDetectadasTxt = [];
+        return;
+    }
+
     const formData = new FormData();
     formData.append('archivo_txt', file);
 
@@ -153,14 +161,22 @@ function procesarArchivosXml() {
         return;
     }
 
+    // Solo archivos .xml: al elegir una carpeta, el navegador incluye todo lo que contiene
+    // (PDF, imágenes, etc.) aunque el selector diga .xml.
+    const archivosXml = Array.from(input.files).filter(f => /\.xml$/i.test(f.name));
+    const omitidos = input.files.length - archivosXml.length;
+    if (archivosXml.length === 0) {
+        Swal.fire('Atención', 'Los archivos seleccionados no son de tipo XML (.xml). Seleccione archivos o una carpeta con archivos XML.', 'warning');
+        input.value = '';
+        return;
+    }
+
     const btn = document.getElementById('btnProcesarXml');
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Procesando XMLs...`;
 
     const formData = new FormData();
-    for (let i = 0; i < input.files.length; i++) {
-        formData.append('archivos_xml[]', input.files[i]);
-    }
+    archivosXml.forEach(f => formData.append('archivos_xml[]', f));
 
     fetch(`${BASE_URL}/modulos/descargas_sri/procesarArchivosXmlAjax`, {
         method: 'POST',
@@ -177,7 +193,8 @@ function procesarArchivosXml() {
             Swal.fire({
                 icon: 'success',
                 title: 'Proceso Masivo Finalizado',
-                text: `Se procesaron ${data.total} archivos correctamente.`,
+                text: `Se procesaron ${data.total} archivos correctamente.`
+                    + (omitidos > 0 ? ` Se omitieron ${omitidos} archivo(s) que no son de tipo XML (.xml).` : ''),
                 timer: 3000
             });
         } else {
@@ -577,7 +594,7 @@ function renderUltimoEstado(c) {
 
 // ── Documentos emitidos por otras empresas del sistema ──────────────────────
 function cargarRecepcionEntreEmpresas() {
-    // La pestaña «Documentos de empresas del sistema» aparece solo si está disponible.
+    // La pestaña «Documentos del sistema» aparece solo si está disponible.
     const card = document.getElementById('tab-entre-empresas-item');
     if (!card) return;
     fetch(`${BASE_URL}/modulos/descargas_sri/obtenerRecepcionEntreEmpresasAjax`)

@@ -10,7 +10,7 @@ use App\Services\LogSistemaService;
 
 /**
  * Al eliminar un comprobante electrónico recibido (Compras, Retenciones de Ventas),
- * lo deja en «Documentos para no descargar» de Descargas SRI para que la próxima
+ * lo deja en «Claves a no registrar» de Descargas SRI para que la próxima
  * descarga no lo vuelva a registrar. Se llama DENTRO de la transacción del borrado:
  * si la eliminación falla, tampoco queda en la lista.
  *
@@ -18,7 +18,7 @@ use App\Services\LogSistemaService;
  *  - ANULADO_SRI          → bloqueo para todos los establecimientos del RUC.
  *  - OTRO_ESTABLECIMIENTO → bloqueo solo en este establecimiento (otro del mismo RUC
  *                           sí podrá descargarlo o cargar su XML).
- * Manual: docs/manual/modulos/descargas-sri.md («Documentos para no descargar»).
+ * Manual: docs/manual/modulos/descargas-sri.md («Claves a no registrar»).
  */
 class DocumentoNoDescargarService
 {
@@ -72,8 +72,8 @@ class DocumentoNoDescargarService
         $clave   = trim($clave);
         $todoRuc = $motivo === DocumentoIgnoradoRepository::MOTIVO_ANULADO_SRI;
         $avisoOk = $todoRuc
-            ? 'Se agregó a «Documentos para no descargar»: no se volverá a descargar en ningún establecimiento.'
-            : 'Se agregó a «Documentos para no descargar» solo en este establecimiento: ya puede descargarlo o cargar su XML en el otro.';
+            ? 'Se agregó a «Claves a no registrar»: no se volverá a descargar en ningún establecimiento.'
+            : 'Se agregó a «Claves a no registrar» solo en este establecimiento: ya puede descargarlo o cargar su XML en el otro.';
 
         $documento = trim((string) ($doc['documento'] ?? ''));
         $texto = 'Eliminado desde ' . ($doc['modulo'] ?? 'el sistema')
@@ -93,13 +93,13 @@ class DocumentoNoDescargarService
                 );
                 return $avisoOk;
             }
-            return 'El documento ya estaba en «Documentos para no descargar».';
+            return 'El documento ya estaba en «Claves a no registrar».';
         }
 
         $idsGrupo = (new EmpresaRepository())->getIdsEmpresaMismoRuc($idEmpresa);
         // Otro establecimiento del RUC ya la bloqueó para todos: no hace falta otra fila.
         if ($this->repo->existeClaveEnGrupo($clave, $idsGrupo, $idEmpresa)) {
-            return 'El documento ya estaba en «Documentos para no descargar» para todos los establecimientos.';
+            return 'El documento ya estaba en «Claves a no registrar» para todos los establecimientos.';
         }
 
         $idFila = $this->repo->insertar([
@@ -123,7 +123,7 @@ class DocumentoNoDescargarService
         );
         if (!$this->repo->tieneAlcance() && !$todoRuc) {
             // SQL de alcance aún no aplicado: la fila bloquea a todo el RUC.
-            return 'Se agregó a «Documentos para no descargar» (para todos los establecimientos: falta actualizar la base de datos para limitarlo a este).';
+            return 'Se agregó a «Claves a no registrar» (para todos los establecimientos: falta actualizar la base de datos para limitarlo a este).';
         }
         return $avisoOk;
     }

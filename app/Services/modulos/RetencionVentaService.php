@@ -180,7 +180,7 @@ class RetencionVentaService
     // ELIMINAR (lógico)
     // ─────────────────────────────────────────────────────────────────────────
 
-    /** Aviso del último eliminar() sobre «Documentos para no descargar» (null = no aplicó). */
+    /** Aviso del último eliminar() sobre «Claves a no registrar» (null = no aplicó). */
     private ?string $avisoNoDescargar = null;
 
     public function getAvisoNoDescargar(): ?string
@@ -191,7 +191,7 @@ class RetencionVentaService
     /**
      * Elimina la retención recibida. Si es electrónica (clave de 49 dígitos) y viene
      * $motivoNoDescargar (DocumentoIgnoradoRepository::MOTIVO_*), en la MISMA
-     * transacción la agrega a «Documentos para no descargar» de Descargas SRI
+     * transacción la agrega a «Claves a no registrar» de Descargas SRI
      * (DocumentoNoDescargarService), para que la próxima descarga no la vuelva a registrar.
      */
     public function eliminar(
