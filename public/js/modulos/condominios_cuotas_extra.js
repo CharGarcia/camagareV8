@@ -1,5 +1,5 @@
 /**
- * condominios_cuotas_extra.js — Configuración de condominios → pestaña «Cuotas extraordinarias».
+ * condominios_cuotas_extra.js — Administración del condominio → pestaña «Cuotas extraordinarias».
  *
  * Cuotas extraordinarias a plazos (pintura, ascensor…): listado, ventana con datos generales,
  * plan por inmueble (reparto, anticipo, plazo, pagador), cronograma de cuotas y emisión aparte.
@@ -87,15 +87,13 @@ window.CEX = (function () {
     // ── Ventana: opciones ──
     function llenarSelects() {
         const o = S.opciones || {};
-        $('cex_id_punto_emision').innerHTML = (o.series || []).map(s => `<option value="${s.id_punto_emision}">${esc(s.establecimiento_codigo)}-${esc(s.punto_emision_codigo)} · ${esc(s.establecimiento_nombre || '')}</option>`).join('');
+        // «001-001 · Principal (Nombre del establecimiento)»: el código solo no dice qué serie es.
+        $('cex_id_punto_emision').innerHTML = (o.series || []).map(s => {
+            const nombre = [s.punto_nombre, s.establecimiento_nombre ? `(${s.establecimiento_nombre})` : ''].filter(Boolean).join(' ');
+            return `<option value="${s.id_punto_emision}">${esc(s.establecimiento_codigo)}-${esc(s.punto_emision_codigo)}${nombre ? ' · ' + esc(nombre) : ''}</option>`;
+        }).join('') || '<option value="">— Sin series activas —</option>';
         $('cex_id_forma_anticipo').innerHTML = '<option value="">— La primera de tipo Anticipo —</option>'
             + (o.formas_anticipo || []).map(f => `<option value="${f.id}">${esc(f.nombre)}</option>`).join('');
-    }
-    function plazosTexto() { return ($('cex_plazos').value || '').split(/[\s,;]+/).map(n => parseInt(n, 10)).filter(n => n >= 1 && n <= 120).sort((a, b) => a - b).filter((n, i, a) => a.indexOf(n) === i); }
-    function llenarPlazoDefecto(sel) {
-        const ps = plazosTexto(); const v = sel ?? parseInt($('cex_plazo_defecto').value, 10);
-        $('cex_plazo_defecto').innerHTML = ps.map(p => `<option value="${p}" ${p === v ? 'selected' : ''}>${p} cuota${p > 1 ? 's' : ''}</option>`).join('');
-        if (!ps.includes(v) && ps.length) $('cex_plazo_defecto').value = String(ps[ps.length - 1]);
     }
 
     // Buscador tipo chip del concepto (Backspace/Delete limpian toda la selección).
@@ -132,7 +130,7 @@ window.CEX = (function () {
             S.actual = null; S.prev = null; S.aparte = null;
             $('cex_id').value = '';
             ['cex_nombre', 'cex_acta', 'cex_fecha_acta', 'cex_meta_total', 'cex_descripcion', 'cex_producto_txt', 'cex_id_producto'].forEach(id => { $(id).value = ''; });
-            $('cex_calculo').value = 'porcentaje'; $('cex_plazos').value = '1, 6, 12, 24'; llenarPlazoDefecto(24);
+            $('cex_calculo').value = 'porcentaje'; $('cex_plazos').value = '1, 6, 12, 24'; $('cex_plazo_defecto').value = 24;
             const sig = new Date(); sig.setDate(1); sig.setMonth(sig.getMonth() + 1); // por defecto, el mes siguiente
             $('cex_primer_periodo').value = `${sig.getFullYear()}-${String(sig.getMonth() + 1).padStart(2, '0')}`;
             $('cex_donde_cobro').value = 'junto'; $('cex_pagador_defecto').value = 'propietario'; $('cex_tipo_comprobante').value = 'recibo';
@@ -160,7 +158,7 @@ window.CEX = (function () {
         $('cex_meta_total').value = a.meta_total; $('cex_descripcion').value = a.descripcion || '';
         $('cex_id_producto').value = a.id_producto; $('cex_producto_txt').value = `${a.producto_codigo ? a.producto_codigo + ' - ' : ''}${a.producto_nombre || ''}`;
         $('cex_calculo').value = a.calculo === 'porcentaje' ? 'porcentaje' : 'iguales';
-        $('cex_plazos').value = (a.plazos_permitidos || []).join(', '); llenarPlazoDefecto(parseInt(a.plazo_defecto, 10));
+        $('cex_plazos').value = (a.plazos_permitidos || []).join(', '); $('cex_plazo_defecto').value = a.plazo_defecto;
         $('cex_primer_periodo').value = a.primer_periodo ? `${a.primer_periodo.slice(0, 4)}-${a.primer_periodo.slice(4, 6)}` : '';
         $('cex_donde_cobro').value = a.donde_cobro; $('cex_pagador_defecto').value = a.pagador_defecto;
         $('cex_tipo_comprobante').value = a.tipo_comprobante || 'recibo'; $('cex_id_punto_emision').value = a.id_punto_emision || '';
@@ -175,7 +173,7 @@ window.CEX = (function () {
         $('cex-estado-badge').classList.toggle('d-none', !a);
         if (a) $('cex-estado-badge').textContent = cerrada ? 'Cerrada' : 'Activa';
         const conPlanes = planes.length > 0;
-        ['cex_meta_total', 'cex_calculo', 'cex_primer_periodo', 'cex_producto_txt'].forEach(id => { $(id).disabled = conPlanes || cerrada; });
+        ['cex_meta_total', 'cex_calculo', 'cex_primer_periodo', 'cex_producto_txt', 'cex_plazo_defecto'].forEach(id => { $(id).disabled = conPlanes || cerrada; });
         ['cex_nombre', 'cex_acta', 'cex_fecha_acta', 'cex_plazos', 'cex_plazo_defecto', 'cex_donde_cobro', 'cex_pagador_defecto', 'cex_tipo_comprobante', 'cex_id_punto_emision', 'cex_id_forma_anticipo', 'cex_descripcion']
             .forEach(id => { $(id).disabled = !!cerrada; });
         $('cex-bloqueo-aviso').classList.toggle('d-none', !conPlanes);
@@ -183,7 +181,10 @@ window.CEX = (function () {
         if ($('cex-btn-guardar')) $('cex-btn-guardar').classList.toggle('d-none', !puedeGuardar || !!cerrada);
         if ($('cex-btn-eliminar')) $('cex-btn-eliminar').classList.toggle('d-none', !a || conPlanes);
         if ($('cex-btn-cerrar')) $('cex-btn-cerrar').classList.toggle('d-none', !a || !!cerrada);
-        $('cex-acciones').classList.toggle('d-none', !a);
+        // PDF, Excel y Cerrar solo con la cuota guardada; el botón de nuevo producto, siempre.
+        $('cex-acciones-doc').classList.toggle('d-none', !a);
+        $('cex-acciones').classList.toggle('d-none', !a && !$('cex-btn-nuevo-producto'));
+        if ($('cex-btn-nuevo-producto')) $('cex-btn-nuevo-producto').disabled = conPlanes || !!cerrada;
         $('cex-sin-guardar').classList.toggle('d-none', !!a);
         $('cex-planes-wrap').classList.toggle('d-none', !a);
         $('cex-prev').classList.add('d-none'); $('cex-aparte').classList.add('d-none');
@@ -420,10 +421,42 @@ window.CEX = (function () {
         aviso(r.ok ? 'success' : 'error', r.ok ? 'Cuotas extraordinarias' : 'No se pudo', r.mensaje);
     }
 
+    // ── Crear al vuelo un producto o servicio (CLAUDE.md §9) ──
+    function nuevoProducto() {
+        if (typeof window.abrirModalProductoCrear !== 'function') return aviso('info', 'No disponible', 'No tiene permiso para crear productos.');
+        window.abrirModalProductoCrear();
+    }
+    /** ¿Se puede poner lo creado en el concepto? Ventana abierta y concepto editable. */
+    function conceptoEditable() {
+        return $('modalCuotaExtra')?.classList.contains('show') && !$('cex_producto_txt').disabled;
+    }
+    // productos_modal.js emite 'productoGuardado' (nuevo = alta). Se busca con el mismo buscador
+    // del concepto (solo servicios) y se deja seleccionado como en la búsqueda manual.
+    document.addEventListener('productoGuardado', async e => {
+        const res = e.detail;
+        if (!res || !res.ok || !res.id || res.nuevo !== true || !conceptoEditable()) return;
+        const termino = res.codigo || res.nombre || '';
+        let p = null;
+        try {
+            const rows = (await pedir(`${CFG.url}/buscarServiciosAjax?q=${encodeURIComponent(termino)}`)).rows || [];
+            p = rows.find(r => String(r.id) === String(res.id)) || null;
+        } catch (err) { p = null; }
+        if (!p) return aviso('info', 'Producto creado', 'El concepto debe ser un servicio activo: el producto creado no se pudo poner. Revíselo en Productos.');
+        $('cex_id_producto').value = p.id;
+        $('cex_producto_txt').value = `${p.codigo ? p.codigo + ' - ' : ''}${p.nombre}`;
+    });
+
     document.addEventListener('DOMContentLoaded', () => {
         if (!$('cex-body')) return;
         chipProducto();
-        $('cex_plazos')?.addEventListener('change', () => llenarPlazoDefecto());
+        // La ficha de Productos se abre encima de la cuota extraordinaria: la regla global
+        // .modal (5060 !important) la dejaría detrás.
+        $('modalProducto')?.addEventListener('shown.bs.modal', () => {
+            if (!$('modalCuotaExtra')?.classList.contains('show')) return;
+            $('modalProducto').style.setProperty('z-index', '5080', 'important');
+            const bd = document.querySelectorAll('.modal-backdrop'); bd[bd.length - 1]?.style.setProperty('z-index', '5075', 'important');
+        });
+        $('modalProducto')?.addEventListener('hidden.bs.modal', () => { $('modalProducto').style.removeProperty('z-index'); });
         $('cex-buscar')?.addEventListener('input', () => { clearTimeout(tBuscar); tBuscar = setTimeout(() => cargar(false), 300); });
         document.querySelectorAll('#cex-tabla th[data-sort]').forEach(th => th.addEventListener('click', () => ordenar(th.dataset.sort)));
         // Carga perezosa: al abrir la pestaña por primera vez.
@@ -432,5 +465,5 @@ window.CEX = (function () {
     });
 
     return { nuevo, abrir, guardar, cerrar, eliminar, calcular, recalcular, prevTodos, usarAnticipo, activar, plan, cargo,
-             aparteVista, aparteTodos, aparteEmitir, exportar, revisarCambioPersona };
+             aparteVista, aparteTodos, aparteEmitir, exportar, revisarCambioPersona, nuevoProducto };
 })();

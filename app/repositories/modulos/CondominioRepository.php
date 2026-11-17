@@ -112,7 +112,7 @@ class CondominioRepository extends BaseRepository
 
     // ── Condóminos: todos los clientes con sus inmuebles ────────────────────
 
-    /** Columnas ordenables del listado de condóminos (pestaña de Configuración de condominios). */
+    /** Columnas ordenables del listado de condóminos (pestaña de Administración del condominio). */
     public const MAPA_ORDEN_CONDOMINOS = [
         'nombre'         => 'c.nombre',
         'identificacion' => 'c.identificacion',
@@ -154,7 +154,7 @@ class CondominioRepository extends BaseRepository
     /**
      * Listado de condóminos: TODOS los clientes de la empresa (tengan o no inmueble), cada uno con
      * los inmuebles que tiene como propietario o arrendatario. Así se asigna el inmueble al cliente
-     * sin salir de Configuración de condominios.
+     * sin salir de Administración del condominio.
      */
     public function getCondominos(int $idEmpresa, string $buscar, int $page, int $perPage, array $ordenMulti): array
     {

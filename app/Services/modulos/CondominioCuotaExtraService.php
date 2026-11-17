@@ -11,7 +11,7 @@ use App\Services\GuardadoUnicoService;
 use App\Services\LogSistemaService;
 
 /**
- * Cuotas extraordinarias con meta pagadas a plazos (Configuración de condominios → pestaña
+ * Cuotas extraordinarias con meta pagadas a plazos (Administración del condominio → pestaña
  * Cuotas extraordinarias). Diseño: docs/diseno/condominios-cuotas-extraordinarias.md.
  *
  *  - Una cuota extraordinaria (condominios_aportes, tipo 'meta') tiene una meta y un reparto
@@ -75,7 +75,7 @@ class CondominioCuotaExtraService
     {
         return [
             'instalado' => $this->repo->instalado(),
-            'series'    => (new \App\repositories\modulos\SuscripcionesRepository())->getSeriesActivas($idEmpresa),
+            'series'    => $this->repo->getSeries($idEmpresa),
             'formas_anticipo' => $this->repo->instalado() ? $this->repo->getFormasAnticipo($idEmpresa) : [],
             'calculos'  => CondominioCuotaExtraRules::CALCULOS,
             'donde'     => CondominioCuotaExtraRules::DONDE,

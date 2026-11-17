@@ -7,6 +7,8 @@ use App\Helpers\InformacionRegistro;
 
 $pestanasCex = ['cex-pane-general' => 'General', 'cex-pane-inmuebles' => 'Inmuebles', 'cex-pane-cuotas' => 'Cuotas'];
 $pestanasCex += InformacionRegistro::pestanaConfigurable('cex');
+// Botón «nuevo producto o servicio» (crear al vuelo, CLAUDE.md §9): permiso de Productos, no de este módulo.
+$permProductosCex = \App\Helpers\Permisos::porRuta('modulos/productos');
 ?>
 <style>
     #modalCuotaExtra label { font-size: .8rem; font-weight: 600; color: #495057; margin-bottom: 2px; }
@@ -27,11 +29,16 @@ $pestanasCex += InformacionRegistro::pestanaConfigurable('cex');
                 <input type="hidden" id="cex_id">
                 <!-- Barra de acciones del documento -->
                 <div class="d-flex gap-1 align-items-center flex-wrap border-bottom pb-2 mb-2" id="cex-acciones">
-                    <button type="button" class="btn btn-sm btn-outline-danger" title="PDF del estado por inmueble" onclick="CEX.exportar('pdf')"><i class="bi bi-file-earmark-pdf"></i></button>
-                    <button type="button" class="btn btn-sm btn-outline-success" title="Excel del estado por inmueble" onclick="CEX.exportar('excel')"><i class="bi bi-file-earmark-excel"></i></button>
-                    <?php if (!empty($perm['actualizar'])): ?>
+                    <span class="d-flex gap-1 align-items-center" id="cex-acciones-doc">
+                        <button type="button" class="btn btn-sm btn-outline-danger" title="PDF del estado por inmueble" onclick="CEX.exportar('pdf')"><i class="bi bi-file-earmark-pdf"></i></button>
+                        <button type="button" class="btn btn-sm btn-outline-success" title="Excel del estado por inmueble" onclick="CEX.exportar('excel')"><i class="bi bi-file-earmark-excel"></i></button>
+                        <?php if (!empty($perm['actualizar'])): ?>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" id="cex-btn-cerrar" title="Cerrar: no se emiten más cuotas" onclick="CEX.cerrar()"><i class="bi bi-lock me-1"></i>Cerrar</button>
+                        <?php endif; ?>
                         <div class="vr mx-1"></div>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="cex-btn-cerrar" title="Cerrar: no se emiten más cuotas" onclick="CEX.cerrar()"><i class="bi bi-lock me-1"></i>Cerrar</button>
+                    </span>
+                    <?php if (!empty($permProductosCex['crear'])): ?>
+                        <button type="button" class="btn btn-outline-primary btn-sm px-2" id="cex-btn-nuevo-producto" onclick="CEX.nuevoProducto()" title="Registrar nuevo producto o servicio"><i class="bi bi-box-seam fs-6"></i></button>
                     <?php endif; ?>
                     <div class="ms-auto d-flex flex-wrap gap-3 small" id="cex-kpis"></div>
                 </div>
@@ -60,7 +67,6 @@ $pestanasCex += InformacionRegistro::pestanaConfigurable('cex');
                                     <span class="input-group-text bg-white"><i class="bi bi-box-seam"></i></span>
                                     <input type="text" class="form-control" id="cex_producto_txt" placeholder="Buscar servicio…" autocomplete="off">
                                     <input type="hidden" id="cex_id_producto">
-                                    <a class="btn btn-outline-secondary" href="<?= rtrim($base, '/') ?>/modulos/productos" target="_blank" title="Crear el servicio en Productos"><i class="bi bi-box-arrow-up-right"></i></a>
                                 </div>
                                 <div class="list-group position-absolute w-100 shadow" id="cex_producto_dd" style="display:none;z-index:1090;max-height:220px;overflow-y:auto"></div>
                                 <div class="form-text">Su nombre, IVA y cuenta contable salen del producto.</div>
@@ -92,7 +98,8 @@ $pestanasCex += InformacionRegistro::pestanaConfigurable('cex');
                             </div>
                             <div class="col-md-2">
                                 <label for="cex_plazo_defecto">Cuotas por defecto *</label>
-                                <select class="form-select form-select-sm" id="cex_plazo_defecto"></select>
+                                <input type="number" class="form-control form-control-sm text-end" id="cex_plazo_defecto" min="1" max="120" step="1" value="24">
+                                <div class="form-text">Se suma a las permitidas si no está.</div>
                             </div>
                             <div class="col-md-2">
                                 <label for="cex_primer_periodo">Primera cuota *</label>

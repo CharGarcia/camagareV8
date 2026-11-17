@@ -1,17 +1,17 @@
 ---
-titulo: Configuración de condominios
+titulo: Administración del condominio
 resumen: Todo el módulo Condominios en una pantalla: datos del condominio, condóminos (clientes y sus inmuebles), alícuota y fondo de reserva, mora y multas, reajuste de cuotas y cuotas extraordinarias a plazos (con anticipos). Guardarla activa el módulo.
 categoria: Ventas
 ruta_modulo: modulos/condominios-config
 tipo: modulo
 visibilidad: todos
-etiquetas: condominio, condominios, generar cobro, emitir recibos en bloque, facturas masivas, multas masivas, cuota extraordinaria, enviar por correo, emisiones, configuracion condominio, condominos, condomino, inmuebles, inmueble, departamento, parqueadero, bodega, local, propietario, arrendatario, inquilino, propiedad horizontal, edificio, conjunto, urbanizacion, expensas, administrador del condominio, alicuota, alicuotas, cuota de mantenimiento, cuotas extraordinarias, cuota extraordinaria, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dias de gracia, restriccion areas comunes, cargar inmuebles excel, reajuste de cuotas, activar condominios, cuota extraordinaria a plazos, pintura del edificio, obra aprobada en asamblea, acta de asamblea, cuotas de una obra, dividir en cuotas, 24 cuotas, plan de pagos, anticipo de clientes, abono inicial, liquidar saldo, venta de inmueble deuda, cronograma de cuotas
+etiquetas: administracion del condominio, administracion de condominios, configuracion de condominios, condominio, condominios, generar cobro, emitir recibos en bloque, facturas masivas, multas masivas, cuota extraordinaria, enviar por correo, emisiones, configuracion condominio, condominos, condomino, inmuebles, inmueble, departamento, parqueadero, bodega, local, propietario, arrendatario, inquilino, propiedad horizontal, edificio, conjunto, urbanizacion, expensas, administrador del condominio, alicuota, alicuotas, cuota de mantenimiento, cuotas extraordinarias, cuota extraordinaria, fondo de reserva, intereses de mora, tasa legal, multas, reglamento, pronto pago, pago anticipado, dias de gracia, restriccion areas comunes, cargar inmuebles excel, reajuste de cuotas, activar condominios, cuota extraordinaria a plazos, pintura del edificio, obra aprobada en asamblea, acta de asamblea, cuotas de una obra, dividir en cuotas, 24 cuotas, plan de pagos, anticipo de clientes, abono inicial, liquidar saldo, venta de inmueble deuda, cronograma de cuotas
 version: 1.8
 orden: 1
 estado: activo
 ---
 
-**Configuración de condominios** es la pantalla única del módulo Condominios. La empresa es el
+**Administración del condominio** es la pantalla única del módulo Condominios. La empresa es el
 condominio: aquí se guardan sus reglas (administrador, alícuota, fondo de reserva, mora y multas),
 a cada **cliente** se le asignan sus **inmuebles**, se reajustan las cuotas en bloque y se llevan
 las **cuotas extraordinarias a plazos** (obras aprobadas en asamblea). **Guardarla activa el
@@ -193,10 +193,13 @@ emitió, cuánto se cobró y cuánto falta, por inmueble y en total.
 Pestaña **Cuotas extraordinarias** → **Nueva cuota extraordinaria**:
 
 1. **Nombre**, **concepto** (un servicio de Productos: su nombre, IVA y cuenta contable salen de
-   ahí), **acta** y su fecha.
+   ahí), **acta** y su fecha. Si el servicio aún no existe, créelo con el botón de la caja
+   (**Registrar nuevo producto o servicio**) de la barra superior de la ventana: al guardarlo
+   queda puesto como concepto.
 2. **Monto aprobado** y **reparto**: en **partes iguales** o **por % de alícuota**.
-3. **Cuotas permitidas** (p. ej. `1, 6, 12, 24`) y las que vienen por defecto. Cada condómino
-   puede elegir otra de la lista.
+3. **Cuotas permitidas** (p. ej. `1, 6, 12, 24`) y las **cuotas por defecto**, que se escriben
+   libremente: si el número no está en la lista, se agrega. Cada condómino puede elegir otro
+   número de la lista.
 4. **Primera cuota** (mes) y **quién paga**: el propietario (lo normal) o el arrendatario.
 5. **Dónde sale cada cuota**: en el **recibo o factura de la alícuota** que ya emite
    Suscripciones, o en un **documento aparte**.
@@ -296,7 +299,8 @@ por cobrar a la persona anterior, el sistema pregunta por cada una:
 | Restricción automática | — | Marca la restricción de áreas comunes al superar N meses de mora; se quita al quedar al día. |
 | Cuota extraordinaria: nombre, concepto, monto aprobado | Sí | El concepto es un servicio de Productos. Con planes activados, el monto, el reparto, el concepto y la primera cuota ya no se cambian. |
 | Cuota extraordinaria: reparto | Sí | Partes iguales o por % de alícuota, con ajuste manual por inmueble. |
-| Cuota extraordinaria: cuotas permitidas / por defecto | Sí | Números de cuotas que puede elegir cada condómino (1 a 120). |
+| Cuota extraordinaria: cuotas permitidas / por defecto | Sí | Números de cuotas que puede elegir cada condómino (1 a 120). Las de por defecto se escriben libremente y se suman a las permitidas si no estaban. |
+| Cuota extraordinaria: serie | Sí | Se muestra como «001-001 · Principal (establecimiento)». |
 | Cuota extraordinaria: dónde sale | Sí | Con la alícuota (Suscripciones) o en un documento aparte. |
 | Cuota extraordinaria: documento propio y serie | Sí | Para el abono inicial, las cuotas aparte y las liquidaciones. |
 | Cuota extraordinaria: forma de cobro de anticipos | No | Vacía = la primera forma de cobro activa de tipo Anticipo. |
@@ -410,6 +414,8 @@ permiso ven todos los condóminos.
   reparto en partes iguales o por % de alícuota, aplicación del anticipo de clientes (abono
   inicial), número de cuotas por condómino, cuotas con la alícuota (Suscripciones) o aparte,
   cobrado y saldo por inmueble, liquidación del saldo, cambio de plazo o de pagador, PDF y Excel.
+  Botón para crear el servicio desde la misma ventana (queda puesto como concepto). La pantalla
+  pasa a llamarse **Administración del condominio** (antes «Configuración de condominios»).
   Al vender un inmueble se pregunta si la deuda sigue con el inmueble o se liquida. El recargo
   permanente que se sumaba a cada cuota vuelve a llamarse **Fondo de reserva** (pestaña
   **Alícuota y fondo**).

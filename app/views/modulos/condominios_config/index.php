@@ -523,6 +523,14 @@ $prodChip = function (string $id, string $label, string $campo, string $ayuda) u
     <?php include __DIR__ . '/modal_excel.php'; ?>
     <?php include __DIR__ . '/modal_cobro.php'; ?>
     <?php include __DIR__ . '/modal_cuota_extra.php'; ?>
+    <?php
+    // Ficha de Productos para crear un servicio al vuelo desde la cuota extraordinaria (CLAUDE.md §9).
+    // Va fuera de los demás modales (hermano en la página) para que se apile encima sin quedar atrapado.
+    if (!empty($permProductosCex['crear'])) {
+        include_once dirname(__DIR__) . '/productos/modal.php';
+        echo '<script src="' . rtrim($base, '/') . '/js/modulos/productos_modal.js?v=' . asset_ver('/js/modulos/productos_modal.js') . '"></script>';
+    }
+    ?>
     <script>
         window.COND_CFG = {
             url: <?= json_encode($urlBase) ?>,

@@ -1,5 +1,5 @@
 /**
- * condominios.js — Pestaña «Condóminos» de Configuración de condominios (modulos/condominios-config).
+ * condominios.js — Pestaña «Condóminos» de Administración del condominio (modulos/condominios-config).
  *
  * Listado de TODOS los clientes con sus inmuebles (FiltrosModal + orden multi-columna sin recarga +
  * paginación), modal del inmueble (General / Propietarios / Áreas comunes / Expensa) para asignarlo

@@ -1,5 +1,5 @@
 /**
- * condominios_config.js — Configuración de condominios (modulos/condominios-config).
+ * condominios_config.js — Administración del condominio (modulos/condominios-config).
  *
  * Formulario por pestañas (Condominio / Alícuota y fondo de reserva / Mora y multas / Reajuste)
  * que se guarda completo con AJAX, más el catálogo de multas (se guarda por fila). Los productos

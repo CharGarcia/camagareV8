@@ -11,7 +11,7 @@ use App\Services\GuardadoUnicoService;
 use App\Services\LogSistemaService;
 
 /**
- * Cobros desde la pestaña Condóminos de Configuración de condominios. Dos caminos:
+ * Cobros desde la pestaña Condóminos de Administración del condominio. Dos caminos:
  *
  *  1. EMITIR AHORA (multas, cuotas extraordinarias, cualquier servicio): crea una emisión con un
  *     ítem por documento y la procesa un worker en segundo plano
@@ -550,7 +550,7 @@ class CondominioCobroService
                         'id_empresa' => $idEmpresa, 'id_cliente' => (int) $f['id_cliente'], 'id_periodicidad' => $d['id_periodicidad'],
                         'fecha_inicio' => $d['fecha_inicio'], 'fecha_fin' => null, 'proximo_cobro' => $d['fecha_inicio'],
                         'forma_cobro' => 'credito', 'estado' => 'activo', 'tipo_comprobante' => $d['tipo_comprobante'],
-                        'observaciones' => 'Creada desde Configuración de condominios (Condóminos).', 'info_adicional' => null,
+                        'observaciones' => 'Creada desde Administración del condominio (Condóminos).', 'info_adicional' => null,
                         'id_unidad' => $f['id_unidad'], 'id_usuario' => $idUsuario,
                     ];
                     $idS = $suscRepo->create($datos);

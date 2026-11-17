@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace App\Rules\modulos;
 
 /**
- * Validaciones de los cobros desde la pestaña Condóminos (Configuración de condominios):
+ * Validaciones de los cobros desde la pestaña Condóminos (Administración del condominio):
  * emisión en bloque de recibos/facturas y alta de cobros recurrentes en Suscripciones.
  * Los mensajes llevan «|#id» para que la vista enfoque el control (prefijo cob_).
  */

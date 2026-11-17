@@ -646,6 +646,23 @@ class CondominioCuotaExtraRepository extends BaseRepository
         return $out;
     }
 
+    /** Series activas con el nombre del punto de emisión y del establecimiento (selector del modal). */
+    public function getSeries(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT pe.id AS id_punto_emision, ep.codigo AS establecimiento_codigo, pe.codigo_punto AS punto_emision_codigo,
+                    NULLIF(TRIM(COALESCE(pe.nombre, '')), '') AS punto_nombre,
+                    NULLIF(TRIM(COALESCE(ep.nombre, '')), '') AS establecimiento_nombre
+               FROM empresa_punto_emision pe
+               JOIN empresa_establecimiento ep ON ep.id = pe.id_establecimiento
+              WHERE ep.id_empresa = :e AND ep.estado = 'activo' AND ep.eliminado = false
+                AND pe.eliminado = false AND LOWER(COALESCE(pe.estado, '')) = 'activo'
+              ORDER BY ep.codigo, pe.codigo_punto"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ── Anticipos ────────────────────────────────────────────────────────────
 
     /** Formas de cobro tipo ANTICIPO activas para ingresos. */

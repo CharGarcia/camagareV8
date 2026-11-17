@@ -1,5 +1,5 @@
 <?php
-/** Modal del inmueble (pestaña Condóminos de Configuración de condominios).
+/** Modal del inmueble (pestaña Condóminos de Administración del condominio).
  *  @var callable $prodChip (de index.php) @var array $perm @var array $vistaConfig @var string $rutaModulo @var array $tiposUnidad @var array $metodos */
 $pestanasUni = [
     'pane-uni-general'     => 'General',

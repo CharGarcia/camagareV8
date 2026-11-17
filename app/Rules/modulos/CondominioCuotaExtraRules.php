@@ -4,7 +4,7 @@ declare(strict_types=1);
 namespace App\Rules\modulos;
 
 /**
- * Validaciones de las cuotas extraordinarias a plazos (Configuración de condominios → pestaña
+ * Validaciones de las cuotas extraordinarias a plazos (Administración del condominio → pestaña
  * Cuotas extraordinarias). Mensajes con «|#id» para que la vista enfoque el control (prefijo cex_).
  * Diseño: docs/diseno/condominios-cuotas-extraordinarias.md.
  */
@@ -79,11 +79,13 @@ class CondominioCuotaExtraRules
                 throw new \InvalidArgumentException('La fecha del acta no es válida.|#cex_fecha_acta');
             }
         }
-        if (!$n['plazos_permitidos']) {
-            throw new \InvalidArgumentException('Indique los números de cuotas permitidos, separados por coma (p. ej. 1, 6, 12, 24).|#cex_plazos');
+        if ($n['plazo_defecto'] < 1 || $n['plazo_defecto'] > self::PLAZO_MAX) {
+            throw new \InvalidArgumentException('Indique las cuotas por defecto (1 a ' . self::PLAZO_MAX . ').|#cex_plazo_defecto');
         }
+        // Las cuotas por defecto se escriben libremente: si no están entre las permitidas, se agregan.
         if (!in_array($n['plazo_defecto'], $n['plazos_permitidos'], true)) {
-            $n['plazo_defecto'] = max($n['plazos_permitidos']);
+            $n['plazos_permitidos'][] = $n['plazo_defecto'];
+            sort($n['plazos_permitidos']);
         }
         if ($n['primer_periodo'] === '') {
             throw new \InvalidArgumentException('Indique el mes de la primera cuota.|#cex_primer_periodo');

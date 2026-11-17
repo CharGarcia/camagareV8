@@ -7,7 +7,7 @@ use App\repositories\BaseRepository;
 use PDO;
 
 /**
- * Condominios — cobros desde la pestaña Condóminos de Configuración de condominios:
+ * Condominios — cobros desde la pestaña Condóminos de Administración del condominio:
  *  - emisión en bloque de recibos o facturas (condominios_emisiones + _items), que procesa un
  *    worker en segundo plano;
  *  - cruce de los condóminos con sus suscripciones, para no duplicarlas al agregarles un cobro

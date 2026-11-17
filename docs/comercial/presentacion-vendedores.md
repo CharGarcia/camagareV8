@@ -607,7 +607,7 @@ requiere otro módulo»**, va **incluido a $0** cuando lo trae otro módulo.
 | **Taller mecánico** | Checklist de recepción, Departamentos, Estación, Tablero del taller, Vehículos |
 | **Car wash** | Vehículos |
 | **Centros educativos** | Alumnos, Campus, Niveles y cursos (las pensiones se cobran con Suscripciones) |
-| **Condominios** | Configuración de condominios |
+| **Condominios** | Administración del condominio |
 | **Citas** | Agenda, Pagos de citas, Portal de citas |
 | **Producción** | Configuración, Fórmulas, Órdenes de producción, Reportes de producción (requiere Inventario) |
 | **CRM y redes sociales** | Configuración del CRM, Bandeja social, Asistente virtual de Instagram, Publicaciones |

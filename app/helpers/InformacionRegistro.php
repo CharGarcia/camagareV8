@@ -152,7 +152,7 @@ class InformacionRegistro
             'tabla'  => 'egresos_cabecera',
             'nombre' => 'el egreso',
         ],
-        // Configuración de condominios: el modal con pestaña Información es el de la cuota
+        // Administración del condominio: el modal con pestaña Información es el de la cuota
         // extraordinaria (condominios_aportes).
         'modulos/condominios-config' => [
             'tabla'  => 'condominios_aportes',

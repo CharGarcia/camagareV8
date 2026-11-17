@@ -453,7 +453,7 @@ registrados*.
 - **Condominios (cuotas extraordinarias)**: si la suscripción está enlazada a un inmueble
   (pestaña Expensa), al generar su documento se agregan como líneas las cuotas extraordinarias
   «con la alícuota» que ese inmueble tenga pendientes hasta ese mes (p. ej. «Pintura del edificio –
-  cuota 5/24»). Cada cuota sale una sola vez. Ver *Configuración de condominios*.
+  cuota 5/24»). Cada cuota sale una sola vez. Ver *Administración del condominio*.
 - **Barra superior**: el ícono de flechas circulares avisa cuántas suscripciones de
   clientes están vencidas o por vencer (próximos 7 días). Lo ve quien tiene asignado
   este módulo en la empresa activa (el superadministrador lo ve siempre). En la empresa

@@ -116,7 +116,7 @@ class CondominioService
     // ── Inmuebles ─────────────────────────────────────────────────────────────
 
     /**
-     * Pestaña Condóminos de Configuración de condominios: todos los clientes de la empresa con
+     * Pestaña Condóminos de Administración del condominio: todos los clientes de la empresa con
      * los inmuebles que tienen como propietario o arrendatario.
      */
     public function getCondominos(int $idEmpresa, string $buscar, int $page, int $perPage, array $orden): array
