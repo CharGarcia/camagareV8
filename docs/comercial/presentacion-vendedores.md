@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.27** (17-11-2026). El historial de cambios está al final.
+Versión actual: **0.28** (17-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -651,8 +651,10 @@ en *Cotizador → Configuración → Paquetes*:
 15 % → $850 al año, en vez de $1.000. El mismo paquete con precio fijo de $800
 → $800 al año, con Facturas y Proformas incluidos.
 
-**Paquetes propuestos, uno por perfil prioritario** (precio fijo; módulos y
-precios por confirmar — P-17):
+**Paquetes por perfil prioritario.** La dirección los arma y los mantiene
+directamente en el *Cotizador → Configuración → Paquetes*: **lo que está ahí
+es lo vigente** (nombres, módulos y precios). La tabla es solo una guía de qué
+paquete le corresponde a cada perfil:
 
 | Paquete | Perfil (sección 2.6) | Módulos principales | Precio anual |
 |---|---|---|---|
@@ -846,7 +848,7 @@ actualiza su sección y se tacha aquí.
 | P-14 | Validar la tabla de **dependencias** (qué módulo trae a cuál). | 6.4 |
 | P-15 | ¿Qué módulos son **base** y cuáles **adicionales** (con o sin descuento por establecimiento)? | 6.2 |
 | P-16 | ¿Automatizaciones y Videollamadas van en todos los planes o se venden aparte? ¿Contabilidad e Impuestos se venden juntos? ¿Retenciones de venta van con Facturación o con Tesorería? | 6.4 |
-| P-17 | Paquetes ya disponibles en el Cotizador: definir **nombres, módulos y precio fijo o % de descuento** de cada uno (p. ej. Emprendedor) y cargarlos. Marcar qué módulos van **sin costo cuando los requiere otro**. | 6.4, 6.5 |
+| P-17 | ✅ **Resuelto (17-11-2026):** la dirección arma los paquetes (nombres, módulos y precios) directamente en el Cotizador; lo vigente es lo que está cargado ahí. | 6.4, 6.5 |
 | P-18 | ¿El **vendedor puede dar descuento comercial**? ¿Hasta qué %? | 6.2 |
 | P-19 | **Control de cupos** de usuarios por RUC: hoy no es automático; ¿quién lo controla? | 6.2 |
 
@@ -881,6 +883,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.28 | 17-11-2026 | Los paquetes los arma la dirección en el Cotizador, que es la fuente de lo vigente (6.5). P-17 resuelto |
 | 0.27 | 17-11-2026 | Sin tamaño ideal de empresa; aliados contadores y referidos (beneficio por definir); paquetes propuestos Emprendedor, Comercial y Empresarial con precio fijo, uno por perfil (6.5). P-05 resuelto, P-06 parcial |
 | 0.26 | 17-11-2026 | Perfiles prioritarios (emprendedor, comercio, obligados a contabilidad) y zona (todo el Ecuador): sección 2.6 y proceso de venta. P-03 y P-04 resueltos |
 | 0.25 | 16-11-2026 | Implementación sin costo; puesta en marcha desde 1 hora (hasta 1 día); capacitación de 3 sesiones de 1 hora; qué basta para empezar; contabilidad opcional al inicio; soporte en horario laboral. P-08, P-09 y P-10 resueltos |
