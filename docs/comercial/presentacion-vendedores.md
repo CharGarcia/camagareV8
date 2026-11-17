@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.29** (17-11-2026). El historial de cambios está al final.
+Versión actual: **0.30** (17-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -530,6 +530,11 @@ conserva y el acceso vuelve al regularizar el pago.
 > El sistema todavía no suspende solo: al día 10 lo hace CaMaGaRe desactivando
 > la empresa.
 
+**Precio en la renovación:** el valor cotizado rige para el periodo contratado
+(año, semestre o mes). **En la próxima renovación el precio puede subir o
+bajar**, según los precios vigentes en ese momento. El vendedor debe decirlo al
+cotizar: nunca prometer que el precio se mantendrá igual en las renovaciones.
+
 ### 5.5 Seguridad de la información (en palabras del cliente)
 
 - Cada usuario entra con su clave y solo ve lo que se le permite.
@@ -575,6 +580,10 @@ Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
 | Descuento comercial del vendedor | **Hasta 10 %**, sobre lo recurrente (no sobre los pagos únicos). Se activa en *Cotizador → Configuración → Parámetros* con tope de 10 %. |
 
 Todos los precios son **sin IVA**.
+
+**Vigencia del precio:** el precio cotizado vale para el periodo contratado. En
+cada **renovación** se aplican los precios vigentes, que pueden **subir o bajar**
+(sección 5.4).
 
 ### 6.3 Ejemplo para explicar al cliente *(valores ilustrativos, no reales)*
 
@@ -736,7 +745,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 - **Verificar que lo que registra sea verdadero** (CUARTA).
 - **Sus declaraciones y comprobantes ante el SRI** (CUARTA).
 - **Los datos personales que registra** (clientes, proveedores, empleados): el cliente es el responsable del tratamiento y CaMaGaRe es el encargado (Acuerdo, SEGUNDA).
-- **Pagar la suscripción**: la falta de pago permite suspender el acceso, previo aviso (Contrato, TERCERA).
+- **Pagar la suscripción**: la falta de pago permite suspender el acceso, previo aviso (Contrato, TERCERA). En cada renovación paga el precio vigente, que puede subir o bajar (sección 5.4).
 
 ### 8.4 De quién es cada cosa
 
@@ -766,6 +775,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | ¿Puedo cargar mis clientes y productos que ya tengo? | Sí, por Excel, y los saldos iniciales de cartera, bancos e inventario. |
 | ¿Hace mis declaraciones? | Prepara la información (ATS, IVA, retenciones, renta), pero las declaraciones son responsabilidad del cliente o de su contador. |
 | ¿Qué pasa si me atraso en el pago? | El sistema le avisa antes y después del vencimiento. Si a los **10 días de atraso** el pago sigue pendiente, el servicio se suspende, previo aviso, **sin perder su información**; al pagar se reactiva. |
+| ¿El precio se mantiene cuando renuevo? | El precio vale para el periodo contratado. En la próxima renovación puede **subir o bajar**, según los precios vigentes en ese momento. |
 | ¿Puedo cancelar? | El contrato rige mientras la suscripción esté activa y cualquiera de las partes puede terminarlo con aviso razonable; usted puede pedir la exportación de su información. |
 | ¿Qué horario tiene el soporte? | En **horario laboral, de lunes a viernes**, por el chat del sistema, WhatsApp y llamadas. |
 | ¿Cuánto cuesta la implementación? | **No tiene costo.** |
@@ -876,6 +886,7 @@ actualiza su sección y se tacha aquí.
 | P-30 | ¿Se ofrecen **desarrollos a la medida**? ¿Cómo se cobran? | 7.2 |
 | P-31 | ¿Hay una **empresa de demostración** para las demos de los vendedores? ¿Con qué usuario? | 10 |
 | P-32 | Activar en los usuarios del cliente los módulos vendidos (propuesta en `docs/diseno/cotizador-planes-fase1.md` §7.1, aplazada). | 5.2 |
+| P-33 | Incluir en el **Contrato de uso** que el precio puede **subir o bajar en cada renovación**. El texto inicial de la cláusula TERCERA solo dice «el valor y la periodicidad acordados». Revisarlo junto con P-27. | 5.4, 8 |
 
 ---
 
@@ -883,6 +894,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.30 | 17-11-2026 | En la próxima renovación el precio puede subir o bajar: secciones 5.4, 6.2, 8.3 y preguntas frecuentes. Nuevo P-33 (incluirlo en el contrato) |
 | 0.29 | 17-11-2026 | Precios, dependencias y base/adicional se definen en el Cotizador; descuento comercial del vendedor hasta 10 %. P-13, P-14, P-15 y P-18 resueltos |
 | 0.28 | 17-11-2026 | Los paquetes los arma la dirección en el Cotizador, que es la fuente de lo vigente (6.5). P-17 resuelto |
 | 0.27 | 17-11-2026 | Sin tamaño ideal de empresa; aliados contadores y referidos (beneficio por definir); paquetes propuestos Emprendedor, Comercial y Empresarial con precio fijo, uno por perfil (6.5). P-05 resuelto, P-06 parcial |

@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.9** (17-11-2026). El historial está al final.
+Versión actual: **0.10** (17-11-2026). El historial está al final.
 
 ---
 
@@ -188,7 +188,9 @@ con fecha. El CRM avisa las actividades vencidas.
    a viernes** (chat, WhatsApp y llamadas): no prometer fines de semana, horas
    exactas ni tiempos de respuesta. Tiempos de entrega o funciones nuevas se
    confirman con la dirección.
-2. **Todo precio sale del Cotizador.** Nada de precios «a ojo».
+2. **Todo precio sale del Cotizador.** Nada de precios «a ojo». El precio vale
+   para el periodo contratado: **en la próxima renovación puede subir o bajar**.
+   Nunca prometer que se mantendrá igual.
 3. **Descuento comercial:** **hasta 10 %**, solo sobre lo recurrente (nunca sobre pagos únicos). El Cotizador no deja pasar del tope.
 4. **iPhone/iPad:** la app es solo para empresas con **2 o más usuarios**.
    **Nunca** se le dice a un cliente que pague, compre o se suscriba desde la
@@ -269,6 +271,7 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.10 | 17-11-2026 | Regla 2: el precio puede subir o bajar en la renovación. |
 | 0.9 | 17-11-2026 | Descuento comercial hasta 10 % en las reglas. |
 | 0.8 | 17-11-2026 | Perfiles prioritarios y zona definidos (P-C04). |
 | 0.7 | 16-11-2026 | Implementación sin costo: el ejercicio 4 pasa a llamarse «Con un pago único» y se ajusta la respuesta 8. |
