@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.11** (17-11-2026). El historial está al final.
+Versión actual: **0.12** (17-11-2026). El historial está al final.
 
 ---
 
@@ -261,13 +261,17 @@ El vendedor está listo cuando:
 
 ## 10. Metas y comisiones
 
-La comisión se calcula por **empresas vendidas en el mes**:
+La comisión se calcula por **empresas vendidas en el mes**, con estas condiciones:
+
+- Solo cuentan los **planes anuales** (no los semestrales ni los mensuales).
+- Una venta cuenta cuando el cliente **paga**, no cuando aprueba la proforma.
+- Los **$250** son con **IVA incluido**.
 
 | Empresas vendidas en el mes | Recibe |
 |---|---|
 | **0** | Nada. |
 | **1** | **20 % de esa venta**, sin sueldo base. |
-| **2** (cada una con un valor de **$250**) | **$450 de base**. |
+| **2** (cada una con un valor de **$250, IVA incluido**) | **$450 de base**. |
 | **3 o más** | **$450 de base** + **20 % de la venta** de la tercera empresa en adelante. |
 
 **Ejemplos** *(valores ilustrativos)*:
@@ -276,9 +280,8 @@ La comisión se calcula por **empresas vendidas en el mes**:
 - Vende 3 empresas; la tercera, de $400 → recibe $450 + $80 = **$530**.
 
 > **Por confirmar con la dirección (P-C06):** si los $250 son el valor
-> **mínimo** de cada empresa para contar en la meta; si «la venta» es el valor
-> **sin IVA** y de qué modalidad (anual, semestral o mensual); y si cuenta al
-> aprobarse la proforma o cuando el cliente **paga**.
+> **mínimo** de cada empresa para la base (¿una venta de $200 cuenta?) y si el
+> 20 % se calcula sobre el valor con IVA o sin IVA.
 
 ---
 
@@ -289,7 +292,7 @@ La comisión se calcula por **empresas vendidas en el mes**:
 | P-C01 | ✅ **Resuelto (17-11-2026):** la dicta una persona externa, en línea. |
 | P-C02 | ✅ **Resuelto (17-11-2026):** hay empresa de demostración con usuario y clave de demo. |
 | P-C03 | ✅ **Resuelto (17-11-2026):** metas y comisiones en la sección 10. |
-| P-C06 | Detalles de la comisión: ¿$250 es el mínimo por empresa? ¿«La venta» es sin IVA y de qué modalidad? ¿Cuenta al aprobar la proforma o al pagar el cliente? |
+| P-C06 | Comisión: ✅ solo planes anuales, cuenta al pagar el cliente y los $250 incluyen IVA (17-11-2026). Falta: ¿$250 es el **mínimo** por empresa? ¿El 20 % es sobre el valor **con o sin IVA**? |
 | P-C04 | ✅ **Resuelto (17-11-2026):** emprendedores, comercios y empresas obligadas a llevar contabilidad, en todo el Ecuador (sección 2.6 de la presentación). |
 | P-C05 | Precios reales cargados en el Cotizador para practicar con valores verdaderos (los carga la dirección en el catálogo de precios). |
 
@@ -299,6 +302,7 @@ La comisión se calcula por **empresas vendidas en el mes**:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.12 | 17-11-2026 | Comisiones: solo planes anuales, cuenta al pagar el cliente, $250 con IVA incluido. |
 | 0.11 | 17-11-2026 | Nueva sección 10 «Metas y comisiones». Capacitación externa en línea; empresa de demostración. P-C01, P-C02 y P-C03 resueltos; nuevo P-C06 |
 | 0.10 | 17-11-2026 | Regla 2: el precio puede subir o bajar en la renovación. |
 | 0.9 | 17-11-2026 | Descuento comercial hasta 10 % en las reglas. |
