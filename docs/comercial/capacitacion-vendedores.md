@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.7** (16-11-2026). El historial está al final.
+Versión actual: **0.8** (17-11-2026). El historial está al final.
 
 ---
 
@@ -47,7 +47,7 @@ Duración sugerida: **4 sesiones de 2 horas**. La dirección puede ajustarlo (P-
 | Sesión | Tema | Material | Práctica |
 |---|---|---|---|
 | **1. Conocer CaMaGaRe** | Quiénes somos, lo que ofrecemos, módulos y cómo funciona. | Presentación, secciones 1, 3, 4 y 5 | Cada vendedor dice la propuesta de valor de 30 segundos. |
-| **2. Conocer al cliente** | Quién decide, perfiles de cliente, preguntas de descubrimiento, señales de buen cliente y de alerta. | Presentación, sección 2 | En parejas: uno es el cliente (un perfil al azar) y el otro hace las 10 preguntas. |
+| **2. Conocer al cliente** | Quién decide, perfiles de cliente (con foco en los 3 prioritarios: emprendedor, comercio y obligado a llevar contabilidad), preguntas de descubrimiento, señales de buen cliente y de alerta. | Presentación, sección 2 | En parejas: uno es el cliente (uno de los 3 perfiles prioritarios) y el otro hace las 10 preguntas. |
 | **3. Demo y cotización** | Guion de demo, planes y precios, Cotizador de Planes, proforma. | Presentación, sección 6; esta guía, secciones 3 y 4 | Demo completa de 20 minutos y los 4 ejercicios del Cotizador. |
 | **4. Cierre y seguimiento** | Membresía, responsabilidades, preguntas frecuentes, objeciones, proceso de venta y CRM. | Presentación, secciones 7 a 10; esta guía, secciones 5 a 7 | Juego de roles de objeciones y evaluación final. |
 
@@ -260,7 +260,7 @@ El vendedor está listo cuando:
 | P-C01 | Duración y modalidad de la capacitación (presencial / en línea) y quién la dicta. |
 | P-C02 | Empresa y usuario de **demostración** para los vendedores (igual que P-31 de la presentación). |
 | P-C03 | **Metas** de venta y **comisiones** de los vendedores (no se incluyen aquí hasta que la dirección las defina). |
-| P-C04 | Perfiles de cliente **prioritarios** para enfocar la prospección (P-03 de la presentación). |
+| P-C04 | ✅ **Resuelto (17-11-2026):** emprendedores, comercios y empresas obligadas a llevar contabilidad, en todo el Ecuador (sección 2.6 de la presentación). |
 | P-C05 | Precios reales cargados en el Cotizador para practicar con valores verdaderos (P-13 de la presentación). |
 
 ---
@@ -269,6 +269,7 @@ El vendedor está listo cuando:
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.8 | 17-11-2026 | Perfiles prioritarios y zona definidos (P-C04). |
 | 0.7 | 16-11-2026 | Implementación sin costo: el ejercicio 4 pasa a llamarse «Con un pago único» y se ajusta la respuesta 8. |
 | 0.6 | 16-11-2026 | Puesta en marcha y capacitación en línea por CaMaGaRe y soporte de lunes a viernes en el juego de roles y en las reglas. |
 | 0.5 | 15-11-2026 | Cada cotización queda atada al vendedor: vincular el usuario con su ficha de vendedor. |

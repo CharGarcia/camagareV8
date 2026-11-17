@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.25** (16-11-2026). El historial de cambios está al final.
+Versión actual: **0.26** (17-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -147,11 +147,21 @@ cotización en el Cotizador de Planes:
   y su contenido son responsabilidad del cliente (Contrato de uso, cláusula
   OCTAVA).
 
-### 2.6 Pendiente de definir por la dirección
+### 2.6 Dónde enfocar la venta
 
-- ¿Cuáles son los **3 perfiles prioritarios** a los que deben apuntar los
-  vendedores primero?
-- ¿Hay **ciudades o provincias** de enfoque?
+**Perfiles prioritarios** (a los que se apunta primero; los demás de la sección
+2.2 se atienden igual cuando llegan):
+
+| Prioridad | Perfil | Por qué nos busca | Qué le mostramos primero |
+|---|---|---|---|
+| 1 | **Emprendedor o profesional independiente** | Facturar electrónicamente sin complicarse y llevar sus retenciones. | Facturación electrónica, Proformas y la app móvil. |
+| 2 | **Comercio y distribuidora** | Saber cuánto stock tiene, ordenar su cartera y no perder pedidos. | Inventario, Compras desde XML, Pedidos, POS y Cuentas por cobrar. |
+| 3 | **Empresa obligada a llevar contabilidad** | Contabilidad al día, declaraciones sin errores y reportes a la Superintendencia. | Contabilidad automática, Impuestos SRI y Nómina. |
+
+**Zona:** **todo el Ecuador**. El sistema funciona en la nube y la puesta en
+marcha y la capacitación son en línea, así que no hay ciudades de enfoque.
+
+**Por definir:**
 - ¿Hay un **tamaño de empresa** ideal (número de facturas al mes, de empleados
   o de establecimientos)?
 - ¿Se trabaja con **contadores como aliados o referidores**? ¿Tienen algún
@@ -769,7 +779,7 @@ en *Cotizador → Configuración → Paquetes*:
 
 | # | Etapa | Qué hace el vendedor | Herramienta |
 |---|---|---|---|
-| 1 | **Prospección** | Identifica clientes de los perfiles prioritarios (P-03). Registra el contacto. | CRM (contactos, Bandeja social) |
+| 1 | **Prospección** | Identifica clientes de los perfiles prioritarios: emprendedores, comercios y empresas obligadas a llevar contabilidad (sección 2.6), en todo el Ecuador. Registra el contacto. | CRM (contactos, Bandeja social) |
 | 2 | **Descubrimiento** | Hace las preguntas de la sección 2.3 y anota el problema principal. | CRM (actividad o nota) |
 | 3 | **Demo** | Empieza por el problema del cliente, no por la lista de módulos. Muestra 2 o 3 cosas que lo resuelven. | Sistema (empresa de demostración) |
 | 4 | **Cotización** | Arma el precio con el RUC, los locales, los módulos y los usuarios. Muestra anual y mensual. | Cotizador de Planes |
@@ -803,8 +813,8 @@ actualiza su sección y se tacha aquí.
 ### B. Cliente y mercado
 | # | Pendiente | Sección |
 |---|---|---|
-| P-03 | Los **3 perfiles de cliente prioritarios**. | 2.6 |
-| P-04 | **Ciudades o provincias** de enfoque. | 2.6 |
+| P-03 | ✅ **Resuelto (17-11-2026):** emprendedor o profesional independiente, comercio y distribuidora, y empresa obligada a llevar contabilidad. | 2.6 |
+| P-04 | ✅ **Resuelto (17-11-2026):** todo el Ecuador. | 2.6 |
 | P-05 | **Tamaño de empresa ideal** (facturas al mes, empleados, establecimientos). | 2.6 |
 | P-06 | ¿Trabajamos con **contadores como aliados o referidores**? ¿Con qué beneficio? | 2.6 |
 
@@ -860,6 +870,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.26 | 17-11-2026 | Perfiles prioritarios (emprendedor, comercio, obligados a contabilidad) y zona (todo el Ecuador): sección 2.6 y proceso de venta. P-03 y P-04 resueltos |
 | 0.25 | 16-11-2026 | Implementación sin costo; puesta en marcha desde 1 hora (hasta 1 día); capacitación de 3 sesiones de 1 hora; qué basta para empezar; contabilidad opcional al inicio; soporte en horario laboral. P-08, P-09 y P-10 resueltos |
 | 0.24 | 16-11-2026 | El cliente también puede configurar su empresa, firma electrónica, logo y demás en Configuración → Empresa: sección 5.2 y preguntas frecuentes |
 | 0.23 | 16-11-2026 | Puesta en marcha por CaMaGaRe, capacitación en línea incluida, soporte de lunes a viernes (chat, WhatsApp y llamadas) y suspensión a los 10 días de atraso: secciones 1.5, 5.2, 5.3, 5.4, 7, 9 y 10. P-02, P-07 y P-12 resueltos; P-09 y P-11 parciales |
