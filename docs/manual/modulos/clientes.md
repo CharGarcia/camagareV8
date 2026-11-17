@@ -199,7 +199,7 @@ que registrar el ingreso a mano.
 |-------|----------------|
 | Forma de cobro | Activa el cobro automático. Con **Ninguna** no se genera ningún ingreso solo |
 | Operación bancaria | Solo si la forma es de tipo banco: depósito, transferencia o cheque |
-| Concepto de ingreso | Concepto contable con el que se registra el cobro |
+| Concepto de ingreso | Concepto contable con el que se registra el cobro. Se llena solo con el concepto de **facturas de venta** |
 | Monto mínimo / máximo | Rango dentro del cual el saldo del documento entra en el cobro automático |
 | Días de crédito | Difiere la fecha de cobro: fecha de emisión del documento + estos días |
 
@@ -521,7 +521,7 @@ usuario y la fecha.
 
 ## Historial de cambios
 
-- **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático).
+- **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático). El **Concepto de ingreso predeterminado** ahora se llena solo con el de facturas de venta cada vez que se abre la ficha; antes quedaba vacío desde la segunda ficha abierta.
 - **3.5** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`). Igual que en la ficha de proveedores.
 - **3.4** — La pestaña **Estado de cuenta** del cliente carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
 - **3.3** — Nueva pestaña **Información** en la ventana del cliente (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.

@@ -351,6 +351,8 @@
                 }
                 cliToggleCheque();
                 cliToggleBotonCobrosPendientes();
+                // Si el concepto quedó vacío por cualquier motivo, volver al de facturas de venta.
+                cliAplicarConceptoIngreso(document.getElementById('cliente_id_ingreso_concepto')?.value || null);
             });
         }
 
@@ -380,13 +382,24 @@
                 idVentaDefault = fallbackDefault;
             }
             
-            if (idVentaDefault) {
-                selConcepto.value = idVentaDefault;
-            }
-            
-            const hdConcepto = document.getElementById('cliente_id_ingreso_concepto_hidden');
-            if (hdConcepto) hdConcepto.value = selConcepto.value;
+            // Se guarda el concepto de facturas de venta para volver a ponerlo cada vez
+            // que se abre la ficha (form.reset() lo borraba desde la segunda apertura).
+            selConcepto.dataset.defecto = idVentaDefault || '';
+            cliAplicarConceptoIngreso(null);
         }
+    }
+
+    /**
+     * Concepto de ingreso del cobro automático: el que el cliente tiene guardado o,
+     * si no tiene (o ya no existe), el que corresponde a facturas de venta.
+     */
+    function cliAplicarConceptoIngreso(idGuardado) {
+        const sel = document.getElementById('cliente_id_ingreso_concepto');
+        if (!sel) return;
+        sel.value = idGuardado ? String(idGuardado) : '';
+        if (!sel.value) sel.value = sel.dataset.defecto || '';
+        const hd = document.getElementById('cliente_id_ingreso_concepto_hidden');
+        if (hd) hd.value = sel.value;
     }
 
 
@@ -932,6 +945,9 @@
         const form = document.getElementById('formCliente');
         if (form) form.reset();
 
+        // form.reset() deja vacío el concepto de ingreso: volver al de facturas de venta.
+        cliAplicarConceptoIngreso(null);
+
         // form.reset() devuelve los checkboxes a su estado del HTML (todos sin
         // marcar), pero no reevalúa la visibilidad del bloque de semanas ni el
         // resumen: hay que forzarlo.
@@ -1069,10 +1085,7 @@
         setV('cliente_monto_minimo_auto_cobro', data.monto_minimo_auto_cobro);
         setV('cliente_monto_maximo_auto_cobro', data.monto_maximo_auto_cobro);
 
-        if (data.id_ingreso_concepto_predeterminado) {
-            setV('cliente_id_ingreso_concepto', data.id_ingreso_concepto_predeterminado);
-            setV('cliente_id_ingreso_concepto_hidden', data.id_ingreso_concepto_predeterminado);
-        }
+        cliAplicarConceptoIngreso(data.id_ingreso_concepto_predeterminado);
 
         cliPoblarVisitas(data);
 
