@@ -867,7 +867,7 @@ actualiza su sección y se tacha aquí.
 | # | Pendiente | Sección |
 |---|---|---|
 | P-20 | ✅ **Resuelto (15-11-2026):** ya existe el manual de usuario de Factura Express por QR (configuración y solicitudes), Automatizaciones, Importaciones, Campañas de WhatsApp, Cotización de publicidad, Servicio externo y Portal de citas. | 4 |
-| P-21 | Instalar el Cotizador de Planes (dos SQL), dar permisos y crear los productos «Plan anual» y «Plan mensual». | 6.1 |
+| P-21 | Dejar listo el Cotizador en producción: (1) SQL `2026-11-13_cotizador_planes`, `…_menu`, `2026-11-15_cotizador_planes_semestral`, `…_paquetes` y `…_precio_incluido`; (2) permisos del submódulo a los vendedores; (3) productos «Plan anual / semestral / mensual CaMaGaRe» elegidos en Parámetros; (4) en Parámetros, permitir descuento del vendedor con tope 10 %; (5) vincular cada vendedor con su usuario (ficha del vendedor → «Usuario del sistema»). | 6.1 |
 
 ### F. Secciones por escribir
 | # | Pendiente | Sección |
