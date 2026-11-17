@@ -951,7 +951,8 @@ class ProductosController extends BaseModuloController
             $guardado = (new ProductoRepository())->findById($id, $data['id_empresa']);
             $replicado = $this->replicarSiCorresponde($guardado ?: array_merge($data, ['id' => $id]));
 
-            echo json_encode(['ok' => true, 'msg' => 'Producto creado correctamente.', 'id' => $id, 'replicado' => $replicado]);
+            // 'producto': la ficha se queda abierta y se recarga con lo guardado (ya con su id).
+            echo json_encode(['ok' => true, 'msg' => 'Producto creado correctamente.', 'id' => $id, 'producto' => $guardado, 'replicado' => $replicado]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -978,7 +979,7 @@ class ProductosController extends BaseModuloController
             $guardado = (new ProductoRepository())->findById($id, $idEmpresa);
             $replicado = $this->replicarSiCorresponde($guardado ?: array_merge($data, ['id' => $id]));
 
-            echo json_encode(['ok' => true, 'msg' => 'Producto actualizado correctamente.', 'replicado' => $replicado]);
+            echo json_encode(['ok' => true, 'msg' => 'Producto actualizado correctamente.', 'id' => $id, 'producto' => $guardado, 'replicado' => $replicado]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

@@ -147,12 +147,16 @@ if (($rutaModulo ?? '') !== 'modulos/productos') {
                                                 <i class="bi bi-bag-check text-primary me-1"></i>Venta
                                             </label>
                                         </div>
-                                        <div class="ms-auto d-flex align-items-center gap-2">
+                                        <div class="ms-auto d-flex align-items-center gap-4">
                                             <span class="small fw-bold text-muted"><i class="bi bi-flag me-1"></i>Estado:</span>
-                                            <select name="status" id="prod_status" class="form-select form-select-sm shadow-none border-secondary-subtle" style="width:130px">
-                                                <option value="1">Activo</option>
-                                                <option value="0">Inactivo</option>
-                                            </select>
+                                            <div class="form-check form-switch mb-0">
+                                                <!-- Apagado envía 0 (el checkbox, si está marcado, va después y gana con 1). -->
+                                                <input type="hidden" name="status" value="0">
+                                                <input class="form-check-input" type="checkbox" id="prod_status" name="status" value="1" checked>
+                                                <label class="form-check-label small fw-semibold" for="prod_status">
+                                                    <i class="bi bi-check-circle text-success me-1"></i>Activo
+                                                </label>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

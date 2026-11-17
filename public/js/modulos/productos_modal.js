@@ -673,7 +673,7 @@
         // Igual que la columna Estado del listado: solo status = 1 es "Activo"; cualquier otro
         // valor (0, NULL o el 2 que traen productos migrados) es "Inactivo". Si se asignara el
         // valor crudo, un 2 no coincide con ninguna opción y el select quedaba en blanco.
-        document.getElementById('prod_status').value = (Number(data.status ?? 1) === 1) ? '1' : '0';
+        document.getElementById('prod_status').checked = (Number(data.status ?? 1) === 1);
         document.getElementById('prod_id_categoria').value = data.id_categoria || '';
         document.getElementById('prod_id_marca').value = data.id_marca || '';
         document.getElementById('prod_ubicacion').value = data.ubicacion || '';
@@ -1039,10 +1039,32 @@
         document.getElementById('btnRemoveImage')?.classList.add('d-none');
     };
 
+    // Bandera "en curso" (§8): se fija antes del primer await para que un doble clic
+    // o un Enter repetido no dispare un segundo guardado.
+    let guardandoProducto = false;
+
+    function restaurarBotonGuardar(btn) {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar'; }
+    }
+
     window.guardarProducto = async function() {
+        if (guardandoProducto) return;
+        guardandoProducto = true;
         const f   = document.getElementById('formProducto');
         const btn = document.getElementById('btnGuardarProducto');
         btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        const esNuevo = !document.getElementById('prod_id').value;
+        // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
+        if (typeof Swal !== 'undefined') {
+            Swal.fire({
+                title: esNuevo ? 'Guardando producto...' : 'Actualizando producto...',
+                text: 'Por favor espere, no cierre esta ventana.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                showConfirmButton: false,
+                didOpen: () => Swal.showLoading()
+            });
+        }
         try {
             const fd = new FormData(f);
             fd.append('precios',     JSON.stringify(recogerPrecios())); // se leen las filas editables
@@ -1059,34 +1081,60 @@
             const json      = await resp.json();
 
             if (json.ok) {
-                setTimeout(() => {
-                    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-                    getModal().hide();
-                    swalToast('success', json.msg || 'Guardado correctamente.');
-                    if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
-                    // nuevo/codigo/nombre: los documentos que crean el producto al vuelo lo
-                    // buscan con su propio buscador para agregarlo al detalle.
-                    document.dispatchEvent(new CustomEvent('productoGuardado', { detail: {
-                        ...json,
-                        nuevo:  !id,
-                        codigo: (fd.get('codigo') || document.getElementById('prod_codigo')?.value || '').toString().trim(),
-                        nombre: (fd.get('nombre') || document.getElementById('prod_nombre')?.value || '').toString().trim()
-                    } }));
+                const modalEl = document.getElementById('modalProducto');
+                // Crear al vuelo (§9): un alta abierta encima de otro modal se cierra sola y
+                // queda puesta en el documento. En cualquier otro caso la ficha sigue abierta.
+                const alVuelo = !id && typeof window.CMG_modalSobreOtro === 'function'
+                    && modalEl && window.CMG_modalSobreOtro(modalEl);
 
-                    const htmlReplicado = resumenReplicado(json.replicado);
-                    if (htmlReplicado) {
-                        setTimeout(() => {
-                            Swal.fire({ icon: 'info', title: 'Replicación en otras empresas', html: htmlReplicado, confirmButtonText: 'Entendido' });
-                        }, 600);
+                if (typeof window.fetchSearch === 'function') window.fetchSearch(window.currentPage || 1);
+                // nuevo/codigo/nombre: los documentos que crean el producto al vuelo lo
+                // buscan con su propio buscador para agregarlo al detalle.
+                document.dispatchEvent(new CustomEvent('productoGuardado', { detail: {
+                    ...json,
+                    nuevo:  !id,
+                    codigo: (fd.get('codigo') || document.getElementById('prod_codigo')?.value || '').toString().trim(),
+                    nombre: (fd.get('nombre') || document.getElementById('prod_nombre')?.value || '').toString().trim()
+                } }));
+
+                if (alVuelo) {
+                    getModal().hide();
+                    restaurarBotonGuardar(btn);
+                    swalToast('success', 'Producto creado y seleccionado.');
+                } else {
+                    // Se recarga la ficha con lo guardado: así un producto nuevo ya queda con
+                    // su id (el siguiente Guardar actualiza, no crea otro) y se ven los datos
+                    // que calcula el servidor. Se conserva la pestaña en la que estaba.
+                    const tabActiva = modalEl?.querySelector('.nav-link.active[data-bs-toggle="tab"]');
+                    if (json.producto) {
+                        await window.abrirModalProductoEditar(json.producto);
+                    } else if (json.id) {
+                        document.getElementById('prod_id').value = json.id;
                     }
-                }, 500);
+                    if (tabActiva && typeof bootstrap !== 'undefined' && !tabActiva.classList.contains('d-none')) {
+                        (bootstrap.Tab.getInstance(tabActiva) || new bootstrap.Tab(tabActiva)).show();
+                    }
+                    restaurarBotonGuardar(btn);
+                    swalToast('success', json.msg || 'Guardado correctamente.');
+                }
+
+                const htmlReplicado = resumenReplicado(json.replicado);
+                if (htmlReplicado) {
+                    setTimeout(() => {
+                        Swal.fire({ icon: 'info', title: 'Replicación en otras empresas', html: htmlReplicado, confirmButtonText: 'Entendido' });
+                    }, 600);
+                }
             } else {
-                btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                restaurarBotonGuardar(btn);
                 swalError(json.error || 'Ocurrió un error inesperado.');
             }
         } catch (e) {
-            btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+            // Si el alta ya se guardó y falló solo la recarga, el id ya quedó puesto
+            // (abrirModalProductoEditar lo fija primero), así que reintentar actualiza.
+            restaurarBotonGuardar(btn);
             swalError('Error de conexión con el servidor.');
+        } finally {
+            guardandoProducto = false;
         }
     };
 

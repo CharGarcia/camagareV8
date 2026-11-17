@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto, costo automatico, recalcular costo, metodo de costeo, fifo, lifo, promedio ponderado
-version: 1.21
+version: 1.22
 orden: 10
 estado: activo
 ---
@@ -32,7 +32,15 @@ Al cambiarlo, el formulario muestra u oculta los campos que aplican a cada caso.
    el **nombre** y la **categoría**.
 4. Indique el **precio base** y, si aplica, el **costo**.
 5. Elija la **tarifa de IVA** que le corresponde.
-6. Guarde.
+6. Pulse **Guardar**.
+
+Mientras se guarda aparece el aviso **Guardando producto...** (o **Actualizando
+producto...** si ya existía); espere a que termine. Al guardar, la ficha **no se
+cierra**: queda abierta con los datos ya guardados para que pueda seguir
+revisándola o completándola, y un siguiente **Guardar** actualiza ese mismo
+producto (no crea otro). Ciérrela con la **X** o con **Cerrar** cuando termine.
+La excepción es cuando el producto se crea desde un documento (factura, compra,
+proforma…): ahí la ficha se cierra sola y el producto queda puesto en el documento.
 
 ## Campos principales
 
@@ -55,7 +63,7 @@ Al cambiarlo, el formulario muestra u oculta los campos que aplican a cada caso.
 | Cuenta de inventario | No | Cuenta contable donde se registra el producto |
 | Cuenta de costo o gasto | No | Cuenta contable de su costo |
 | Imagen | No | Se muestra en el punto de venta |
-| Estado | Sí | Activo o inactivo |
+| Estado | Sí | Interruptor **Activo** en la parte superior de la pestaña General, junto a *Usar en*: encendido = activo, apagado = inactivo |
 
 ## Inventariable
 
@@ -348,6 +356,7 @@ del restaurante, plantillas de proforma o de Factura Express).
 
 ## Historial de cambios
 
+- **1.22** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), con el mismo diseño que *Usar en: Compra / Venta*. Al guardar, la ficha ya no se cierra (salvo al crear un producto desde un documento) y muestra el aviso *Guardando / Actualizando producto...* mientras el servidor responde.
 - **1.21** — El bloqueo del **código** y el **tipo** de un producto ya usado considera ahora todos los documentos del sistema (antes solo facturas de venta y movimientos de inventario). Ver *Código y tipo quedan fijos cuando el producto ya se usó*.
 - **1.20** — El **nombre** del producto ya no se puede repetir dentro de la empresa (antes solo se controlaba el código principal). Ver *Código y nombre no se repiten*.
 - **1.19** — Al abrir un producto que trabaja con inventario, su costo se recalcula y guarda solo con el método de costeo de Empresa → Facturación (promedio, FIFO o LIFO), si la facturación afecta al inventario.
