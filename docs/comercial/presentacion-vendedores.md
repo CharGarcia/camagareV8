@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.28** (17-11-2026). El historial de cambios está al final.
+Versión actual: **0.29** (17-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -572,7 +572,7 @@ Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
 | Usuarios incluidos | **3 por establecimiento**, sumados y **compartidos en el RUC** (un usuario en dos locales ocupa un solo cupo). |
 | Usuario adicional | **$20 al año** ($2 al mes). |
 | Servicios de una sola vez | Migración de datos u otros servicios. Se cobran una vez; sin recargo ni descuentos. La **Implementación no tiene costo** (si se agrega a la cotización, va en $0). |
-| Descuento comercial del vendedor | Solo si la configuración lo permite y hasta el tope fijado. |
+| Descuento comercial del vendedor | **Hasta 10 %**, sobre lo recurrente (no sobre los pagos únicos). Se activa en *Cotizador → Configuración → Parámetros* con tope de 10 %. |
 
 Todos los precios son **sin IVA**.
 
@@ -593,7 +593,7 @@ local además es restaurante ($300 al año, módulo adicional); 10 usuarios.
 locales, cada uno le sale con 20 % de descuento».* En el ejemplo, pagar anual
 ahorra **$1.064**.
 
-### 6.4 Qué módulos traen consigo a otros *(propuesta — se carga como dependencias en el catálogo)*
+### 6.4 Qué módulos traen consigo a otros *(guía — lo vigente son las dependencias cargadas en el Cotizador)*
 
 El cliente no compra 130 módulos sueltos. Al elegir un módulo principal, el
 cotizador agrega solos los que necesita. Cada módulo tiene su precio cuando se
@@ -844,12 +844,12 @@ actualiza su sección y se tacha aquí.
 ### D. Precios
 | # | Pendiente | Sección |
 |---|---|---|
-| P-13 | **Precio anual de cada módulo** y de cada servicio, para cargarlo en el Cotizador. | 6.2 |
-| P-14 | Validar la tabla de **dependencias** (qué módulo trae a cuál). | 6.4 |
-| P-15 | ¿Qué módulos son **base** y cuáles **adicionales** (con o sin descuento por establecimiento)? | 6.2 |
+| P-13 | ✅ **Resuelto (17-11-2026):** los precios de cada módulo y servicio los carga la dirección en *Cotizador → Configuración → Catálogo de precios*; lo vigente es lo cargado ahí. | 6.2 |
+| P-14 | ✅ **Resuelto (17-11-2026):** las dependencias se definen en cada módulo del catálogo (lista «Requiere»); la tabla de la sección 6.4 es solo una guía. | 6.4 |
+| P-15 | ✅ **Resuelto (17-11-2026):** base o adicional se marca en cada módulo del catálogo (casilla «Entra en el descuento por establecimiento adicional»). | 6.2 |
 | P-16 | ¿Automatizaciones y Videollamadas van en todos los planes o se venden aparte? ¿Contabilidad e Impuestos se venden juntos? ¿Retenciones de venta van con Facturación o con Tesorería? | 6.4 |
 | P-17 | ✅ **Resuelto (17-11-2026):** la dirección arma los paquetes (nombres, módulos y precios) directamente en el Cotizador; lo vigente es lo que está cargado ahí. | 6.4, 6.5 |
-| P-18 | ¿El **vendedor puede dar descuento comercial**? ¿Hasta qué %? | 6.2 |
+| P-18 | ✅ **Resuelto (17-11-2026):** el vendedor puede dar **hasta 10 %** de descuento comercial. | 6.2 |
 | P-19 | **Control de cupos** de usuarios por RUC: hoy no es automático; ¿quién lo controla? | 6.2 |
 
 ### E. Producto y documentación
@@ -883,6 +883,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.29 | 17-11-2026 | Precios, dependencias y base/adicional se definen en el Cotizador; descuento comercial del vendedor hasta 10 %. P-13, P-14, P-15 y P-18 resueltos |
 | 0.28 | 17-11-2026 | Los paquetes los arma la dirección en el Cotizador, que es la fuente de lo vigente (6.5). P-17 resuelto |
 | 0.27 | 17-11-2026 | Sin tamaño ideal de empresa; aliados contadores y referidos (beneficio por definir); paquetes propuestos Emprendedor, Comercial y Empresarial con precio fijo, uno por perfil (6.5). P-05 resuelto, P-06 parcial |
 | 0.26 | 17-11-2026 | Perfiles prioritarios (emprendedor, comercio, obligados a contabilidad) y zona (todo el Ecuador): sección 2.6 y proceso de venta. P-03 y P-04 resueltos |
