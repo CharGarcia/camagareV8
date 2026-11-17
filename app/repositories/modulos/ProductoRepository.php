@@ -1257,21 +1257,80 @@ class ProductoRepository extends BaseRepository
     }
 
     /**
-     * Verifica si el producto ha sido usado en facturas de venta o en movimientos de inventario.
-     * Cuando es true, no se permite modificar código, nombre ni tipo_produccion.
+     * Tablas de detalle de TODOS los documentos que guardan id_producto
+     * (tabla => ¿tiene columna eliminado?). Si se crea un módulo nuevo cuyo
+     * detalle referencia productos, agregar aquí su tabla.
+     *
+     * No van aquí los catálogos ni las plantillas (precios, bodegas, variantes,
+     * homologaciones, componentes, menú del restaurante, plantillas de proforma
+     * o de Factura Express): no son documentos emitidos.
+     */
+    private const TABLAS_USO_DOCUMENTOS = [
+        'ventas_detalle'                    => false,
+        'recibos_venta_detalle'             => false,
+        'notas_credito_detalle'             => false,
+        'proformas_detalle'                 => false,
+        'pedidos_detalle'                   => true,
+        'guias_remision_detalle'            => false,
+        'compras_detalle'                   => false,
+        'liquidaciones_detalle'             => false,
+        'ordenes_compra_detalle'            => false,
+        'importaciones_detalle'             => true,
+        'consignaciones_ventas_detalles'    => true,
+        'consignaciones_facturas_detalles'  => true,
+        'retornos_cv_detalles'              => true,
+        'cambios_producto_cv_detalles'      => true,
+        'saldos_iniciales_consignaciones'   => true,
+        'inventario_kardex'                 => true,
+        'inventario_cargas_detalle'         => true,
+        'transferencias_inventario_detalle' => true,
+        'suscripciones_detalle'             => true,
+        'carwash_ordenes_detalle'           => true,
+        'taller_ordenes_detalle'            => true,
+        'servicioexterno_ordenes_detalle'   => true,
+        'comanda_detalle'                   => true,
+    ];
+
+    /**
+     * Verifica si el producto ya fue usado en algún documento del sistema (ventas,
+     * compras, proformas, pedidos, consignaciones, órdenes, inventario, etc.; ver
+     * TABLAS_USO_DOCUMENTOS). Cuando es true, no se permite modificar el código ni
+     * el tipo_produccion (el nombre sí: cada documento guarda su propia copia).
+     *
+     * El id del producto es único en toda la base, así que basta filtrar por él.
+     * Solo se consultan las tablas que existen en la base (una instalación puede
+     * no tener todavía la de un módulo), en una sola consulta y sin provocar
+     * errores SQL que dejarían abortada una transacción abierta.
      */
     public function estaUsadoEnDocumentos(int $id, int $idEmpresa): bool
     {
-        $sqlV = "SELECT 1 FROM ventas_detalle WHERE id_producto = :id LIMIT 1";
-        $stV  = $this->db->prepare($sqlV);
-        $stV->execute([':id' => $id]);
-        if ($stV->fetchColumn()) return true;
+        $tablas = array_keys(self::TABLAS_USO_DOCUMENTOS);
+        $marcas = implode(',', array_fill(0, count($tablas), '?'));
+        $stT = $this->db->prepare(
+            "SELECT table_name FROM information_schema.columns
+             WHERE table_schema = current_schema() AND column_name = 'id_producto'
+               AND table_name IN ($marcas)"
+        );
+        $stT->execute($tablas);
+        $existentes = $stT->fetchAll(PDO::FETCH_COLUMN);
+        if (!$existentes) {
+            return false;
+        }
 
-        $sqlK = "SELECT 1 FROM inventario_kardex
-                 WHERE id_producto = :id AND id_empresa = :ide AND eliminado = false LIMIT 1";
-        $stK  = $this->db->prepare($sqlK);
-        $stK->execute([':id' => $id, ':ide' => $idEmpresa]);
-        return (bool) $stK->fetchColumn();
+        $partes = [];
+        $params = [];
+        foreach ($existentes as $i => $tabla) {
+            if (!isset(self::TABLAS_USO_DOCUMENTOS[$tabla])) {
+                continue; // solo nombres de la lista blanca llegan al SQL
+            }
+            $filtroEliminado = self::TABLAS_USO_DOCUMENTOS[$tabla] ? ' AND eliminado = false' : '';
+            $partes[] = "EXISTS (SELECT 1 FROM {$tabla} WHERE id_producto = :id{$i}{$filtroEliminado})";
+            $params[":id{$i}"] = $id;
+        }
+
+        $st = $this->db->prepare('SELECT ' . implode(' OR ', $partes));
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
     }
 
     /**

@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto, costo automatico, recalcular costo, metodo de costeo, fifo, lifo, promedio ponderado
-version: 1.20
+version: 1.21
 orden: 10
 estado: activo
 ---
@@ -310,7 +310,28 @@ avisa *"Ya existe un producto con el mismo nombre"* y no crea el registro.
   editando (precio, categoría, etc.); el aviso aparece solo si se les cambia el
   nombre por uno que ya usa otro producto.
 
+## Código y tipo quedan fijos cuando el producto ya se usó
+
+Cuando un producto ya aparece en **cualquier documento** del sistema, su
+**código principal** y su **tipo** (Producto/Bien o Servicio) ya no se pueden
+cambiar: en la ficha salen bloqueados. El **nombre** sí se puede corregir
+siempre, porque cada documento guarda su propia copia.
+
+Cuentan como uso: facturas y recibos de venta, notas de crédito, proformas,
+pedidos, guías de remisión, compras, liquidaciones de compra, órdenes de compra,
+importaciones, consignaciones (entregas, facturación, retornos, cambios de
+producto y saldos iniciales), movimientos, cargas y transferencias de
+inventario, suscripciones, órdenes de lavado, taller y servicio externo, y
+comandas del restaurante.
+
+No cuentan los catálogos ni las plantillas (precios, bodegas, componentes, menú
+del restaurante, plantillas de proforma o de Factura Express).
+
 ## Errores frecuentes
+
+- **No puedo cambiar el código o el tipo del producto**: ya fue usado en algún
+  documento. Cree un producto nuevo con el código o tipo correcto y deje este
+  inactivo.
 
 - **"Ya existe un producto con el mismo nombre"**: ya hay otro producto activo
   o inactivo con esa descripción. Búsquelo en el listado y úselo, o diferencie
@@ -327,6 +348,7 @@ avisa *"Ya existe un producto con el mismo nombre"* y no crea el registro.
 
 ## Historial de cambios
 
+- **1.21** — El bloqueo del **código** y el **tipo** de un producto ya usado considera ahora todos los documentos del sistema (antes solo facturas de venta y movimientos de inventario). Ver *Código y tipo quedan fijos cuando el producto ya se usó*.
 - **1.20** — El **nombre** del producto ya no se puede repetir dentro de la empresa (antes solo se controlaba el código principal). Ver *Código y nombre no se repiten*.
 - **1.19** — Al abrir un producto que trabaja con inventario, su costo se recalcula y guarda solo con el método de costeo de Empresa → Facturación (promedio, FIFO o LIFO), si la facturación afecta al inventario.
 - **1.18** — Nueva pestaña **Información** en la ventana del producto (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
