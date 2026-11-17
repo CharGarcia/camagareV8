@@ -1277,9 +1277,21 @@ class RolPagoRepository extends BaseRepository
                       AND pv.fecha_salida IS NULL
                       AND pv.fecha_ingreso > :fin_mes2
                   )
+                  AND NOT (
+                    -- No avisar si el empleado YA SALIÓ antes de este mes: tiene períodos,
+                    -- todos cerrados con fecha_salida anterior al inicio del rol (aunque su
+                    -- ficha siga en estado 'activo', registrar la salida no lo cambia).
+                    EXISTS (SELECT 1 FROM empleado_periodos px
+                            WHERE px.id_empleado = e.id AND px.eliminado = false)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM empleado_periodos py
+                        WHERE py.id_empleado = e.id AND py.eliminado = false
+                          AND (py.fecha_salida IS NULL OR py.fecha_salida >= :inicio_mes2)
+                    )
+                  )
                 ORDER BY e.nombres_apellidos";
         $st = $this->db->prepare($sql);
-        $st->execute([':emp' => $idEmpresa, ':inicio_mes' => $inicioMes, ':fin_mes' => $finMes, ':fin_mes2' => $finMes]);
+        $st->execute([':emp' => $idEmpresa, ':inicio_mes' => $inicioMes, ':fin_mes' => $finMes, ':fin_mes2' => $finMes, ':inicio_mes2' => $inicioMes]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 

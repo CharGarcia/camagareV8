@@ -425,6 +425,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
+- **1.22** — El aviso *empleados activos sin período* ya no lista a quien salió de la empresa antes del mes del rol (todos sus períodos cerrados con fecha de salida anterior), aunque su ficha siga en estado activo.
+
 - **1.21** — El rol mensual de un empleado ya no se puede pagar mientras tenga una quincena o semana del mes sin pagar (no estaba descontada), y una quincena o semana ya no se puede pagar si el rol mensual de ese empleado ya tiene pagos. Al ver el rol mensual, un aviso lista las quincenas/semanas pendientes. Igual con anticipos y préstamos empresa (a mano o cargados por Excel como *por pagar*): el rol no se paga con un anticipo sin pagar o un préstamo sin desembolsar de su período, el anticipo no se paga si su rol ya se pagó, y el préstamo no se desembolsa si alguna cuota cae en un rol ya pagado. Evita pagar dos veces o perder una cuota. Además, **Nuevo** genera una sola quincena por mes (ya no se elige quincena 1 o 2).
 
 - **1.20** — Los roles y quincenas migrados del sistema anterior ya no se recalculan al abrirlos ni con **Generar**: antes se perdían las líneas de los empleados inactivos y cambiaban los valores de los demás. Volver a migrarlos los restaura.

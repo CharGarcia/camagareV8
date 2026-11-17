@@ -2,9 +2,12 @@
 -- Copiar el MENÚ de producción (módulos y submódulos) a la base LOCAL.
 --
 -- PASO 1 — en PRODUCCIÓN (pgAdmin, Query Tool, F5). Es SOLO LECTURA: no cambia nada.
---   Devuelve una sola columna «sql» con un script, una fila por sentencia.
---   Selecciona TODA la columna del resultado (clic en el encabezado «sql»), cópiala
---   (Ctrl+C) y pégala en un Query Tool de la base LOCAL.
+--   Devuelve UNA sola celda «sql» con todo el script.
+--   ⚠ pgAdmin, al copiar, envuelve el texto en comillas ("BEGIN;" → error 42601). Antes de
+--   copiar: Archivo → Preferencias → Query Tool → Results grid → «Result copy quoting» = None
+--   (y Guardar). Luego clic en la celda, Ctrl+C, y pegar en un Query Tool de la base LOCAL.
+--   Alternativa sin tocar preferencias: doble clic en la celda, se abre el texto completo;
+--   Ctrl+A, Ctrl+C dentro de esa ventana (así no lleva comillas).
 --
 -- PASO 2 — en LOCAL: ejecuta lo pegado (F5). Ese script:
 --   • guarda un respaldo de las tablas del menú local (respaldo_menu_local_*), una sola vez;
@@ -64,8 +67,8 @@ pie AS (
                                    COALESCE((SELECT string_agg(id::text, ',') FROM modulos_menu), '0'),
                                    COALESCE((SELECT string_agg(id::text, ',') FROM submodulos_menu), '0'))
 )
-SELECT sql FROM (
+-- Todo el script en UNA sola celda (una sentencia por línea): se copia de una vez.
+SELECT string_agg(sql, E'\n' ORDER BY orden, sub) AS sql FROM (
     SELECT * FROM cab UNION ALL SELECT * FROM iconos UNION ALL SELECT * FROM modulos
     UNION ALL SELECT * FROM submodulos UNION ALL SELECT * FROM pie
-) x
-ORDER BY orden, sub;
+) x;
