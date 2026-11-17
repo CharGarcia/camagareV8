@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto, costo automatico, recalcular costo, metodo de costeo, fifo, lifo, promedio ponderado
-version: 1.19
+version: 1.20
 orden: 10
 estado: activo
 ---
@@ -42,7 +42,7 @@ Al cambiarlo, el formulario muestra u oculta los campos que aplican a cada caso.
 | Código principal | Sí | Identificador con el que aparece en los documentos. Se propone automáticamente |
 | Código auxiliar | No | Segundo código propio de la empresa |
 | Código de barras | No | Para lectura con pistola en el punto de venta |
-| Nombre | Sí | Descripción que sale impresa en la factura. Hasta 300 caracteres: es el máximo que el SRI admite en la descripción de cada ítem del comprobante electrónico |
+| Nombre | Sí | Descripción que sale impresa en la factura. Hasta 300 caracteres: es el máximo que el SRI admite en la descripción de cada ítem del comprobante electrónico. No se puede repetir: dos productos de la empresa no pueden tener el mismo nombre |
 | Categoría / Marca | No | Sirven para agrupar y filtrar el catálogo |
 | Unidad de medida | No | Unidad en la que se vende (unidad, caja, kilo…) |
 | Precio base | Sí | Precio de venta antes de impuestos |
@@ -295,7 +295,26 @@ documentos que ya lo usan siguen intactos. Si solo quiere dejar de usarlo,
 prefiera cambiar su **estado a inactivo**: así conserva el historial y deja de
 aparecer al facturar.
 
+## Código y nombre no se repiten
+
+Dentro de una misma empresa no puede haber dos productos con el mismo **código
+principal** ni con el mismo **nombre** (descripción). Al guardar, el sistema
+avisa *"Ya existe un producto con el mismo nombre"* y no crea el registro.
+
+- La comparación no distingue mayúsculas de minúsculas ni espacios de más:
+  `Aceite 10W40` y `ACEITE  10W40` son el mismo nombre. Las tildes sí cuentan.
+- Los productos **eliminados** no cuentan: su nombre queda libre.
+- Aplica igual al crear desde la ficha, desde un documento, en la **Carga de
+  productos por Excel**, al **copiar a otra empresa** y desde la app móvil.
+- Los productos que ya compartían nombre antes de esta regla se pueden seguir
+  editando (precio, categoría, etc.); el aviso aparece solo si se les cambia el
+  nombre por uno que ya usa otro producto.
+
 ## Errores frecuentes
+
+- **"Ya existe un producto con el mismo nombre"**: ya hay otro producto activo
+  o inactivo con esa descripción. Búsquelo en el listado y úselo, o diferencie
+  el nombre (presentación, medida, marca).
 
 - **No aparece al facturar**: no tiene marcado *Se vende*, está inactivo, o
   pertenece a otra empresa.
@@ -308,6 +327,7 @@ aparecer al facturar.
 
 ## Historial de cambios
 
+- **1.20** — El **nombre** del producto ya no se puede repetir dentro de la empresa (antes solo se controlaba el código principal). Ver *Código y nombre no se repiten*.
 - **1.19** — Al abrir un producto que trabaja con inventario, su costo se recalcula y guarda solo con el método de costeo de Empresa → Facturación (promedio, FIFO o LIFO), si la facturación afecta al inventario.
 - **1.18** — Nueva pestaña **Información** en la ventana del producto (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.17** — Botón **IVA temporal** (solo prestadores de servicios turísticos): programa el cambio de tarifa de IVA de los productos entre dos fechas (IVA 8% en feriados) y lo restaura solo al terminar.

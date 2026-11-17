@@ -490,6 +490,32 @@ class ProductoRepository extends BaseRepository
     }
 
     /**
+     * ¿Ya hay en la empresa otro producto (no eliminado) con el mismo nombre?
+     * Compara sin distinguir mayúsculas/minúsculas y sin contar espacios de más
+     * ('Aceite  10W40 ' = 'ACEITE 10W40').
+     */
+    public function existeNombre(int $idEmpresa, string $nombre, ?int $excluirId = null): bool
+    {
+        $nombre = trim(preg_replace('/\s+/u', ' ', $nombre));
+        if ($nombre === '') {
+            return false;
+        }
+        $sql = "SELECT 1 FROM {$this->table}
+                WHERE id_empresa = :id_empresa
+                  AND lower(regexp_replace(btrim(nombre), '\\s+', ' ', 'g')) = lower(:nombre)
+                  AND eliminado = false";
+        $params = [':id_empresa' => $idEmpresa, ':nombre' => $nombre];
+        if ($excluirId !== null && $excluirId > 0) {
+            $sql .= " AND id != :id";
+            $params[':id'] = $excluirId;
+        }
+        $sql .= " LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
      * Busca por código + empresa, INCLUYENDO eliminados (para que la replicación
      * entre empresas reactive en vez de duplicar). Case-insensitive, mismo criterio
      * que existeCodigo().

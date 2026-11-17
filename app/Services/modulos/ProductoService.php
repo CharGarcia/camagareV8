@@ -89,6 +89,10 @@ class ProductoService
             throw new Exception("Ya existe un producto con el mismo código principal.");
         }
 
+        if ($this->repository->existeNombre($idEmpresa, (string) $data['nombre'])) {
+            throw new Exception("Ya existe un producto con el mismo nombre.");
+        }
+
         $this->repository->beginTransaction();
         try {
             $insertData = [
@@ -254,6 +258,11 @@ class ProductoService
             return ['estado' => 'omitido', 'id' => (int) $existente['id']];
         }
 
+        // Producto nuevo en la empresa destino: su nombre tampoco puede repetirse allí.
+        if (!$existente && $this->repository->existeNombre($idEmpresaDestino, (string) ($datosOrigen['nombre'] ?? ''))) {
+            throw new Exception('En la empresa destino ya existe un producto con el mismo nombre (con otro código).');
+        }
+
         $this->repository->beginTransaction();
         try {
             if ($existente) {
@@ -374,6 +383,15 @@ class ProductoService
 
         if ($this->repository->existeCodigo($idEmpresa, trim($data['codigo']), $id)) {
             throw new Exception("Ya existe otro producto con el mismo código principal.");
+        }
+
+        // El nombre tampoco se repite. Solo se valida cuando el nombre cambia:
+        // así un producto antiguo que ya compartía nombre con otro se puede
+        // seguir editando (precio, stock mínimo, etc.) sin obligar a renombrarlo.
+        $normalizarNombre = static fn($n) => mb_strtolower(trim(preg_replace('/\s+/u', ' ', (string) $n)));
+        if ($normalizarNombre($data['nombre'] ?? '') !== $normalizarNombre($antes['nombre'] ?? '')
+            && $this->repository->existeNombre($idEmpresa, (string) $data['nombre'], $id)) {
+            throw new Exception("Ya existe otro producto con el mismo nombre.");
         }
 
         $this->repository->beginTransaction();
