@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.14** (18-11-2026). El historial está al final.
+Versión actual: **0.15** (18-11-2026). El historial está al final.
 
 ---
 
@@ -34,7 +34,7 @@ Al terminar la capacitación, el vendedor puede:
 1. Explicar **qué es CaMaGaRe** en 30 segundos, con la misión y la visión.
 2. **Descubrir** qué necesita un cliente con las preguntas de la presentación (sección 2.3).
 3. Dar una **demo de 20 minutos** que empieza por el problema del cliente.
-4. **Cotizar** en el Cotizador de Planes y explicar el precio anual y el mensual.
+4. **Cotizar** en el Cotizador de Planes y explicar el precio anual, el semestral y el mensual.
 5. **Responder** las preguntas frecuentes y las objeciones sin prometer de más.
 6. Llevar **cada oportunidad en el CRM** hasta ganarla o perderla.
 7. Cumplir las **reglas que no se rompen** (sección 7).
@@ -68,7 +68,7 @@ La capacitación la dicta **una persona externa**, **en línea**. Duración suge
 | 10–14 | **Lo que se hace solo** | Factura → inventario, cartera y asiento contable automáticos. | «Lo registra una vez y el sistema lo lleva a todos lados.» |
 | 14–16 | **Celular** | La app móvil con los mismos datos. | Recordar la regla de iPhone si es una sola persona (sección 7). |
 | 16–18 | **Seguridad** | Permisos por usuario, pestaña Información (quién hizo qué). | «Usted decide qué ve cada empleado, y todo queda registrado.» |
-| 18–20 | **Cotizar** | El Cotizador con su RUC: precio anual y mensual. | «Esto es lo que pagaría usted, con sus locales y sus usuarios.» |
+| 18–20 | **Cotizar** | El Cotizador con su RUC: el paquete de su perfil y el precio anual, semestral y mensual. | «Esto es lo que pagaría usted, con sus locales y sus usuarios.» |
 
 ### Qué mostrar según el problema
 
@@ -105,6 +105,7 @@ La capacitación la dicta **una persona externa**, **en línea**. Duración suge
 | Servicios de una sola vez | Aparte, sin recargo ni descuentos |
 | Paquetes | **Precio fijo** (módulos incluidos) o **suma de sus módulos menos el %**; sus módulos no se quitan; se pueden sumar módulos sueltos |
 | Módulos incluidos | Un módulo con la casilla «sin costo cuando lo requiere otro» se cobra si va solo y va a $0 si lo trae otro módulo (p. ej. Clientes con Facturas) |
+| Descuento comercial | Hasta 10 %, solo sobre lo recurrente |
 
 ### 4.2 Ejercicios *(precios ilustrativos, no son los reales)*
 
@@ -129,12 +130,12 @@ Un local con módulos base de **$1.000** y **Migración de datos** de **$150** (
 
 ### 4.3 Respuestas
 
-| Ej. | Anual | Mensual | 12 meses | Ahorro anual | Pago único | Explicación |
-|---|---|---|---|---|---|---|
-| 1 | **$820** | **$82** | $984 | $164 | — | 4 usuarios − 3 incluidos = 1 adicional ($20 / $2). |
-| 2 | **$1.800** | **$200** | $2.400 | $600 | — | $1.000 + $800 (20 % al segundo). 6 incluidos: sin adicionales. |
-| 3 | **$2.620** | **$286** | $3.432 | $812 | — | Principal = **002** (el más caro, aunque no es el primero). Anual: $480 + $1.200 + ($480 + $400) + 3 usuarios × $20. Producción no lleva descuento. |
-| 4 | **$1.000** | **$100** | $1.200 | $200 | **$150** | La migración se cobra una sola vez, aparte del plan. |
+| Ej. | Anual | Semestral | Mensual | 12 meses | Ahorro anual vs. mensual | Pago único | Explicación |
+|---|---|---|---|---|---|---|---|
+| 1 | **$820** | **$451** | **$82** | $984 | $164 | — | 4 usuarios − 3 incluidos = 1 adicional ($20 / $11 / $2). |
+| 2 | **$1.800** | **$1.100** | **$200** | $2.400 | $600 | — | Anual: $1.000 + $800 (20 % al segundo). Semestral: ($1.000 + $1.000) ÷ 2 × 1,10, sin descuento. 6 incluidos: sin adicionales. |
+| 3 | **$2.620** | **$1.573** | **$286** | $3.432 | $812 | — | Principal = **002** (el más caro, aunque no es el primero). Anual: $480 + $1.200 + ($480 + $400) + 3 usuarios × $20. Producción no lleva descuento. |
+| 4 | **$1.000** | **$550** | **$100** | $1.200 | $200 | **$150** | La migración se cobra una sola vez, aparte del plan. |
 
 > **Errores frecuentes al cotizar:**
 > - Dar el 20 % de descuento por establecimiento en el plan **semestral o mensual** (solo es anual).
@@ -154,7 +155,7 @@ sección 9.2.
 
 | # | Objeción | Lo que se evalúa |
 |---|---|---|
-| 1 | «Es caro.» | Muestra el plan anual y arma solo lo necesario en el Cotizador. |
+| 1 | «Es caro.» | Recuerda que la implementación no tiene costo; muestra el plan anual y el paquete de su perfil, o arma solo lo necesario en el Cotizador. Si hace falta, descuento hasta 10 %. |
 | 2 | «Ya tengo un sistema.» | Pregunta qué le falta antes de mostrar. |
 | 3 | «Mi contador ya me lleva todo.» | Ofrece el sistema como herramienta para el contador e invita al contador a la demo. |
 | 4 | «No tengo tiempo para aprender.» | Nosotros le dejamos todo configurado, con sus datos cargados, y lo capacitamos en línea; luego tiene soporte de lunes a sábado por chat, WhatsApp y llamadas. |
@@ -227,9 +228,7 @@ la tabla, para el capacitador.
 | 9 | ¿Puede una empresa de un solo usuario usar la app en iPhone? ¿Qué alternativa tiene? |
 | 10 | ¿Qué debe tener toda oportunidad abierta en el CRM? |
 
-<details>
-
-**Respuestas para el capacitador**
+### Respuestas para el capacitador
 
 1. Simplificar la gestión de las empresas ecuatorianas con un sistema en la nube que integra facturación, contabilidad, inventario, nómina e impuestos, para que sus dueños se dediquen a crecer y no a trámites.
 2. Dueño (control y que no lo multen), contador (información completa y a tiempo), personal operativo (rapidez y no hacer doble trabajo).
@@ -241,8 +240,6 @@ la tabla, para el capacitador.
 8. Por ejemplo: módulos no contratados, usuarios adicionales, firma electrónica, servicio contable, equipos e internet. (La implementación **no tiene costo**.)
 9. No; puede usar la web o Android.
 10. Una próxima actividad con fecha.
-
-</details>
 
 ---
 
@@ -292,8 +289,8 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 | P-C01 | ✅ **Resuelto (17-11-2026):** la dicta una persona externa, en línea. |
 | P-C02 | ✅ **Resuelto (17-11-2026):** hay empresa de demostración con usuario y clave de demo. |
 | P-C03 | ✅ **Resuelto (17-11-2026):** metas y comisiones en la sección 10. |
-| P-C06 | ✅ **Resuelto (18-11-2026):** solo planes anuales, cuenta al pagar el cliente, mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA. |
 | P-C04 | ✅ **Resuelto (17-11-2026):** emprendedores, comercios y empresas obligadas a llevar contabilidad, en todo el Ecuador (sección 2.6 de la presentación). |
+| P-C06 | ✅ **Resuelto (18-11-2026):** solo planes anuales, cuenta al pagar el cliente, mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA. |
 | P-C05 | Precios reales cargados en el Cotizador para practicar con valores verdaderos (los carga la dirección en el catálogo de precios). |
 
 ---
@@ -302,6 +299,7 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.15 | 18-11-2026 | **Revisión final**: plan semestral en el objetivo, la demo y las respuestas de los ejercicios (verificadas con el motor del Cotizador); descuento comercial en las reglas de práctica; objeción «Es caro» con implementación sin costo y paquetes; respuestas de la evaluación sin HTML; pendientes en orden. |
 | 0.14 | 18-11-2026 | Horario de soporte con sábados en la regla 1 y en el juego de roles. |
 | 0.13 | 18-11-2026 | Comisiones cerradas: mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA; ejemplos actualizados. P-C06 resuelto |
 | 0.12 | 17-11-2026 | Comisiones: solo planes anuales, cuenta al pagar el cliente, $250 con IVA incluido. |

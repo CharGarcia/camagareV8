@@ -3,18 +3,18 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.33** (18-11-2026). El historial de cambios está al final.
+Versión actual: **0.34** (18-11-2026). El historial de cambios está al final.
 
 ---
 
 ## Índice
 
-1. Quiénes somos: nombre, misión, visión y valores — *aprobado (falta historia del nombre)*
+1. Quiénes somos: nombre, misión, visión y valores — *aprobado*
 2. Conociendo al cliente: target y problemas que resolvemos — *borrador para revisión*
 3. **Lo que ofrecemos** — *borrador listo para revisión*
 4. **Módulos del sistema** — *borrador listo para revisión*
 5. **Cómo funciona el sistema** (alta, puesta en marcha, soporte, pagos) — *borrador para revisión*
-6. **Planes y precios**: cómo se calcula lo que paga el cliente — *reglas aprobadas; faltan los precios*
+6. **Planes y precios**: cómo se calcula lo que paga el cliente — *reglas aprobadas; precios en el Cotizador*
 7. **Qué cubre y qué no cubre la membresía** — *borrador para revisión*
 8. **De qué somos responsables y de qué no** — *borrador basado en el Contrato de uso y el Acuerdo de datos*
 9. **Preguntas frecuentes y manejo de objeciones** — *borrador para revisión*
@@ -24,7 +24,7 @@ Al final: **Pendientes por definir** (lista única) e **Historial de versiones**
 
 ---
 
-## 1. Quiénes somos *(misión, visión y valores aprobados; falta la historia del nombre)*
+## 1. Quiénes somos ✅
 
 ### 1.1 Nombre
 
@@ -65,7 +65,7 @@ el sistema por la empresa.
 | **Cumplimiento** | Hacemos las cosas como exige la ley. | Comprobantes electrónicos, anexos y declaraciones del SRI, nómina según la ley laboral, acuerdo de datos personales (LOPDP). |
 | **Confianza** | La información del cliente es suya y está protegida. | Permisos por usuario, registro de auditoría, nada se borra físicamente, respaldos periódicos. |
 | **Simplicidad** | Lo complejo lo resuelve el sistema, no el usuario. | Asientos contables automáticos, carga desde Excel y desde el XML del SRI, guardado sin duplicados. |
-| **Cercanía** | Acompañamos al cliente. | Chat de soporte en todas las pantallas, manual en línea y asistente con IA. |
+| **Cercanía** | Acompañamos al cliente. | Puesta en marcha y capacitación incluidas; soporte por chat, WhatsApp y llamadas; manual en línea y asistente con IA. |
 | **Mejora continua** | El sistema crece con sus clientes. | Novedades del sistema y módulos por industria que se suman constantemente. |
 
 ### 1.5 Propuesta de valor (lo que el vendedor dice en 30 segundos)
@@ -83,8 +83,8 @@ el sistema por la empresa.
 ## 2. Conociendo al cliente *(borrador para revisión)*
 
 > Los perfiles salen de los módulos que el sistema ya tiene. **No hay todavía
-> datos de ventas** que digan cuáles compran más: la prioridad de cada perfil
-> la define la dirección (ver 2.6).
+> datos de ventas** que digan cuáles compran más: la prioridad la definió la
+> dirección (ver 2.6).
 
 ### 2.1 ¿Quién decide y quién usa?
 
@@ -181,7 +181,9 @@ varias empresas, recibe la información completa y a tiempo, y puede recomendar
 el sistema a sus clientes.
 
 **Beneficio para el contador:** recibe una **comisión del 20 %** por cada
-empresa que refiera.
+empresa que refiera, con las mismas condiciones que los vendedores: solo
+**planes anuales**, cuenta cuando el cliente **paga**, cada empresa de **al
+menos $250 con IVA** y el 20 % sobre el valor **con IVA**.
 
 ---
 
@@ -420,12 +422,14 @@ obligaciones por vencer.
 
 **Automatizaciones**: tareas que el sistema hace solo, en el horario que se
 programe. Por ejemplo:
-- enviar al SRI los documentos en borrador;
-- enviar por correo los comprobantes autorizados, reintentando los que fallaron;
-- sincronizar las descargas del SRI;
+- enviar al SRI las facturas de venta en borrador;
+- enviar por correo las facturas autorizadas, reintentando las que fallaron;
+- enviar a cada cliente su estado de cuenta por correo o WhatsApp;
+- generar los roles de pago (mensual, quincena o semana);
+- generar la facturación de las suscripciones y avisar sus vencimientos;
 - avisar por correo el IVA a pagar del mes, a tiempo para decidir antes del cierre;
 - avisar por WhatsApp los chats sin leer;
-- recordar a los clientes de car wash su próxima cita o cambio de aceite.
+- recordar a los clientes de car wash su próxima cita o mantenimiento.
 
 ---
 
@@ -565,7 +569,7 @@ cotizar: nunca prometer que el precio se mantendrá igual en las renovaciones.
 
 ---
 
-## 6. Planes y precios *(reglas aprobadas; faltan los precios)*
+## 6. Planes y precios *(reglas aprobadas; los precios vigentes están en el Cotizador)*
 
 ### 6.1 Cómo se arma el precio
 
@@ -573,12 +577,14 @@ No hay una lista de precios fija: **cada cliente paga por lo que usa**. El
 vendedor arma la cotización en el módulo **CRM → Cotizador de Planes**:
 
 1. Escribe el RUC y el sistema trae los establecimientos abiertos del SRI.
-2. En cada establecimiento elige los **módulos**. Cada módulo tiene su precio
-   anual y trae solos los módulos que necesita para funcionar (por ejemplo,
-   *Facturas de Venta* trae *Clientes* y *Productos*).
+2. En cada establecimiento elige un **paquete** y/o los **módulos** sueltos.
+   Cada módulo tiene su precio anual y trae solos los módulos que necesita
+   para funcionar (por ejemplo, *Facturas de Venta* trae *Clientes* y
+   *Productos*).
 3. Indica cuántos **usuarios** necesita el RUC.
-4. El sistema muestra al instante el precio **anual** y el **mensual**, y genera
-   la proforma enlazada al CRM.
+4. El sistema muestra al instante el precio **anual**, **semestral** y
+   **mensual**, y genera la proforma enlazada al CRM. Cada cotización queda a
+   nombre del vendedor.
 
 Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
 
@@ -687,13 +693,14 @@ paquete le corresponde a cada perfil:
 
 | Paquete | Perfil (sección 2.6) | Módulos principales | Precio anual |
 |---|---|---|---|
-| **Emprendedor** | Emprendedor o profesional independiente | Facturación electrónica (con lo que trae: clientes, productos, notas de crédito y débito, retenciones de venta, reportes de ventas) + Proformas | *Por definir* |
-| **Comercial** | Comercio y distribuidora | Emprendedor + Proformas y pedidos + POS + Compras + Inventario + Tesorería | *Por definir* |
-| **Empresarial** | Empresa obligada a llevar contabilidad | Comercial + Contabilidad + Impuestos SRI + Conciliaciones + Nómina | *Por definir* |
-| **Estudio contable** | Contadores aliados que llevan varias empresas | Por definir | *Por definir* |
+| **Emprendedor** | Emprendedor o profesional independiente | Facturación electrónica (con lo que trae: clientes, productos, notas de crédito y débito, retenciones de venta, reportes de ventas) + Proformas | Ver Cotizador |
+| **Comercial** | Comercio y distribuidora | Emprendedor + Proformas y pedidos + POS + Compras + Inventario + Tesorería | Ver Cotizador |
+| **Empresarial** | Empresa obligada a llevar contabilidad | Comercial + Contabilidad + Impuestos SRI + Conciliaciones + Nómina | Ver Cotizador |
+| **Estudio contable** | Contadores aliados que llevan varias empresas | Ver Cotizador | Ver Cotizador |
 
-Cada paquete se crea en *Cotizador → Configuración → Paquetes* con **precio
-fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
+Los nombres, módulos y precios reales son los que la dirección cargue en el
+Cotizador; con **precio fijo**, sus módulos van incluidos y el vendedor puede
+sumar módulos sueltos.
 
 ---
 
@@ -713,7 +720,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | **Ayuda dentro del sistema** | Manual en línea, asistente con IA y novedades. | Sección 5.3 |
 | **App móvil** | Android e iPhone/iPad (en iPhone, empresas con 2 o más usuarios). | Sección 5.1 |
 | **Aviso de mantenimientos** | Los mantenimientos programados se avisan con anticipación. | Contrato, QUINTA |
-| **Mejoras del sistema** | Las mejoras y novedades de los módulos contratados van **incluidas, sin costo**. | P-28 |
+| **Mejoras del sistema** | Las mejoras y novedades de los módulos contratados van **incluidas, sin costo**. | Definido por la dirección |
 
 ### 7.2 Lo que NO cubre la membresía (se cobra aparte o lo pone el cliente)
 
@@ -808,7 +815,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 
 | Objeción | Cómo responder |
 |---|---|
-| **«Es caro»** | Compare con lo que hoy cuesta digitar dos veces, los errores y las multas. Muestre el plan **anual** (más barato) y arme solo los módulos que necesita con el Cotizador. |
+| **«Es caro»** | Compare con lo que hoy cuesta digitar dos veces, los errores y las multas. Recuerde que la **implementación no tiene costo**. Muestre el plan **anual** (más barato) y el **paquete** de su perfil, o arme solo los módulos que necesita con el Cotizador. Si hace falta, el descuento comercial llega hasta el 10 %. |
 | **«Ya tengo un sistema»** | Pregunte qué le falta o qué le cuesta hoy (pregunta 10 de 2.3) y muestre solo eso. Destaque: todo en un solo sistema, contabilidad automática y celular. |
 | **«Mi contador ya me lleva todo»** | Ofrézcalo como herramienta para su contador: recibe la información completa y a tiempo, con ATS y declaraciones listas. Invite al contador a la demo. |
 | **«No tengo tiempo para aprender otro sistema»** | Nosotros se lo dejamos configurado y con sus datos cargados, y lo capacitamos en línea. Muestre lo rápido que se factura, el manual y el soporte de lunes a sábado. |
@@ -825,7 +832,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | 1 | **Prospección** | Identifica clientes de los perfiles prioritarios: emprendedores, comercios y empresas obligadas a llevar contabilidad (sección 2.6), en todo el Ecuador. Registra el contacto. | CRM (contactos, Bandeja social) |
 | 2 | **Descubrimiento** | Hace las preguntas de la sección 2.3 y anota el problema principal. | CRM (actividad o nota) |
 | 3 | **Demo** | Empieza por el problema del cliente, no por la lista de módulos. Muestra 2 o 3 cosas que lo resuelven. | Sistema: **empresa de demostración** con usuario y clave de demo (los entrega la dirección; no van en este documento) |
-| 4 | **Cotización** | Arma el precio con el RUC, los locales, los módulos y los usuarios. Muestra anual y mensual. | Cotizador de Planes |
+| 4 | **Cotización** | Arma el precio con el RUC, los locales, el paquete y/o los módulos y los usuarios. Muestra anual, semestral y mensual, y avisa que en la renovación el precio puede variar. | Cotizador de Planes |
 | 5 | **Proforma** | La genera desde la cotización y la envía por correo o WhatsApp; el cliente la aprueba con un botón. | Cotizador → Proformas |
 | 6 | **Seguimiento** | Agenda actividades con fecha (llamar, reunión) hasta la respuesta. | CRM (oportunidad y actividades) |
 | 7 | **Cierre** | Con la proforma aprobada, marca la oportunidad como **ganada**. Si no, la marca **perdida** con su motivo. | CRM |
@@ -834,8 +841,8 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 ### 10.1 Reglas de oro del vendedor
 
 1. **Pregunte antes de mostrar.** El problema del cliente guía la demo.
-2. **No prometa lo que no está en este documento.** Funciones nuevas, horarios de soporte o tiempos de entrega se confirman con la dirección.
-3. **Toda venta pasa por el Cotizador.** Así el precio sigue siempre las mismas reglas.
+2. **No prometa lo que no está en este documento.** El horario de soporte es el de la sección 5.3; funciones nuevas o tiempos de entrega se confirman con la dirección.
+3. **Toda venta pasa por el Cotizador.** Así el precio sigue siempre las mismas reglas. Descuento comercial: hasta 10 %. El precio vale para el periodo contratado y puede variar en la renovación.
 4. **Toda oportunidad queda en el CRM**, con su siguiente actividad y fecha.
 5. **iPhone:** no ofrezca la app de iPhone a una empresa de un solo usuario, y **nunca** indique al cliente que pague, compre o se suscriba desde la app (regla de Apple).
 6. **Las declaraciones son del cliente:** el sistema las prepara, no las presenta por él.
@@ -859,7 +866,7 @@ actualiza su sección y se tacha aquí.
 | P-03 | ✅ **Resuelto (17-11-2026):** emprendedor o profesional independiente, comercio y distribuidora, y empresa obligada a llevar contabilidad. | 2.6 |
 | P-04 | ✅ **Resuelto (17-11-2026):** todo el Ecuador. | 2.6 |
 | P-05 | ✅ **Resuelto (17-11-2026):** no hay tamaño ideal; cualquier empresa dentro de los perfiles. | 2.6 |
-| P-06 | ✅ **Resuelto (18-11-2026):** los contadores reciben **20 % de comisión** por cada empresa referida. | 2.6 |
+| P-06 | ✅ **Resuelto (18-11-2026):** los contadores reciben **20 % de comisión** por cada empresa referida, con las mismas condiciones que los vendedores. | 2.6 |
 
 ### C. Puesta en marcha y soporte
 | # | Pendiente | Sección |
@@ -902,7 +909,7 @@ actualiza su sección y se tacha aquí.
 | # | Pendiente | Sección |
 |---|---|---|
 | P-28 | ✅ **Resuelto (17-11-2026):** las mejoras de lo contratado van incluidas sin costo. | 7.1 |
-| P-29 | ✅ **Resuelto (17-11-2026):** los servicios de terceros tienen costo; los configura el usuario administrador de la empresa cliente. | 7.2 |
+| P-29 | ✅ **Resuelto (17-11-2026):** los servicios de terceros tienen costo; los pone el usuario administrador de la empresa cliente. | 7.2 |
 | P-30 | ✅ **Resuelto (17-11-2026):** sí, con cotización aparte. | 7.2 |
 | P-31 | ✅ **Resuelto (17-11-2026):** hay empresa de demostración con usuario y clave de demo (los entrega la dirección). | 10 |
 | P-32 | Activar en los usuarios del cliente los módulos vendidos (propuesta en `docs/diseno/cotizador-planes-fase1.md` §7.1, aplazada). | 5.2 |
@@ -914,6 +921,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.34 | 18-11-2026 | **Revisión final**: estados de las secciones 1 y 6 al día; lista de Automatizaciones corregida según el sistema (se quita «sincronizar descargas del SRI», que no está disponible); el Cotizador muestra semestral y paquetes (6.1 y 10); la tabla de paquetes remite al Cotizador; reglas de oro con horario, descuento y renovación; objeción «Es caro» con implementación sin costo; condiciones de la comisión de contadores |
 | 0.33 | 18-11-2026 | Horario de soporte (lun–vie 08:30–18:00, sáb 08:30–14:00, extendido por temporada) y comisión del 20 % para contadores por empresa referida. P-06 y P-11 resueltos |
 | 0.32 | 17-11-2026 | Significado del nombre (CaMaGaRe ERP), mejoras incluidas, costos de terceros, desarrollos a la medida y empresa de demostración. P-01, P-28, P-29, P-30 y P-31 resueltos |
 | 0.31 | 17-11-2026 | P-16 se resuelve en el Cotizador; los cupos de usuarios los controla un usuario nivel 3 (6.2). Bloque Precios cerrado |
