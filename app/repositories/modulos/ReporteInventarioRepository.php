@@ -36,6 +36,7 @@ class ReporteInventarioRepository extends BaseRepository
         'CAMBIO_ESTADO_RETORNO_CV'       => 'Retorno de consignación (cambio de estado)',
         'CAMBIO_PRODUCTO_CV'             => 'Cambio de producto',
         'migracion'                      => 'Migración histórica',
+        'encerado_inventario'            => 'Encerado de existencias',
     ];
 
     /**

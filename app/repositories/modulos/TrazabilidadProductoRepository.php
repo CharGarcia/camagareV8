@@ -35,6 +35,7 @@ class TrazabilidadProductoRepository extends BaseRepository
         'CAMBIO_ESTADO_RETORNO_CV'       => ['grupo' => 'retorno_cv',        'label' => 'Retorno de consignación (cambio de estado)'],
         'CAMBIO_PRODUCTO_CV'             => ['grupo' => 'cambio_producto_cv', 'label' => 'Cambio de producto'],
         'migracion'                      => ['grupo' => null,                'label' => 'Migración histórica'],
+        'encerado_inventario'            => ['grupo' => null,                'label' => 'Encerado de existencias'],
     ];
 
     /** Ruta MVC del módulo dueño de cada grupo, para enlazar al listado origen. */

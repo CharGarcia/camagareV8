@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado, costo del producto, costo de la ficha, costo unitario del ajuste, entrada con costo, costo en cero
-version: 1.16
+etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado, costo del producto, costo de la ficha, costo unitario del ajuste, entrada con costo, costo en cero, encerar, encerar existencias, encerar inventario, dejar stock en cero, poner stock en cero, borrar existencias, inventario en cero, reiniciar inventario, empezar inventario de cero, inventario fisico, revertir encerado
+version: 1.17
 orden: 20
 estado: activo
 ---
@@ -202,6 +202,54 @@ ventana de ajuste de la pestaña **Existencias** del Reporte de Inventarios) gen
 - Se puede apagar en **Configuración Contable → Módulos que contabilizan →
   Ajustes de Inventario**.
 
+## Encerar existencias (dejar el stock en cero)
+
+Sirve para empezar de cero, por ejemplo antes de cargar un **inventario
+físico**: deja en **cero**, a una **fecha de corte**, el saldo de cada producto
+de una, varias o todas las bodegas.
+
+**Quién puede**: solo los **administradores (nivel 2 y 3)** con permiso de
+crear en Inventario. Para el resto, el botón no aparece y el servidor rechaza la
+acción.
+
+**Cómo se usa**
+
+1. Pulse **Encerar existencias** (botón rojo junto a *Nuevo*).
+2. Elija la **fecha de corte**, las **bodegas** (o marque *Todas las bodegas*) y
+   escriba el **motivo** en la observación.
+3. Pulse **Previsualizar**: muestra cuántos productos y movimientos se
+   generarán, las unidades que salen y entran, el valor de las salidas y el
+   detalle por bodega, producto, lote y NUP. Todavía no se graba nada.
+4. Escriba **ENCERAR** en la casilla de confirmación y pulse **Encerar
+   existencias**.
+
+**Qué hace**
+
+- No borra nada: por cada producto / bodega / lote / NUP con saldo distinto de
+  cero a la fecha de corte registra en el kardex un movimiento que lo compensa:
+  una **salida** si el saldo es positivo y una **entrada** si es negativo.
+- Esos movimientos llevan la fecha de corte (al cierre del día), el origen
+  **Encerado de existencias** y la observación *Encerado de existencias #N al
+  dd-mm-aaaa: motivo*. Se valoran al costo promedio de entradas del producto en
+  esa bodega.
+- **No genera asiento contable.**
+- Los movimientos **posteriores** a la fecha de corte se mantienen: si encera al
+  31 de diciembre y en enero hubo ventas, el stock de hoy queda igual a lo que se
+  movió desde enero.
+- Un movimiento de encerado no se edita ni se anula uno por uno: se revierte el
+  encerado completo.
+
+**Revertir**
+
+En la pestaña **Historial** de la misma ventana están todos los encerados, con
+quién y cuándo los hizo. **Revertir** pide un motivo y anula todos los
+movimientos de ese encerado: el stock vuelve a como estaba. Si hay un encerado
+**posterior** que comparte bodegas con él, primero hay que revertir ese.
+
+**Límites**: la fecha de corte no puede ser futura ni estar en un período
+contable cerrado (tampoco para revertir), y cada encerado admite hasta 2.500
+productos/bodega con saldo; si son más, encere menos bodegas a la vez.
+
 ## Imprimir un movimiento
 
 Abra el movimiento desde el listado. Arriba de la ventana, antes de las
@@ -241,6 +289,8 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Errores frecuentes
 
+- **"Falta aplicar el SQL … inventario_encerados"**: el botón *Encerar existencias* necesita su tabla; hay que ejecutar ese SQL en la base de datos.
+- **"Primero revierta el encerado #N"**: hay un encerado posterior en alguna de las mismas bodegas; reviértalo primero.
 - **"…su fecha corresponde a un período contable cerrado"**: el ajuste o el movimiento es de un mes cerrado en Periodos Contables. No se puede registrar, modificar, anular ni habilitar desde aquí; registre el ajuste en el período abierto o pida que reabran el mes.
 - **Compré y el stock no subió**: registrar la compra no mueve el stock. Hay que
   **procesar las entradas** y, antes, vincular cada línea con un producto del
@@ -257,6 +307,7 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.17** — Nuevo botón **Encerar existencias** (solo niveles 2 y 3): deja en cero, a una fecha de corte, el stock de las bodegas elegidas con movimientos de compensación (sin asiento contable), con vista previa, confirmación e historial para **revertir** el encerado completo. **Requiere ejecutar** `database/2026-11-18_inventario_encerados.sql`.
 - **1.16** — El saldo de cada bodega se toma **siempre del Kardex**, sea cual sea el proceso que movió el stock. Corregidos tres casos en que quedaba distinto: un ajuste de entrada sobre saldo negativo lo dejaba en 0, con **lotes obligatorios** se guardaba el saldo de un solo lote como saldo de la bodega, y al editar una factura o recibo con dos líneas del mismo producto el saldo quedaba corrido.
 - **1.15** — Al anular un movimiento cuando el stock ya se consumió, el saldo de la bodega queda en el valor real (negativo, igual que el Kardex) y no en 0. Editar un ajuste cambiando de producto o de bodega actualiza **las dos** bodegas (antes la anterior conservaba el movimiento). La importación de ajustes por CSV es **todo o nada** y ya no acepta columnas de vínculo con documentos. Dos anulaciones simultáneas del mismo movimiento ya no devuelven el stock dos veces.
 - **1.14** — Ya no se puede **habilitar** un movimiento anulado cuyo documento de origen está eliminado. Corregido: los movimientos de una **compra** se reconocían como «de un documento eliminado» mirando otra compra (la del mismo número que la línea), así que a veces quedaban libres para editarlos aquí con la compra vigente, o al revés.

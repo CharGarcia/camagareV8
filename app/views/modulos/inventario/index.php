@@ -76,6 +76,13 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
     <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Movimientos de Inventario</h5>
     <?php if ($perm['crear']): ?>
         <div class="d-flex gap-2">
+            <?php // «Encerar existencias»: solo niveles 2 y 3 (el servidor vuelve a validarlo). ?>
+            <?php if (!empty($puedeEncerar)): ?>
+            <button type="button" class="btn btn-outline-danger btn-sm px-3" onclick="window.INV_abrirEncerado()"
+                    title="Dejar en cero las existencias de una o varias bodegas a una fecha (solo administradores)">
+                <i class="bi bi-eraser"></i> Encerar existencias
+            </button>
+            <?php endif; ?>
             <a href="<?= BASE_URL ?>/modulos/cargas-inventario" class="btn btn-outline-success btn-sm px-3" title="La importación masiva ahora se gestiona (con aprobación) en el módulo Cargas de Inventario">
                 <i class="bi bi-file-earmark-excel"></i> Importar (Cargas de Inventario)
             </a>
@@ -268,6 +275,11 @@ $optOrigen   = array_map(fn($t) => ['v' => $t, 'l' => ucwords(str_replace('_', '
 <script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
 <?php endif; ?>
 <?php include __DIR__ . '/modal.php'; ?>
+<?php if (!empty($puedeEncerar)): ?>
+<?php include __DIR__ . '/_modal_encerado.php'; ?>
+<script>window.INV_ENCERADO_URL = '<?= $urlBase ?>';</script>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/inventario_encerado.js?v=<?= asset_ver('/js/modulos/inventario_encerado.js') ?>"></script>
+<?php endif; ?>
 
 <!-- ── Scripts ── -->
 <script>

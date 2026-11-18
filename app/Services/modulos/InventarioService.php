@@ -63,6 +63,7 @@ class InventarioService
         'carwash_orden'              => 'una orden de car-wash',
         'saldo_inicial'              => 'un saldo inicial',
         'migracion'                  => 'la migración del sistema anterior',
+        'encerado_inventario'        => 'un encerado de existencias',
     ];
 
     private InventarioRepository $repo;
@@ -804,8 +805,12 @@ class InventarioService
             // Migración y saldos iniciales no tienen un módulo donde corregirlos.
             $sinModulo   = in_array(strtolower($tipo), ['migracion', 'saldo_inicial'], true);
 
+            $msgEncerado = 'Lo generó un encerado de existencias (ver la observación): se revierte completo desde «Encerar existencias» → Historial.';
+            $esEncerado  = $tipo === 'encerado_inventario';
+
             $motivo = match (true) {
                 $anulado        => 'Movimiento anulado: no afecta el stock. Solo se puede habilitar de nuevo.',
+                $esEncerado     => $msgEncerado,
                 $deDocumento && $sinModulo => "Viene de {$etiqueta}: no se edita. Si la cantidad está mal, corríjala con un ajuste nuevo.",
                 $deDocumento    => "Lo generó {$etiqueta} (ver la observación). Se corrige desde ese módulo"
                                    . ($anulableAqui ? '; desde aquí solo se puede anular.' : ', no desde Inventario.'),
@@ -815,6 +820,7 @@ class InventarioService
             };
             $motivoAnular = match (true) {
                 $anulado                       => 'El movimiento ya está anulado.',
+                $esEncerado                    => $msgEncerado,
                 $deDocumento && $sinModulo     => "Viene de {$etiqueta}: no se anula desde aquí.",
                 $deDocumento && !$anulableAqui => "Lo generó {$etiqueta}: se anula desde ese módulo.",
                 $periodoCerrado                => $msgPeriodo,

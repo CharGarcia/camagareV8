@@ -90,7 +90,10 @@ class InventarioController extends BaseModuloController
             'rutaModulo' => $rutaModulo,
             'titulo'     => 'Movimientos de Inventario',
             'fullWidth'  => true,
-            'vistaConfig'=> $prefsVista
+            'vistaConfig'=> $prefsVista,
+            // Botón «Encerar existencias»: solo niveles 2 y 3 con permiso de crear.
+            'puedeEncerar' => !empty($permisos['crear'])
+                && \App\Rules\modulos\InventarioEnceradoRules::puedeEncerar((int) ($_SESSION['nivel'] ?? 1)),
         ]);
     }
 
@@ -623,6 +626,93 @@ class InventarioController extends BaseModuloController
         try {
             $this->service->restaurarMovimiento($id, $idEmpresa, $idUsuario, true);
             echo json_encode(['ok' => true, 'mensaje' => 'Movimiento habilitado correctamente.']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    // ────────────────────────────────────────────────────────────────
+    // ENCERAR EXISTENCIAS (solo niveles 2 y 3)
+    // ────────────────────────────────────────────────────────────────
+
+    /** Corta con 403 si el usuario no es administrador (el botón ya no se dibuja, esto es el servidor). */
+    private function requireAdministradorEncerado(): void
+    {
+        if (!\App\Rules\modulos\InventarioEnceradoRules::puedeEncerar((int) ($_SESSION['nivel'] ?? 1))) {
+            http_response_code(403);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'mensaje' => 'Solo los administradores (nivel 2 y 3) pueden encerar o revertir existencias.']);
+            exit;
+        }
+    }
+
+    /** Qué se encerraría (resumen + detalle), sin escribir nada. */
+    public function enceradoPreviaAjax(): void
+    {
+        $this->requireCrear();
+        $this->requireAdministradorEncerado();
+        header('Content-Type: application/json');
+        try {
+            $data = (new \App\Services\modulos\InventarioEnceradoService())->previsualizar(
+                $_POST, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (int) $_SESSION['nivel']
+            );
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function encerarAjax(): void
+    {
+        $this->requireCrear();
+        $this->requireAdministradorEncerado();
+        header('Content-Type: application/json');
+        try {
+            $service = new \App\Services\modulos\InventarioEnceradoService();
+            $res = $service->encerar(
+                $_POST, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (int) $_SESSION['nivel']
+            );
+            $mensaje = $service->ultimoGuardadoRepetido
+                ? 'Este encerado ya estaba registrado (#' . $res['id'] . '); no se creó otro.'
+                : 'Encerado #' . $res['id'] . ' aplicado: ' . (int) ($res['resumen']['total_movimientos'] ?? 0) . ' movimientos registrados.';
+            echo json_encode(['ok' => true, 'id' => $res['id'], 'mensaje' => $mensaje, 'repetido' => $service->ultimoGuardadoRepetido]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function enceradosListarAjax(): void
+    {
+        $this->requireLeer();
+        $this->requireAdministradorEncerado();
+        header('Content-Type: application/json');
+        try {
+            $rows = (new \App\Services\modulos\InventarioEnceradoService())->listar((int) $_SESSION['id_empresa'], (int) $_SESSION['nivel']);
+            echo json_encode(['ok' => true, 'rows' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    public function enceradoRevertirAjax(): void
+    {
+        $this->requireEliminar();
+        $this->requireAdministradorEncerado();
+        header('Content-Type: application/json');
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            (new \App\Services\modulos\InventarioEnceradoService())->revertir(
+                $id, (string) ($_POST['motivo'] ?? ''), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (int) $_SESSION['nivel']
+            );
+            echo json_encode(['ok' => true, 'mensaje' => 'Encerado #' . $id . ' revertido: sus movimientos quedaron anulados.']);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
