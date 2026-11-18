@@ -48,11 +48,13 @@ class ImportarAntiguoService
     /**
      * Credenciales del servidor FTP legacy. Se leen de config/parametros.xml
      * (no versionado, por entorno): claves ftp_docs_host/user/pass/port.
-     * Si no están, cae a los valores por defecto conocidos (no rompe producción).
+     * Usuario y clave NO tienen valor por defecto: nunca se escriben en el código
+     * (quedarían en el repositorio). Sin ellos, falla al conectar (nuevoScanner).
      */
     private static function configFtp(): array
     {
-        $cfg = ['host' => '64.225.69.65', 'user' => 'char', 'pass' => 'CmGr1980', 'port' => 21];
+        // Servidor y puerto no son secretos: tienen valor por defecto. Usuario y clave, no.
+        $cfg = ['host' => '64.225.69.65', 'user' => '', 'pass' => '', 'port' => 21];
         $file = (defined('MVC_CONFIG') ? MVC_CONFIG : dirname(__DIR__, 3) . '/config') . '/parametros.xml';
         if (is_file($file)) {
             $xml = @simplexml_load_file($file);
@@ -68,6 +70,12 @@ class ImportarAntiguoService
 
     private function nuevoScanner(): FtpDocumentosScanner
     {
+        if ($this->ftpUser === '' || $this->ftpPass === '') {
+            throw new \RuntimeException(
+                'Faltan las credenciales del FTP de documentos. Agréguelas en config/parametros.xml del servidor: '
+                . '<ftp_docs_user> y <ftp_docs_pass> (y, si cambian, <ftp_docs_host> y <ftp_docs_port>).'
+            );
+        }
         return new FtpDocumentosScanner($this->ftpHost, $this->ftpUser, $this->ftpPass, $this->ftpPort);
     }
 

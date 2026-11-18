@@ -195,7 +195,7 @@ Si prefiere solo cambiar la contraseña del usuario actual:
 ALTER USER el_usuario_actual WITH PASSWORD 'LA_NUEVA';
 ```
 
-> La contraseña `CmGr1980` se reutiliza en `parametros.xml` para el **FTP de
+> La contraseña anterior (ya no se escribe aquí) se reutiliza en `parametros.xml` para el **FTP de
 > documentos** y para la **base MySQL legacy**. Cambiar solo la de PostgreSQL deja
 > las otras dos abiertas con la misma clave conocida: rotar las tres.
 

@@ -9,8 +9,9 @@ use RuntimeException;
 
 /**
  * Conexión de SOLO LECTURA a la BD MySQL/MariaDB del sistema anterior (otro servidor).
- * Credenciales en config/parametros.xml (no versionado): mysql_legacy_host/port/user/pass/db,
- * con fallback a los valores por defecto conocidos.
+ * Credenciales en config/parametros.xml (no versionado): mysql_legacy_host/port/user/pass/db.
+ * El usuario y la contraseña NO tienen valor por defecto: nunca se escriben en el código
+ * (quedarían en el repositorio). Sin ellos la conexión falla con un mensaje claro.
  */
 class LegacyMysqlConnection
 {
@@ -89,7 +90,8 @@ class LegacyMysqlConnection
 
     private static function config(): array
     {
-        $cfg = ['host' => 'camagare.com.ec', 'port' => 3306, 'user' => 'Char', 'pass' => 'CmGr1980', 'db' => 'sistema'];
+        // Servidor, puerto y base no son secretos: tienen valor por defecto. Usuario y clave, no.
+        $cfg = ['host' => 'camagare.com.ec', 'port' => 3306, 'user' => '', 'pass' => '', 'db' => 'sistema'];
         $file = (defined('MVC_CONFIG') ? MVC_CONFIG : dirname(__DIR__, 3) . '/config') . '/parametros.xml';
         if (is_file($file)) {
             $xml = @simplexml_load_file($file);
@@ -100,6 +102,12 @@ class LegacyMysqlConnection
                 if (!empty($xml->mysql_legacy_pass)) $cfg['pass'] = (string) $xml->mysql_legacy_pass;
                 if (!empty($xml->mysql_legacy_db))   $cfg['db']   = (string) $xml->mysql_legacy_db;
             }
+        }
+        if ($cfg['user'] === '' || $cfg['pass'] === '') {
+            throw new RuntimeException(
+                'Faltan las credenciales de la BD anterior (MySQL). Agréguelas en config/parametros.xml del servidor: '
+                . '<mysql_legacy_user> y <mysql_legacy_pass> (y, si cambian, <mysql_legacy_host>, <mysql_legacy_port> y <mysql_legacy_db>).'
+            );
         }
         return $cfg;
     }
