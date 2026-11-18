@@ -6,7 +6,7 @@ ruta_modulo: modulos/crm_publicaciones
 tipo: modulo
 visibilidad: todos
 etiquetas: publicaciones, publicar, duplicar, copiar publicacion, volver a publicar, respuesta automatica, comenta info, palabra clave, mensaje privado, whatsapp, pedir producto, enlace, link, url, pagina web, tarjeta con link, redes sociales, instagram, linkedin, programar publicacion, calendario de contenidos, calendario editorial, post, posteo, reel, carrusel, historia, biblioteca de medios, imagenes, videos, subir fotos, aprobar publicacion, aprobacion, redactar con ia, inteligencia artificial, hashtags, texto alternativo, estadisticas, metricas, alcance, me gusta, seguidores, resultados, marketing, community manager, crm
-version: 1.3
+version: 1.4
 orden: 17
 estado: activo
 ---
@@ -47,7 +47,9 @@ fue: cuántas personas lo vieron y, sobre todo, cuántos **contactos** y
      **Elegir de la biblioteca**; el orden es el del carrusel).
    - **Dónde**: marque las cuentas, el formato de cada una y, si quiere, un texto
      propio para esa red.
-   - **Vista previa**: cómo se verá aproximadamente en cada red.
+   - **Vista previa**: cómo se verá aproximadamente en cada red. La imagen se
+     muestra con su proporción real (de vertical 4:5 a horizontal 1,91:1), como
+     en Instagram y LinkedIn; lo que quede fuera de ese rango se recorta.
 3. Pulse **Guardar** (queda en **Borrador**).
 4. Elija la fecha y hora y pulse **Programar**; con la fecha vacía el botón dice
    **Publicar ahora** y sale en el siguiente minuto.
@@ -276,3 +278,5 @@ En la misma ventana se fija el **tope de publicaciones por día** de la empresa
 - **1.3** — **Respuesta automática** a los comentarios de Instagram (palabra
   clave + mensaje privado), botón **Llevar a WhatsApp** en el formato Enlace de
   LinkedIn y botón **Duplicar**.
+- **1.4** — La **Vista previa** muestra cada imagen con su proporción real
+  (vertical 4:5 a horizontal 1,91:1) en vez de recortarla a cuadrado.

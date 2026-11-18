@@ -905,7 +905,10 @@
         const destinos = leerDestinos();
         const canales = Object.fromEntries((st.datos.canales || []).map((c) => [c.id, c]));
         const m0 = st.medios[0];
-        const medio = (m) => !m ? '' : (m.tipo === 'video' ? `<video src="${urlMedio(m.id)}" muted controls></video>` : `<img src="${urlMedio(m.id)}" alt="">`);
+        // data-prop: el marco toma la proporción real del archivo (ver ajustarProporciones)
+        const medio = (m, prop) => !m ? '' : (m.tipo === 'video'
+            ? `<video src="${urlMedio(m.id)}" muted controls${prop ? ' data-prop' : ''}></video>`
+            : `<img src="${urlMedio(m.id)}" alt=""${prop ? ' data-prop' : ''}>`);
         $('pub-m-previa').innerHTML = destinos.map((d) => {
             const c = canales[d.id_canal] || {};
             const texto = d.texto || base;
@@ -913,7 +916,7 @@
                 const corto = texto.length > 125 ? texto.slice(0, 125) + '… más' : texto;
                 return `<div class="pub-prev-ig">
                     <div class="p-2 small fw-bold"><i class="bi bi-person-circle me-1"></i>${esc(c.usuario || '')}</div>
-                    <div class="marco ${d.formato === 'reel' ? 'reel' : ''}">${medio(m0) || '<div class="h-100 d-flex align-items-center justify-content-center text-muted small">Sin imagen</div>'}</div>
+                    <div class="marco ${d.formato === 'reel' ? 'reel' : ''}" data-marco>${medio(m0, d.formato !== 'reel') || '<div class="h-100 d-flex align-items-center justify-content-center text-muted small">Sin imagen</div>'}</div>
                     ${d.formato === 'carrusel' ? `<div class="text-center small text-muted">1 de ${st.medios.length} ●○○</div>` : ''}
                     <div class="p-2 pub-prev-texto"><b>${esc(c.usuario || '')}</b> ${esc(corto)}</div>
                 </div>`;
@@ -935,9 +938,26 @@
             }
             return `<div class="pub-prev-li">
                 ${cab}
-                ${imgs.length ? `<div class="rejilla" style="grid-template-columns:repeat(${Math.min(2, imgs.length)}, 1fr)">${imgs.map((m) => `<img src="${urlMedio(m.id)}" alt="">`).join('')}</div>` : ''}
+                ${imgs.length === 1 ? `<div class="rejilla"><img src="${urlMedio(imgs[0].id)}" alt="" data-prop style="height:auto"></div>` : ''}
+                ${imgs.length > 1 ? `<div class="rejilla" style="grid-template-columns:repeat(${Math.min(2, imgs.length)}, 1fr)">${imgs.map((m) => `<img src="${urlMedio(m.id)}" alt="">`).join('')}</div>` : ''}
             </div>`;
         }).join('') || '<div class="small text-muted">Elija dónde publicar en la pestaña «Dónde».</div>';
+        ajustarProporciones($('pub-m-previa'));
+    }
+
+    // Instagram y LinkedIn muestran una foto sola con su proporción real, entre
+    // vertical 4:5 (0,8) y horizontal 1,91:1; fuera de ese rango la recortan.
+    // La vista previa hace lo mismo en vez de forzar todo a cuadrado.
+    function ajustarProporciones(cont) {
+        cont.querySelectorAll('[data-prop]').forEach((el) => {
+            const marco = el.closest('[data-marco]') || el;
+            const fijar = () => {
+                const w = el.naturalWidth || el.videoWidth, h = el.naturalHeight || el.videoHeight;
+                if (w && h) marco.style.aspectRatio = String(Math.min(1.91, Math.max(0.8, w / h)));
+            };
+            const listo = el.tagName === 'VIDEO' ? el.readyState >= 1 : (el.complete && el.naturalWidth);
+            if (listo) fijar(); else el.addEventListener(el.tagName === 'VIDEO' ? 'loadedmetadata' : 'load', fijar, { once: true });
+        });
     }
 
     // ── Configuración ────────────────────────────────────────────────────────
