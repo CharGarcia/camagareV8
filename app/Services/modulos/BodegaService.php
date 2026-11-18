@@ -24,9 +24,22 @@ class BodegaService
         $this->logService = $logService;
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null, array $ordenMulti = []): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro, $ordenMulti);
+    }
+
+    public function getSaldoBodega(int $idBodega, int $idEmpresa): array
+    {
+        return $this->repository->getSaldoBodega($idBodega, $idEmpresa);
+    }
+
+    /** Opciones de los selects del modal de filtros del listado. */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return [
+            'usuarios' => $this->repository->getUsuariosConBodegas($idEmpresa),
+        ];
     }
 
     public function crear(array $data): int

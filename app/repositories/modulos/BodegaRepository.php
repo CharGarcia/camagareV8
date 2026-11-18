@@ -8,11 +8,65 @@ use PDO;
 
 class BodegaRepository extends BaseRepository
 {
-    public const COLUMNAS_ORDEN = ['nombre', 'status'];
+    /**
+     * Whitelist + mapa del ORDER BY (OrdenListado). Las columnas de saldo salen del
+     * subquery `s` (saldosPorBodegaSql) y la del establecimiento del JOIN `est`.
+     */
+    public const MAPA_ORDEN = [
+        'nombre'          => 'b.nombre',
+        'status'          => 'b.status',
+        'establecimiento' => 'est.codigo',
+        'productos'       => 'COALESCE(s.productos, 0)',
+        'unidades'        => 'COALESCE(s.unidades, 0)',
+        'valor_costo'     => 'COALESCE(s.valor_costo, 0)',
+        'valor_venta'     => 'COALESCE(s.valor_venta, 0)',
+    ];
 
     public function __construct()
     {
         parent::__construct('bodegas');
+    }
+
+    /**
+     * Saldo de cada bodega de la empresa, a partir del kardex (no del caché
+     * productos_bodegas.stock_actual, que puede desincronizarse):
+     *  - productos:   productos con saldo distinto de cero.
+     *  - unidades:    suma de las cantidades en existencia.
+     *  - valor_costo: saldo × último costo del kardex (si no hay, el costo de la ficha),
+     *                 el mismo criterio que la pestaña Existencias del Reporte de Inventarios.
+     *  - valor_venta: saldo × precio de venta de la ficha (precio_base, sin IVA).
+     * Es un listado operativo: sigue el ambiente SRI actual de la empresa, igual que
+     * el stock que ven Facturas, Transferencias e Inventario (getStockActual()).
+     * Último costo con MAX(ARRAY[fecha, id, costo])[3]: ver
+     * ReporteInventarioRepository::baseExistencias().
+     */
+    private function saldosPorBodegaSql(string $filtroBodega = ''): string
+    {
+        return "SELECT x.id_bodega,
+                       COUNT(*) AS productos,
+                       SUM(x.stock) AS unidades,
+                       SUM(x.stock * COALESCE(NULLIF(x.costo, 0), p.costo_producto, 0)) AS valor_costo,
+                       SUM(x.stock * COALESCE(p.precio_base, 0)) AS valor_venta
+                  FROM (
+                        SELECT k.id_producto, k.id_bodega, SUM(k.cantidad) AS stock,
+                               (MAX(ARRAY[EXTRACT(EPOCH FROM k.fecha_movimiento), k.id, k.costo_unitario]))[3] AS costo
+                          FROM inventario_kardex k
+                         WHERE k.id_empresa = :id_empresa AND k.eliminado = false
+                           AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
+                           {$filtroBodega}
+                         GROUP BY k.id_producto, k.id_bodega
+                       ) x
+                 INNER JOIN productos p ON p.id = x.id_producto AND p.id_empresa = :id_empresa
+                 WHERE ROUND(x.stock, 4) <> 0
+                 GROUP BY x.id_bodega";
+    }
+
+    /** JOIN del establecimiento (solo si la columna ya existe en la base). */
+    private function joinEstablecimiento(): string
+    {
+        return $this->tieneColumnaEstablecimiento()
+            ? "LEFT JOIN empresa_establecimiento est ON est.id = b.id_establecimiento AND est.id_empresa = b.id_empresa"
+            : "LEFT JOIN (SELECT NULL::integer AS id, NULL::text AS codigo, NULL::text AS nombre) est ON false";
     }
 
     public function getListado(
@@ -22,12 +76,13 @@ class BodegaRepository extends BaseRepository
         int $perPage,
         string $ordenCol,
         string $ordenDir,
-        ?int $idUsuarioFiltro = null
+        ?int $idUsuarioFiltro = null,
+        array $ordenMulti = []
     ): array {
-        if (!in_array($ordenCol, self::COLUMNAS_ORDEN, true)) {
-            $ordenCol = 'nombre';
-        }
-        $dir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        $ordenMulti = \App\Helpers\OrdenListado::normalizar(
+            $ordenMulti !== [] ? $ordenMulti : [['col' => $ordenCol, 'dir' => $ordenDir]]
+        );
+        $orderBy = \App\Helpers\OrdenListado::clausula($ordenMulti, self::MAPA_ORDEN, 'b.nombre', 'b.id DESC');
 
         $whereSql = $this->getBaseWhere($idEmpresa, 'b', $idUsuarioFiltro);
         $params   = [':id_empresa' => $idEmpresa];
@@ -35,23 +90,86 @@ class BodegaRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND b.nombre ILIKE :b";
-            $params[':b'] = '%' . $buscar . '%';
+        // El COUNT y las filas usan exactamente los mismos JOIN: los filtros de saldo
+        // (con stock, rangos de unidades/valores) dependen del subquery `s`.
+        $joins = $this->joinEstablecimiento() . "
+                 LEFT JOIN (" . $this->saldosPorBodegaSql() . ") s ON s.id_bodega = b.id";
+
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'b.nombre',
+                'est.codigo',
+                'est.nombre',
+            ], $parsed['texto_libre'], $params, 'bod_b');
+            if ($cond !== '') {
+                $whereSql .= ' AND ' . $cond;
+            }
         }
 
-        $sqlCount = "SELECT COUNT(*) FROM {$this->table} b {$whereSql}";
-        $stCount  = $this->db->prepare($sqlCount);
+        // Estado: columna booleana (NULL = Activo, como lo pinta la tabla).
+        if (isset($parsed['filtros']['estado'])) {
+            $val = $parsed['filtros']['estado']['valor'];
+            $val = mb_strtolower(trim(is_array($val) ? (string) ($val[0] ?? '') : (string) $val), 'UTF-8');
+            $lit = in_array($val, ['activo', 'si', '1', 'true', 't'], true) ? true
+                 : (in_array($val, ['inactivo', 'no', '0', 'false', 'f'], true) ? false : null);
+            if ($lit !== null) {
+                $esTrue = $lit !== (bool) $parsed['filtros']['estado']['neg'];
+                $whereSql .= ' AND COALESCE(b.status, true) = ' . ($esTrue ? 'true' : 'false');
+            }
+            unset($parsed['filtros']['estado']);
+        }
+
+        $exactos = [
+            'usuario'   => 'b.created_by',
+            'con_stock' => "CASE WHEN COALESCE(s.productos, 0) > 0 THEN 'si' ELSE 'no' END",
+        ];
+        if ($this->tieneColumnaEstablecimiento()) {
+            $exactos['id_establecimiento'] = 'b.id_establecimiento';
+        }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto'    => [
+                'nombre'          => 'b.nombre',
+                'bodega'          => 'b.nombre',
+                'establecimiento' => 'est.nombre',
+            ],
+            'exacto'   => $exactos,
+            'fecha'    => [
+                'registro'   => 'b.created_at',
+                'created_at' => 'b.created_at',
+            ],
+            'numerico' => [
+                'productos'   => 'COALESCE(s.productos, 0)',
+                'unidades'    => 'COALESCE(s.unidades, 0)',
+                'valor_costo' => 'COALESCE(s.valor_costo, 0)',
+                'valor_venta' => 'COALESCE(s.valor_venta, 0)',
+            ],
+        ]);
+
+        $stCount = $this->db->prepare("SELECT COUNT(*) FROM {$this->table} b {$joins} {$whereSql}");
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
 
         $offset = ($page - 1) * $perPage;
-        
-        $sqlRows = "SELECT b.*
+
+        // Los totales (SUM ... OVER ()) se calculan sobre TODAS las bodegas filtradas,
+        // antes del LIMIT: el pie de la tabla muestra el total general, no el de la página.
+        $sqlRows = "SELECT b.*,
+                           est.codigo AS establecimiento_codigo,
+                           est.nombre AS establecimiento_nombre,
+                           COALESCE(s.productos, 0)   AS productos,
+                           COALESCE(s.unidades, 0)    AS unidades,
+                           COALESCE(s.valor_costo, 0) AS valor_costo,
+                           COALESCE(s.valor_venta, 0) AS valor_venta,
+                           SUM(COALESCE(s.unidades, 0))    OVER () AS total_unidades,
+                           SUM(COALESCE(s.valor_costo, 0)) OVER () AS total_valor_costo,
+                           SUM(COALESCE(s.valor_venta, 0)) OVER () AS total_valor_venta
                     FROM {$this->table} b
+                    {$joins}
                     {$whereSql}
-                    ORDER BY b.{$ordenCol} {$dir}, b.id DESC";
-                    
+                    {$orderBy}";
+
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }
@@ -60,10 +178,49 @@ class BodegaRepository extends BaseRepository
         $stRows->execute($params);
         $rows = $stRows->fetchAll(PDO::FETCH_ASSOC);
 
-        return [
-            'total' => $total,
-            'rows'  => $rows
+        $totales = [
+            'unidades'    => (float) ($rows[0]['total_unidades'] ?? 0),
+            'valor_costo' => (float) ($rows[0]['total_valor_costo'] ?? 0),
+            'valor_venta' => (float) ($rows[0]['total_valor_venta'] ?? 0),
         ];
+        foreach ($rows as &$r) {
+            unset($r['total_unidades'], $r['total_valor_costo'], $r['total_valor_venta']);
+        }
+        unset($r);
+
+        return [
+            'total'   => $total,
+            'rows'    => $rows,
+            'totales' => $totales,
+        ];
+    }
+
+    /** Saldo de una sola bodega (ficha del modal). */
+    public function getSaldoBodega(int $idBodega, int $idEmpresa): array
+    {
+        $st = $this->db->prepare($this->saldosPorBodegaSql('AND k.id_bodega = :id_bodega'));
+        $st->execute([':id_empresa' => $idEmpresa, ':id_bodega' => $idBodega]);
+        $r = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+        return [
+            'productos'   => (int) ($r['productos'] ?? 0),
+            'unidades'    => (float) ($r['unidades'] ?? 0),
+            'valor_costo' => (float) ($r['valor_costo'] ?? 0),
+            'valor_venta' => (float) ($r['valor_venta'] ?? 0),
+        ];
+    }
+
+    /** Usuarios que registraron bodegas en la empresa (select "Usuario" del modal de filtros). */
+    public function getUsuariosConBodegas(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM bodegas b
+               INNER JOIN usuarios u ON u.id = b.created_by
+              WHERE b.id_empresa = :id_empresa AND b.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     /**

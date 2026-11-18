@@ -1,15 +1,24 @@
 <?php
+
+/** @var string $titulo */
+/** @var array $perm */
+/** @var string $rutaModulo */
+/** @var string $rowsHtml */
+/** @var string $pieHtml */
+/** @var int $total */
+/** @var int $page */
+/** @var int $totalPages */
+/** @var int $perPage */
+/** @var string $buscar */
+
 $base = BASE_URL;
 $urlBaseBodegas = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
-$rows       = $rows       ?? [];
-$total      = $total      ?? 0;
-$page       = $page       ?? 1;
+$total      = $total ?? 0;
+$page       = $page ?? 1;
 $totalPages = $totalPages ?? 1;
-$perPage    = $perPage    ?? 20;
-$ordenCol   = $ordenCol   ?? 'nombre';
-$ordenDir   = $ordenDir   ?? 'asc';
-$buscar     = $buscar     ?? '';
+$perPage    = $perPage ?? 25;
+$buscar     = $buscar ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 ?>
@@ -31,12 +40,29 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         box-shadow: 0 1px 0 #dee2e6;
     }
 
+    .bodegas-scroll tfoot td {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 -1px 0 #dee2e6;
+    }
+
     .bodega-row {
         cursor: pointer;
     }
 
     .bodega-row:hover {
         background-color: rgba(0, 0, 0, .04);
+    }
+
+    .bodega-saldo-stat {
+        font-size: .7rem;
+    }
+
+    .bodega-saldo-stat .valor {
+        font-size: .95rem;
+        font-weight: 700;
     }
 </style>
 <?= \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig ?? []) ?>
@@ -51,37 +77,71 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <form method="POST" action="<?= $urlBaseBodegas ?>" class="d-flex align-items-center m-0" onsubmit="return false;">
-                <input type="hidden" name="page" value="1">
-                <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-                <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b" id="buscarBodega" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar bodega..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                    <?php if ($buscar !== ''): ?>
-                        <a href="<?= $urlBaseBodegas ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                    <?php endif; ?>
-                </div>
-                <button type="submit" class="d-none">Buscar</button>
-            </form>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal), igual que Proveedores: texto libre sobre
+            // nombre y establecimiento + embudo con todos los filtros + chips de los
+            // activos. Las claves deben existir en los mapas de BodegaRepository::getListado().
+            $opcFiltro = $opcionesFiltro ?? [];
+            $tB = 'Bodega';
+            $opcionesEstablecimiento = array_map(
+                fn($e) => ['v' => (string) $e['id'], 'l' => trim(($e['codigo'] ?? '') . ' - ' . ($e['nombre'] ?? ''), ' -')],
+                $establecimientos ?? []
+            );
+            $filtrosBodegas = [
+                // ── Bodega ──
+                ['tab' => $tB, 'key' => 'nombre',             'label' => 'Nombre',          'icon' => 'bi-box-seam', 'type' => 'text',   'grupo' => 'Bodega', 'col' => 4],
+                ['tab' => $tB, 'key' => 'id_establecimiento', 'label' => 'Establecimiento', 'icon' => 'bi-shop',     'type' => 'select', 'grupo' => 'Bodega', 'col' => 4, 'options' => $opcionesEstablecimiento],
+                ['tab' => $tB, 'key' => 'estado',             'label' => 'Estado',          'icon' => 'bi-flag',     'type' => 'select', 'grupo' => 'Bodega', 'col' => 4, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                // ── Saldo ──
+                ['tab' => $tB, 'key' => 'con_stock',   'label' => 'Existencias',           'icon' => 'bi-boxes',          'type' => 'select',       'grupo' => 'Saldo', 'col' => 6, 'options' => [
+                    ['v' => 'si', 'l' => 'Con saldo'],
+                    ['v' => 'no', 'l' => 'Sin saldo'],
+                ]],
+                ['tab' => $tB, 'key' => 'unidades',    'label' => 'Unidades',              'icon' => 'bi-123',            'type' => 'number_range', 'grupo' => 'Saldo', 'col' => 6],
+                ['tab' => $tB, 'key' => 'valor_costo', 'label' => 'Saldo al costo',        'icon' => 'bi-cash-stack',     'type' => 'number_range', 'grupo' => 'Saldo', 'col' => 6],
+                ['tab' => $tB, 'key' => 'valor_venta', 'label' => 'Saldo a precio de venta', 'icon' => 'bi-tag',          'type' => 'number_range', 'grupo' => 'Saldo', 'col' => 6],
+                // ── Registro ──
+                ['tab' => $tB, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tB, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6,
+                    'options' => array_map(fn($u) => ['v' => (string) $u['id'], 'l' => (string) $u['nombre']], $opcFiltro['usuarios'] ?? [])],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorBOD"></div>
+            <input type="hidden" id="buscarBodega" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorBOD',
+                        hiddenInputId: 'buscarBodega',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de bodegas',
+                        inputWidth: 380,
+                        extraId: 'fmExtraBOD', // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosBodegas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyBodegas',
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
 
-            <div class="btn-group btn-group-sm">
-                <?php
-                $columnasTabla = [
-                    'nombre' => 'Nombre',
-                    'status' => 'Estado'
-                ];
-                ?>
-                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraBOD" class="btn-group btn-group-sm">
+                <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla ?? [], $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBaseBodegas ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBaseBodegas ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBaseBodegas ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBaseBodegas ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -90,17 +150,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         <div class="d-flex align-items-center gap-3">
             <span id="paginationInfo" class="text-muted small fw-medium"><?= $from ?>-<?= $to ?>/<?= $total ?></span>
             <div id="paginationContainer" class="btn-group btn-group-sm">
-                <?php if ($page <= 1): ?>
-                    <button type="button" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-left"></i></button>
-                <?php else: ?>
-                    <button type="button" class="btn btn-outline-secondary" onclick="cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
-                <?php endif; ?>
-
-                <?php if ($page >= $totalPages): ?>
-                    <button type="button" class="btn btn-outline-secondary" disabled><i class="bi bi-chevron-right"></i></button>
-                <?php else: ?>
-                    <button type="button" class="btn btn-outline-secondary" onclick="cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
-                <?php endif; ?>
+                <button type="button" class="btn btn-outline-secondary" <?= $page <= 1 ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page - 1 ?>)"><i class="bi bi-chevron-left"></i></button>
+                <button type="button" class="btn btn-outline-secondary" <?= $page >= $totalPages ? 'disabled' : '' ?> onclick="cambiarPaginaAjax(<?= $page + 1 ?>)"><i class="bi bi-chevron-right"></i></button>
             </div>
         </div>
     </div>
@@ -111,36 +162,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">
-                            Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
-                        </th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-sort="status" data-col="status" style="width: 120px">
-                            Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
-                        </th>
+                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="establecimiento" data-col="establecimiento">Establecimiento <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-end" role="button" data-sort="productos" data-col="productos" title="Productos con saldo en la bodega">Productos <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-end" role="button" data-sort="unidades" data-col="unidades" title="Suma de las cantidades en existencia">Unidades <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-end" role="button" data-sort="valor_costo" data-col="valor_costo" title="Existencias × último costo del kardex">Saldo al costo <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header text-end" role="button" data-sort="valor_venta" data-col="valor_venta" title="Existencias × precio de venta (sin IVA)">Saldo a precio de venta <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="status" data-col="status" style="width: 110px">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyBodegas">
-                    <?php if (empty($rows)): ?>
-                        <tr>
-                            <td colspan="2" class="text-center py-5 text-muted">
-                                <i class="bi bi-box-seam fs-3 d-block mb-2"></i> No se encontraron bodegas.
-                            </td>
-                        </tr>
-                    <?php else: ?>
-                        <?php foreach ($rows as $r): ?>
-                            <tr class="bodega-row" role="button" tabindex="0" data-row='<?= htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8') ?>' onclick="abrirModalBodegaEditar(this)">
-                                <td class="fw-medium ps-3" data-col="nombre"><?= htmlspecialchars($r['nombre'] ?? '') ?></td>
-                                <td class="text-center pe-3" data-col="status">
-                                    <?php if (($r['status'] ?? 1) == 1): ?>
-                                        <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>
-                                    <?php else: ?>
-                                        <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>
-                                    <?php endif; ?>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?= $rowsHtml ?? '' ?>
                 </tbody>
+                <tfoot id="tfootBodegas">
+                    <?= $pieHtml ?? '' ?>
+                </tfoot>
             </table>
         </div>
     </div>
@@ -158,7 +194,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
                 <div class="modal-body p-0">
-                    <div id="modalAlert" class="alert d-none mx-3 mt-3 mb-0 py-2 small shadow-sm border-0"></div>
                     <input type="hidden" name="id" id="bodega_id">
 
                     <div class="d-flex align-items-center bg-light px-3 pt-2">
@@ -211,6 +246,31 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                         <?php endforeach; ?>
                                     </select>
                                     <div class="form-text small">Local donde está físicamente la bodega. Define cuándo una transferencia de inventario cruza de un establecimiento a otro.</div>
+                                </div>
+
+                                <!-- Saldo de la bodega (solo al editar) -->
+                                <div class="col-12 d-none" id="bodegaSaldoBox">
+                                    <div class="border rounded-3 bg-light p-2">
+                                        <div class="small fw-bold text-muted mb-2"><i class="bi bi-boxes me-1"></i>Saldo actual de la bodega</div>
+                                        <div class="row g-2 text-center">
+                                            <div class="col-6 col-md-3 bodega-saldo-stat">
+                                                <div class="valor" id="saldo_productos">0</div>
+                                                <div class="text-muted">Productos</div>
+                                            </div>
+                                            <div class="col-6 col-md-3 bodega-saldo-stat">
+                                                <div class="valor" id="saldo_unidades">0.00</div>
+                                                <div class="text-muted">Unidades</div>
+                                            </div>
+                                            <div class="col-6 col-md-3 bodega-saldo-stat">
+                                                <div class="valor text-primary" id="saldo_costo">0.00</div>
+                                                <div class="text-muted">Al costo</div>
+                                            </div>
+                                            <div class="col-6 col-md-3 bodega-saldo-stat">
+                                                <div class="valor text-success" id="saldo_venta">0.00</div>
+                                                <div class="text-muted">A precio de venta</div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -273,97 +333,66 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const form = document.getElementById('formBodega');
         const inputBuscar = document.getElementById('buscarBodega');
         let modalInst = null;
-        let page = <?= $page ?>;
-        let totalPages = <?= $totalPages ?>;
-        let buscarTimer = null;
-        let ordenCol = '<?= $ordenCol ?>';
-        let ordenDir = '<?= $ordenDir ?>';
+        let sorter = null;
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        window.currentPage = <?= (int) $page ?>;
 
         function getModal() {
             if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalBodega'));
             return modalInst;
         }
 
-        window.cambiarPaginaAjax = function(p) {
-            if (p < 1 || p > totalPages) return;
-            page = p;
-            cargarListado();
-        };
+        const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const fmt2 = (v) => Number(v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-        window.limpiarBuscar = function() {
-            if (inputBuscar) inputBuscar.value = '';
-            page = 1;
-            cargarListado();
-        };
-
-        if (inputBuscar) {
-            inputBuscar.addEventListener('input', () => {
-                clearTimeout(buscarTimer);
-                buscarTimer = setTimeout(() => {
-                    page = 1;
-                    cargarListado();
-                }, 500);
-            });
+        // ─── Mensajes (SweetAlert) ───────────────────────────────────────────
+        function avisoError(texto, titulo = 'No se pudo completar') {
+            if (typeof Swal === 'undefined') { alert(texto); return; }
+            Swal.fire({ icon: 'error', title: titulo, text: texto, confirmButtonText: 'Aceptar' });
+        }
+        function avisoOk(texto) {
+            if (typeof Swal === 'undefined') return;
+            Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2200, title: texto });
         }
 
-        document.querySelectorAll('.sortable-header').forEach(th => {
-            th.addEventListener('click', () => {
-                const newSort = th.dataset.sort;
-                if (!newSort) return;
-                if (ordenCol === newSort) {
-                    ordenDir = (ordenDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-                } else {
-                    ordenCol = newSort;
-                    ordenDir = 'ASC';
-                }
+        // ─── Listado ─────────────────────────────────────────────────────────
+        window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
 
-                if (typeof window.guardarOrdenacionVista === 'function') {
-                    window.guardarOrdenacionVista('bodegas', ordenCol, ordenDir);
-                }
-
-                page = 1;
-                cargarListado();
-            });
-        });
-
-        async function cargarListado() {
-            const b = inputBuscar ? inputBuscar.value.trim() : '';
-            const url = `${urlBase}/searchAjax?page=${page}&b=${encodeURIComponent(b)}&sort=${ordenCol}&dir=${ordenDir}`;
-
+        window.fetchSearch = async (page = 1) => {
+            const term = inputBuscar ? inputBuscar.value.trim() : '';
+            const orden = window.CMG_ordenParam ? window.CMG_ordenParam(window.currentSorts || []) : '';
+            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            const tbody = document.getElementById('tbodyBodegas');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
-                const resp = await fetch(url);
-                const json = await resp.json();
-
-                if (json.ok) {
-                    document.getElementById('tbodyBodegas').innerHTML = json.rows;
-                    document.getElementById('paginationInfo').textContent = json.info;
-                    document.getElementById('paginationContainer').innerHTML = json.pagination;
-
-                    if (json.pdf_url) document.getElementById('btnExportPdf').href = json.pdf_url;
-                    if (json.excel_url) document.getElementById('btnExportExcel').href = json.excel_url;
-
-                    if (json.total !== undefined) {
-                        const perPage = 20;
-                        totalPages = Math.ceil(json.total / perPage) || 1;
-                    }
-
-                    // Actualizar iconos de ordenamiento
-                    document.querySelectorAll('.sortable-header').forEach(th => {
-                        const icon = th.querySelector('i');
-                        if (!icon) return;
-                        const field = th.dataset.sort;
-                        if (field === ordenCol) {
-                            icon.className = (ordenDir.toLowerCase() === 'asc') ?
-                                'bi bi-sort-alpha-down text-primary ms-1' :
-                                'bi bi-sort-alpha-up text-primary ms-1';
-                        } else {
-                            icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                        }
-                    });
+                const resp = await fetch(uri);
+                const data = await resp.json();
+                if (data.ok) {
+                    window.currentPage = page;
+                    tbody.innerHTML = data.rows;
+                    document.getElementById('tfootBodegas').innerHTML = data.pie || '';
+                    document.getElementById('paginationContainer').innerHTML = data.pagination;
+                    document.getElementById('paginationInfo').textContent = data.info;
+                    document.getElementById('btnExportPdf').href = data.pdf_url;
+                    document.getElementById('btnExportExcel').href = data.excel_url;
+                    if (sorter) sorter.refreshIcons();
+                } else {
+                    avisoError(data.error || 'No se pudo cargar el listado de bodegas.');
                 }
             } catch (e) {
                 console.error('Error cargando bodegas:', e);
+                avisoError('Error de conexión al cargar el listado de bodegas.');
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
             }
+        };
+
+        // Orden de una o varias columnas (Shift+clic), igual que Proveedores.
+        if (window.CMG_initSort) {
+            sorter = window.CMG_initSort('bodegas', (col, dir, sorts) => {
+                window.currentSorts = sorts;
+                window.fetchSearch(1);
+            }, { sorts: window.currentSorts, multi: true, container: '.bodegas-scroll', reload: false });
         }
 
         // ─── Interruptor de Estado ───────────────────────────────────────────
@@ -392,6 +421,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             sincronizarStatusSwitchBodega();
         }
 
+        function mostrarPestanaGeneral() {
+            const btn = document.getElementById('tab-general-btn');
+            if (btn && typeof bootstrap !== 'undefined') bootstrap.Tab.getOrCreateInstance(btn).show();
+        }
+
         window.abrirModalBodegaCrear = function() {
             form.reset();
             // form.reset() no toca los campos ocultos: el estado vuelve a Activo a mano.
@@ -399,19 +433,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             document.getElementById('bodega_id').value = '';
             document.getElementById('tituloModal').textContent = 'Nueva Bodega';
             document.getElementById('btnEliminar')?.classList.add('d-none');
-
-            if (typeof bootstrap !== 'undefined') {
-                bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
-            }
-            resetearInfoExtra();
-
-            const mo = document.getElementById('modalAlert');
-            if (mo) mo.classList.add('d-none');
+            document.getElementById('bodegaSaldoBox').classList.add('d-none');
+            mostrarPestanaGeneral();
 
             if (typeof aplicarFavoritosModal === 'function') {
                 aplicarFavoritosModal();
             }
-
+            // Bodega nueva: todos los usuarios con acceso (modelo "lista de denegados").
+            fetchAccesosUsuarios(0);
             getModal().show();
         };
 
@@ -427,21 +456,44 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
             document.getElementById('tituloModal').textContent = 'Editar Bodega';
             document.getElementById('btnEliminar')?.classList.remove('d-none');
+            mostrarPestanaGeneral();
 
-            if (typeof bootstrap !== 'undefined') {
-                bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
-            }
-            const mo = document.getElementById('modalAlert');
-            if (mo) mo.classList.add('d-none');
-
-            fetchInformacionExtra(data.id);
+            pintarSaldo({
+                productos: data.productos,
+                unidades: data.unidades,
+                valor_costo: data.valor_costo,
+                valor_venta: data.valor_venta
+            });
             fetchAccesosUsuarios(data.id);
             getModal().show();
         };
 
+        function pintarSaldo(s) {
+            document.getElementById('saldo_productos').textContent = Number(s.productos || 0).toLocaleString('en-US');
+            document.getElementById('saldo_unidades').textContent = fmt2(s.unidades);
+            document.getElementById('saldo_costo').textContent = fmt2(s.valor_costo);
+            document.getElementById('saldo_venta').textContent = fmt2(s.valor_venta);
+            document.getElementById('bodegaSaldoBox').classList.remove('d-none');
+        }
+
+        async function refrescarSaldo(id) {
+            try {
+                const resp = await fetch(`${urlBase}/getDetalleAjax?id=${id}`);
+                const json = await resp.json();
+                if (json.ok && json.data && json.data.saldo) pintarSaldo(json.data.saldo);
+            } catch (e) {
+                console.error('Error cargando saldo de la bodega:', e);
+            }
+        }
+
         async function fetchAccesosUsuarios(id) {
             const container = document.getElementById('tbodyAccesosUsuarios');
             if (!container) return;
+
+            if (!id) {
+                container.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted small">Guarde la bodega para configurar los accesos. Por defecto, todos los usuarios tienen acceso.</td></tr>';
+                return;
+            }
 
             container.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm mb-2"></div><div class="small">Cargando usuarios...</div></td></tr>';
 
@@ -455,31 +507,29 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         html = '<tr><td colspan="3" class="text-center py-4">No hay usuarios disponibles.</td></tr>';
                     } else {
                         json.data.forEach(u => {
-                            const checkedAcceso = u.tiene_acceso ? 'checked' : '';
-                            const checkedDefault = u.es_default ? 'checked' : '';
+                            const uid = parseInt(u.id, 10);
                             html += `
                                 <tr class="align-middle">
                                     <td class="text-center">
                                         <div class="form-check d-inline-block">
-                                            <input class="form-check-input check-acceso" type="checkbox" value="${u.id}" ${checkedAcceso} onchange="validarDefaultInPermiso(this)">
+                                            <input class="form-check-input check-acceso" type="checkbox" value="${uid}" ${u.tiene_acceso ? 'checked' : ''} onchange="validarDefaultInPermiso(this)">
                                         </div>
                                     </td>
                                     <td class="text-center">
                                         <div class="form-check d-inline-block">
-                                            <input class="form-check-input radio-default" type="radio" name="user_default_${u.id}" data-user-id="${u.id}" ${checkedDefault} ${u.tiene_acceso ? '' : 'disabled'}>
+                                            <input class="form-check-input radio-default" type="radio" name="user_default_${uid}" data-user-id="${uid}" ${u.es_default ? 'checked' : ''} ${u.tiene_acceso ? '' : 'disabled'}>
                                         </div>
                                     </td>
                                     <td>
-                                        <div class="fw-bold small">${u.nombre}</div>
-                                        <div class="text-muted" style="font-size: 0.65rem;">${u.mail}</div>
+                                        <div class="fw-bold small">${esc(u.nombre)}</div>
+                                        <div class="text-muted" style="font-size: 0.65rem;">${esc(u.mail)}</div>
                                     </td>
-                                </tr>
-                            `;
+                                </tr>`;
                         });
                     }
                     container.innerHTML = html;
                 } else {
-                    container.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-danger small">${json.error || 'Error'}</td></tr>`;
+                    container.innerHTML = `<tr><td colspan="3" class="text-center py-4 text-danger small">${esc(json.error || 'Error')}</td></tr>`;
                 }
             } catch (e) {
                 container.innerHTML = '<tr><td colspan="3" class="text-center py-4 text-danger small">Error de conexión</td></tr>';
@@ -499,33 +549,6 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
         };
 
-        async function fetchInformacionExtra(id) {
-            resetearInfoExtra('Cargando...');
-            try {
-                const resp = await fetch(`${urlBase}/getDetalleAjax?id=${id}`);
-                const json = await resp.json();
-                if (json.ok) {
-                    const d = json.data;
-                    const countEl = document.getElementById('info_productos_count');
-                    if (countEl) countEl.textContent = d.productos_count + (d.productos_count === 1 ? ' producto' : ' productos');
-
-                    fetchHistorialBodega(id);
-                } else {
-                    resetearInfoExtra('Error al cargar');
-                }
-            } catch (e) {
-                resetearInfoExtra('Error de red');
-            }
-        }
-
-        function resetearInfoExtra(msg = '-') {
-            const countEl = document.getElementById('info_productos_count');
-            if (countEl) countEl.textContent = msg === '-' ? 'Sin datos' : msg;
-
-            const timeline = document.getElementById('auditoriaTimelineBodega');
-            if (timeline) timeline.innerHTML = '<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>';
-        }
-
         // Bandera "en curso" (§8): un Enter repetido o un doble clic no envían otro guardado.
         let guardandoBodega = false;
         form.addEventListener('submit', async (e) => {
@@ -536,23 +559,19 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             const action = id ? '/update' : '/store';
             const fd = new FormData(form);
             const btn = document.getElementById('btnGuardar');
-            const alertEl = document.getElementById('modalAlert');
             const restaurarBtn = () => {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Guardar';
             };
-            const mostrarError = (texto) => {
-                if (typeof Swal !== 'undefined') Swal.close();
-                if (alertEl) {
-                    alertEl.textContent = texto;
-                    alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                    alertEl.classList.remove('d-none');
-                }
-            };
+
+            if (!String(fd.get('nombre') || '').trim()) {
+                guardandoBodega = false;
+                avisoError('Escriba el nombre de la bodega.', 'Falta un dato');
+                return;
+            }
 
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
-            if (alertEl) alertEl.classList.add('d-none');
             // Aviso mientras el servidor guarda (no se puede cerrar hasta que responda).
             if (typeof Swal !== 'undefined') {
                 Swal.fire({
@@ -566,10 +585,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             }
 
             try {
-                const resp = await fetch(urlBase + action, {
-                    method: 'POST',
-                    body: fd
-                });
+                const resp = await fetch(urlBase + action, { method: 'POST', body: fd });
                 const json = await resp.json();
 
                 if (json.ok) {
@@ -581,23 +597,30 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         document.getElementById('tituloModal').textContent = 'Editar Bodega';
                         document.getElementById('btnEliminar')?.classList.remove('d-none');
                     }
+                    let avisoAccesos = '';
                     if (bodegaId) {
-                        await guardarAccesosUsuarios(bodegaId);
-                        fetchInformacionExtra(bodegaId);
+                        // Bodega recién creada: la tabla de accesos aún no estaba cargada,
+                        // no hay nada que guardar (todos con acceso por defecto).
+                        if (id) {
+                            const rAcc = await guardarAccesosUsuarios(bodegaId);
+                            if (rAcc && rAcc.ok === false) avisoAccesos = rAcc.error || 'No se pudieron guardar los accesos de usuarios.';
+                        }
+                        refrescarSaldo(bodegaId);
                         fetchAccesosUsuarios(bodegaId);
                     }
-                    cargarListado();
+                    window.fetchSearch(window.currentPage || 1);
                     restaurarBtn();
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire({ toast: true, position: 'top-end', icon: 'success', showConfirmButton: false, timer: 2200,
-                            title: json.msg || 'Guardado correctamente.' });
+                    if (avisoAccesos) {
+                        avisoError(avisoAccesos, 'Bodega guardada, accesos sin guardar');
+                    } else {
+                        avisoOk(json.msg || 'Guardado correctamente.');
                     }
                 } else {
-                    mostrarError(json.msg || json.error || 'Error desconocido');
+                    avisoError(json.msg || json.error || 'Error desconocido');
                     restaurarBtn();
                 }
             } catch (err) {
-                mostrarError('Error de red al conectar con el servidor');
+                avisoError('Error de red al conectar con el servidor.');
                 restaurarBtn();
             } finally {
                 guardandoBodega = false;
@@ -606,17 +629,17 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
         async function guardarAccesosUsuarios(idBodega) {
             const container = document.getElementById('tbodyAccesosUsuarios');
-            if (!container) return;
+            if (!container) return null;
+
+            const filas = container.querySelectorAll('tr.align-middle');
+            if (filas.length === 0) return null; // la tabla no llegó a cargarse: no tocar accesos
 
             const accesos = [];
-            container.querySelectorAll('tr.align-middle').forEach(row => {
+            filas.forEach(row => {
                 const chk = row.querySelector('.check-acceso');
                 const rad = row.querySelector('.radio-default');
                 if (chk && chk.checked) {
-                    accesos.push({
-                        id_usuario: chk.value,
-                        es_default: rad ? rad.checked : false
-                    });
+                    accesos.push({ id_usuario: chk.value, es_default: rad ? rad.checked : false });
                 }
             });
 
@@ -625,106 +648,52 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             fd.append('accesos', JSON.stringify(accesos));
 
             try {
-                const resp = await fetch(`${urlBase}/guardarAccesosAjax`, {
-                    method: 'POST',
-                    body: fd
-                });
+                const resp = await fetch(`${urlBase}/guardarAccesosAjax`, { method: 'POST', body: fd });
                 return await resp.json();
             } catch (e) {
                 console.error('Error guardando accesos:', e);
-                return {
-                    ok: false
-                };
+                return { ok: false, error: 'Error de conexión al guardar los accesos.' };
             }
         }
 
         window.eliminarBodega = async function() {
             const id = document.getElementById('bodega_id').value;
-            if (!id || !confirm('¿Está seguro de eliminar esta bodega?')) return;
+            if (!id) return;
+            const nombre = document.getElementById('bodega_nombre').value || 'esta bodega';
+
+            if (typeof Swal !== 'undefined') {
+                const r = await Swal.fire({
+                    icon: 'warning',
+                    title: '¿Eliminar la bodega?',
+                    html: `Se eliminará <b>${esc(nombre)}</b>. Solo se puede eliminar una bodega sin movimientos ni documentos asociados.`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, eliminar',
+                    cancelButtonText: 'Cancelar',
+                    confirmButtonColor: '#dc3545',
+                    focusCancel: true
+                });
+                if (!r.isConfirmed) return;
+                Swal.fire({ title: 'Eliminando bodega...', allowOutsideClick: false, allowEscapeKey: false, showConfirmButton: false, didOpen: () => Swal.showLoading() });
+            } else if (!confirm('¿Está seguro de eliminar esta bodega?')) {
+                return;
+            }
 
             const fd = new FormData();
             fd.append('id_eliminar', id);
 
             try {
-                const resp = await fetch(urlBase + '/delete', {
-                    method: 'POST',
-                    body: fd
-                });
+                const resp = await fetch(urlBase + '/delete', { method: 'POST', body: fd });
                 const json = await resp.json();
                 if (json.ok) {
                     getModal().hide();
-                    cargarListado();
+                    window.fetchSearch(window.currentPage || 1);
+                    avisoOk(json.msg || 'Bodega eliminada correctamente.');
                 } else {
-                    alert(json.error);
+                    avisoError(json.error || 'No se pudo eliminar la bodega.', 'No se puede eliminar');
                 }
             } catch (e) {
-                alert('Error al eliminar la bodega');
+                avisoError('Error de conexión al eliminar la bodega.');
             }
         };
-
-        async function fetchHistorialBodega(id) {
-            const container = document.getElementById('auditoriaTimelineBodega');
-            if (!container || !id) return;
-
-            try {
-                const resp = await fetch(`${urlBase}/getHistorialAjax?id=${id}&tabla=bodegas`);
-                const json = await resp.json();
-
-                if (json.ok && json.data.length > 0) {
-                    let html = '<div class="timeline-border position-absolute h-100 border-start border-2 border-primary border-opacity-10" style="left: 10px; top: 0;"></div>';
-
-                    json.data.forEach(log => {
-                        const icon = log.accion.includes('Crear') ? 'bi-plus-circle-fill text-success' :
-                            log.accion.includes('Actualizar') ? 'bi-pencil-fill text-primary' :
-                            log.accion.includes('Eliminar') ? 'bi-trash-fill text-danger' :
-                            'bi-clock-history text-secondary';
-
-                        html += `
-                            <div class="timeline-item position-relative mb-3 ps-4">
-                                <div class="timeline-icon position-absolute rounded-circle bg-white d-flex align-items-center justify-content-center shadow-sm border" 
-                                     style="left: 0; top: 0; width: 22px; height: 22px; z-index: 2;">
-                                    <i class="bi ${icon}" style="font-size: 0.7rem;"></i>
-                                </div>
-                                <div class="timeline-content">
-                                    <div class="d-flex justify-content-between align-items-center mb-0">
-                                        <span class="fw-bold" style="font-size: 0.75rem;">${log.accion}</span>
-                                        <span class="text-muted" style="font-size: 0.65rem;">${log.created_at}</span>
-                                    </div>
-                                    <div class="text-muted mb-1" style="font-size: 0.7rem;">
-                                        <i class="bi bi-person me-1"></i> ${log.usuario_nombre || 'SISTEMA'}
-                                    </div>
-                                    <div class="bg-light rounded p-1 border border-light-subtle shadow-sm" style="font-size: 0.65rem;">
-                                        ${renderDetalleHistorialBodega(log.detalles)}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                    });
-                    container.innerHTML = html;
-                } else {
-                    container.innerHTML = `<div class="text-center py-4 text-muted small">No hay historial de cambios.</div>`;
-                }
-            } catch (e) {
-                container.innerHTML = `<div class="text-center py-3 text-danger small">Error de carga.</div>`;
-            }
-        }
-
-        function renderDetalleHistorialBodega(detalle) {
-            if (!detalle || detalle.length === 0) return '<span class="text-muted">Sin detalles específicos</span>';
-            if (typeof detalle === 'string') return detalle;
-            if (Array.isArray(detalle)) {
-                return `<ul class="list-unstyled mb-0">
-                    ${detalle.map(d => {
-                        if (typeof d === 'object') {
-                            const antes = d.antes !== null ? `<span class="text-decoration-line-through text-muted">${d.antes}</span> ` : '';
-                            return `<li><i class="bi bi-dot"></i> <span class="fw-bold">${d.campo}:</span> ${antes}<i class="bi bi-arrow-right mx-1"></i> ${d.despues}</li>`;
-                        }
-                        return ` < li > < i class = "bi bi-dot" > < /i> ${d}</li > `;
-                    }).join('')}
-                </ul>`;
-            }
-            return '<span class="text-muted">Acción registrada</span>';
-        }
-
     })();
 </script>

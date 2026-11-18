@@ -28,54 +28,74 @@ class BodegasController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /** Columnas del listado (dropdown de columnas, PDF y Excel). */
+    private const COLUMNAS = [
+        'nombre'          => 'Nombre',
+        'establecimiento' => 'Establecimiento',
+        'productos'       => 'Productos',
+        'unidades'        => 'Unidades',
+        'valor_costo'     => 'Saldo al costo',
+        'valor_venta'     => 'Saldo a precio de venta',
+        'status'          => 'Estado',
+    ];
+
+    /** Lee búsqueda, página y orden (una o varias columnas) de la petición. */
+    private function leerParametrosListado(): array
+    {
+        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+        $orden = \App\Helpers\OrdenListado::leer($prefsVista, 'nombre');
+        return [
+            'prefsVista' => $prefsVista,
+            'buscar'     => trim((string) ($_GET['b'] ?? $_POST['b'] ?? '')),
+            'page'       => max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1)),
+            'orden'      => $orden,
+            'ordenCol'   => \App\Helpers\OrdenListado::primeraCol($orden, 'nombre'),
+            'ordenDir'   => \App\Helpers\OrdenListado::primeraDir($orden),
+        ];
+    }
+
+    private function idUsuarioFiltro(): ?int
+    {
+        return empty($this->getPermisos()['todo']) ? (int) $_SESSION['id_usuario'] : null;
+    }
+
     public function index(): void
     {
         $this->requireLeer();
 
         $perm = $this->getPermisos();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-
-        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
-
-        $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
+        $p = $this->leerParametrosListado();
         $perPage = $this->porPagina();
 
-        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
-
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
-        $rows = $result['rows'];
+        $result = $this->service->getListado($idEmpresa, $p['buscar'], $p['page'], $perPage, $p['ordenCol'], $p['ordenDir'], $this->idUsuarioFiltro(), $p['orden']);
         $total = $result['total'];
-
-        foreach ($rows as &$r) {
-            if (!empty($r['created_at'])) $r['created_at'] = date('d-m-Y H:i:s', strtotime($r['created_at']));
-            if (!empty($r['updated_at'])) $r['updated_at'] = date('d-m-Y H:i:s', strtotime($r['updated_at']));
-        }
-        unset($r);
-
-        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
+        $totalPages = $perPage > 0 ? max(1, (int) ceil($total / $perPage)) : 1;
 
         // Establecimientos de la empresa: cada bodega puede indicar en cuál está
         // (lo consumen las Transferencias de Inventario).
         $establecimientos = (new \App\models\Empresa())->getEstablecimientos($idEmpresa);
 
         $this->viewWithLayout('layouts.main', 'modulos.bodegas.index', [
-            'titulo'     => 'Bodegas',
+            'titulo'           => 'Bodegas',
             'establecimientos' => $establecimientos,
-            'fullWidth'  => true,
-            'perm'       => $perm,
-            'rutaModulo' => self::RUTA_MODULO,
-            'rows'       => $rows,
-            'total'      => $total,
-            'page'       => $page,
-            'totalPages' => $totalPages,
-            'perPage'    => $perPage,
-            'buscar'     => $buscar,
-            'ordenCol'   => $ordenCol,
-            'ordenDir'   => $ordenDir,
-            'vistaConfig'=> $prefsVista
+            'fullWidth'        => true,
+            'perm'             => $perm,
+            'rutaModulo'       => self::RUTA_MODULO,
+            'rowsHtml'         => $this->renderFilas($result['rows']),
+            'pieHtml'          => $this->renderPie($result['totales'], $total),
+            'total'            => $total,
+            'page'             => $p['page'],
+            'totalPages'       => $totalPages,
+            'perPage'          => $perPage,
+            'buscar'           => $p['buscar'],
+            'ordenCol'         => $p['ordenCol'],
+            'ordenDir'         => $p['ordenDir'],
+            'ordenJson'        => \App\Helpers\OrdenListado::aJson($p['orden']),
+            'ordenParam'       => \App\Helpers\OrdenListado::aCadena($p['orden']),
+            'columnasTabla'    => self::COLUMNAS,
+            'opcionesFiltro'   => $this->service->getOpcionesFiltroListado($idEmpresa),
+            'vistaConfig'      => $p['prefsVista'],
         ]);
     }
 
@@ -85,64 +105,97 @@ class BodegasController extends BaseModuloController
         header('Content-Type: application/json');
 
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
-        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'nombre');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'asc'));
+        $p = $this->leerParametrosListado();
         $perPage = $this->porPagina();
 
-        $perm = $this->getPermisos();
-        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
-
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
-        $rows = $result['rows'];
+        try {
+            $result = $this->service->getListado($idEmpresa, $p['buscar'], $p['page'], $perPage, $p['ordenCol'], $p['ordenDir'], $this->idUsuarioFiltro(), $p['orden']);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar el listado de bodegas.']);
+            exit;
+        }
         $total = $result['total'];
-        $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
-
+        $page = $p['page'];
+        $totalPages = $perPage > 0 ? max(1, (int) ceil($total / $perPage)) : 1;
         $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
         $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
-        ob_start();
-        if (empty($rows)) {
-            echo '<tr><td colspan="2" class="text-center py-5 text-muted"><i class="bi bi-box-seam fs-3 d-block mb-2"></i>No se encontraron bodegas.</td></tr>';
-        } else {
-            foreach ($rows as $r) {
-                if (!empty($r['created_at'])) $r['created_at'] = date('d-m-Y H:i:s', strtotime($r['created_at']));
-                if (!empty($r['updated_at'])) $r['updated_at'] = date('d-m-Y H:i:s', strtotime($r['updated_at']));
-
-                $statusBadge = ((int)($r['status'] ?? 1) == 1)
-                    ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>'
-                    : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>';
-
-                $dataAttr = htmlspecialchars(json_encode($r), ENT_QUOTES, 'UTF-8');
-                echo '<tr class="bodega-row" role="button" tabindex="0" data-row=\'' . $dataAttr . '\' onclick="abrirModalBodegaEditar(this)">
-                        <td class="fw-medium ps-3" data-col="nombre">' . htmlspecialchars($r['nombre'] ?? '') . '</td>
-                        <td class="text-center pe-3" data-col="status" style="width:120px">' . $statusBadge . '</td>
-                      </tr>';
-            }
-        }
-        $rowsHtml = ob_get_clean();
-
-        ob_start();
         $prevDisabled = ($page <= 1) ? 'disabled' : '';
         $nextDisabled = ($page >= $totalPages) ? 'disabled' : '';
-        echo '<div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-outline-secondary border-end-0 rounded-end-0" ' . $prevDisabled . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>
-                <button type="button" class="btn btn-outline-secondary rounded-start-0" ' . $nextDisabled . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>
-              </div>';
-        $paginationHtml = ob_get_clean();
+        $paginationHtml = '<button type="button" class="btn btn-outline-secondary" ' . $prevDisabled . ' onclick="cambiarPaginaAjax(' . ($page - 1) . ')"><i class="bi bi-chevron-left"></i></button>'
+                        . '<button type="button" class="btn btn-outline-secondary" ' . $nextDisabled . ' onclick="cambiarPaginaAjax(' . ($page + 1) . ')"><i class="bi bi-chevron-right"></i></button>';
 
+        $qs = 'b=' . urlencode($p['buscar']) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($p['orden']));
         echo json_encode([
-            'ok'        => true,
-            'rows'      => $rowsHtml,
+            'ok'         => true,
+            'rows'       => $this->renderFilas($result['rows']),
+            'pie'        => $this->renderPie($result['totales'], $total),
             'pagination' => $paginationHtml,
-            'info'      => "$from-$to/$total",
-            'total'     => $total,
-            'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
+            'info'       => "$from-$to/$total",
+            'total'      => $total,
+            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?' . $qs,
+            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?' . $qs,
         ]);
         exit;
+    }
+
+    private static function num(float $v): string
+    {
+        return number_format($v, 2, '.', ',');
+    }
+
+    private static function esActiva(array $r): bool
+    {
+        $s = $r['status'] ?? true;
+        return !($s === false || $s === 0 || $s === '0' || $s === 'f' || $s === 'false');
+    }
+
+    /** Filas del listado (las usan index() y searchAjax(), así no se pintan dos veces distinto). */
+    private function renderFilas(array $rows): string
+    {
+        if (empty($rows)) {
+            return '<tr><td colspan="7" class="text-center py-5 text-muted"><i class="bi bi-box-seam fs-3 d-block mb-2"></i>No se encontraron bodegas.</td></tr>';
+        }
+        $h = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
+        $neg = fn($v) => (float) $v < 0 ? ' text-danger' : '';
+        $html = '';
+        foreach ($rows as $r) {
+            if (!empty($r['created_at'])) $r['created_at'] = date('d-m-Y H:i:s', strtotime($r['created_at']));
+            if (!empty($r['updated_at'])) $r['updated_at'] = date('d-m-Y H:i:s', strtotime($r['updated_at']));
+
+            $statusBadge = self::esActiva($r)
+                ? '<span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">Activo</span>'
+                : '<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">Inactivo</span>';
+
+            $est = self::valorCelda($r, 'establecimiento');
+
+            $html .= '<tr class="bodega-row" role="button" tabindex="0" data-row="' . $h(json_encode($r)) . '" onclick="abrirModalBodegaEditar(this)">'
+                . '<td class="fw-medium ps-3" data-col="nombre">' . $h($r['nombre'] ?? '') . '</td>'
+                . '<td data-col="establecimiento" class="text-truncate" style="max-width:240px">' . ($est !== 'Sin asignar' ? $h($est) : '<span class="text-muted">Sin asignar</span>') . '</td>'
+                . '<td class="text-end" data-col="productos">' . number_format((int) $r['productos']) . '</td>'
+                . '<td class="text-end' . $neg($r['unidades']) . '" data-col="unidades">' . self::num((float) $r['unidades']) . '</td>'
+                . '<td class="text-end' . $neg($r['valor_costo']) . '" data-col="valor_costo">' . self::num((float) $r['valor_costo']) . '</td>'
+                . '<td class="text-end' . $neg($r['valor_venta']) . '" data-col="valor_venta">' . self::num((float) $r['valor_venta']) . '</td>'
+                . '<td class="text-center pe-3" data-col="status">' . $statusBadge . '</td>'
+                . '</tr>';
+        }
+        return $html;
+    }
+
+    /** Fila de totales (de todas las bodegas filtradas, no solo de la página). */
+    private function renderPie(array $t, int $total): string
+    {
+        if ($total <= 0) return '';
+        return '<tr class="fw-bold">'
+            . '<td class="ps-3" data-col="nombre">Total (' . $total . ' ' . ($total === 1 ? 'bodega' : 'bodegas') . ')</td>'
+            . '<td data-col="establecimiento"></td>'
+            . '<td data-col="productos"></td>'
+            . '<td class="text-end" data-col="unidades">' . self::num((float) $t['unidades']) . '</td>'
+            . '<td class="text-end" data-col="valor_costo">' . self::num((float) $t['valor_costo']) . '</td>'
+            . '<td class="text-end" data-col="valor_venta">' . self::num((float) $t['valor_venta']) . '</td>'
+            . '<td data-col="status"></td>'
+            . '</tr>';
     }
 
     public function getDetalleAjax(): void
@@ -158,22 +211,11 @@ class BodegasController extends BaseModuloController
 
             $repo = new BodegaRepository();
             $bodega = $repo->getDetalleCompleto($id, $idEmpresa);
-
             if (!$bodega) throw new \Exception('Bodega no encontrada');
-
-            $productosCount = $repo->contarProductos($id, $idEmpresa);
-
-            $fmt = fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime($d)) : '—';
 
             echo json_encode([
                 'ok' => true,
-                'data' => [
-                    'productos_count' => $productosCount,
-                    'creado_at' => $fmt($bodega['created_at'] ?? null),
-                    'creado_por' => $bodega['creado_por_nombre'] ?? 'Sistema',
-                    'actualizado_at' => $fmt($bodega['updated_at'] ?? null),
-                    'actualizado_por' => $bodega['actualizado_por_nombre'] ?? '—',
-                ]
+                'data' => ['saldo' => $this->service->getSaldoBodega($id, $idEmpresa)],
             ]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
@@ -182,151 +224,137 @@ class BodegasController extends BaseModuloController
         exit;
     }
 
-    public function exportPdf(): void
+    /** Filas completas (sin paginar) para PDF y Excel, con el mismo filtro y orden de la pantalla. */
+    private function datosExportacion(): array
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
-        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
+        $p = $this->leerParametrosListado();
+        $data = $this->service->getListado($idEmpresa, $p['buscar'], 1, 0, $p['ordenCol'], $p['ordenDir'], $this->idUsuarioFiltro(), $p['orden']);
 
-        $perm = $this->getPermisos();
-        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
+        $empresa = (new \App\models\Empresa())->getPorId($idEmpresa);
+        $autoload = MVC_ROOT . '/vendor/autoload.php';
+        if (file_exists($autoload)) {
+            require_once $autoload;
+        }
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+        // Columnas visibles según las preferencias del usuario (las ocultas no se exportan).
+        $ocultas = (array) ($p['prefsVista']['__columnas_ocultas__'] ?? []);
+        $cols = array_filter(self::COLUMNAS, fn($k) => $k === 'nombre' || !in_array($k, $ocultas, true), ARRAY_FILTER_USE_KEY);
+
+        return [$data, $empresa['nombre'] ?? '', $cols];
+    }
+
+    private static function valorCelda(array $r, string $col): string
+    {
+        return match ($col) {
+            'nombre'          => (string) ($r['nombre'] ?? ''),
+            'establecimiento' => trim(($r['establecimiento_codigo'] ?? '') . ' - ' . ($r['establecimiento_nombre'] ?? ''), ' -') ?: 'Sin asignar',
+            'productos'       => (string) (int) ($r['productos'] ?? 0),
+            'unidades', 'valor_costo', 'valor_venta' => self::num((float) ($r[$col] ?? 0)),
+            'status'          => self::esActiva($r) ? 'Activo' : 'Inactivo',
+            default           => '',
+        };
+    }
+
+    public function exportPdf(): void
+    {
+        [$data, $nombreEmpresa, $cols] = $this->datosExportacion();
         $rows = $data['rows'];
+        $t = $data['totales'];
+        $numericas = ['productos', 'unidades', 'valor_costo', 'valor_venta'];
+        $pesos = ['nombre' => 26, 'establecimiento' => 20, 'productos' => 9, 'unidades' => 11, 'valor_costo' => 12, 'valor_venta' => 12, 'status' => 10];
+        $sumaPesos = array_sum(array_intersect_key($pesos, $cols));
+        $ancho = fn($k) => round($pesos[$k] * 100 / max(1, $sumaPesos), 2) . '%';
 
         try {
-            $empresaModel = new \App\models\Empresa();
-            $empresa = $empresaModel->getPorId($idEmpresa);
-            $nombreEmpresa = $empresa['nombre'] ?? 'REPORTE';
-
-            $autoload = MVC_ROOT . '/vendor/autoload.php';
-            if (file_exists($autoload)) {
-                require_once $autoload;
-            }
-
             ob_start();
 ?>
             <style>
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    font-family: Arial, sans-serif;
-                    font-size: 8pt;
-                    table-layout: fixed;
-                }
-
-                th {
-                    background: #f2f2f2;
-                    border: 1px solid #ccc;
-                    padding: 4px;
-                    text-align: left;
-                }
-
-                td {
-                    border: 1px solid #ccc;
-                    padding: 4px;
-                    overflow: hidden;
-                    word-wrap: break-word;
-                }
-
-                .header {
-                    text-align: center;
-                    margin-bottom: 15px;
-                    width: 100%;
-                }
-
-                h1 {
-                    margin: 0;
-                    font-size: 14pt;
-                    color: #333;
-                }
-
-                h2 {
-                    margin: 3px 0 0 0;
-                    color: #666;
-                    font-size: 10pt;
-                    text-transform: uppercase;
-                }
+                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 8pt; }
+                th { background: #f2f2f2; border: 1px solid #ccc; padding: 4px; text-align: left; }
+                td { border: 1px solid #ccc; padding: 4px; }
+                .r { text-align: right; }
+                .header { text-align: center; margin-bottom: 15px; width: 100%; }
+                h1 { margin: 0; font-size: 14pt; color: #333; }
+                h2 { margin: 3px 0 0 0; color: #666; font-size: 10pt; text-transform: uppercase; }
             </style>
             <page backtop="10mm" backbottom="10mm" backleft="10mm" backright="10mm">
                 <div class="header">
                     <h1><?= htmlspecialchars($nombreEmpresa) ?></h1>
-                    <h2>Catálogo de Bodegas</h2>
+                    <h2>Bodegas y saldos</h2>
                 </div>
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 80%">Nombre</th>
-                            <th style="width: 20%">Estado</th>
+                            <?php foreach ($cols as $k => $label): ?>
+                                <th style="width: <?= $ancho($k) ?>" class="<?= in_array($k, $numericas, true) ? 'r' : '' ?>"><?= htmlspecialchars($label) ?></th>
+                            <?php endforeach; ?>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($rows as $r): ?>
                             <tr>
-                                <td><?= htmlspecialchars((string)($r['nombre'] ?? '')) ?></td>
-                                <td><?= ((int)($r['status'] ?? 0) === 1) ? 'Activo' : 'Inactivo' ?></td>
+                                <?php foreach ($cols as $k => $label): ?>
+                                    <td style="width: <?= $ancho($k) ?>" class="<?= in_array($k, $numericas, true) ? 'r' : '' ?>"><?= htmlspecialchars(self::valorCelda($r, $k)) ?></td>
+                                <?php endforeach; ?>
                             </tr>
                         <?php endforeach; ?>
+                        <?php if ($rows): ?>
+                            <tr>
+                                <?php foreach ($cols as $k => $label): ?>
+                                    <td style="width: <?= $ancho($k) ?>; font-weight: bold" class="<?= in_array($k, $numericas, true) ? 'r' : '' ?>"><?= $k === 'nombre' ? 'TOTAL' : (isset($t[$k]) ? self::num((float) $t[$k]) : '') ?></td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </page>
 <?php
             $content = ob_get_clean();
 
-            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf(count($cols) > 5 ? 'L' : 'P', 'A4', 'es');
             $html2pdf->writeHTML($content);
             $html2pdf->output('Bodegas_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             header('Content-Type: text/html');
-            echo "Error al generar PDF: " . $e->getMessage();
+            echo "Error al generar PDF: " . htmlspecialchars($e->getMessage());
             exit;
         }
     }
 
     public function exportExcel(): void
     {
-        $this->requireLeer();
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombre');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'asc'));
-
-        $perm = $this->getPermisos();
-        $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
-
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
-        $rows = $data['rows'];
+        [$data, $nombreEmpresa, $cols] = $this->datosExportacion();
+        $t = $data['totales'];
+        $numericas = ['productos', 'unidades', 'valor_costo', 'valor_venta'];
 
         try {
-            $empresaModel = new \App\models\Empresa();
-            $empresa = $empresaModel->getPorId($idEmpresa);
-            $nombreEmpresa = $empresa['nombre'] ?? '';
-
-            $autoload = MVC_ROOT . '/vendor/autoload.php';
-            if (file_exists($autoload)) {
-                require_once $autoload;
-            }
-
-            $headers = ['Nombre', 'Fecha Creación', 'Estado'];
             $exportData = [];
-            foreach ($rows as $r) {
-                $fechaC = !empty($r['created_at']) ? date('d-m-Y H:i:s', strtotime($r['created_at'])) : '-';
-                $exportData[] = [
-                    (string)($r['nombre'] ?? ''),
-                    $fechaC,
-                    ((int)($r['status'] ?? 1) === 1 ? 'Activo' : 'Inactivo')
-                ];
+            foreach ($data['rows'] as $r) {
+                $fila = [];
+                foreach (array_keys($cols) as $k) {
+                    $fila[] = in_array($k, $numericas, true) ? round((float) ($r[$k] ?? 0), 2) : self::valorCelda($r, $k);
+                }
+                $exportData[] = $fila;
+            }
+            if ($exportData) {
+                $fila = [];
+                foreach (array_keys($cols) as $k) {
+                    $fila[] = $k === 'nombre' ? 'TOTAL' : (isset($t[$k]) ? round((float) $t[$k], 2) : '');
+                }
+                $exportData[] = $fila;
             }
 
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel('Bodegas', $headers, $exportData, 'Lista de Bodegas', $nombreEmpresa);
+            $reportService->exportToExcel('Bodegas', array_values($cols), $exportData, 'Bodegas y saldos', $nombreEmpresa);
             exit;
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             header('Content-Type: text/html');
-            echo "Error al generar Excel: " . $e->getMessage();
+            echo "Error al generar Excel: " . htmlspecialchars($e->getMessage());
             exit;
         }
     }
