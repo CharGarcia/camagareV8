@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.12** (17-11-2026). El historial está al final.
+Versión actual: **0.13** (18-11-2026). El historial está al final.
 
 ---
 
@@ -265,23 +265,22 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 
 - Solo cuentan los **planes anuales** (no los semestrales ni los mensuales).
 - Una venta cuenta cuando el cliente **paga**, no cuando aprueba la proforma.
-- Los **$250** son con **IVA incluido**.
+- Cada empresa debe ser de **al menos $250, IVA incluido**, para contar.
+- El **20 %** se calcula sobre el valor **con IVA** que pagó el cliente.
 
 | Empresas vendidas en el mes | Recibe |
 |---|---|
 | **0** | Nada. |
 | **1** | **20 % de esa venta**, sin sueldo base. |
-| **2** (cada una con un valor de **$250, IVA incluido**) | **$450 de base**. |
+| **2** (cada una de al menos **$250, IVA incluido**) | **$450 de base**. |
 | **3 o más** | **$450 de base** + **20 % de la venta** de la tercera empresa en adelante. |
 
-**Ejemplos** *(valores ilustrativos)*:
-- Vende 1 empresa de $300 → recibe **$60** (20 % de $300).
-- Vende 2 empresas → recibe **$450**.
-- Vende 3 empresas; la tercera, de $400 → recibe $450 + $80 = **$530**.
-
-> **Por confirmar con la dirección (P-C06):** si los $250 son el valor
-> **mínimo** de cada empresa para la base (¿una venta de $200 cuenta?) y si el
-> 20 % se calcula sobre el valor con IVA o sin IVA.
+**Ejemplos** *(valores ilustrativos, todos con IVA incluido)*:
+- Vende 1 empresa de $345 → recibe **$69** (20 % de $345).
+- Vende 2 empresas, de $250 y $300 → recibe **$450**.
+- Vende 2 empresas, de $250 y $200 → la de $200 **no cuenta** (no llega al
+  mínimo): es como vender 1 empresa → recibe **$50** (20 % de $250).
+- Vende 3 empresas; la tercera, de $460 → recibe $450 + $92 = **$542**.
 
 ---
 
@@ -292,7 +291,7 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 | P-C01 | ✅ **Resuelto (17-11-2026):** la dicta una persona externa, en línea. |
 | P-C02 | ✅ **Resuelto (17-11-2026):** hay empresa de demostración con usuario y clave de demo. |
 | P-C03 | ✅ **Resuelto (17-11-2026):** metas y comisiones en la sección 10. |
-| P-C06 | Comisión: ✅ solo planes anuales, cuenta al pagar el cliente y los $250 incluyen IVA (17-11-2026). Falta: ¿$250 es el **mínimo** por empresa? ¿El 20 % es sobre el valor **con o sin IVA**? |
+| P-C06 | ✅ **Resuelto (18-11-2026):** solo planes anuales, cuenta al pagar el cliente, mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA. |
 | P-C04 | ✅ **Resuelto (17-11-2026):** emprendedores, comercios y empresas obligadas a llevar contabilidad, en todo el Ecuador (sección 2.6 de la presentación). |
 | P-C05 | Precios reales cargados en el Cotizador para practicar con valores verdaderos (los carga la dirección en el catálogo de precios). |
 
@@ -302,6 +301,7 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.13 | 18-11-2026 | Comisiones cerradas: mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA; ejemplos actualizados. P-C06 resuelto |
 | 0.12 | 17-11-2026 | Comisiones: solo planes anuales, cuenta al pagar el cliente, $250 con IVA incluido. |
 | 0.11 | 17-11-2026 | Nueva sección 10 «Metas y comisiones». Capacitación externa en línea; empresa de demostración. P-C01, P-C02 y P-C03 resueltos; nuevo P-C06 |
 | 0.10 | 17-11-2026 | Regla 2: el precio puede subir o bajar en la renovación. |
