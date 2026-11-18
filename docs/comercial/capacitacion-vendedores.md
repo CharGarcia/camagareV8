@@ -1,12 +1,11 @@
 # CaMaGaRe — Capacitación de vendedores
 
-> **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
+> **Versión aprobada por la dirección** — Documento interno del equipo comercial.
 > Va de la mano con la **Presentación para vendedores**
 > (`docs/comercial/presentacion-vendedores.md`): la presentación es *qué*
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
-> No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.15** (18-11-2026). El historial está al final.
+Versión actual: **1.0** (18-11-2026). El historial está al final.
 
 ---
 
@@ -299,6 +298,7 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 1.0 | 18-11-2026 | **Versión aprobada por la dirección.** |
 | 0.15 | 18-11-2026 | **Revisión final**: plan semestral en el objetivo, la demo y las respuestas de los ejercicios (verificadas con el motor del Cotizador); descuento comercial en las reglas de práctica; objeción «Es caro» con implementación sin costo y paquetes; respuestas de la evaluación sin HTML; pendientes en orden. |
 | 0.14 | 18-11-2026 | Horario de soporte con sábados en la regla 1 y en el juego de roles. |
 | 0.13 | 18-11-2026 | Comisiones cerradas: mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA; ejemplos actualizados. P-C06 resuelto |

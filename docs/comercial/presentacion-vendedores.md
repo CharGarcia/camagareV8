@@ -1,30 +1,29 @@
 # CaMaGaRe — Presentación para vendedores
 
-> **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
-> No se entrega en PDF hasta que la dirección lo apruebe como versión final.
+> **Versión aprobada por la dirección** — Documento interno del equipo comercial.
 
-Versión actual: **0.34** (18-11-2026). El historial de cambios está al final.
+Versión actual: **1.0** (18-11-2026). El historial de cambios está al final.
 
 ---
 
 ## Índice
 
-1. Quiénes somos: nombre, misión, visión y valores — *aprobado*
-2. Conociendo al cliente: target y problemas que resolvemos — *borrador para revisión*
-3. **Lo que ofrecemos** — *borrador listo para revisión*
-4. **Módulos del sistema** — *borrador listo para revisión*
-5. **Cómo funciona el sistema** (alta, puesta en marcha, soporte, pagos) — *borrador para revisión*
-6. **Planes y precios**: cómo se calcula lo que paga el cliente — *reglas aprobadas; precios en el Cotizador*
-7. **Qué cubre y qué no cubre la membresía** — *borrador para revisión*
-8. **De qué somos responsables y de qué no** — *borrador basado en el Contrato de uso y el Acuerdo de datos*
-9. **Preguntas frecuentes y manejo de objeciones** — *borrador para revisión*
-10. **Proceso de venta**: demo, cotización, contrato y alta — *borrador para revisión*
+1. Quiénes somos: nombre, misión, visión y valores
+2. Conociendo al cliente: target y problemas que resolvemos
+3. **Lo que ofrecemos**
+4. **Módulos del sistema**
+5. **Cómo funciona el sistema** (alta, puesta en marcha, soporte, pagos)
+6. **Planes y precios**: cómo se calcula lo que paga el cliente (los precios vigentes están en el Cotizador)
+7. **Qué cubre y qué no cubre la membresía**
+8. **De qué somos responsables y de qué no** (según el Contrato de uso y el Acuerdo de datos)
+9. **Preguntas frecuentes y manejo de objeciones**
+10. **Proceso de venta**: demo, cotización, contrato y alta
 
 Al final: **Pendientes por definir** (lista única) e **Historial de versiones**.
 
 ---
 
-## 1. Quiénes somos ✅
+## 1. Quiénes somos
 
 ### 1.1 Nombre
 
@@ -80,7 +79,7 @@ el sistema por la empresa.
 
 ---
 
-## 2. Conociendo al cliente *(borrador para revisión)*
+## 2. Conociendo al cliente
 
 > Los perfiles salen de los módulos que el sistema ya tiene. **No hay todavía
 > datos de ventas** que digan cuáles compran más: la prioridad la definió la
@@ -180,8 +179,8 @@ módulos y usuarios).
 varias empresas, recibe la información completa y a tiempo, y puede recomendar
 el sistema a sus clientes.
 
-**Beneficio para el contador:** recibe una **comisión del 20 %** por cada
-empresa que refiera, con las mismas condiciones que los vendedores: solo
+**Beneficio para contadores y referidos:** reciben una **comisión del 20 %** por
+cada empresa que refieran, con las mismas condiciones que los vendedores: solo
 **planes anuales**, cuenta cuando el cliente **paga**, cada empresa de **al
 menos $250 con IVA** y el 20 % sobre el valor **con IVA**.
 
@@ -433,7 +432,7 @@ programe. Por ejemplo:
 
 ---
 
-## 5. Cómo funciona el sistema *(borrador para revisión)*
+## 5. Cómo funciona el sistema
 
 ### 5.1 Cómo se accede
 
@@ -569,7 +568,7 @@ cotizar: nunca prometer que el precio se mantendrá igual en las renovaciones.
 
 ---
 
-## 6. Planes y precios *(reglas aprobadas; los precios vigentes están en el Cotizador)*
+## 6. Planes y precios *(los precios vigentes están en el Cotizador)*
 
 ### 6.1 Cómo se arma el precio
 
@@ -704,7 +703,7 @@ sumar módulos sueltos.
 
 ---
 
-## 7. Qué cubre y qué no cubre la membresía *(borrador para revisión)*
+## 7. Qué cubre y qué no cubre la membresía
 
 ### 7.1 Lo que cubre la membresía
 
@@ -783,7 +782,7 @@ sumar módulos sueltos.
 
 ---
 
-## 9. Preguntas frecuentes y manejo de objeciones *(borrador para revisión)*
+## 9. Preguntas frecuentes y manejo de objeciones
 
 ### 9.1 Preguntas frecuentes
 
@@ -825,7 +824,7 @@ sumar módulos sueltos.
 
 ---
 
-## 10. Proceso de venta *(borrador para revisión)*
+## 10. Proceso de venta
 
 | # | Etapa | Qué hace el vendedor | Herramienta |
 |---|---|---|---|
@@ -866,7 +865,7 @@ actualiza su sección y se tacha aquí.
 | P-03 | ✅ **Resuelto (17-11-2026):** emprendedor o profesional independiente, comercio y distribuidora, y empresa obligada a llevar contabilidad. | 2.6 |
 | P-04 | ✅ **Resuelto (17-11-2026):** todo el Ecuador. | 2.6 |
 | P-05 | ✅ **Resuelto (17-11-2026):** no hay tamaño ideal; cualquier empresa dentro de los perfiles. | 2.6 |
-| P-06 | ✅ **Resuelto (18-11-2026):** los contadores reciben **20 % de comisión** por cada empresa referida, con las mismas condiciones que los vendedores. | 2.6 |
+| P-06 | ✅ **Resuelto (18-11-2026):** contadores y referidos reciben **20 % de comisión** por cada empresa referida, con las mismas condiciones que los vendedores. | 2.6 |
 
 ### C. Puesta en marcha y soporte
 | # | Pendiente | Sección |
@@ -898,11 +897,11 @@ actualiza su sección y se tacha aquí.
 ### F. Secciones por escribir
 | # | Pendiente | Sección |
 |---|---|---|
-| P-22 | ~~Escribir qué cubre la membresía~~ → borrador v0.17; revisar. | 7 |
-| P-23 | ~~Escribir responsabilidades~~ → borrador v0.17; revisar. | 8 |
-| P-24 | ~~Escribir preguntas frecuentes y objeciones~~ → borrador v0.17; revisar. | 9 |
-| P-25 | ~~Escribir el proceso de venta~~ → borrador v0.17; revisar. | 10 |
-| P-26 | ~~Capacitación de vendedores~~ → borrador en `docs/comercial/capacitacion-vendedores.md` (v0.1); revisar. | — |
+| P-22 | ✅ **Aprobado (18-11-2026):** qué cubre la membresía. | 7 |
+| P-23 | ✅ **Aprobado (18-11-2026):** responsabilidades. | 8 |
+| P-24 | ✅ **Aprobado (18-11-2026):** preguntas frecuentes y objeciones. | 9 |
+| P-25 | ✅ **Aprobado (18-11-2026):** proceso de venta. | 10 |
+| P-26 | ✅ **Aprobado (18-11-2026):** capacitación de vendedores (`docs/comercial/capacitacion-vendedores.md`). | — |
 | P-27 | Revisión legal del Contrato de uso y del Acuerdo de datos (el propio sistema lo recomienda). | 8 |
 
 ### G. Nuevos (v0.17)
@@ -921,6 +920,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 1.0 | 18-11-2026 | **Versión aprobada por la dirección.** Contadores y referidos reciben 20 % de comisión. P-22 a P-26 aprobados |
 | 0.34 | 18-11-2026 | **Revisión final**: estados de las secciones 1 y 6 al día; lista de Automatizaciones corregida según el sistema (se quita «sincronizar descargas del SRI», que no está disponible); el Cotizador muestra semestral y paquetes (6.1 y 10); la tabla de paquetes remite al Cotizador; reglas de oro con horario, descuento y renovación; objeción «Es caro» con implementación sin costo; condiciones de la comisión de contadores |
 | 0.33 | 18-11-2026 | Horario de soporte (lun–vie 08:30–18:00, sáb 08:30–14:00, extendido por temporada) y comisión del 20 % para contadores por empresa referida. P-06 y P-11 resueltos |
 | 0.32 | 17-11-2026 | Significado del nombre (CaMaGaRe ERP), mejoras incluidas, costos de terceros, desarrollos a la medida y empresa de demostración. P-01, P-28, P-29, P-30 y P-31 resueltos |
