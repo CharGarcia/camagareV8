@@ -8,8 +8,26 @@
 $anioActual = (int) date('Y');
 $mesActual  = (int) date('n');
 ?>
+<style>
+    /* Modo del modal Nuevo: "Un empleado" (formulario de siempre) o "Todos los empleados" (cuadrícula). */
+    #modalNovedad.nov-modo-todos .nov-solo-uno { display: none !important; }
+    #modalNovedad:not(.nov-modo-todos) .nov-solo-todos { display: none !important; }
+    #modalNovedad .novmasivo-scroll { max-height: 52vh; overflow: auto; }
+    #nov_tabla_masivo { font-size: .78rem; width: max-content; min-width: 100%; }
+    #nov_tabla_masivo thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; white-space: nowrap; vertical-align: top; font-weight: 600; }
+    #nov_tabla_masivo tfoot td { position: sticky; bottom: 0; z-index: 2; background: #f8f9fa; font-weight: 600; }
+    /* Empleado fijo a la izquierda al desplazarse por las columnas. */
+    #nov_tabla_masivo .nov-col-emp { position: sticky; left: 0; z-index: 1; background: #fff; min-width: 230px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #nov_tabla_masivo thead .nov-col-emp, #nov_tabla_masivo tfoot .nov-col-emp { z-index: 3; background: #f8f9fa; }
+    #nov_tabla_masivo td.p-0 input, #nov_tabla_masivo td.p-0 select { padding: 0 4px; height: 20px; font-size: .78rem; border-radius: 0; }
+    #nov_tabla_masivo input.nov-m-valor { width: 70px; text-align: right; }
+    #nov_tabla_masivo select.nov-m-sel { width: 78px; }
+    #nov_tabla_masivo select.nov-m-motivo { width: 190px; }
+    #nov_tabla_masivo th select { height: 20px; padding: 0 4px; font-size: .72rem; font-weight: 400; }
+    #nov_tabla_masivo td.nov-con-valor { background: #fff8e1; }
+</style>
 <div class="modal fade" id="modalNovedad" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" style="z-index:1060;">
-    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable" id="nov_dialog">
         <div class="modal-content shadow-lg border-0">
             <form id="formNovedad" novalidate onsubmit="return false;">
                 <div class="modal-header bg-light py-3">
@@ -30,8 +48,18 @@ $mesActual  = (int) date('n');
                         <span class="small" id="novBloqueoAvisoTexto">Esta novedad no se puede modificar: el rol de este período ya está pagado, o ya fue desembolsada por egreso (Anticipo/Préstamo Empresa). Anule el pago/egreso correspondiente, o registre una novedad nueva de ajuste, si necesita corregirla.</span>
                     </div>
                     <input type="hidden" name="id" id="nov_id" value="">
+                    <!-- Solo al crear: registrar para un empleado o para todos los empleados activos -->
+                    <div id="nov_modo_wrap" class="d-flex align-items-center gap-2 mb-3 pb-2 border-bottom">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Registrar para">
+                            <input type="radio" class="btn-check" name="nov_modo" id="nov_modo_uno" value="uno" autocomplete="off" checked>
+                            <label class="btn btn-outline-primary" for="nov_modo_uno"><i class="bi bi-person me-1"></i>Un empleado</label>
+                            <input type="radio" class="btn-check" name="nov_modo" id="nov_modo_todos" value="todos" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="nov_modo_todos"><i class="bi bi-people me-1"></i>Todos los empleados</label>
+                        </div>
+                        <span class="small text-muted nov-solo-todos">Escriba el valor solo en las novedades que correspondan a cada empleado: las celdas vacías o en 0 no crean nada.</span>
+                    </div>
                     <div class="row g-3">
-                        <div class="col-md-8 position-relative">
+                        <div class="col-md-8 position-relative nov-solo-uno">
                             <label class="form-label mb-1 small fw-bold text-muted">Empleado *</label>
                             <input type="hidden" name="id_empleado" id="nov_id_empleado" value="">
                             <div class="input-group input-group-sm">
@@ -40,7 +68,7 @@ $mesActual  = (int) date('n');
                             </div>
                             <div id="nov_empleado_resultados" class="list-group position-absolute w-100 shadow-sm d-none" style="z-index:1080; max-height:220px; overflow-y:auto;"></div>
                         </div>
-                        <div class="col-md-4" id="nov_container_estado">
+                        <div class="col-md-4 nov-solo-uno" id="nov_container_estado">
                             <label class="form-label mb-1 small fw-bold text-muted">Estado</label>
                             <select class="form-select form-select-sm shadow-none" name="estado" id="nov_estado">
                                 <option value="activo">Activo</option>
@@ -48,7 +76,7 @@ $mesActual  = (int) date('n');
                             </select>
                         </div>
 
-                        <div class="col-md-6">
+                        <div class="col-md-6 nov-solo-uno">
                             <label class="form-label mb-1 small fw-bold text-muted">Tipo de Novedad * <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito('novedades', 'nov_tipo_codigo', 'tipo_codigo') ?></label>
                             <select class="form-select form-select-sm shadow-none" name="tipo_codigo" id="nov_tipo_codigo" required onchange="window.novToggleCampos()">
                                 <option value="">-- Seleccionar tipo --</option>
@@ -57,13 +85,13 @@ $mesActual  = (int) date('n');
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-6" id="nov_container_valor">
+                        <div class="col-md-6 nov-solo-uno" id="nov_container_valor">
                             <label class="form-label mb-1 small fw-bold text-muted" id="nov_label_valor">Monto ($)</label>
                             <input type="number" step="0.01" class="form-control form-control-sm shadow-none fw-bold" name="valor" id="nov_valor" value="0.00">
                         </div>
 
                         <!-- Solo Otros Ingresos y horas: si el ingreso aporta al IESS (como los rubros fijos del empleado) -->
-                        <div class="col-md-3 d-none" id="nov_container_iess">
+                        <div class="col-md-3 d-none nov-solo-uno" id="nov_container_iess">
                             <label class="form-label mb-1 small fw-bold text-muted" for="nov_aporta_iess">Aporta IESS</label>
                             <select class="form-select form-select-sm shadow-none" name="aporta_iess" id="nov_aporta_iess">
                                 <option value="si">Sí</option>
@@ -72,7 +100,7 @@ $mesActual  = (int) date('n');
                             <div class="form-text small mt-1 d-none" id="nov_iess_aviso">El empleado no aporta al IESS.</div>
                         </div>
 
-                        <div class="col-md-6 d-none" id="nov_container_motivo">
+                        <div class="col-md-6 d-none nov-solo-uno" id="nov_container_motivo">
                             <label class="form-label mb-1 small fw-bold text-muted">Motivo de Salida *</label>
                             <select class="form-select form-select-sm shadow-none" name="motivo_codigo" id="nov_motivo_codigo">
                                 <option value="">-- Seleccionar motivo --</option>
@@ -111,6 +139,26 @@ $mesActual  = (int) date('n');
                         <div class="col-12">
                             <label class="form-label mb-1 small fw-bold text-muted">Observación</label>
                             <textarea class="form-control form-control-sm shadow-none" name="observacion" id="nov_observacion" rows="2"></textarea>
+                            <div class="form-text small mt-1 nov-solo-todos">Vale para todas las novedades. Si la deja vacía, cada una se guarda con «Tipo - Mes Año».</div>
+                        </div>
+
+                        <!-- Cuadrícula "Todos los empleados": una fila por empleado activo, una columna por tipo -->
+                        <div class="col-12 nov-solo-todos">
+                            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                                <div class="input-group input-group-sm" style="width:300px;">
+                                    <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                                    <input type="text" class="form-control form-control-sm shadow-none" id="nov_masivo_buscar" placeholder="Filtrar empleados..." autocomplete="off">
+                                </div>
+                                <span class="small text-muted" id="nov_masivo_info"></span>
+                                <span class="ms-auto small fw-bold text-primary" id="nov_masivo_contador">0 novedades por registrar</span>
+                            </div>
+                            <div class="novmasivo-scroll border rounded">
+                                <table class="table table-sm table-bordered table-hover mb-0 align-middle" id="nov_tabla_masivo">
+                                    <thead class="table-light"></thead>
+                                    <tbody></tbody>
+                                    <tfoot class="table-light"></tfoot>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>

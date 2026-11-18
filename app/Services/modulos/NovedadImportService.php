@@ -474,17 +474,8 @@ class NovedadImportService
      */
     private function claveNovedad(array $d): string
     {
-        $tipo  = trim((string) $d['tipo_codigo']);
-        $marca = CatalogoNovedades::admiteOpcionIess($tipo)
-            ? (CatalogoNovedades::aportaIess($tipo, $d['aporta_iess'] ?? null) ? '|I' : '|N')
-            : '';
-        // Anticipo / Préstamo Empresa: ya entregado y por pagar son novedades distintas.
-        if (NovedadPlantillaService::requiereEntrega($tipo)) {
-            $marca .= in_array($d['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true) ? '|E' : '|P';
-        }
-        return ((int) $d['id_empleado']) . '|' . $tipo
-            . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']) . $marca
-            . '|' . number_format((float) ($d['valor'] ?? 0), 2, '.', '');
+        // Misma clave que el registro para todos los empleados del modal.
+        return NovedadService::claveDuplicado($d);
     }
 
     /**

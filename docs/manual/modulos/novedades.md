@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips, quincena, quincena ya pagada, quincena por pagar, adelanto de quincena, quincena repetida, ya tiene quincenas, valor quincena, concepto repetido, novedad repetida, doble descuento
-version: 1.15
+etiquetas: novedades, novedad, todos los empleados, registro masivo, novedades para todos, varios empleados, cuadricula, tabla de novedades, ya pagado, por pagar, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips, quincena, quincena ya pagada, quincena por pagar, adelanto de quincena, quincena repetida, ya tiene quincenas, valor quincena, concepto repetido, novedad repetida, doble descuento
+version: 1.16
 orden: 20
 estado: activo
 ---
@@ -25,6 +25,59 @@ el sueldo.
 5. Escriba el **valor** que corresponda al tipo elegido.
 6. En Otros Ingresos y horas, indique si **aporta al IESS** (ver más abajo).
 7. Guarde.
+
+## Registrar novedades para todos los empleados
+
+Al pulsar **Nuevo**, arriba del formulario hay dos opciones: **Un empleado** (el
+formulario de siempre) y **Todos los empleados**. Con *Todos los empleados* el
+mismo cuadro muestra una tabla con **una fila por cada empleado activo** y **una
+columna por cada tipo de novedad**, incluido el **Aviso de salida**. Sirve para
+cargar en una sola pantalla las horas extra, descuentos, anticipos, etc. de todo
+el personal del mes.
+
+1. Pulse **Nuevo** y elija **Todos los empleados**.
+2. Indique la **fecha**, el **mes** y el **año** del rol y a qué pago **afecta**:
+   valen para todas las novedades.
+3. Escriba la **observación** si quiere una común; si la deja vacía, cada
+   novedad se guarda con *"Tipo - Mes Año"*.
+4. En la fila de cada empleado escriba el valor **solo en las novedades que le
+   correspondan** (monto, horas o días, según indica cada columna). Las celdas
+   vacías o en 0 no crean nada.
+5. Guarde. Cada celda con valor se registra como una novedad aparte.
+
+Junto al valor, algunas columnas tienen un selector:
+
+| Columna | Selector | Qué indica |
+|---------|----------|------------|
+| Otros Ingresos, Horas Nocturnas, Suplementarias y Extraordinarias | **Con IESS / Sin IESS** | Si aporta al IESS (ver más abajo). Si el empleado no aporta, queda fijo en *Sin IESS* |
+| Anticipo, Quincena y Préstamo Empresa | **Por pagar / Ya pagado** | *Por pagar*: se paga en *Egresos → Nómina* y el rol lo descuenta después, igual que con **Un empleado**. *Ya pagado*: ya se entregó fuera del sistema y el rol lo descuenta directo, sin egreso |
+| Aviso de salida | Lista de **motivos** | Elegir un motivo registra el aviso de ese empleado (no lleva valor) |
+
+El selector del **encabezado** de la columna cambia la opción de **todos** los
+empleados a la vez. El buscador de arriba filtra la tabla por nombre o
+identificación, y al pie se ven los totales de cada columna y cuántas novedades
+se van a registrar.
+
+Las novedades quedan **igual que las registradas de a una**: mismo origen
+(*registro manual*), mismas reglas y se editan o eliminan una por una desde el
+listado. Los días no laborados, el aviso de salida y la quincena van siempre al
+rol mensual aunque *Afecta a* diga otra cosa.
+
+**Es todo o nada y no duplica.** Antes de guardar se revisa toda la tabla y, si
+hay un solo error, no se registra ninguna novedad: se muestra la lista con el
+empleado, la novedad y el motivo. Se rechaza, entre otros:
+
+- una novedad **idéntica ya registrada** (mismo empleado, tipo, mes y año, valor
+  y, según el caso, la misma marca de IESS, de pago o el mismo motivo);
+- una segunda **Quincena** del mes, o una novedad sobre un **rol ya pagado**.
+
+Si un empleado ya tiene **otra novedad del mismo tipo en el mes** (con otro
+valor) o su ficha tiene **valor quincena**, se pide confirmación con la lista de
+casos, igual que al registrar de a una. Pulsar **Guardar** dos veces, o volver a
+pulsarlo después de un error de conexión, no registra el lote dos veces.
+
+> Los préstamos empresa en **varias cuotas** se siguen cargando con la plantilla
+> Excel (columna *N° DE CUOTAS*); aquí se registra la cuota del mes.
 
 ## El valor depende del tipo
 
@@ -408,6 +461,7 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.16** — Al crear con **Nuevo** se puede elegir **Todos los empleados**: una tabla con todos los empleados activos y una columna por cada tipo de novedad (incluido el aviso de salida), con selectores Con/Sin IESS, Por pagar/Ya pagado y motivo. Todo o nada, sin duplicar novedades ya registradas.
 - **1.15** — Nuevo tipo **Quincena**, que funciona como el anticipo (*ya pagada* / *por pagar*) y se descuenta en el rol mensual; en la plantilla tiene dos columnas junto al anticipo. No se acepta una segunda quincena del mismo mes ni una quincena para quien ya está en el rol de QUINCENA del mes; si la ficha tiene valor quincena se pide confirmación. Al registrar a mano, aviso si el empleado ya tiene otra novedad del mismo tipo en el mes.
 - **1.14** — Un anticipo *por pagar* o un préstamo empresa *por desembolsar* (a mano o por Excel) pendiente impide pagar el rol de ese período en Egresos hasta pagarlo o desembolsarlo; y ya no se puede pagar el anticipo ni desembolsar el préstamo si el rol donde se descuentan ya se pagó sin descontarlos.
 - **1.13** — **Anticipo y Préstamo Empresa con columnas «ya entregado» y «por

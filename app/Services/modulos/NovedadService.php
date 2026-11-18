@@ -121,6 +121,257 @@ class NovedadService
     }
 
     /**
+     * Registro para TODOS los empleados desde el modal (modo "Todos los empleados"): una
+     * novedad por cada celda con valor de la cuadrícula empleado × tipo. Cada una se guarda
+     * igual que la registrada a mano con "Nuevo" (sin carga: origen manual), con las mismas
+     * reglas, y todo o nada.
+     *
+     * $comun: fecha, periodo_mes, periodo_anio, aplica_en, observacion (para todas).
+     * $items: [id_empleado, tipo_codigo, valor, aporta_iess ('si'|'no'|null),
+     *          ya_pagado (bool, solo Anticipo/Quincena/Préstamo Empresa), motivo_codigo (Aviso de salida)].
+     *
+     * Devuelve uno de:
+     *  - ['errores' => [[empleado, novedad, error], …]]   nada se guardó
+     *  - ['requiere_confirmacion' => true, 'avisos' => […]] el modal reenvía con $confirmado
+     *  - ['ids' => [...], 'ya_registrado' => bool]          guardado (o reintento del mismo formulario)
+     */
+    public function crearMasivo(array $comun, array $items, int $idEmpresa, int $idUsuario, bool $confirmado = false, string $token = ''): array
+    {
+        if (empty($items)) {
+            throw new Exception('No escribió ninguna novedad: ponga el valor en la columna de la novedad que corresponde a cada empleado.');
+        }
+
+        // Reintento del mismo formulario (se perdió la respuesta, pero el servidor sí guardó):
+        // se responde con lo ya creado ANTES de validar, que si no lo rechazaría como duplicado
+        // (CLAUDE.md §8). Se repite dentro de la transacción final por si hay dos envíos a la vez.
+        $guardado = new \App\Services\GuardadoUnicoService();
+        $this->repository->beginTransaction();
+        try {
+            $previo = $guardado->previo($token, $idEmpresa, 'novedades_masivo');
+        } finally {
+            $this->repository->rollBack();
+        }
+        if ($previo) {
+            return ['ids' => (array) ($previo['respuesta']['ids'] ?? [$previo['id_registro']]), 'ya_registrado' => true];
+        }
+
+        $empleados = [];
+        foreach ($this->repository->getEmpleadosActivosParaNovedades($idEmpresa) as $e) {
+            $empleados[$e['id']] = $e['nombres_apellidos'];
+        }
+        $mes  = (int) ($comun['periodo_mes'] ?? 0);
+        $anio = (int) ($comun['periodo_anio'] ?? 0);
+        $obs  = trim((string) ($comun['observacion'] ?? ''));
+
+        // Lo común se revisa una vez, no repetido en cada empleado.
+        $fecha = trim((string) ($comun['fecha'] ?? ''));
+        if ($fecha === '' || strtotime($fecha) === false) {
+            throw new Exception('La fecha de la novedad es obligatoria y debe ser válida.');
+        }
+        if ($mes < 1 || $mes > 12) {
+            throw new Exception('El mes del período debe estar entre 1 y 12.');
+        }
+        if ($anio < 2000 || $anio > 2100) {
+            throw new Exception('El año del período no es válido.');
+        }
+        if (!CatalogoNovedades::esAplicaEnValido(trim((string) ($comun['aplica_en'] ?? 'rol')))) {
+            throw new Exception('El campo "Afecta a" no es válido.');
+        }
+
+        $errores = [];
+        $error = function (string $empleado, ?string $novedad, string $msg) use (&$errores): void {
+            $errores[] = ['empleado' => $empleado, 'novedad' => $novedad, 'error' => $msg];
+        };
+
+        // ── Armar y normalizar cada novedad ──────────────────────────────────
+        $preparadas = [];
+        $hayYaPagado = false;
+        $vistos = [];
+        foreach ($items as $it) {
+            $idEmp  = (int) ($it['id_empleado'] ?? 0);
+            $tipo   = trim((string) ($it['tipo_codigo'] ?? ''));
+            $nombre = $empleados[$idEmp] ?? null;
+            if ($nombre === null) {
+                $error('Empleado #' . $idEmp, CatalogoNovedades::nombreTipo($tipo), 'El empleado no existe o ya no está activo en la empresa.');
+                continue;
+            }
+            if (!CatalogoNovedades::esTipoValido($tipo)) {
+                $error($nombre, null, 'El tipo de novedad no es válido.');
+                continue;
+            }
+            // Una sola novedad por empleado y tipo en la cuadrícula (la pantalla no permite más).
+            if (isset($vistos[$idEmp . '|' . $tipo])) {
+                continue;
+            }
+            $vistos[$idEmp . '|' . $tipo] = true;
+
+            $entrega  = NovedadPlantillaService::requiereEntrega($tipo);
+            $yaPagado = $entrega && !empty($it['ya_pagado']);
+            $hayYaPagado = $hayYaPagado || $yaPagado;
+            $iess = $it['aporta_iess'] ?? null;
+
+            $data = [
+                'id_empresa'    => $idEmpresa,
+                'id_usuario'    => $idUsuario,
+                'id_empleado'   => $idEmp,
+                'tipo_codigo'   => $tipo,
+                'fecha'         => trim((string) ($comun['fecha'] ?? '')),
+                'periodo_mes'   => $mes,
+                'periodo_anio'  => $anio,
+                'valor'         => (float) ($it['valor'] ?? 0),
+                'aplica_en'     => trim((string) ($comun['aplica_en'] ?? 'rol')),
+                'motivo_codigo' => trim((string) ($it['motivo_codigo'] ?? '')),
+                'observacion'   => $obs !== '' ? $obs : $this->observacionPorDefecto($tipo, $mes, $anio),
+                'estado'        => 'activo',
+                'aporta_iess'   => $iess === null || $iess === '' ? null : (string) $iess,
+                // Anticipo / Quincena / Préstamo Empresa ya entregado fuera del sistema: el rol
+                // lo descuenta directo, sin egreso (como en la plantilla Excel).
+                'desembolsado_migrado' => $yaPagado,
+                'desembolso_manual'    => $yaPagado,
+            ];
+            $data = $this->normalizar($data, $idEmpresa);
+            $preparadas[] = ['empleado' => $nombre, 'novedad' => self::etiquetaNovedad($data), 'data' => $data];
+        }
+
+        if ($hayYaPagado && !$this->repository->tieneDesembolsoManual()) {
+            throw new Exception('Para registrar novedades "Ya pagado" falta aplicar en la base de datos el script database/2026-11-18_novedades_desembolso_manual.sql. Márquelas como "Por pagar" o pida que se aplique.');
+        }
+
+        // ── Duplicados: la misma novedad ya registrada (empleado, tipo, período, marca y valor) ──
+        if ($preparadas) {
+            $datos = array_column($preparadas, 'data');
+            $existentes = [];
+            foreach ($this->repository->getParaDuplicados($idEmpresa, array_column($datos, 'id_empleado'), array_column($datos, 'periodo_anio')) as $r) {
+                $existentes[self::claveDuplicado($r)] = true;
+            }
+            foreach ($preparadas as $k => $p) {
+                if (isset($existentes[self::claveDuplicado($p['data'])])) {
+                    $error($p['empleado'], $p['novedad'], 'Ya está registrada en ' . $this->nombrePeriodo($mes, $anio)
+                        . ' con el mismo valor (' . number_format((float) $p['data']['valor'], 2, '.', '') . '). Borre ese valor de la cuadrícula.');
+                    unset($preparadas[$k]);
+                }
+            }
+        }
+
+        // ── Reglas de negocio, rol pagado y quincena repetida (sin escribir nada) ──
+        foreach ($preparadas as $k => $p) {
+            try {
+                $this->rules->validate($p['data']);
+                $this->bloquearSiRolPagado($idEmpresa, $p['data']['id_empleado'], $p['data']['aplica_en'] ?? 'rol', $anio, $mes);
+                $this->bloquearQuincenaRepetida($p['data']);
+            } catch (\Throwable $e) {
+                $error($p['empleado'], $p['novedad'], $e->getMessage());
+                unset($preparadas[$k]);
+            }
+        }
+
+        if ($errores) {
+            return ['errores' => $errores];
+        }
+        if (empty($preparadas)) {
+            throw new Exception('No escribió ninguna novedad.');
+        }
+
+        // ── Avisos que se confirman (los mismos del registro de a uno) ──
+        if (!$confirmado) {
+            $avisos = [];
+            foreach ($preparadas as $p) {
+                foreach ($this->avisosAntesDeGuardar($p['data'], $idEmpresa) as $a) {
+                    $avisos[] = $p['empleado'] . ' — ' . $a;
+                }
+            }
+            if ($avisos) {
+                return ['requiere_confirmacion' => true, 'avisos' => $avisos];
+            }
+        }
+
+        // ── Guardar todo en una transacción (y una sola vez por formulario) ──
+        $ids = [];
+        $this->repository->beginTransaction();
+        try {
+            if ($previo = $guardado->previo($token, $idEmpresa, 'novedades_masivo')) {
+                $this->repository->rollBack();
+                return ['ids' => (array) ($previo['respuesta']['ids'] ?? [$previo['id_registro']]), 'ya_registrado' => true];
+            }
+            foreach ($preparadas as $p) {
+                try {
+                    $ids[] = $this->crearInterno($p['data']);
+                } catch (\Throwable $e) {
+                    throw new Exception($p['empleado'] . ' · ' . $p['novedad'] . ': ' . $e->getMessage(), 0, $e);
+                }
+            }
+            $guardado->registrar($token, $idEmpresa, 'novedades_masivo', $ids[0], null, $idUsuario, ['ids' => $ids]);
+            $this->repository->commit();
+        } catch (\Throwable $e) {
+            $this->repository->rollBack();
+            throw $e;
+        }
+
+        // Regenerar una sola vez cada rol afectado (normalmente uno; los tipos que solo
+        // afectan al rol mensual pueden sumar otro).
+        $periodos = [];
+        foreach ($preparadas as $p) {
+            $periodos[(string) ($p['data']['aplica_en'] ?? 'rol')] = true;
+        }
+        foreach (array_keys($periodos) as $aplica) {
+            $this->sincronizarRol($idEmpresa, $aplica, $anio, $mes, $idUsuario);
+        }
+
+        return ['ids' => $ids, 'ya_registrado' => false];
+    }
+
+    /**
+     * Clave de duplicidad contra lo ya registrado: mismo empleado, tipo, período (mes/año),
+     * valor y, en Otros Ingresos y horas, misma marca de IESS; en Anticipo / Quincena /
+     * Préstamo Empresa, ya entregado y por pagar son novedades distintas. La usan la
+     * importación Excel y el registro para todos los empleados, con las novedades ya
+     * registradas (NovedadRepository::getParaDuplicados).
+     */
+    public static function claveDuplicado(array $d): string
+    {
+        $tipo  = trim((string) $d['tipo_codigo']);
+        $marca = CatalogoNovedades::admiteOpcionIess($tipo)
+            ? (CatalogoNovedades::aportaIess($tipo, $d['aporta_iess'] ?? null) ? '|I' : '|N')
+            : '';
+        if (NovedadPlantillaService::requiereEntrega($tipo)) {
+            $marca .= in_array($d['desembolsado_migrado'] ?? null, ['t', true, 1, '1', 'true'], true) ? '|E' : '|P';
+        }
+        // Aviso de salida: el motivo distingue un aviso de otro (su valor siempre es 0).
+        if (CatalogoNovedades::esAvisoSalida($tipo)) {
+            $marca .= '|' . trim((string) ($d['motivo_codigo'] ?? ''));
+        }
+        return ((int) $d['id_empleado']) . '|' . $tipo
+            . '|' . ((int) $d['periodo_mes']) . '|' . ((int) $d['periodo_anio']) . $marca
+            . '|' . number_format((float) ($d['valor'] ?? 0), 2, '.', '');
+    }
+
+    /** "Horas Nocturnas con IESS", "Anticipo ya pagado", "Aviso de salida"… para los mensajes. */
+    private static function etiquetaNovedad(array $d): string
+    {
+        $tipo   = (string) $d['tipo_codigo'];
+        $nombre = CatalogoNovedades::nombreTipo($tipo) ?? $tipo;
+        if (NovedadPlantillaService::requiereEntrega($tipo)) {
+            return $nombre . (!empty($d['desembolsado_migrado']) ? ' ya pagado' : ' por pagar');
+        }
+        if (CatalogoNovedades::admiteOpcionIess($tipo)) {
+            return $nombre . (!empty($d['aporta_iess']) ? ' con IESS' : ' sin IESS');
+        }
+        return $nombre;
+    }
+
+    private function nombrePeriodo(int $mes, int $anio): string
+    {
+        return (CatalogoNovedades::MESES[$mes] ?? (string) $mes) . ' ' . $anio;
+    }
+
+    /** "Tipo - Mes Año": el mismo texto que autocompleta el modal de novedades. */
+    private function observacionPorDefecto(string $tipo, int $mes, int $anio): string
+    {
+        $texto = (CatalogoNovedades::nombreTipo($tipo) ?? '') . ' - ' . (CatalogoNovedades::MESES[$mes] ?? '') . ' ' . $anio;
+        return trim((string) preg_replace('/\s+/', ' ', $texto));
+    }
+
+    /**
      * Validación + INSERT + auditoría de UNA novedad, SIN abrir transacción ni
      * regenerar el rol: eso lo decide el llamador (crear() por registro,
      * crearLote() para toda una carga). $data ya viene normalizado.

@@ -213,6 +213,73 @@ class NovedadesController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Empleados activos para la cuadrícula "Todos los empleados" del modal Nuevo
+     * (con si aportan al IESS, para fijar la marca en No como en el registro de a uno).
+     */
+    public function empleadosActivosAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+        try {
+            $data = (new \App\repositories\modulos\NovedadRepository())->getEmpleadosActivosParaNovedades((int) $_SESSION['id_empresa']);
+            echo json_encode(['ok' => true, 'data' => $data]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cargar el listado de empleados.']);
+        }
+        exit;
+    }
+
+    /**
+     * Guarda las novedades de la cuadrícula "Todos los empleados": una por cada celda con
+     * valor, todo o nada (NovedadService::crearMasivo). `items` llega como JSON.
+     */
+    public function storeMasivo(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $comun = [
+            'fecha'        => trim($_POST['fecha'] ?? ''),
+            'periodo_mes'  => (int) ($_POST['periodo_mes'] ?? 0),
+            'periodo_anio' => (int) ($_POST['periodo_anio'] ?? 0),
+            'aplica_en'    => trim($_POST['aplica_en'] ?? 'rol'),
+            'observacion'  => trim($_POST['observacion'] ?? ''),
+        ];
+        $items = json_decode((string) ($_POST['items'] ?? '[]'), true);
+        $items = is_array($items) ? array_values(array_filter($items, 'is_array')) : [];
+
+        try {
+            $res = $this->service->crearMasivo(
+                $comun,
+                $items,
+                $idEmpresa,
+                $idUsuario,
+                !empty($_POST['confirmar_avisos']),
+                (string) ($_POST['token_guardado'] ?? '')
+            );
+            if (!empty($res['errores'])) {
+                echo json_encode(['ok' => false, 'errores' => $res['errores'],
+                    'error' => 'No se registró ninguna novedad: corrija lo indicado y vuelva a guardar.']);
+            } elseif (!empty($res['requiere_confirmacion'])) {
+                echo json_encode(['ok' => false, 'requiere_confirmacion' => true, 'avisos' => $res['avisos']]);
+            } else {
+                $n = count($res['ids']);
+                $msg = !empty($res['ya_registrado'])
+                    ? 'Estas novedades ya estaban registradas; no se creó otra vez.'
+                    : ($n === 1 ? 'Se registró 1 novedad.' : "Se registraron {$n} novedades.");
+                echo json_encode(['ok' => true, 'msg' => $msg, 'creadas' => $n, 'ya_registrado' => !empty($res['ya_registrado'])]);
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function update(): void
     {
         $this->requireActualizar();

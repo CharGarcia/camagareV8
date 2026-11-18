@@ -288,6 +288,11 @@ final class CatalogoNovedades
             'labels'           => $labels,
             'iess_por_defecto' => $iessPorDefecto, // solo los tipos con la opción
             'cods_solo_rol'    => self::CODS_SOLO_ROL,
+            // Cuadrícula "Todos los empleados" del modal: columnas y selectores.
+            'tipos'            => self::TIPOS,
+            'motivos'          => self::MOTIVOS_SALIDA,
+            // Anticipo, Quincena y Préstamo Empresa: selector Por pagar / Ya pagado.
+            'cods_entrega'     => array_values(array_unique(array_merge(self::CODS_PAGO_EGRESO, self::CODS_PRESTAMO))),
         ];
     }
 }

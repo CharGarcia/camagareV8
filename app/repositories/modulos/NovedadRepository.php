@@ -73,7 +73,7 @@ class NovedadRepository extends BaseRepository
                 // origen:manual / origen:carga (importada desde Excel)
                 'origen'    => "CASE WHEN n.id_carga IS NULL THEN 'manual' ELSE 'carga' END",
                 // pago:pagada / pago:pendiente — mismo criterio que la columna Pago
-                'pago'      => self::exprEstadoPago('n'),
+                'pago'      => self::exprEstadoPago('n', $this->tieneDesembolsoManual()),
             ],
             'fecha'    => ['fecha' => 'n.fecha'],
             'numerico' => ['valor' => 'n.valor'],
@@ -122,11 +122,13 @@ class NovedadRepository extends BaseRepository
      * de rol cuyo neto quedó cubierto por egresos (ver idsNovedadesPagadas). Solo se
      * evalúa cuando se usa el filtro `pago:`.
      */
-    private static function exprEstadoPago(string $a): string
+    private static function exprEstadoPago(string $a, bool $conDesembolsoManual = false): string
     {
-        // La marca de desembolso solo cuenta como pagada en lo migrado (id_carga NULL): en
-        // lo cargado por Excel solo dice que el anticipo/préstamo ya se entregó (ver esDesembolsoMigrado).
-        return "CASE WHEN (COALESCE({$a}.desembolsado_migrado, false) AND {$a}.id_carga IS NULL) OR COALESCE({$a}.conciliada_migrada, false)
+        // La marca de desembolso solo cuenta como pagada en lo migrado (id_carga NULL y sin
+        // desembolso_manual): en lo cargado por Excel, o marcado "Ya pagado" al registrar para
+        // todos los empleados, solo dice que el anticipo/préstamo ya se entregó (ver esDesembolsoMigrado).
+        $manual = $conDesembolsoManual ? " AND NOT COALESCE({$a}.desembolso_manual, false)" : '';
+        return "CASE WHEN (COALESCE({$a}.desembolsado_migrado, false) AND {$a}.id_carga IS NULL{$manual}) OR COALESCE({$a}.conciliada_migrada, false)
                        OR EXISTS (
                             SELECT 1
                             FROM rol_detalle_rubro rr
@@ -224,7 +226,9 @@ class NovedadRepository extends BaseRepository
      */
     public static function esDesembolsoMigrado(array $n): bool
     {
-        return self::tieneMarcaDesembolso($n) && empty($n['id_carga']);
+        // "Ya pagado" marcado a mano al registrar para todos los empleados: tampoco es migrado.
+        $manual = in_array($n['desembolso_manual'] ?? null, ['t', true, 1, '1', 'true'], true);
+        return self::tieneMarcaDesembolso($n) && empty($n['id_carga']) && !$manual;
     }
 
     /** Clave [id_empleado|tipo_rol|anio|mes] para cruzar una novedad con su corrida de rol. */
@@ -378,6 +382,12 @@ class NovedadRepository extends BaseRepository
         return $this->columnaExiste('novedades', 'aporta_iess');
     }
 
+    /** ¿Ya existe novedades.desembolso_manual? (database/2026-11-18_novedades_desembolso_manual.sql) */
+    public function tieneDesembolsoManual(): bool
+    {
+        return $this->columnaExiste('novedades', 'desembolso_manual');
+    }
+
     /** Valor para la columna aporta_iess: 'true'/'false', o null si la novedad no lleva marca. */
     private static function paramMarcaIess(array $d)
     {
@@ -397,6 +407,12 @@ class NovedadRepository extends BaseRepository
         $desemb     = !empty($d['desembolsado_migrado']);
         $colDesemb  = $desemb ? ', desembolsado_migrado' : '';
         $valDesemb  = $desemb ? ', true' : '';
+        // "Ya pagado" marcado a mano (registro para todos los empleados): no es migrado,
+        // se edita y elimina como cualquier otra (ver esDesembolsoMigrado).
+        if ($desemb && !empty($d['desembolso_manual']) && $this->tieneDesembolsoManual()) {
+            $colDesemb .= ', desembolso_manual';
+            $valDesemb .= ', true';
+        }
         // Igual con la marca de IESS: solo si ya existe la columna.
         $conIess    = $this->tieneMarcaIess();
         $colIess    = $conIess ? ', aporta_iess' : '';
@@ -593,7 +609,7 @@ class NovedadRepository extends BaseRepository
 
         // desembolsado_migrado: en Anticipo/Préstamo Empresa, "ya entregado" y "por pagar"
         // no son la misma novedad (ver NovedadImportService::claveNovedad).
-        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, valor, {$colIess},
+        $sql = "SELECT id_empleado, tipo_codigo, periodo_mes, periodo_anio, valor, {$colIess}, motivo_codigo,
                        COALESCE(desembolsado_migrado, false) AS desembolsado_migrado
                   FROM {$this->table}
                  WHERE id_empresa = :id_empresa AND eliminado = false
@@ -643,6 +659,25 @@ class NovedadRepository extends BaseRepository
             $out[(int) $r['id']] = (float) $r['valor_quincena'];
         }
         return $out;
+    }
+
+    /**
+     * Empleados activos de la empresa para la cuadrícula "Todos los empleados" del modal:
+     * id, identificación, nombre y si aporta al IESS (sin dato cuenta como que aporta).
+     */
+    public function getEmpleadosActivosParaNovedades(int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT id, identificacion, nombres_apellidos, aporta_iess
+                                    FROM empleados
+                                   WHERE id_empresa = :e AND eliminado = false AND estado = 'activo'
+                                   ORDER BY nombres_apellidos ASC, id ASC");
+        $st->execute([':e' => $idEmpresa]);
+        return array_map(fn($r) => [
+            'id'                => (int) $r['id'],
+            'identificacion'    => (string) $r['identificacion'],
+            'nombres_apellidos' => (string) $r['nombres_apellidos'],
+            'aporta_iess'       => $r['aporta_iess'] === null || in_array($r['aporta_iess'], [true, 't', 1, '1', 'true'], true),
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
     }
 
     /** ¿El empleado aporta al IESS (pestaña Laboral de su ficha)? null si no existe en la empresa. */
