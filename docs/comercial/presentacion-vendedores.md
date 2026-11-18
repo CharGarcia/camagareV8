@@ -585,7 +585,7 @@ vendedor arma la cotización en el módulo **CRM → Cotizador de Planes**:
    **mensual**, y genera la proforma enlazada al CRM. Cada cotización queda a
    nombre del vendedor.
 
-Manual del módulo: `docs/manual/modulos/cotizador-planes.md`.
+Manual del módulo: botón **Manual del sistema** de la barra superior, artículo **Cotizador de Planes**.
 
 ### 6.2 Reglas de precio ✅ (aprobadas)
 

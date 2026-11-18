@@ -1,8 +1,7 @@
 # CaMaGaRe — Capacitación de vendedores
 
 > **Versión aprobada por la dirección** — Documento interno del equipo comercial.
-> Va de la mano con la **Presentación para vendedores**
-> (`docs/comercial/presentacion-vendedores.md`): la presentación es *qué*
+> Va de la mano con la **Presentación para vendedores**: la presentación es *qué*
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 
 Versión actual: **1.0** (18-11-2026). El historial está al final.
