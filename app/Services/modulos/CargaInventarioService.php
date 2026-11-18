@@ -218,44 +218,101 @@ class CargaInventarioService
     // ─── Importación ──────────────────────────────────────────────────────────
 
     /**
-     * Crea una carga desde filas importadas. Cada fila: codigo_producto, bodega, cantidad,
-     * costo_unitario?, numero_lote?, fecha_caducidad?, nup?, observacion?.
+     * Revisión previa del archivo, SIN grabar nada: con esto la pantalla avisa antes de
+     * generar la carga qué bodegas del archivo no existen (para ofrecer crearlas), qué filas
+     * no se cargarán (servicios y, en entradas/salidas, cantidad 0) y qué líneas quedarán con
+     * error. Usa exactamente la misma clasificación que crearDesdeImportacion().
      *
-     * En una carga de AJUSTE la cantidad es lo contado (conteo físico): admite 0, no admite
-     * NUP, cada producto va una vez por bodega y lote, y si el producto tiene stock por lotes
-     * en la bodega hay que indicar el lote contado. La diferencia se calcula al aprobar.
+     * @return array{total_filas:int, a_cargar:int, errores:string[], omitidas:array<int,array>,
+     *               bodegas_faltantes:array<int,array{nombre:string, filas:int[]}>, filas_bodega_faltante:int}
      */
-    public function crearDesdeImportacion(int $idEmpresa, int $idUsuario, string $tipoMovimiento, ?string $observacion, array $filas, ?string $tokenGuardado = null): array
+    public function analizarImportacion(int $idEmpresa, string $tipoMovimiento, array $filas): array
     {
         $this->rules->validarCabecera(['tipo_movimiento' => $tipoMovimiento, 'filas' => $filas]);
-        $esAjuste = $tipoMovimiento === 'ajuste';
+        $r = $this->clasificarFilas($idEmpresa, $tipoMovimiento === 'ajuste', $filas);
 
-        // Validar cada línea. El Excel identifica el producto por CÓDIGO principal y la
-        // bodega por NOMBRE (se resuelven al id interno).
-        $lineas = [];
-        foreach (array_values($filas) as $f) {
-            $codProd = trim((string) ($f['codigo_producto'] ?? ''));
-            $nomBod  = trim((string) ($f['bodega'] ?? ''));
-            $cant    = (float) ($f['cantidad'] ?? 0);
-            $nup     = ($f['nup'] ?? '') !== '' ? trim((string) $f['nup']) : null;
-            $lote    = $esAjuste
+        $faltantes = [];
+        $conFaltante = 0;
+        foreach ($r['bodegas_faltantes'] as $b) {
+            $faltantes[]  = ['nombre' => $b['nombre'], 'filas' => array_column($b['filas'], 'fila')];
+            $conFaltante += count($b['filas']);
+        }
+
+        return [
+            'total_filas'           => count($filas),
+            'a_cargar'              => count($r['lineas']),
+            'errores'               => $r['errores'],
+            'omitidas'              => $r['omitidas'],
+            'bodegas_faltantes'     => $faltantes,
+            'filas_bodega_faltante' => $conFaltante,
+        ];
+    }
+
+    /**
+     * Clasifica las filas del archivo (sin escribir nada):
+     *  - omitidas: no se cargan — el código es de un servicio (no lleva inventario) o, en
+     *    entradas y salidas, la cantidad está en 0 o vacía. En un AJUSTE el 0 es un conteo
+     *    válido (deja el saldo en cero), así que ahí no se omite.
+     *  - bodegas_faltantes: filas cuya bodega no existe en la empresa, agrupadas por bodega
+     *    (quien llama decide si se crean o si esas filas se omiten).
+     *  - lineas: las que van a la carga, cada una con su comprobación (linea_valida / error_linea).
+     *
+     * El número de fila es el del Excel (`__fila`, que pone el controlador); el motivo de
+     * cada línea con error lo lleva al inicio ("Fila 7: …") para que siga coincidiendo con el
+     * archivo aunque se hayan omitido filas.
+     */
+    private function clasificarFilas(int $idEmpresa, bool $esAjuste, array $filas): array
+    {
+        $lineas    = [];
+        $omitidas  = [];
+        $faltantes = [];
+        $cacheBod  = [];
+
+        foreach (array_values($filas) as $i => $f) {
+            $fila      = (int) ($f['__fila'] ?? $i + 2); // fila 1 = encabezados
+            $codProd   = trim((string) ($f['codigo_producto'] ?? ''));
+            $nomBod    = trim((string) ($f['bodega'] ?? ''));
+            $celdaCant = trim((string) ($f['cantidad'] ?? ''));
+            $cant      = (float) $celdaCant;
+            $nup       = ($f['nup'] ?? '') !== '' ? trim((string) $f['nup']) : null;
+            $lote      = $esAjuste
                 ? CargaInventarioRules::normalizarLote($f['numero_lote'] ?? null)
                 : (($f['numero_lote'] ?? '') !== '' ? trim((string) $f['numero_lote']) : null);
 
             $idProd = $codProd !== '' ? $this->repo->getProductoIdPorCodigo($codProd, $idEmpresa) : 0;
-            $idBod  = $nomBod  !== '' ? $this->repo->getBodegaIdPorNombre($nomBod, $idEmpresa)   : 0;
+
+            // Servicio: no lleva inventario, la fila no se carga.
+            if ($codProd !== '' && $idProd === 0 && $this->repo->codigoEsServicio($codProd, $idEmpresa)) {
+                $omitidas[] = self::filaOmitida($fila, $codProd, $nomBod, 'servicio',
+                    "El código \"{$codProd}\" es un servicio: los servicios no llevan inventario.");
+                continue;
+            }
+            // Entrada/salida con cantidad 0 (o vacía): no mueve nada, la fila no se carga.
+            if (!$esAjuste && ($celdaCant === '' || (is_numeric($celdaCant) && $cant == 0.0))) {
+                $omitidas[] = self::filaOmitida($fila, $codProd, $nomBod, 'cantidad_cero', 'La cantidad está en 0.');
+                continue;
+            }
+
+            $claveBod = mb_strtoupper($nomBod, 'UTF-8');
+            $idBod = 0;
+            if ($nomBod !== '') {
+                $cacheBod[$claveBod] ??= $this->repo->getBodegaIdPorNombre($nomBod, $idEmpresa);
+                $idBod = $cacheBod[$claveBod];
+            }
+            // Bodega inexistente: se decide aparte (crearla u omitir sus filas).
+            if ($nomBod !== '' && $idBod === 0) {
+                $faltantes[$claveBod] ??= ['nombre' => $nomBod, 'filas' => []];
+                $faltantes[$claveBod]['filas'][] = ['fila' => $fila, 'codigo' => $codProd];
+                continue;
+            }
 
             $err = null;
             if ($codProd === '') {
                 $err = 'Falta el código del producto.';
             } elseif ($idProd === 0) {
-                $err = $this->repo->codigoEsServicio($codProd, $idEmpresa)
-                    ? "El código \"{$codProd}\" corresponde a un servicio y no puede cargarse al inventario."
-                    : "El producto con código \"{$codProd}\" no existe en la empresa.";
+                $err = "El producto con código \"{$codProd}\" no existe en la empresa.";
             } elseif ($nomBod === '') {
                 $err = 'Falta la bodega.';
-            } elseif ($idBod === 0) {
-                $err = "La bodega \"{$nomBod}\" no existe en la empresa.";
             } elseif ($esAjuste) {
                 $err = $this->rules->validarLineaAjuste($f['cantidad'] ?? null, $nup)
                     ?? ($lote === null ? $this->errorAjusteSinLote($idProd, $idBod, $idEmpresa) : null);
@@ -266,6 +323,7 @@ class CargaInventarioService
             }
 
             $lineas[] = [
+                'fila'             => $fila,
                 'id_producto'      => $idProd,
                 'id_bodega'        => $idBod,
                 'cantidad'         => $cant,
@@ -277,7 +335,7 @@ class CargaInventarioService
                 'cod_producto_raw' => $codProd,
                 'cod_bodega_raw'   => $nomBod,
                 'linea_valida'     => $err === null,
-                'error_linea'      => $err,
+                'error_linea'      => $err === null ? null : "Fila {$fila}: {$err}",
             ];
         }
 
@@ -286,22 +344,92 @@ class CargaInventarioService
             foreach ($this->rules->erroresDuplicadosAjuste($lineas) as $i => $err) {
                 if ($lineas[$i]['linea_valida']) {
                     $lineas[$i]['linea_valida'] = false;
-                    $lineas[$i]['error_linea']  = $err;
+                    $lineas[$i]['error_linea']  = "Fila {$lineas[$i]['fila']}: {$err}";
                 }
             }
         }
 
         $errores = [];
-        foreach ($lineas as $i => $ln) {
+        foreach ($lineas as $ln) {
             if (!$ln['linea_valida']) {
-                $errores[] = 'Fila ' . ($i + 2) . ': ' . $ln['error_linea']; // +2: fila 1 = encabezados
+                $errores[] = $ln['error_linea'];
             }
         }
-        $todasOk = $errores === [];
 
-        // La config se resuelve con el valor de la carga: si el checkpoint tiene
-        // monto mínimo, las cargas por debajo no piden aprobación.
-        $cfg = $this->getConfigAprobacion($idEmpresa, $this->montoParaAprobacion($tipoMovimiento, $lineas, $idEmpresa));
+        return [
+            'lineas'            => $lineas,
+            'errores'           => $errores,
+            'omitidas'          => $omitidas,
+            'bodegas_faltantes' => array_values($faltantes),
+        ];
+    }
+
+    /** Fila del archivo que no se carga, con su motivo (para el resumen al usuario). */
+    private static function filaOmitida(int $fila, string $codigo, string $bodega, string $tipo, string $motivo): array
+    {
+        return ['fila' => $fila, 'codigo' => $codigo, 'bodega' => $bodega, 'tipo' => $tipo, 'motivo' => $motivo];
+    }
+
+    /**
+     * Crea las bodegas que el usuario eligió crear al importar. Solo las que vienen en el
+     * archivo y no existen todavía (con candado por nombre: dos importaciones a la vez no
+     * crean la misma bodega dos veces). Debe llamarse dentro de la transacción de la carga:
+     * si la carga no se genera, tampoco quedan las bodegas.
+     *
+     * @param string[] $nombres
+     * @return string[] Nombres de las bodegas creadas.
+     */
+    private function crearBodegasDelArchivo(array $nombres, array $filas, int $idEmpresa, int $idUsuario): array
+    {
+        if ($nombres === []) {
+            return [];
+        }
+        $delArchivo = [];
+        foreach ($filas as $f) {
+            $n = trim((string) ($f['bodega'] ?? ''));
+            if ($n !== '') {
+                $delArchivo[mb_strtoupper($n, 'UTF-8')] ??= $n;
+            }
+        }
+
+        $creadas = [];
+        foreach ($nombres as $nombre) {
+            $clave = mb_strtoupper(trim((string) $nombre), 'UTF-8');
+            if ($clave === '' || !isset($delArchivo[$clave]) || isset($creadas[$clave])) {
+                continue;
+            }
+            $this->repo->lockNombreBodega($clave, $idEmpresa);
+            if ($this->repo->getBodegaIdPorNombre($delArchivo[$clave], $idEmpresa) > 0) {
+                continue; // ya existe (la creó otro usuario mientras tanto)
+            }
+            $this->bodegaService()->crear([
+                'id_empresa' => $idEmpresa,
+                'id_usuario' => $idUsuario,
+                'nombre'     => $delArchivo[$clave],
+            ]);
+            $creadas[$clave] = $clave;
+        }
+        return array_values($creadas);
+    }
+
+    /**
+     * Crea una carga desde filas importadas. Cada fila: codigo_producto, bodega, cantidad,
+     * costo_unitario?, numero_lote?, fecha_caducidad?, nup?, observacion?.
+     *
+     * No se cargan (y se devuelven en `omitidas`): los servicios, las filas de entrada/salida
+     * con cantidad 0 y las de una bodega inexistente que no está en $crearBodegas. Las bodegas
+     * de $crearBodegas se crean en la misma transacción.
+     *
+     * En una carga de AJUSTE la cantidad es lo contado (conteo físico): admite 0, no admite
+     * NUP, cada producto va una vez por bodega y lote, y si el producto tiene stock por lotes
+     * en la bodega hay que indicar el lote contado. La diferencia se calcula al aprobar.
+     *
+     * @param string[] $crearBodegas Nombres de bodegas del archivo que el usuario aceptó crear.
+     */
+    public function crearDesdeImportacion(int $idEmpresa, int $idUsuario, string $tipoMovimiento, ?string $observacion, array $filas, ?string $tokenGuardado = null, array $crearBodegas = []): array
+    {
+        $this->rules->validarCabecera(['tipo_movimiento' => $tipoMovimiento, 'filas' => $filas]);
+        $esAjuste = $tipoMovimiento === 'ajuste';
 
         $db = Database::getConnection();
         $db->beginTransaction();
@@ -321,13 +449,41 @@ class CargaInventarioService
                     'validada' => (bool) ($existente['validada'] ?? true),
                     'lineas'   => (int) ($existente['total_lineas'] ?? 0),
                     'errores'  => [],
+                    'omitidas' => [],
+                    'bodegas_creadas'     => [],
                     'requiere_aprobacion' => false,
                     'error_aplicacion'    => null,
                     'ya_registrada'       => true,
                 ];
             }
 
-            $numero = $this->repo->siguienteNumero($idEmpresa);
+            // Primero las bodegas que el usuario aceptó crear: así sus filas se resuelven.
+            $bodegasCreadas = $this->crearBodegasDelArchivo($crearBodegas, $filas, $idEmpresa, $idUsuario);
+
+            $r = $this->clasificarFilas($idEmpresa, $esAjuste, $filas);
+            $lineas   = $r['lineas'];
+            $errores  = $r['errores'];
+            $omitidas = $r['omitidas'];
+            foreach ($r['bodegas_faltantes'] as $b) {
+                foreach ($b['filas'] as $x) {
+                    $omitidas[] = self::filaOmitida($x['fila'], $x['codigo'], $b['nombre'], 'bodega',
+                        "La bodega \"{$b['nombre']}\" no existe y no se creó.");
+                }
+            }
+            usort($omitidas, static fn(array $a, array $b): int => $a['fila'] <=> $b['fila']);
+            $todasOk = $errores === [];
+
+            if ($lineas === []) {
+                throw new \InvalidArgumentException('Ninguna fila del archivo se puede cargar: '
+                    . count($omitidas) . ' ' . (count($omitidas) === 1 ? 'fila omitida' : 'filas omitidas')
+                    . ' (servicios, cantidades en 0 o bodegas inexistentes). No se generó la carga.');
+            }
+
+            // La config se resuelve con el valor de la carga: si el checkpoint tiene
+            // monto mínimo, las cargas por debajo no piden aprobación.
+            $cfg = $this->getConfigAprobacion($idEmpresa, $this->montoParaAprobacion($tipoMovimiento, $lineas, $idEmpresa));
+
+            $numero =$this->repo->siguienteNumero($idEmpresa);
             $idCarga = $this->repo->crearCabecera([
                 'id_empresa'         => $idEmpresa,
                 'numero'             => $numero,
@@ -350,6 +506,7 @@ class CargaInventarioService
 
             $this->log->registrar($idUsuario, $idEmpresa, 'crear', 'inventario_cargas', $idCarga, null, [
                 'numero' => $numero, 'tipo' => $tipoMovimiento, 'lineas' => count($lineas), 'validada' => $todasOk,
+                'filas_omitidas' => count($omitidas), 'bodegas_creadas' => $bodegasCreadas,
             ]);
 
             $guardado->registrar($tokenGuardado, $idEmpresa, 'cargas_inventario', $idCarga, (string) $numero, $idUsuario);
@@ -391,6 +548,9 @@ class CargaInventarioService
             'validada' => $todasOk,
             'lineas'   => count($lineas),
             'errores'  => $errores,
+            // Filas del archivo que no se cargaron (servicios, cantidad 0, bodega no creada).
+            'omitidas' => $omitidas,
+            'bodegas_creadas'     => $bodegasCreadas,
             'requiere_aprobacion' => $cfg['requiere'],
             // Motivo por el que no se aplicó sola, aunque la empresa no exige aprobación.
             'error_aplicacion'    => $errorAuto,

@@ -303,6 +303,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                                 Formato <strong>Excel (.xlsx)</strong>. Columnas: <code>codigo_producto, bodega, cantidad, costo_unitario, numero_lote, fecha_caducidad, nup, observacion</code>.
                                 La plantilla incluye hojas <strong>Productos</strong> y <strong>Bodegas</strong> con los valores válidos de la empresa. El movimiento se aplica al inventario solo al aprobarse (si la empresa exige aprobación).
                                 <br><strong>Ajuste</strong>: conteo físico. La cantidad es lo contado (0 si no hay); al aprobar se registra solo la diferencia. Si el producto tiene lotes, una línea por lote; sin NUP.
+                                <br><strong>Antes de generar la carga</strong> se revisa el archivo: no se cargan los servicios ni, en entradas y salidas, las filas con cantidad 0; si una bodega no existe, puede crearla en ese momento.
                                 <br><strong>NUP</strong>: una serie con cualquier cantidad, o varias series (una por renglón de la celda) con cantidad igual al número de series.
                             </div>
                         </div>
@@ -478,30 +479,161 @@ function CI_abrirImportar(observacion = '') {
     bootstrap.Modal.getOrCreateInstance(document.getElementById('ci-modal-importar')).show();
 }
 
+/** POST del formulario de importación a una acción del módulo; devuelve el JSON o un error de conexión. */
+async function CI_postImportar(accion, formData) {
+    try {
+        const res = await fetch(`${CI_URL}/${accion}`, { method: 'POST', body: formData });
+        return await res.json();
+    } catch (err) {
+        return { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
+    }
+}
+
+/** Lista compacta con scroll (filas omitidas, errores…). */
+const CI_listaAviso = (items, clase = '') =>
+    `<ul class="mb-2 ps-3 ${clase}" style="max-height:150px;overflow:auto;">${items.map(x => `<li>${x}</li>`).join('')}</ul>`;
+
+/** "Fila 4 · COD-1 · BODEGA: motivo" de una fila omitida. */
+const CI_textoOmitida = o =>
+    `Fila ${o.fila}${o.codigo ? ` · <b>${CI_esc(o.codigo)}</b>` : ''}${o.bodega ? ` · ${CI_esc(o.bodega)}` : ''}: ${CI_esc(o.motivo)}`;
+
+/** ¿La revisión previa encontró algo que el usuario deba saber antes de generar la carga? */
+const CI_hayAdvertencias = r =>
+    (r.bodegas_faltantes || []).length > 0 || (r.omitidas || []).length > 0 || (r.errores || []).length > 0;
+
+/**
+ * Aviso con el resultado de la revisión previa: bodegas que no existen (con la opción de
+ * crearlas), filas que no se cargarán (servicios, cantidad 0) y líneas con error. Pregunta si
+ * se genera la carga; al aceptar devuelve (r.value) los nombres de las bodegas a crear.
+ */
+function CI_opcionesRevision(r) {
+    const faltantes = r.bodegas_faltantes || [];
+    const omitidas  = r.omitidas || [];
+    const errores   = r.errores || [];
+    const servicios = omitidas.filter(o => o.tipo === 'servicio');
+    const enCero    = omitidas.filter(o => o.tipo === 'cantidad_cero');
+    const plural    = (n, uno, varios) => `${n} ${n === 1 ? uno : varios}`;
+    const filasTxt  = f => (f.length > 12 ? f.slice(0, 12).join(', ') + '…' : f.join(', '));
+
+    let html = `<p class="mb-2">El archivo tiene ${plural(r.total_filas, 'fila', 'filas')}:
+        <b>${plural(r.a_cargar, 'se cargará', 'se cargarán')}</b>${faltantes.length ? `, ${plural(r.filas_bodega_faltante, 'depende', 'dependen')} de bodegas que no existen` : ''}${omitidas.length ? ` y <b>${plural(omitidas.length, 'no se cargará', 'no se cargarán')}</b>` : ''}.</p>`;
+
+    if (faltantes.length) {
+        html += `<div class="fw-bold mt-2 mb-1"><i class="bi bi-house-exclamation text-warning me-1"></i>Bodegas que no existen</div>`;
+        if (r.puede_crear_bodegas) {
+            html += `<p class="mb-1 text-muted">Marque las que desea crear. Las filas de las bodegas que no marque no se cargarán.</p>`
+                + faltantes.map((b, i) => `<div class="form-check mb-1">
+                    <input class="form-check-input ci-crear-bodega" type="checkbox" id="ci-crear-bod-${i}" data-i="${i}" checked>
+                    <label class="form-check-label" for="ci-crear-bod-${i}">Crear la bodega <b>${CI_esc(b.nombre)}</b>
+                        <span class="text-muted">(${plural(b.filas.length, 'fila', 'filas')}: ${filasTxt(b.filas)})</span></label>
+                </div>`).join('');
+        } else {
+            html += `<p class="mb-1 text-danger">No tiene permiso para crear bodegas: estas filas no se cargarán.</p>`
+                + CI_listaAviso(faltantes.map(b => `<b>${CI_esc(b.nombre)}</b> <span class="text-muted">(${plural(b.filas.length, 'fila', 'filas')}: ${filasTxt(b.filas)})</span>`));
+        }
+    }
+    if (servicios.length) {
+        html += `<div class="fw-bold mt-2 mb-1"><i class="bi bi-tools text-secondary me-1"></i>Servicios (no llevan inventario): ${servicios.length} no se cargarán</div>`
+            + CI_listaAviso(servicios.map(CI_textoOmitida), 'text-muted');
+    }
+    if (enCero.length) {
+        html += `<div class="fw-bold mt-2 mb-1"><i class="bi bi-0-circle text-secondary me-1"></i>Cantidad en 0: ${enCero.length} no se cargarán</div>`
+            + CI_listaAviso(enCero.map(CI_textoOmitida), 'text-muted');
+    }
+    if (errores.length) {
+        html += `<div class="fw-bold mt-2 mb-1"><i class="bi bi-exclamation-triangle text-danger me-1"></i>${plural(errores.length, 'línea con error', 'líneas con error')}</div>
+            <p class="mb-1 text-muted">Se cargarán, pero la carga quedará <b>pendiente</b> y no se podrá aprobar hasta corregirlas.</p>`
+            + CI_listaAviso(errores.map(x => CI_esc(x)), 'text-danger');
+    }
+    html += `<p class="mt-3 mb-0 fw-bold">¿Desea generar la carga?</p>`;
+
+    return {
+        icon: 'warning',
+        title: 'Revise antes de generar la carga',
+        width: 680,
+        html: `<div class="text-start small">${html}</div>`,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-check-lg me-1"></i>Sí, generar la carga',
+        cancelButtonText: 'Cancelar',
+        focusCancel: true,
+        preConfirm: () => {
+            const marcadas = [...Swal.getHtmlContainer().querySelectorAll('.ci-crear-bodega:checked')]
+                .map(c => faltantes[Number(c.dataset.i)]);
+            const filasNuevas = marcadas.reduce((s, b) => s + b.filas.length, 0);
+            if ((Number(r.a_cargar) || 0) + filasNuevas === 0) {
+                Swal.showValidationMessage('No queda ninguna fila para cargar. Marque una bodega para crear o corrija el archivo.');
+                return false;
+            }
+            return marcadas.map(b => b.nombre);
+        },
+    };
+}
+
+/** Agrega al aviso final el resumen de bodegas creadas y filas que no se cargaron. */
+function CI_conResumenOmitidas(opciones, d) {
+    const omitidas = d.omitidas || [];
+    const creadas  = d.bodegas_creadas || [];
+    if (!omitidas.length && !creadas.length) return opciones;
+
+    let extra = '';
+    if (creadas.length) {
+        extra += `<p class="mb-1"><i class="bi bi-house-add text-success me-1"></i>Bodegas creadas: <b>${creadas.map(CI_esc).join(', ')}</b></p>`;
+    }
+    if (omitidas.length) {
+        extra += `<p class="mb-1"><i class="bi bi-skip-forward text-secondary me-1"></i>${omitidas.length === 1 ? 'No se cargó 1 fila' : `No se cargaron ${omitidas.length} filas`} del archivo:</p>`
+            + CI_listaAviso(omitidas.map(CI_textoOmitida), 'text-muted');
+    }
+    const base = opciones.html || `<p class="mb-2">${CI_esc(opciones.text || '')}</p>`;
+    const { text, ...resto } = opciones;
+    return { ...resto, width: 640, html: `<div class="text-start small">${base}<hr class="my-2">${extra}</div>` };
+}
+
+// Bandera "en curso" (CLAUDE.md §8): un segundo Enter o clic mientras se revisa o importa no hace nada.
+let CI_importando = false;
+
 document.getElementById('ci-form-importar').addEventListener('submit', async function (e) {
     e.preventDefault();
+    if (CI_importando) return;
     const archivo = this.querySelector('input[name=archivo]').files[0];
     if (!archivo) {
         CI_aviso({ icon: 'warning', title: 'Falta el archivo', text: 'Seleccione el archivo Excel con las líneas de la carga.' }, 'ci-modal-importar');
         return;
     }
 
+    CI_importando = true;
     const btn = this.querySelector('button[type=submit]');
     btn.disabled = true;
-    // Mientras el servidor lee el archivo y comprueba cada línea contra los productos y
-    // bodegas de la empresa (con archivos grandes tarda unos segundos).
-    CI_avisoProceso('Cargando archivo…',
-        `Importando <b>${CI_esc(archivo.name)}</b> y comprobando cada línea.<br><span class="small text-muted">No cierre esta ventana.</span>`,
-        'ci-modal-importar');
-
     let json;
     try {
-        const res = await fetch(`${CI_URL}/importarAjax`, { method: 'POST', body: new FormData(this) });
-        json = await res.json();
-    } catch (err) {
-        json = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
+        // 1. Revisión previa (no graba nada): bodegas que no existen, filas que no se cargarán
+        //    (servicios, cantidad 0) y líneas con error.
+        CI_avisoProceso('Revisando archivo…',
+            `Comprobando <b>${CI_esc(archivo.name)}</b> contra los productos y bodegas de la empresa.<br><span class="small text-muted">No cierre esta ventana.</span>`,
+            'ci-modal-importar');
+        const rev = await CI_postImportar('previsualizarAjax', new FormData(this));
+        if (!rev.ok) {
+            CI_aviso({ icon: 'error', title: 'No se pudo importar', text: rev.mensaje || rev.error || 'Error al leer el archivo.' }, 'ci-modal-importar');
+            return;
+        }
+
+        // 2. Con advertencias, el usuario decide (y elige qué bodegas crear) antes de generar la carga.
+        let crearBodegas = [];
+        if (CI_hayAdvertencias(rev.data)) {
+            const r = await CI_aviso(CI_opcionesRevision(rev.data), 'ci-modal-importar');
+            if (!r.isConfirmed) return;
+            crearBodegas = r.value || [];
+        }
+
+        // 3. Genera la carga.
+        CI_avisoProceso('Cargando archivo…',
+            `Importando <b>${CI_esc(archivo.name)}</b>${crearBodegas.length ? ' y creando las bodegas elegidas' : ''}.<br><span class="small text-muted">No cierre esta ventana.</span>`,
+            'ci-modal-importar');
+        const fd = new FormData(this);
+        fd.append('crear_bodegas', JSON.stringify(crearBodegas));
+        json = await CI_postImportar('importarAjax', fd);
     } finally {
         btn.disabled = false;
+        CI_importando = false;
     }
 
     if (!json.ok) {
@@ -513,7 +645,7 @@ document.getElementById('ci-form-importar').addEventListener('submit', async fun
     // recargar la página (conserva búsqueda, filtros y orden) y se informa el resultado.
     bootstrap.Modal.getInstance(document.getElementById('ci-modal-importar'))?.hide();
     CI_buscar(1);
-    const r = await CI_aviso(CI_resultadoImportacion(json.data));
+    const r = await CI_aviso(CI_conResumenOmitidas(CI_resultadoImportacion(json.data), json.data));
     if (r.isConfirmed) CI_verDetalle(json.data.id);
 });
 
@@ -651,7 +783,7 @@ async function CI_verDetalle(id) {
             <td class="text-end text-nowrap">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
             <td style="min-width:180px">${CI_esc(d.observacion || '')}</td>
             <td class="text-center">${ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'}</td>
-            <td class="pe-2 text-danger" style="min-width:220px">${ok ? '' : `Fila ${i + 2}: ${CI_esc(d.error_linea || 'Línea con error')}`}</td>
+            <td class="pe-2 text-danger" style="min-width:220px">${ok ? '' : CI_esc(/^Fila \d+:/.test(d.error_linea || '') ? d.error_linea : `Fila ${i + 2}: ${d.error_linea || 'Línea con error'}`)}</td>
         </tr>`;
     }).join('');
 

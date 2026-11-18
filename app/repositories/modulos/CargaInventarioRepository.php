@@ -487,6 +487,16 @@ class CargaInventarioRepository extends BaseRepository
         return (int) $st->fetchColumn();
     }
 
+    /**
+     * Candado transaccional por nombre de bodega (CLAUDE.md §8): dos importaciones a la vez
+     * que crean la misma bodega no la duplican. Se libera solo al COMMIT/ROLLBACK.
+     */
+    public function lockNombreBodega(string $nombreNormalizado, int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext(:k))");
+        $st->execute([':k' => 'bodega_nombre:' . $idEmpresa . ':' . $nombreNormalizado]);
+    }
+
     /** Usuarios por ids (id, nombre, mail) — para mostrar/notificar a los aprobadores. */
     public function getNombresUsuarios(array $ids): array
     {

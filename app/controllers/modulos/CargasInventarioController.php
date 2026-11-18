@@ -232,6 +232,75 @@ class CargasInventarioController extends BaseModuloController
         return $clave === 'observaciones' ? 'observacion' : $clave;
     }
 
+    /**
+     * Lee el archivo subido (Excel/CSV) y devuelve sus filas de datos, cada una con la clave
+     * `__fila` = número de fila en el Excel (fila 1 = encabezados), para que los avisos
+     * coincidan con el archivo aunque haya filas en blanco u omitidas.
+     *
+     * @throws \InvalidArgumentException Con el mensaje para el usuario.
+     */
+    private function leerFilasArchivo(): array
+    {
+        if (empty($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
+            throw new \InvalidArgumentException('Seleccione un archivo Excel válido.');
+        }
+        $ext = strtolower(pathinfo($_FILES['archivo']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+            throw new \InvalidArgumentException('Formato no soportado. Use Excel (.xlsx, .xls) o CSV.');
+        }
+
+        $hoja = IOFactory::load($_FILES['archivo']['tmp_name'])->getActiveSheet()->toArray(null, true, true, false);
+        if (count($hoja) <= 1) {
+            throw new \InvalidArgumentException('El archivo está vacío o solo contiene los encabezados.');
+        }
+
+        // Primera fila = encabezados (ver claveEncabezado()).
+        $header = array_map(static fn($h): string => self::claveEncabezado($h), $hoja[0]);
+
+        $filas = [];
+        for ($i = 1; $i < count($hoja); $i++) {
+            $row = $hoja[$i];
+            if (empty(array_filter($row, static fn($v) => trim((string) $v) !== ''))) continue;
+            $fila = @array_combine($header, $row) ?: [];
+            $fila['__fila'] = $i + 1;
+            $filas[] = $fila;
+        }
+        if (empty($filas)) {
+            throw new \InvalidArgumentException('El archivo no contiene filas de datos.');
+        }
+        return $filas;
+    }
+
+    /** ¿El usuario puede crear bodegas (permiso de crear en el módulo Bodegas)? */
+    private function puedeCrearBodegas(): bool
+    {
+        return !empty($this->permisosModuloPorRuta('modulos/bodegas')['crear']);
+    }
+
+    /**
+     * Revisión previa del archivo, sin grabar nada: bodegas que no existen, filas que no se
+     * cargarán (servicios, cantidad 0) y líneas con error. La pantalla la muestra y pregunta
+     * si se genera la carga.
+     */
+    public function previsualizarAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+        try {
+            $filas = $this->leerFilasArchivo();
+            $res = $this->service->analizarImportacion($idEmpresa, (string) ($_POST['tipo_movimiento'] ?? 'entrada'), $filas);
+            $res['puede_crear_bodegas'] = $this->puedeCrearBodegas();
+            echo json_encode(['ok' => true, 'data' => $res]);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'mensaje' => 'No se pudo leer el archivo: ' . $e->getMessage()]);
+        }
+    }
+
     public function importarAjax(): void
     {
         $this->requireCrear();
@@ -243,41 +312,22 @@ class CargasInventarioController extends BaseModuloController
         $tipo = $_POST['tipo_movimiento'] ?? 'entrada';
         $obs  = trim($_POST['observacion'] ?? '');
 
-        if (empty($_FILES['archivo']) || $_FILES['archivo']['error'] !== UPLOAD_ERR_OK) {
-            echo json_encode(['ok' => false, 'mensaje' => 'Seleccione un archivo Excel válido.']);
-            return;
-        }
-        $ext = strtolower(pathinfo($_FILES['archivo']['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
-            echo json_encode(['ok' => false, 'mensaje' => 'Formato no soportado. Use Excel (.xlsx, .xls) o CSV.']);
+        // Bodegas del archivo que el usuario aceptó crear (JSON con la lista de nombres).
+        $crearBodegas = json_decode((string) ($_POST['crear_bodegas'] ?? '[]'), true);
+        $crearBodegas = is_array($crearBodegas)
+            ? array_values(array_filter(array_map(static fn($n): string => trim((string) $n), $crearBodegas), 'strlen'))
+            : [];
+        if ($crearBodegas !== [] && !$this->puedeCrearBodegas()) {
+            echo json_encode(['ok' => false, 'mensaje' => 'No tiene permiso para crear bodegas.']);
             return;
         }
 
         try {
-            $hoja = IOFactory::load($_FILES['archivo']['tmp_name'])->getActiveSheet()->toArray(null, true, true, false);
-
-            if (count($hoja) <= 1) {
-                echo json_encode(['ok' => false, 'mensaje' => 'El archivo está vacío o solo contiene los encabezados.']);
-                return;
-            }
-
-            // Primera fila = encabezados (ver claveEncabezado()).
-            $header = array_map(static fn($h): string => self::claveEncabezado($h), $hoja[0]);
-
-            $filas = [];
-            for ($i = 1; $i < count($hoja); $i++) {
-                $row = $hoja[$i];
-                if (empty(array_filter($row, static fn($v) => trim((string) $v) !== ''))) continue;
-                $filas[] = @array_combine($header, $row) ?: [];
-            }
-
-            if (empty($filas)) {
-                echo json_encode(['ok' => false, 'mensaje' => 'El archivo no contiene filas de datos.']);
-                return;
-            }
-
-            $res = $this->service->crearDesdeImportacion($idEmpresa, $idUsuario, $tipo, $obs !== '' ? $obs : null, $filas, $_POST['token_guardado'] ?? null);
+            $filas = $this->leerFilasArchivo();
+            $res = $this->service->crearDesdeImportacion($idEmpresa, $idUsuario, $tipo, $obs !== '' ? $obs : null, $filas, $_POST['token_guardado'] ?? null, $crearBodegas);
             echo json_encode(['ok' => true, 'data' => $res]);
+        } catch (\InvalidArgumentException $e) {
+            echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => 'No se pudo leer el archivo: ' . $e->getMessage()]);
@@ -668,6 +718,16 @@ class CargasInventarioController extends BaseModuloController
      *
      * @return array<int, array{codigo:string, producto:string, bodega:string, cantidad:float, costo:float, observacion:string, ok:bool, motivo:string, saldo:?float, diferencia:?float}>
      */
+    /**
+     * Motivo de una línea con error, con la fila del Excel. Desde que la importación omite
+     * filas (servicios, cantidad 0…) el motivo ya se guarda con su fila ("Fila 7: …"); las
+     * cargas anteriores no la traen y se calcula por la posición, como antes.
+     */
+    private static function motivoConFila(string $motivo, int $indice): string
+    {
+        return preg_match('/^Fila \d+:/u', $motivo) ? $motivo : 'Fila ' . ($indice + 2) . ': ' . $motivo;
+    }
+
     private function lineasParaExportar(array $detalle): array
     {
         $primero = static function (...$valores): string {
@@ -690,7 +750,7 @@ class CargasInventarioController extends BaseModuloController
                 'costo'       => (float) ($d['costo_unitario'] ?? 0),
                 'observacion' => $primero($d['observacion'] ?? ''),
                 'ok'          => $ok,
-                'motivo'      => $ok ? '' : 'Fila ' . ($i + 2) . ': ' . $primero($d['error_linea'] ?? '', 'Línea con error'),
+                'motivo'      => $ok ? '' : self::motivoConFila($primero($d['error_linea'] ?? '', 'Línea con error'), $i),
                 'saldo'       => self::numeroONulo($d['saldo_sistema'] ?? $d['saldo_actual'] ?? null),
                 'diferencia'  => self::numeroONulo($d['diferencia'] ?? $d['diferencia_estimada'] ?? null),
             ];

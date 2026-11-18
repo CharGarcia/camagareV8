@@ -174,7 +174,7 @@ class CargaInventarioRules
             if (empty($ln['id_producto']) || empty($ln['id_bodega'])) {
                 continue;
             }
-            $fila   = $i + 2;
+            $fila   = (int) ($ln['fila'] ?? $i + 2); // fila del Excel, si se conoce
             $pb     = (int) $ln['id_producto'] . ':' . (int) $ln['id_bodega'];
             $lote   = $ln['numero_lote'] ?? null;
             $clave  = $pb . ':' . ($lote ?? '');

@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion
-version: 2.2
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion, crear bodega, bodega no existe, bodega inexistente, servicio, servicios, cantidad cero, cantidad 0, filas omitidas, filas no cargadas, revisar archivo, advertencias, resumen de importacion
+version: 2.3
 orden: 25
 estado: activo
 ---
@@ -29,8 +29,9 @@ Cada carga es de un tipo, y solo se admiten tres:
 
 1. Pulse **Importar carga** y, si no la tiene, baje la **plantilla** de Excel. Cada fila del archivo es una línea: código del producto, bodega, cantidad y costo (más lote, caducidad, NUP y observación, opcionales). Si arma su propio archivo, los títulos de las columnas pueden llevar tildes, mayúsculas o espacios: *Código producto*, *Costo unitario* u *Observación* (también *Observaciones*) se reconocen igual que `codigo_producto`, `costo_unitario` y `observacion`.
 2. Elija el **tipo de movimiento** y, si quiere, escriba una observación.
-3. Seleccione el archivo y pulse **Importar**. Mientras el sistema lee el archivo y comprueba cada línea aparece el aviso **Cargando archivo…**; no cierre la ventana hasta que termine (con archivos grandes tarda unos segundos).
-4. Al terminar, un aviso resume el resultado:
+3. Seleccione el archivo y pulse **Importar**. Primero aparece **Revisando archivo…**: el sistema comprueba cada fila **sin grabar nada**. Si encuentra bodegas que no existen, filas que no se cargarán o líneas con error, muestra la ventana **Revise antes de generar la carga** y pregunta **¿Desea generar la carga?** (ver *Revisión antes de generar la carga*). Si todo está bien, sigue sin preguntar.
+4. Mientras se genera la carga aparece **Cargando archivo…**; no cierre la ventana hasta que termine (con archivos grandes tarda unos segundos).
+5. Al terminar, un aviso resume el resultado (y, al pie, las bodegas que se crearon y las filas que **no se cargaron**, con su motivo):
    - **Carga aplicada al inventario**: todas las líneas estaban bien y la empresa no exige aprobación; el stock ya se actualizó.
    - **Carga registrada**: queda pendiente de aprobación.
    - **Carga registrada, pero no se aplicó al inventario**: debía aplicarse sola pero falló (p. ej. una salida sin stock suficiente); muestra el motivo y la carga queda pendiente (ver *Aprobación*).
@@ -39,11 +40,33 @@ Cada carga es de un tipo, y solo se admiten tres:
 El botón **Ver líneas** del aviso abre la carga recién importada. El listado se
 actualiza solo, sin perder la búsqueda ni los filtros.
 
-En las cargas de entrada y salida las cantidades deben ser **mayores a cero**; en
+En las cargas de entrada y salida las filas con cantidad **0 o vacía no se cargan**
+(se avisan antes); una cantidad negativa o con texto queda como línea con error. En
 un ajuste la cantidad es lo contado y puede ser 0. La carga debe tener al menos
 una línea. Todos los avisos del módulo (resultado de la importación, confirmar
 una aprobación, el motivo de un rechazo, eliminar, errores) salen en una ventana
 emergente.
+
+## Revisión antes de generar la carga
+
+Antes de grabar nada, el sistema revisa el archivo y, si hay algo que avisar,
+muestra una ventana con todo junto y pregunta si se genera la carga:
+
+| Aviso | Qué pasa |
+|-------|----------|
+| **Bodegas que no existen** | Cada bodega del archivo que no está registrada en la empresa aparece con una casilla **Crear la bodega …** (marcada) y las filas que la usan. Las que deje marcadas se crean al generar la carga, con el nombre en mayúsculas y sin establecimiento (puede completarla después en el módulo **Bodegas**). Las filas de las bodegas que desmarque **no se cargan**. Sin permiso de crear en el módulo Bodegas, solo se listan y sus filas no se cargan. |
+| **Servicios** | Una fila cuyo código es de un producto de tipo **servicio** no se carga: los servicios no llevan inventario. |
+| **Cantidad en 0** | En entradas y salidas, una fila con cantidad 0 o vacía no se carga. En un **ajuste** el 0 sí se carga, porque es un conteo (deja el saldo en cero). |
+| **Líneas con error** | Se cargan, pero la carga queda **pendiente** y no se podrá aprobar hasta corregirlas (ver *Errores frecuentes*). |
+
+- **Sí, generar la carga** crea las bodegas marcadas y genera la carga solo con
+  las filas que se pueden cargar. Si no se genera la carga, tampoco se crean las
+  bodegas.
+- **Cancelar** no graba nada: puede corregir el archivo e importarlo de nuevo.
+- Si al final no queda ninguna fila para cargar, la ventana no deja continuar.
+
+Las filas que no se cargan **no quedan en la carga**: se informan en el aviso
+final con su número de fila del Excel y el motivo, para que pueda revisarlas.
 
 ## Series (NUP)
 
@@ -348,7 +371,9 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 
 - **"Tipo de movimiento inválido"**: debe ser entrada, salida o ajuste.
 - **"La carga no contiene líneas para procesar"**: el archivo llegó vacío o ninguna fila se pudo interpretar.
-- **"La cantidad debe ser mayor a cero"**: revise las filas en cero o negativas (en una carga de entrada o salida; en un ajuste el 0 es válido).
+- **"La cantidad debe ser mayor a cero"**: revise las filas con cantidad negativa o con texto (en una carga de entrada o salida). Las filas en 0 o vacías no dan error: no se cargan y se avisan antes.
+- **"Ninguna fila del archivo se puede cargar…"**: todas las filas eran servicios, tenían cantidad 0 o eran de bodegas que no se crearon. No se generó la carga ni se crearon bodegas.
+- **"No tiene permiso para crear bodegas"**: pida el permiso de crear en el módulo Bodegas, o cree antes las bodegas.
 - **"La celda NUP trae N series y la cantidad es M"**: con varias series en la celda, la cantidad debe ser igual al número de series (ver *Series (NUP)*).
 - **"Falta la cantidad contada o no es un número"**: en un ajuste la cantidad es obligatoria; si no hay unidades, escriba 0.
 - **"El producto tiene stock por lotes en esta bodega (…): indique el lote que contó"**: en un ajuste, cuente ese producto por lote, una línea por lote.
@@ -376,10 +401,10 @@ para corregir el archivo. Los motivos posibles son:
   |---------|-------|-----------------|
   | *Falta el código del producto* | La celda de código está vacía | Escriba el código principal del producto |
   | *El producto con código "X" no existe en la empresa* | El código no coincide con ninguno de la hoja **Productos** de la plantilla (se compara exacto, sin espacios al inicio o al final) | Copie el código tal como aparece en la hoja **Productos**, o cree primero el producto en el módulo Productos |
-  | *El código "X" corresponde a un servicio y no puede cargarse al inventario* | El producto existe pero es de tipo servicio | Quite la fila o cambie el producto a tipo bien |
+  | *El código "X" corresponde a un servicio y no puede cargarse al inventario* | Cargas importadas antes de la versión 2.3; desde entonces los servicios no se cargan y se avisan antes | Quite la fila o cambie el producto a tipo bien |
   | *Falta la bodega* | La celda de bodega está vacía | Escriba el nombre de la bodega |
-  | *La bodega "X" no existe en la empresa* | El nombre no coincide con ninguna bodega activa de la empresa (no distingue mayúsculas, pero debe ser el nombre completo) | Use el nombre exacto de la hoja **Bodegas** de la plantilla |
-  | *La cantidad debe ser mayor a cero* | La celda está vacía, en cero, negativa o con texto (entradas y salidas) | Escriba una cantidad numérica mayor a cero |
+  | *La bodega "X" no existe en la empresa* | Cargas importadas antes de la versión 2.3; desde entonces la bodega se ofrece crear antes de generar la carga | Use el nombre exacto de la hoja **Bodegas** de la plantilla |
+  | *La cantidad debe ser mayor a cero* | La celda es negativa o tiene texto (entradas y salidas) | Escriba una cantidad numérica mayor a cero |
   | *La celda NUP trae N series y la cantidad es M* | Varias series en la celda con otra cantidad | Ponga como cantidad el número de series, o una serie por línea |
   | *Falta la cantidad contada…* / *La cantidad contada no puede ser negativa* | Ajuste con la cantidad vacía, con texto o negativa | Escriba lo contado; 0 si no hay unidades |
   | *El producto tiene stock por lotes en esta bodega…* | Ajuste sin lote de un producto que maneja lotes | Una línea por lote con lo contado de cada uno |
@@ -393,6 +418,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **2.3** — **Revisión antes de generar la carga**: al importar, el sistema revisa el archivo sin grabar nada y, si hay avisos, pregunta si se genera la carga. Las **bodegas que no existen** se pueden crear en ese momento (las que no se crean dejan sus filas sin cargar); las filas de **servicios** y, en entradas y salidas, las de **cantidad 0** ya no dejan la carga con error: no se cargan. El aviso final resume las bodegas creadas y las filas que no se cargaron. El motivo de cada línea con error conserva la fila real del Excel aunque se hayan omitido filas.
 - **2.2** — **Importar** una carga registra una sola vez: un reintento tras «Error de conexión» ya no crea una segunda carga (que, sin aprobación exigida, se aplicaba sola). Rechazar o eliminar una carga mientras otro usuario la aprueba ya no la deja «rechazada» con su stock aplicado: quien llega segundo ve el estado real.
 - **2.1** — La **observación general** de la carga se puede editar desde la ventana
   de la carga (botón **Actualizar**, al pie de la ventana), en cualquier estado salvo anulada y con permiso

@@ -47,7 +47,11 @@ class BodegaService
         $this->rules->validar($data);
         $idEmpresa = (int) $data['id_empresa'];
 
-        $this->repository->beginTransaction();
+        // Si quien llama ya abrió una transacción (p. ej. la importación de Cargas de
+        // Inventario, que crea bodegas junto con la carga), esta forma parte de ella:
+        // no se confirma ni se revierte aquí, para no cerrar la transacción ajena.
+        $propia = !$this->repository->getDb()->inTransaction();
+        if ($propia) $this->repository->beginTransaction();
         try {
             $insertData = [
                 'id_empresa'         => $idEmpresa,
@@ -70,10 +74,10 @@ class BodegaService
                 $insertData
             );
 
-            $this->repository->commit();
+            if ($propia) $this->repository->commit();
             return $id;
         } catch (Exception $e) {
-            $this->repository->rollBack();
+            if ($propia) $this->repository->rollBack();
             throw $e;
         }
     }
