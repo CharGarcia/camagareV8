@@ -25,11 +25,14 @@ class CotizadorPlanesService
     /**
      * Documentos comerciales que se descargan desde Configuración → Documentos.
      * Viven en docs/comercial/pdf (fuera de public/: solo se entregan por el controlador).
-     * Clave => [PDF, Markdown de origen (para leer su versión), título, nombre de descarga].
+     * Clave => [PDF, Markdown de origen (para leer su versión), título, nombre de descarga, quién lo ve].
+     * Quién lo ve: 'todos' o 'admin' (niveles 2 y 3). La edición del capacitador trae las
+     * respuestas de la evaluación: el nivel 1 solo recibe la edición sin respuestas.
      */
     private const DOCUMENTOS_COMERCIALES = [
-        'presentacion' => ['presentacion-vendedores.pdf', 'presentacion-vendedores.md', 'Presentación para vendedores', 'CaMaGaRe - Presentacion para vendedores'],
-        'capacitacion' => ['capacitacion-vendedores.pdf', 'capacitacion-vendedores.md', 'Capacitación de vendedores', 'CaMaGaRe - Capacitacion de vendedores'],
+        'presentacion'          => ['presentacion-vendedores.pdf', 'presentacion-vendedores.md', 'Presentación para vendedores', 'CaMaGaRe - Presentacion para vendedores', 'todos'],
+        'capacitacion_vendedor' => ['capacitacion-vendedores-sin-respuestas.pdf', 'capacitacion-vendedores.md', 'Capacitación de vendedores', 'CaMaGaRe - Capacitacion de vendedores', 'todos'],
+        'capacitacion'          => ['capacitacion-vendedores.pdf', 'capacitacion-vendedores.md', 'Capacitación — edición para el capacitador', 'CaMaGaRe - Capacitacion (capacitador)', 'admin'],
     ];
 
     public const MODULO_GUARDADO = 'cotizador_planes';
@@ -1029,12 +1032,12 @@ class CotizadorPlanesService
         return $out;
     }
 
-    /** Documentos comerciales disponibles, con su versión y fecha (solo los que existen). */
-    public function getDocumentosComerciales(): array
+    /** Documentos comerciales que puede ver el usuario, con su versión y fecha (solo los que existen). */
+    public function getDocumentosComerciales(bool $esAdmin): array
     {
         $out = [];
         foreach (self::DOCUMENTOS_COMERCIALES as $clave => $d) {
-            $doc = $this->documentoComercial($clave);
+            $doc = $this->documentoComercial($clave, $esAdmin);
             if (!$doc) continue;
             $out[] = ['clave' => $clave, 'titulo' => $d[2], 'version' => $doc['version'], 'fecha' => $doc['fecha']];
         }
@@ -1046,11 +1049,12 @@ class CotizadorPlanesService
      * válida o el archivo no está. Solo claves de la lista: nunca rutas que vengan del usuario.
      * @return array{ruta:string, nombre:string, version:string, fecha:string}|null
      */
-    public function documentoComercial(string $clave): ?array
+    public function documentoComercial(string $clave, bool $esAdmin): ?array
     {
         $d = self::DOCUMENTOS_COMERCIALES[$clave] ?? null;
+        if (!$d || ($d[4] === 'admin' && !$esAdmin)) return null; // no le corresponde
         $dir = MVC_ROOT . '/docs/comercial';
-        if (!$d || !is_file($dir . '/pdf/' . $d[0])) return null;
+        if (!is_file($dir . '/pdf/' . $d[0])) return null;
         // Versión y fecha según el documento de origen («Versión actual: **1.0** (18-11-2026)»).
         $version = ''; $fecha = '';
         $md = @file_get_contents($dir . '/' . $d[1]) ?: '';

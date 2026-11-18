@@ -6,7 +6,7 @@ ruta_modulo: modulos/cotizador-planes
 tipo: modulo
 visibilidad: todos
 etiquetas: cotizador, cotizar, presentacion para vendedores, capacitacion de vendedores, documentos comerciales, descargar pdf vendedores, paquetes, paquete, precio fijo del paquete, modulo incluido, incluido, sin costo, modulo gratis, dependencia sin costo, combo de modulos, emprendedor, plan emprendedor, descuento del paquete, plan semestral, semestral, cada seis meses, cotizacion del sistema, precio del sistema, cuanto cuesta, planes, plan anual, plan mensual, suscripcion, membresia, precio por modulo, lista de precios, catalogo de precios, vendedor, vendedores, venta del sistema, propuesta, oferta, proforma del plan, crm, oportunidad, seguimiento, establecimientos, sucursales, locales, usuarios adicionales, usuario adicional, descuento por establecimiento, descuento comercial, recargo mensual, implementacion, migracion, capacitacion, pago unico, consultar ruc, sri, modulos que se necesitan, dependencias
-version: 1.12
+version: 1.13
 orden: 0
 estado: activo
 ---
@@ -73,9 +73,16 @@ Un administrador (nivel 2 o 3) deja listo el cotizador con el botón
    establecimiento adicional, usuarios incluidos, precio del usuario adicional
    y los **productos** de la línea resumen (plan anual, semestral y mensual). Esos
    productos deben existir en *Productos* con su IVA.
-4. **Documentos**: descarga en PDF de la **Presentación para vendedores** y de
-   la **Capacitación de vendedores**, con su versión y fecha. Son documentos de
-   uso interno para el equipo comercial.
+4. **Documentos**: los mismos documentos del botón **Documentos** (ver abajo),
+   más la **edición para el capacitador** de la capacitación, que trae las
+   respuestas de la evaluación.
+
+**Documentos para vendedores:** el botón **Documentos** de la pantalla
+principal lo ve todo el que puede entrar al Cotizador. Descarga en PDF la
+**Presentación para vendedores** y la **Capacitación de vendedores** (sin las
+respuestas de la evaluación), con su versión y fecha. Son de uso interno del
+equipo comercial: no se comparten con los clientes. La edición con respuestas
+solo la descargan los niveles 2 y 3.
 
 Para generar la proforma hace falta además una **serie con secuencial de
 Proformas** y permiso de **crear en Proformas**.
@@ -265,3 +272,4 @@ paga en plan anual $1.000 + $800 = **$1.800**, o en plan mensual $100 + $100 =
 - **1.10** — El vendedor viene puesto por defecto y solo el superadministrador (nivel 3) lo cambia; los niveles 1 y 2 cotizan a nombre de su vendedor.
 - **1.11** — El PDF de la cotización y el anexo de la proforma avisan que en la próxima renovación los precios pueden subir o bajar.
 - **1.12** — Nueva pestaña **Documentos** en Configuración: descarga en PDF de la presentación y de la capacitación de vendedores (niveles 2 y 3).
+- **1.13** — Botón **Documentos** para todos los vendedores: presentación y capacitación sin respuestas. La edición del capacitador (con respuestas) queda para los niveles 2 y 3.

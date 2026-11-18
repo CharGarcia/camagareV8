@@ -113,6 +113,9 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <a id="btnExcelCP" href="<?= $urlCP ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam) ?>" class="btn btn-outline-success" title="Descargar Excel">
                     <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
+                <button type="button" class="btn btn-outline-primary" onclick="CP_abrirDocumentos()" title="Documentos para vendedores: presentación y capacitación">
+                    <i class="bi bi-journal-text"></i><span class="d-none d-md-inline"> Documentos</span>
+                </button>
                 <?php if ($esAdmin): ?>
                     <button type="button" class="btn btn-outline-secondary" onclick="CP_abrirConfig()" title="Configuración: parámetros y catálogo de precios">
                         <i class="bi bi-gear"></i><span class="d-none d-md-inline"> Configuración</span>
@@ -326,6 +329,25 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                         <button type="button" class="btn btn-success btn-sm px-3" id="cpBtnProforma"><i class="bi bi-file-earmark-plus me-1"></i> Generar proforma</button>
                     <?php endif; ?>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Documentos para vendedores (todos los que ven el Cotizador) -->
+<div class="modal fade" id="modalCPDocumentos" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title fs-6 fw-bold"><i class="bi bi-journal-text text-primary me-2"></i>Documentos para vendedores</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2">Documentos internos del equipo comercial, en PDF. No se comparten con los clientes.</div>
+                <div class="row g-2" id="cpDocumentos"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
     </div>
