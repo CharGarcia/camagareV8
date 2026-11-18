@@ -727,6 +727,14 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                                         <input type="hidden" name="id_cliente" id="m-id-cliente">
                                                         <input type="hidden" id="m-tipo-id-cliente">
                                                         <input type="hidden" id="m-nombre-tipo-id-cliente">
+                                                        <?php /* Cliente por defecto del usuario (favorito por usuario y empresa,
+                                                                 campo id_cliente). No usa .btn-favorito: aplicarFavoritosModal()
+                                                                 solo sabe poner el valor en un <select>; el cliente se coloca con
+                                                                 seleccionarCliente() (ver fvAplicarClienteFavorito). */ ?>
+                                                        <span class="input-group-text bg-white border-0 px-2">
+                                                            <i id="fv-fav-cliente" class="bi bi-star text-muted cursor-pointer"
+                                                               title="Cliente por defecto: márquelo con la estrella y aparecerá en cada factura nueva"></i>
+                                                        </span>
                                                     </div>
                                                     <div id="m-dropdown-clientes" class="list-group shadow dropdown-predictivo position-absolute d-none" style="z-index: 1050; width: 100%; max-height: 250px; overflow-y: auto; right: 0px; top: 35px;"></div>
                                                 </div>
@@ -1771,7 +1779,12 @@ $totalPages = $totalPagesOriginal;
                     // id_establecimiento con el punto que quedó seleccionado.
                     syncSerie(selectPto.value);
                 }
+                // Cliente por defecto del usuario (estrella junto al buscador de cliente).
+                // Va después de los favoritos: si el cliente tiene vendedor propio, manda el
+                // del cliente, igual que al elegirlo a mano.
+                fvAplicarClienteFavorito();
             }
+            fvMarcarEstrellaCliente();
 
             const searchCliente = document.getElementById('m-search-cliente');
             if (searchCliente) {
@@ -2475,7 +2488,12 @@ $totalPages = $totalPagesOriginal;
         try {
             const estado = fvCapturarEstado();
             // Solo guardar si hay algo significativo (cliente o al menos un ítem con producto)
-            if (!estado.id_cliente && !estado.detalles.length) {
+            // El cliente por defecto puesto solo (sin que el usuario haya hecho nada más)
+            // no cuenta: si no, cada factura abierta y cerrada dejaría el aviso de
+            // "Factura sin guardar".
+            const soloClienteFavorito = FV_CLIENTE_FAV_AUTO !== null
+                && String(estado.id_cliente) === FV_CLIENTE_FAV_AUTO;
+            if ((!estado.id_cliente || soloClienteFavorito) && !estado.detalles.length) {
                 localStorage.removeItem(FV_STORAGE_KEY);
                 return;
             }
@@ -3146,6 +3164,7 @@ $totalPages = $totalPagesOriginal;
         document.getElementById('m-info-cliente').classList.add('d-none');
         document.getElementById('m-dropdown-clientes').classList.add('d-none');
         document.getElementById('m-search-cliente').value = '';
+        FV_CLIENTE_FAV_AUTO = null;
 
         document.getElementById('m-tbody-info-adicional').innerHTML = '';
         agregarInfoAdicional();
@@ -4182,9 +4201,105 @@ $totalPages = $totalPagesOriginal;
 
                 dropdownClientes.classList.add('d-none');
                 actualizarInfoCorreoCliente('');
+                FV_CLIENTE_FAV_AUTO = null;
+                fvMarcarEstrellaCliente();
                 e.preventDefault();
             }
         });
+    }
+
+    // --- CLIENTE POR DEFECTO (favorito del usuario) ---
+    // Se guarda como cualquier favorito (usuarios_preferencias, por usuario y empresa,
+    // campo id_cliente) y llega en APP_FAVORITOS. En una factura NUEVA sin cliente se
+    // trae por el mismo buscador (getClientesAjax, solo clientes activos) y se coloca con
+    // seleccionarCliente(), igual que si el usuario lo hubiera elegido.
+    const FV_MODULO_FAV = <?= json_encode(str_replace('-', '_', basename($rutaModulo))) ?>;
+    // id del cliente que se puso SOLO por ser el favorito: con nada más en la factura, el
+    // auto-guardado no lo toma como "factura sin guardar" (ver fvAutoGuardar).
+    let FV_CLIENTE_FAV_AUTO = null;
+
+    function fvIdClienteFavorito() {
+        if (typeof APP_FAVORITOS === 'undefined') return '';
+        const v = APP_FAVORITOS['id_cliente'];
+        return (v == null) ? '' : String(v).trim();
+    }
+
+    function fvMarcarEstrellaCliente() {
+        const estrella = document.getElementById('fv-fav-cliente');
+        if (!estrella) return;
+        const fav = fvIdClienteFavorito();
+        const actual = document.getElementById('m-id-cliente')?.value || '';
+        const activa = fav !== '' && String(actual) === fav;
+        estrella.classList.toggle('bi-star-fill', activa);
+        estrella.classList.toggle('text-warning', activa);
+        estrella.classList.toggle('bi-star', !activa);
+        estrella.classList.toggle('text-muted', !activa);
+        estrella.title = activa
+            ? 'Este es su cliente por defecto (clic para quitarlo)'
+            : 'Cliente por defecto: márquelo con la estrella y aparecerá en cada factura nueva';
+    }
+
+    document.getElementById('fv-fav-cliente')?.addEventListener('click', async () => {
+        const fav = fvIdClienteFavorito();
+        const actual = String(document.getElementById('m-id-cliente')?.value || '');
+        if (!actual && !fav) {
+            Swal.fire({ toast: true, position: 'top-end', icon: 'info', showConfirmButton: false, timer: 2500,
+                title: 'Seleccione primero el cliente que quiere dejar por defecto.' });
+            return;
+        }
+        // Clic sobre el favorito (o sin cliente elegido) = quitarlo.
+        const quitar = !actual || actual === fav;
+        const fd = new FormData();
+        fd.append('modulo', FV_MODULO_FAV);
+        fd.append('campo', 'id_cliente');
+        fd.append('valor', quitar ? '' : actual);
+        try {
+            const resp = await fetch(typeof APP_FAVORITOS_URL !== 'undefined' ? APP_FAVORITOS_URL : `${B_URL}/Preferencias/guardarAjax`, {
+                method: 'POST', body: fd
+            });
+            const res = await resp.json();
+            if (!res.ok) throw new Error(res.error || 'No se pudo guardar.');
+            if (typeof APP_FAVORITOS !== 'undefined') {
+                if (quitar) delete APP_FAVORITOS['id_cliente'];
+                else APP_FAVORITOS['id_cliente'] = actual;
+            }
+            fvMarcarEstrellaCliente();
+            Swal.fire({ toast: true, position: 'top-end', icon: quitar ? 'info' : 'success', showConfirmButton: false, timer: 2000,
+                title: quitar ? 'Cliente por defecto quitado' : 'Cliente por defecto guardado' });
+        } catch (err) {
+            console.error('Cliente por defecto:', err);
+            Swal.fire({ icon: 'error', title: 'Error', text: 'No se pudo guardar el cliente por defecto.' });
+        }
+    });
+
+    /**
+     * Factura NUEVA: pone el cliente favorito si la factura aún no tiene cliente. Se
+     * revisa de nuevo al volver la respuesta, porque mientras tanto pudo llenarse por otro
+     * camino (borrador restaurado, "Facturar desde pedido") o el usuario pudo empezar a
+     * escribir otro cliente: en esos casos no se toca nada.
+     */
+    async function fvAplicarClienteFavorito() {
+        const fav = fvIdClienteFavorito();
+        if (!fav || !/^\d+$/.test(fav)) return;
+        const sigueLibre = () => (parseInt(FV_ID_ACTIVO) || 0) === 0
+            && document.getElementById('modalNuevaFactura')?.classList.contains('show')
+            && !document.getElementById('m-id-cliente')?.value
+            && !(document.getElementById('m-search-cliente')?.value || '').trim();
+        if (!sigueLibre()) return;
+        try {
+            const resp = await fetch(`${B_URL}/${RUTA_MODULO}/getClientesAjax?q=${encodeURIComponent('id:' + fav)}`);
+            const json = await resp.json();
+            const c = (json.data || []).find(x => String(x.id) === fav);
+            // Cliente eliminado o inactivo: la factura queda sin cliente, como siempre.
+            if (!c || !sigueLibre()) return;
+            seleccionarCliente(c);
+            FV_CLIENTE_FAV_AUTO = String(c.id);
+        } catch (err) {
+            console.error('No se pudo cargar el cliente por defecto:', err);
+        }
+    }
+
+    if (inputSearchCliente) {
 
         inputSearchCliente.addEventListener('input', debounce(async (e) => {
             const q = e.target.value.trim();
@@ -4404,6 +4519,11 @@ $totalPages = $totalPagesOriginal;
                 }
             }
         }
+
+        // Elegido a mano (o por otro camino): ya no es "solo el favorito puesto solo".
+        // fvAplicarClienteFavorito() lo vuelve a marcar justo después de llamar aquí.
+        FV_CLIENTE_FAV_AUTO = null;
+        fvMarcarEstrellaCliente();
 
         // Pasar el cursor al buscador de productos en la primera fila
         setTimeout(() => {
@@ -6034,6 +6154,7 @@ $totalPages = $totalPagesOriginal;
         if (rucLbl) rucLbl.textContent = data.cliente_ruc || '';
         fvMostrarTipoIdCliente('');   // lo llena la cabecera completa que llega por AJAX
         if (infoBarCliente) infoBarCliente.classList.remove('d-none');
+        fvMarcarEstrellaCliente();
 
         // Botón eliminar: visible para borradores con permiso, y además para el
         // superadmin (nivel 3) en cualquier otro estado — caso: una factura cargada

@@ -295,7 +295,9 @@ class ClienteRepository extends BaseRepository
                 'registro'   => 'c.created_at',
                 'created_at' => 'c.created_at',
             ],
-            'numerico' => [ 'plazo' => 'c.plazo', 'orden_visita' => 'c.orden_visita' ],
+            // 'id': lo usa Facturas de Venta para traer el cliente favorito del usuario
+            // (getClientesAjax?q=id:123); numérico para que el valor se fuerce a número.
+            'numerico' => [ 'plazo' => 'c.plazo', 'orden_visita' => 'c.orden_visita', 'id' => 'c.id' ],
         ]);
 
         // Selección de cliente para OPERACIONES: excluir inactivos (status = 0).
