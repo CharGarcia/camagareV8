@@ -76,6 +76,8 @@ descargasri_python/
 
 # Documentos de prueba en raíz
 *.pdf
+# PDF comerciales para vendedores (se descargan desde Cotizador → Configuración → Documentos)
+!docs/comercial/pdf/*.pdf
 Factura.xml
 "Ficha ATS.pdf"
 "GUIA FORMULARIO 104.pdf"

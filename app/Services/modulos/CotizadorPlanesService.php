@@ -22,6 +22,16 @@ class CotizadorPlanesService
     /** Condición de precio en la renovación: va igual en el PDF de la cotización y en el anexo de la proforma. */
     public const CONDICION_RENOVACION = 'Los precios valen para el periodo contratado. En la próxima renovación se aplican los precios vigentes en ese momento, que pueden subir o bajar.';
 
+    /**
+     * Documentos comerciales que se descargan desde Configuración → Documentos.
+     * Viven en docs/comercial/pdf (fuera de public/: solo se entregan por el controlador).
+     * Clave => [PDF, Markdown de origen (para leer su versión), título, nombre de descarga].
+     */
+    private const DOCUMENTOS_COMERCIALES = [
+        'presentacion' => ['presentacion-vendedores.pdf', 'presentacion-vendedores.md', 'Presentación para vendedores', 'CaMaGaRe - Presentacion para vendedores'],
+        'capacitacion' => ['capacitacion-vendedores.pdf', 'capacitacion-vendedores.md', 'Capacitación de vendedores', 'CaMaGaRe - Capacitacion de vendedores'],
+    ];
+
     public const MODULO_GUARDADO = 'cotizador_planes';
 
     public function __construct(
@@ -1017,6 +1027,42 @@ class CotizadorPlanesService
               . 'el establecimiento con el plan base de mayor valor paga el precio completo.</p>';
         $out .= '<p>' . htmlspecialchars(self::CONDICION_RENOVACION, ENT_QUOTES, 'UTF-8') . '</p>';
         return $out;
+    }
+
+    /** Documentos comerciales disponibles, con su versión y fecha (solo los que existen). */
+    public function getDocumentosComerciales(): array
+    {
+        $out = [];
+        foreach (self::DOCUMENTOS_COMERCIALES as $clave => $d) {
+            $doc = $this->documentoComercial($clave);
+            if (!$doc) continue;
+            $out[] = ['clave' => $clave, 'titulo' => $d[2], 'version' => $doc['version'], 'fecha' => $doc['fecha']];
+        }
+        return $out;
+    }
+
+    /**
+     * Ruta y nombre de descarga de un documento comercial, o null si la clave no es
+     * válida o el archivo no está. Solo claves de la lista: nunca rutas que vengan del usuario.
+     * @return array{ruta:string, nombre:string, version:string, fecha:string}|null
+     */
+    public function documentoComercial(string $clave): ?array
+    {
+        $d = self::DOCUMENTOS_COMERCIALES[$clave] ?? null;
+        $dir = MVC_ROOT . '/docs/comercial';
+        if (!$d || !is_file($dir . '/pdf/' . $d[0])) return null;
+        // Versión y fecha según el documento de origen («Versión actual: **1.0** (18-11-2026)»).
+        $version = ''; $fecha = '';
+        $md = @file_get_contents($dir . '/' . $d[1]) ?: '';
+        if (preg_match('/Versión actual: \*\*([0-9.]+)\*\* \(([0-9-]+)\)/u', $md, $m)) {
+            [$version, $fecha] = [$m[1], $m[2]];
+        }
+        return [
+            'ruta'    => $dir . '/pdf/' . $d[0],
+            'nombre'  => $d[3] . ($version !== '' ? ' v' . $version : '') . '.pdf',
+            'version' => $version,
+            'fecha'   => $fecha,
+        ];
     }
 
     /** Modalidad de la cotización: anual | semestral | mensual. */

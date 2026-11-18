@@ -345,6 +345,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                     <li class="nav-item"><a class="nav-link active small" data-bs-toggle="tab" href="#cfg-tab-catalogo">Catálogo de precios</a></li>
                     <li class="nav-item"><a class="nav-link small" data-bs-toggle="tab" href="#cfg-tab-paquetes">Paquetes</a></li>
                     <li class="nav-item"><a class="nav-link small" data-bs-toggle="tab" href="#cfg-tab-parametros">Parámetros</a></li>
+                    <li class="nav-item"><a class="nav-link small" data-bs-toggle="tab" href="#cfg-tab-documentos">Documentos</a></li>
                 </ul>
                 <div class="tab-content">
                     <div class="tab-pane fade show active" id="cfg-tab-catalogo">
@@ -462,6 +463,12 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                                 <button type="button" class="btn btn-primary btn-sm" id="cfgBtnGuardarParametros"><i class="bi bi-check2-circle"></i> Guardar parámetros</button>
                             </div>
                         </div>
+                    </div>
+                    <div class="tab-pane fade" id="cfg-tab-documentos">
+                        <div class="small text-muted mb-2">
+                            Documentos para el equipo comercial, en PDF. Son de uso interno: se entregan a los vendedores y a quien dicta su capacitación.
+                        </div>
+                        <div class="row g-2" id="cfgDocumentos"></div>
                     </div>
                 </div>
                 <datalist id="cfgProductosLista"></datalist>

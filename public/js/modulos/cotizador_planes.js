@@ -664,6 +664,7 @@
         cfgItems = j.items || [];
         cfgPaquetes = j.paquetes || [];
         cfgSubmodulos = j.submodulos || [];
+        pintarCfgDocumentos(j.documentos || []);
         pintarCfgItems();
         pintarCfgPaquetes();
     }
@@ -709,6 +710,30 @@
         const n = idsMarcados(cont).length;
         etiqueta.textContent = n ? `(${n} marcados)` : '';
     }
+
+    // ── Documentos comerciales (configuración) ─────────────────────────────
+    function pintarCfgDocumentos(docs) {
+        const descripcion = {
+            presentacion: 'Qué decir: quiénes somos, el cliente, módulos, precios, membresía, preguntas frecuentes y proceso de venta.',
+            capacitacion: 'Cómo aprenderlo: programa, guion de demo, ejercicios del Cotizador, objeciones, reglas, evaluación y comisiones.',
+        };
+        $('cfgDocumentos').innerHTML = docs.map((d) => `
+            <div class="col-md-6">
+                <div class="border rounded-3 p-3 h-100 d-flex gap-3 align-items-start">
+                    <i class="bi bi-file-earmark-pdf text-danger fs-3"></i>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">${esc(d.titulo)}</div>
+                        <div class="small text-muted">${d.version ? 'Versión ' + esc(d.version) : ''}${d.fecha ? ' · ' + esc(d.fecha) : ''}</div>
+                        <div class="small mt-1">${esc(descripcion[d.clave] || '')}</div>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm text-nowrap" onclick="CP_descargarDocumento('${esc(d.clave)}')">
+                        <i class="bi bi-download"></i> Descargar</button>
+                </div>
+            </div>`).join('') || '<div class="col-12 small text-muted">No hay documentos disponibles.</div>';
+    }
+    window.CP_descargarDocumento = function (clave) {
+        CMG_descargar(`${URL}/descargarDocumento?doc=${encodeURIComponent(clave)}`);
+    };
 
     // ── Paquetes (configuración) ───────────────────────────────────────────
     /** Suma anual de los módulos de un paquete y su valor con el descuento (los únicos no se descuentan). */

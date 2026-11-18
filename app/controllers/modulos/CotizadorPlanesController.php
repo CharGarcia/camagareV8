@@ -387,6 +387,23 @@ class CotizadorPlanesController extends BaseModuloController
 
     // ── Configuración (niveles 2 y 3) ────────────────────────────────────────
 
+    /** Descarga un documento comercial (presentación o capacitación de vendedores). Niveles 2 y 3. */
+    public function descargarDocumento(): void
+    {
+        $this->requireLeer();
+        $this->requireAdministrador();
+        $doc = $this->service->documentoComercial((string) ($_GET['doc'] ?? ''));
+        if (!$doc) {
+            $this->json(['ok' => false, 'error' => 'El documento no está disponible.'], 404);
+        }
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . $doc['nombre'] . '"');
+        header('Content-Length: ' . filesize($doc['ruta']));
+        header('Cache-Control: private, no-store');
+        readfile($doc['ruta']);
+        exit;
+    }
+
     public function getConfigAjax(): void
     {
         $this->requireLeer();
@@ -398,6 +415,7 @@ class CotizadorPlanesController extends BaseModuloController
             'items'      => $this->service->getCatalogo($this->idEmpresa(), false),
             'paquetes'   => $this->service->getPaquetes($this->idEmpresa(), false),
             'submodulos' => $this->service->getSubmodulosMenu(),
+            'documentos' => $this->service->getDocumentosComerciales(),
         ]);
     }
 
