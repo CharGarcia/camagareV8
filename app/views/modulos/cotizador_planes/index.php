@@ -343,7 +343,7 @@ $e      = fn($v) => htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8');
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <div class="modal-body">
-                <div class="small text-muted mb-2">Documentos internos del equipo comercial, en PDF. No se comparten con los clientes.</div>
+                <div class="small text-muted mb-2">Documentos en PDF. La <strong>presentación para el cliente</strong> se puede enviar a los clientes; los demás son internos del equipo comercial.</div>
                 <div class="row g-2" id="cpDocumentos"></div>
             </div>
             <div class="modal-footer py-2">

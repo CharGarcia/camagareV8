@@ -30,6 +30,7 @@ class CotizadorPlanesService
      * respuestas de la evaluación: el nivel 1 solo recibe la edición sin respuestas.
      */
     private const DOCUMENTOS_COMERCIALES = [
+        'presentacion_cliente'  => ['presentacion-cliente.pdf', 'presentacion-cliente.md', 'Presentación para el cliente', 'CaMaGaRe ERP - Presentacion', 'todos'],
         'presentacion'          => ['presentacion-vendedores.pdf', 'presentacion-vendedores.md', 'Presentación para vendedores', 'CaMaGaRe - Presentacion para vendedores', 'todos'],
         'capacitacion_vendedor' => ['capacitacion-vendedores-sin-respuestas.pdf', 'capacitacion-vendedores.md', 'Capacitación de vendedores', 'CaMaGaRe - Capacitacion de vendedores', 'todos'],
         'capacitacion'          => ['capacitacion-vendedores.pdf', 'capacitacion-vendedores.md', 'Capacitación — edición para el capacitador', 'CaMaGaRe - Capacitacion (capacitador)', 'admin'],

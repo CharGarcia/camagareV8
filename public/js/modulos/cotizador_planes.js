@@ -616,6 +616,7 @@
     // ── Documentos para vendedores (botón «Documentos» y pestaña de Configuración) ──
     function pintarDocumentos(cont, docs) {
         const descripcion = {
+            presentacion_cliente: 'Folleto para entregar al cliente: qué es CaMaGaRe, módulos, cómo empezamos, cómo se arma el plan (sin montos), qué incluye y contacto.',
             presentacion: 'Qué decir: quiénes somos, el cliente, módulos, precios, membresía, preguntas frecuentes y proceso de venta.',
             capacitacion: 'Igual a la anterior, pero con las respuestas de la evaluación. Solo para quien dicta la capacitación: no entregarla a los vendedores.',
             capacitacion_vendedor: 'Cómo aprenderlo: programa, guion de demo, ejercicios del Cotizador, objeciones, reglas, evaluación y comisiones.',
