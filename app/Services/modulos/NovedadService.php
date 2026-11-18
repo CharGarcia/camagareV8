@@ -134,6 +134,8 @@ class NovedadService
 
         // No permitir registrar una novedad sobre un rol ya pagado.
         $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
+        // Ni una segunda quincena del mismo mes (novedad o rol de QUINCENA).
+        $this->bloquearQuincenaRepetida($data);
 
         $id = $this->repository->create($data);
         $this->logService->registrar($idUsuario, $idEmpresa, 'CREAR', 'novedades', $id, null, $data);
@@ -157,6 +159,7 @@ class NovedadService
                 $data['periodo_anio'] ?? 0,
                 $data['periodo_mes'] ?? 0
             );
+            $this->bloquearQuincenaRepetida($data);
             return null;
         } catch (\Throwable $e) {
             return $e->getMessage();
@@ -182,6 +185,8 @@ class NovedadService
         $this->bloquearSiRolPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0);
         // Bloquear si esta novedad (Anticipo o cuota de Préstamo Empresa) ya fue desembolsada.
         $this->bloquearSiYaDesembolsada($idEmpresa, $old);
+        // Ni una segunda quincena del mismo mes (sin contar esta misma novedad).
+        $this->bloquearQuincenaRepetida($data + ['id_empresa' => $idEmpresa], $id);
 
         $idUsuario = (int) $data['id_usuario'];
         $this->repository->beginTransaction();
@@ -224,6 +229,94 @@ class NovedadService
             throw $e;
         }
         $this->sincronizarRol($idEmpresa, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0, $idUsuario);
+    }
+
+    /**
+     * Una Quincena (CatalogoNovedades::COD_QUINCENA) no se acepta si el empleado ya tiene la
+     * quincena de ese mes: otra novedad Quincena (cargada a mano o por plantilla) o una línea
+     * en un rol de QUINCENA vigente. En ambos casos se le descontaría dos veces en el mensual.
+     * `$excluirId`: la novedad que se está editando.
+     */
+    private function bloquearQuincenaRepetida(array $data, ?int $excluirId = null): void
+    {
+        if (!CatalogoNovedades::esQuincena((string) ($data['tipo_codigo'] ?? ''))) {
+            return;
+        }
+        $idEmpresa = (int) ($data['id_empresa'] ?? 0);
+        $idEmp     = (int) ($data['id_empleado'] ?? 0);
+        $anio      = (int) ($data['periodo_anio'] ?? 0);
+        $mes       = (int) ($data['periodo_mes'] ?? 0);
+        if ($idEmpresa <= 0 || $idEmp <= 0 || $mes < 1 || $anio < 2000) {
+            return; // las reglas ya rechazan el dato incompleto
+        }
+        $periodo = str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio;
+
+        $previas = $this->repository->getMismoTipoPeriodo($idEmpresa, $idEmp, CatalogoNovedades::COD_QUINCENA, $anio, $mes, $excluirId);
+        if ($previas) {
+            $p = $previas[0];
+            $cuando = !empty($p['created_at']) ? ' el ' . date('d-m-Y H:i:s', strtotime((string) $p['created_at'])) : '';
+            throw new Exception("El empleado ya tiene la quincena de {$periodo}: novedad Quincena de $"
+                . number_format((float) $p['valor'], 2) . " registrada{$cuando}. Edítela o elimínela en lugar de registrar otra.");
+        }
+
+        try {
+            $conRol = (new \App\repositories\modulos\RolPagoRepository())->getEmpleadosConRolQuincena($idEmpresa, $anio, $mes, [$idEmp]);
+        } catch (\Throwable $e) {
+            $conRol = []; // roles no desplegado → sin rol de quincena que cruzar
+        }
+        if (isset($conRol[$idEmp])) {
+            throw new Exception("El empleado ya tiene la quincena de {$periodo}: está en el rol de QUINCENA de ese mes. "
+                . 'Anule ese rol o quite al empleado de él si quiere registrarla como novedad.');
+        }
+    }
+
+    /**
+     * Avisos que NO impiden guardar pero que el usuario debe confirmar (el controlador los
+     * devuelve como `requiere_confirmacion` y el modal vuelve a enviar con la confirmación):
+     *  - Quincena de un empleado que tiene VALOR QUINCENA en su ficha: el rol de QUINCENA de
+     *    ese mes lo omitirá (su quincena ya está en Novedades).
+     *  - Otra novedad del mismo tipo para el empleado en ese mes (concepto repetido; a veces es
+     *    legítimo, p. ej. dos descuentos distintos).
+     * Al editar (`$old`), solo se avisa si cambió el empleado, el tipo o el período: si no, ya
+     * se confirmó al crearla.
+     */
+    public function avisosAntesDeGuardar(array $data, int $idEmpresa, ?array $old = null): array
+    {
+        $tipo  = trim((string) ($data['tipo_codigo'] ?? ''));
+        $idEmp = (int) ($data['id_empleado'] ?? 0);
+        $anio  = (int) ($data['periodo_anio'] ?? 0);
+        $mes   = (int) ($data['periodo_mes'] ?? 0);
+        if ($tipo === '' || $idEmp <= 0 || $mes < 1 || $anio < 2000 || CatalogoNovedades::esAvisoSalida($tipo)) {
+            return [];
+        }
+        if ($old !== null
+            && (int) ($old['id_empleado'] ?? 0) === $idEmp && (string) ($old['tipo_codigo'] ?? '') === $tipo
+            && (int) ($old['periodo_anio'] ?? 0) === $anio && (int) ($old['periodo_mes'] ?? 0) === $mes) {
+            return [];
+        }
+        $periodo = str_pad((string) $mes, 2, '0', STR_PAD_LEFT) . '/' . $anio;
+        $avisos  = [];
+
+        if (CatalogoNovedades::esQuincena($tipo)) {
+            $ficha = $this->repository->getValorQuincenaFicha($idEmpresa, [$idEmp]);
+            if (isset($ficha[$idEmp])) {
+                $avisos[] = 'El empleado ya tiene quincenas: su ficha tiene un valor quincena de $' . number_format($ficha[$idEmp], 2)
+                    . ". Si continúa, al generar el rol de QUINCENA de {$periodo} se le omitirá, porque su quincena ya estará en Novedades.";
+            }
+            return $avisos; // una segunda Quincena del mes no es aviso: es error (bloquearQuincenaRepetida)
+        }
+
+        $previas = $this->repository->getMismoTipoPeriodo($idEmpresa, $idEmp, $tipo, $anio, $mes, isset($old['id']) ? (int) $old['id'] : null);
+        if ($previas) {
+            $detalle = implode(', ', array_map(
+                fn($p) => CatalogoNovedades::formatValor($tipo, $p['valor'])
+                    . (!empty($p['created_at']) ? ' (registrada el ' . date('d-m-Y H:i:s', strtotime((string) $p['created_at'])) . ')' : ''),
+                $previas
+            ));
+            $avisos[] = 'El empleado ya tiene ' . (count($previas) === 1 ? 'una novedad' : count($previas) . ' novedades')
+                . ' de ' . CatalogoNovedades::nombreTipo($tipo) . " en {$periodo}: {$detalle}. ¿Registrar otra?";
+        }
+        return $avisos;
     }
 
     /**
@@ -287,8 +380,8 @@ class NovedadService
         if (NovedadRepository::esDesembolsoMigrado($novedad)) {
             throw new Exception('No se puede editar ni eliminar esta novedad: viene migrada del sistema anterior, donde ya fue pagada/desembolsada. Registre una novedad nueva de ajuste si necesita corregirla.');
         }
-        $msg = $cod === '3'
-            ? 'No se puede editar ni eliminar este Anticipo: ya fue pagado por egreso.'
+        $msg = \App\models\CatalogoNovedades::esPagoPorEgreso($cod)
+            ? 'No se puede editar ni eliminar ' . (\App\models\CatalogoNovedades::esQuincena($cod) ? 'esta Quincena' : 'este Anticipo') . ': ya fue pagado por egreso.'
             : 'No se puede editar ni eliminar esta cuota: el Préstamo Empresa de este empleado ya tiene desembolsos registrados por egreso.';
         throw new Exception($msg . ' Anule ese egreso si necesita corregirlo, o registre una novedad nueva de ajuste.');
     }
@@ -302,7 +395,7 @@ class NovedadService
     private function yaDesembolsada(int $idEmpresa, array $novedad): bool
     {
         $cod = (string) ($novedad['tipo_codigo'] ?? '');
-        if ($cod !== '3' && $cod !== '9') return false;
+        if (!\App\models\CatalogoNovedades::esPagoPorEgreso($cod) && $cod !== '9') return false;
 
         $idNovedad = (int) ($novedad['id'] ?? 0);
         $idEmpleado = (int) ($novedad['id_empleado'] ?? 0);
@@ -317,7 +410,7 @@ class NovedadService
 
         try {
             $rolRepo = new \App\repositories\modulos\RolPagoRepository();
-            $monto = $cod === '3'
+            $monto = \App\models\CatalogoNovedades::esPagoPorEgreso($cod)
                 ? ($rolRepo->getAnticiposPagadosMasivo($idEmpresa, [$idNovedad])[$idNovedad] ?? 0.0)
                 : $rolRepo->getDesembolsadoPrestamoEmpleado($idEmpresa, $idEmpleado, '9');
             return $monto > 0.001;

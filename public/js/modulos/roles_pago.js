@@ -120,7 +120,7 @@
                 renderVer(json.data);
                 modalVer()?.show();
                 window.dispatchEvent(new CustomEvent('rolGuardado'));
-                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || [], json.data.parciales_pendientes || []);
+                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || [], json.data.parciales_pendientes || [], json.data.quincena_en_novedades || []);
             } else {
                 Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo generar.' });
             }
@@ -188,7 +188,7 @@
         rolActual = { id: rol.id, estado: rol.estado, tipo_rol: rol.tipo_rol };
         $('rolver_periodo').textContent = periodoTexto;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
-        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || [], rol.parciales_pendientes || []);
+        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || [], rol.parciales_pendientes || [], rol.quincena_en_novedades || []);
 
         const det = rol.detalle || [];
         if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
@@ -213,7 +213,7 @@
     // (2) anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos),
     // (3) solo mensual: semanas/quincenas del mes sin pagar (bloquean el pago del mensual).
     // Cerrados y con scroll propio para que, con muchos avisos, no tapen la tabla ni el footer.
-    function renderAvisos(avisos, sinPeriodo, parciales) {
+    function renderAvisos(avisos, sinPeriodo, parciales, quincenaNov) {
         const box = $('rolver_avisos');
         if (!box) return;
         const item = (id, color, icono, titulo, cuerpo) => `
@@ -240,7 +240,7 @@
         }
         if (avisos && avisos.length) {
             const li = avisos.map(a =>
-                `<li>${esc(a.empleado)} — <b>${esc(a.concepto)}</b>: ${money(a.monto)} <span class="text-muted">(${a.tipo === 'anticipo' ? 'anticipo sin pagar' : 'préstamo sin desembolsar'})</span></li>`
+                `<li>${esc(a.empleado)} — <b>${esc(a.concepto)}</b>: ${money(a.monto)} <span class="text-muted">(${a.tipo === 'anticipo' ? (a.concepto === 'Quincena' ? 'quincena sin pagar' : 'anticipo sin pagar') : 'préstamo sin desembolsar'})</span></li>`
             ).join('');
             html += item('rolver_av_desembolso', 'warning', 'bi-exclamation-triangle-fill',
                 `<b>${avisos.length} novedad(es) pendiente(s) de desembolso</b>`,
@@ -255,15 +255,22 @@
                 <b>no se podrá pagar en Egresos</b> hasta pagarlas (el rol se recalcula solo) o anularlas:
                 <ul class="mb-0 mt-1">${parciales.map(liParcial).join('')}</ul>`);
         }
+        if (quincenaNov && quincenaNov.length) {
+            html += item('rolver_av_quincenanov', 'info', 'bi-info-circle-fill',
+                `<b>${quincenaNov.length} empleado(s) omitido(s): su quincena ya está en Novedades</b>`,
+                `Tienen una novedad <b>Quincena</b> de este mes (cargada a mano o por plantilla), que descuenta el rol mensual. Para pagarles la quincena con este rol, elimine esa novedad y vuelva a abrir el rol:
+                <ul class="mb-0 mt-1">${quincenaNov.map(e => `<li>${esc(e.empleado)} — ${money(e.valor)}</li>`).join('')}</ul>`);
+        }
         box.innerHTML = html ?`<div class="accordion py-2" id="rolver_avisos_acc">${html}</div>` : '';
     }
 
     // Aviso emergente al generar, si hay empleados sin período o novedades sin desembolsar.
-    function avisarPendientes(avisos, sinPeriodo, parciales) {
+    function avisarPendientes(avisos, sinPeriodo, parciales, quincenaNov) {
         const hayAvisos = avisos && avisos.length;
         const haySinPeriodo = sinPeriodo && sinPeriodo.length;
         const hayParciales = parciales && parciales.length;
-        if (!hayAvisos && !haySinPeriodo && !hayParciales) return;
+        const hayQuincenaNov = quincenaNov && quincenaNov.length;
+        if (!hayAvisos && !haySinPeriodo && !hayParciales && !hayQuincenaNov) return;
 
         let html = '';
         if (haySinPeriodo) {
@@ -276,6 +283,9 @@
         }
         if (hayParciales) {
             html += `<div class="mt-2">Estas semanas/quincenas del mes <b>no se descontaron</b> porque aún no se han pagado. El rol mensual de estos empleados <b>no se podrá pagar</b> hasta pagarlas o anularlas:<ul class="mt-1 mb-0">${parciales.map(liParcial).join('')}</ul></div>`;
+        }
+        if (hayQuincenaNov) {
+            html += `<div class="mt-2"><b>${quincenaNov.length} empleado(s) NO se incluyeron</b> porque su quincena de este mes ya está registrada en Novedades (la descuenta el rol mensual):<ul class="mt-1 mb-0">${quincenaNov.map(e => `<li>${esc(e.empleado)} — ${money(e.valor)}</li>`).join('')}</ul></div>`;
         }
         Swal.fire({
             icon: 'warning',

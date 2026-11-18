@@ -76,7 +76,7 @@ class NovedadImportService
         $this->cargaSvc = $cargaSvc;
     }
 
-    public function procesar(string $archivoTmp, int $idEmpresa, int $idUsuario, string $nombreArchivo = ''): array
+    public function procesar(string $archivoTmp, int $idEmpresa, int $idUsuario, string $nombreArchivo = '', bool $confirmado = false): array
     {
         $spreadsheet = IOFactory::load($archivoTmp);
         // La plantilla trae la hoja "Novedades" y una de "Instrucciones": se lee siempre
@@ -125,6 +125,25 @@ class NovedadImportService
             foreach ($res['novedades'] as $data) {
                 $preparadas[] = ['fila' => $nf, 'data' => $data];
             }
+        }
+
+        // Quincena: una sola por empleado y mes, también dentro del archivo (dos serían dos
+        // descuentos de lo mismo). Contra lo ya registrado lo revisa validarParaCrear().
+        $quincenas = [];
+        foreach ($preparadas as $k => $p) {
+            $d = $p['data'];
+            if (!CatalogoNovedades::esQuincena((string) $d['tipo_codigo'])) {
+                continue;
+            }
+            $clave = (int) $d['id_empleado'] . '|' . (int) $d['periodo_anio'] . '|' . (int) $d['periodo_mes'];
+            if (isset($quincenas[$clave])) {
+                $this->agregarError($errores, $p['fila'], $this->etiqueta($d),
+                    'La quincena de ' . $d['_nombre_empleado'] . ' para ' . $this->nombrePeriodo($d)
+                    . ' viene más de una vez en el archivo (también en la fila ' . $quincenas[$clave] . '). Deje una sola.');
+                unset($preparadas[$k]);
+                continue;
+            }
+            $quincenas[$clave] = $p['fila'];
         }
 
         // Contra lo ya registrado solo se rechaza la novedad IDÉNTICA (mismo empleado,
@@ -178,6 +197,25 @@ class NovedadImportService
             throw new Exception($porEmpleado
                 ? 'Ningún empleado tiene novedades: escriba el valor en la columna de la novedad que le corresponda (monto, horas o días).'
                 : 'Ninguna fila tiene VALOR: complete la columna VALOR de los empleados a los que aplica la novedad.');
+        }
+
+        // Quincena de empleados que ya tienen VALOR QUINCENA en su ficha: no es error, pero el
+        // usuario debe confirmarlo (el rol de QUINCENA de ese mes los omitirá). El modal vuelve
+        // a subir el mismo archivo con la confirmación.
+        if (!$confirmado) {
+            $avisos = $this->avisosQuincenaFicha($preparadas, $idEmpresa);
+            if ($avisos) {
+                return [
+                    'creadas'  => 0,
+                    'errores'  => [],
+                    'total'    => $leidas,
+                    'omitidas' => $omitidas,
+                    'id_carga' => null,
+                    'abortada' => true,
+                    'requiere_confirmacion' => true,
+                    'avisos'   => $avisos,
+                ];
+            }
         }
 
         // ── Fase 2: grabar la carga completa en una sola transacción ─────────
@@ -331,6 +369,28 @@ class NovedadImportService
         }
 
         return ['novedades' => $novedades, 'errores' => $errores, 'leidas' => $leidas];
+    }
+
+    /**
+     * "Fila N — EMPLEADO: …" por cada Quincena del archivo cuyo empleado tiene VALOR QUINCENA en
+     * su ficha (una sola consulta para todo el archivo).
+     */
+    private function avisosQuincenaFicha(array $preparadas, int $idEmpresa): array
+    {
+        $quincenas = array_filter($preparadas, fn($p) => CatalogoNovedades::esQuincena((string) $p['data']['tipo_codigo']));
+        if (!$quincenas) {
+            return [];
+        }
+        $ficha = $this->repo->getValorQuincenaFicha($idEmpresa, array_map(fn($p) => $p['data']['id_empleado'], $quincenas));
+        $avisos = [];
+        foreach ($quincenas as $p) {
+            $d = $p['data'];
+            if (isset($ficha[(int) $d['id_empleado']])) {
+                $avisos[] = 'Fila ' . $p['fila'] . ' — ' . $d['_nombre_empleado'] . ': ya tiene quincenas (valor quincena en su ficha $'
+                    . number_format($ficha[(int) $d['id_empleado']], 2) . '). Al generar el rol de QUINCENA de ' . $this->nombrePeriodo($d) . ' se le omitirá.';
+            }
+        }
+        return $avisos;
     }
 
     /**

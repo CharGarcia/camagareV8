@@ -202,7 +202,7 @@ class NovedadRepository extends BaseRepository
             $concMig = in_array($r['conciliada_migrada'] ?? null, ['t', true, 1, '1', 'true'], true);
             $r['pagada'] = isset($pagadas[(int) $r['id']]) || $desembMig || $concMig;
             $cod = (string) ($r['tipo_codigo'] ?? '');
-            $porDesembolso = ($cod === '3' && (isset($desembolsadas['a' . (int) $r['id']]) || $desembMig))
+            $porDesembolso = (\App\models\CatalogoNovedades::esPagoPorEgreso($cod) && (isset($desembolsadas['a' . (int) $r['id']]) || $desembMig))
                 || ($cod === '9' && (isset($desembolsadas['p' . (int) $r['id_empleado']]) || $desembMig));
             $r['bloqueada'] = isset($bloqueadas[$this->claveCombo($r)]) || $porDesembolso;
         }
@@ -287,7 +287,7 @@ class NovedadRepository extends BaseRepository
         $set = [];
 
         $idsAnticipo = array_values(array_unique(array_filter(array_map(
-            fn($r) => ((string) ($r['tipo_codigo'] ?? '')) === '3' ? (int) $r['id'] : null,
+            fn($r) => \App\models\CatalogoNovedades::esPagoPorEgreso((string) ($r['tipo_codigo'] ?? '')) ? (int) $r['id'] : null,
             $rows
         ))));
         if (!empty($idsAnticipo)) {
@@ -602,6 +602,47 @@ class NovedadRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':id_empresa' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Novedades activas del mismo empleado, tipo y período (mes/año), del ambiente
+     * actual de la empresa, sin contar `$excluirId` (la que se está editando). Para
+     * avisar de un concepto repetido y para no aceptar una segunda Quincena del mes.
+     */
+    public function getMismoTipoPeriodo(int $idEmpresa, int $idEmpleado, string $tipo, int $anio, int $mes, ?int $excluirId = null): array
+    {
+        $sql = "SELECT id, tipo_nombre, valor, fecha, created_at, COALESCE(desembolsado_migrado, false) AS desembolsado_migrado
+                  FROM {$this->table}
+                 WHERE id_empresa = :id_empresa AND eliminado = false AND estado = 'activo'
+                   AND id_empleado = :emp AND tipo_codigo = :tipo
+                   AND periodo_anio = :a AND periodo_mes = :m
+                   AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)";
+        $p = [':id_empresa' => $idEmpresa, ':emp' => $idEmpleado, ':tipo' => $tipo, ':a' => $anio, ':m' => $mes];
+        if ($excluirId !== null && $excluirId > 0) {
+            $sql .= ' AND id <> :excluir';
+            $p[':excluir'] = $excluirId;
+        }
+        $st = $this->db->prepare($sql . ' ORDER BY id');
+        $st->execute($p);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** [id_empleado => valor_quincena de la ficha] de los empleados que tienen uno mayor a 0. */
+    public function getValorQuincenaFicha(int $idEmpresa, array $idsEmpleado): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsEmpleado))));
+        if (empty($ids)) {
+            return [];
+        }
+        $st = $this->db->prepare("SELECT id, valor_quincena FROM empleados
+                                   WHERE id_empresa = :e AND eliminado = false AND COALESCE(valor_quincena, 0) > 0
+                                     AND id IN (" . implode(',', $ids) . ")");
+        $st->execute([':e' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = (float) $r['valor_quincena'];
+        }
+        return $out;
     }
 
     /** ¿El empleado aporta al IESS (pestaña Laboral de su ficha)? null si no existe en la empresa. */

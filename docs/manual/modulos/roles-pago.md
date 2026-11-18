@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula
-version: 1.21
+etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula, quincena en novedades, empleado omitido en la quincena, falta un empleado en la quincena, quincena cargada por excel
+version: 1.23
 orden: 30
 estado: activo
 ---
@@ -29,6 +29,15 @@ hay número que escoger. Las novedades que se registran para la quincena se
 descuentan en esa única corrida (con dos quincenas se cargaban en ambas). Las
 quincenas 2 que ya existían, por ejemplo las migradas del sistema anterior, se
 siguen viendo y pagando.
+
+**Quincena registrada en Novedades.** Si un empleado ya tiene su quincena del
+mes como novedad **Quincena** (a mano o por la plantilla de Novedades), el rol de
+QUINCENA de ese mes **lo omite** y lo avisa en *Empleados omitidos: su quincena
+ya está en Novedades*: esa quincena la descuenta el rol mensual, igual que un
+anticipo (*Pendientes de desembolso* mientras no se pague). Para pagarla con el
+rol de quincena, elimine la novedad y vuelva a abrir el rol. Al revés, no se
+puede registrar la novedad Quincena de un empleado que ya está en el rol de
+QUINCENA del mes.
 
 En el listado, la columna **Tipo** distingue cada ritmo con su propio color e
 ícono de calendario: **Rol Mensual** en celeste, **Quincena** en gris oscuro y
@@ -424,6 +433,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.23** — El rol de QUINCENA omite a los empleados que ya tienen su quincena del mes registrada en Novedades (tipo *Quincena*) y lo avisa. Esa quincena se descuenta en el rol mensual como un anticipo y, en el asiento, va a la cuenta de Anticipos.
 
 - **1.22** — El aviso *empleados activos sin período* ya no lista a quien salió de la empresa antes del mes del rol (todos sus períodos cerrados con fecha de salida anterior), aunque su ficha siga en estado activo.
 

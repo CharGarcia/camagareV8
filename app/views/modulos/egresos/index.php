@@ -1274,8 +1274,13 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             };
             const esPrestamo = String(d.tipo_bd || '').startsWith('PRESTAMO');
             const esNominaTipo = d.tipo_bd === 'ROL' || d.tipo_bd === 'ANTICIPO' || esPrestamo;
+            // La Quincena cargada como novedad (código 15) se paga como ANTICIPO; su número
+            // empieza con el nombre del tipo ("Quincena 11/2026"), así se distingue en la etiqueta.
+            const esQuincenaNov = d.tipo_bd === 'ANTICIPO' && /^Quincena\b/i.test(String(d.numero || ''));
             const tipoBadge = esPrestamo
                 ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem">PRÉSTAMO</span>'
+                : esQuincenaNov
+                ? '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" style="font-size:0.65rem">QUINCENA</span>'
                 : (badgesDoc[d.tipo_bd] || `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" style="font-size:0.65rem">${d.tipo_bd}</span>`);
             // Nómina migrada aún sin enlazar a su rol: el número es la llave técnica del sistema anterior
             // (ROL_PAGOS22882 / QUINCENA2722); se muestra su texto ("Rol de pagos 11-2023 …"), que trae el mes.

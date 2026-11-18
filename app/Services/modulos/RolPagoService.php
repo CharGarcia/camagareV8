@@ -106,6 +106,10 @@ class RolPagoService
         $cab['parciales_pendientes'] = $cab['tipo_rol'] === 'MENSUAL'
             ? $this->repo->getParcialesPendientesPeriodo($idEmpresa, (int) $cab['periodo_anio'], (int) $cab['periodo_mes'])
             : [];
+        // Aviso (solo QUINCENA): empleados omitidos porque su quincena del mes ya está en Novedades.
+        $cab['quincena_en_novedades'] = $cab['tipo_rol'] === 'QUINCENA'
+            ? array_values($this->repo->getEmpleadosConQuincenaNovedad($idEmpresa, (int) $cab['periodo_anio'], (int) $cab['periodo_mes']))
+            : [];
         return $cab;
     }
 
@@ -358,6 +362,9 @@ class RolPagoService
         $ingNeteoMap      = $esMensual ? $this->repo->getIngresosNeteoMasivo($idEmpresa, $ids, $anio, $mes) : [];
         $vacMap           = $esMensual ? $vacRepo->getValorParaRolMasivo($idEmpresa, $ids, $anio, $mes) : [];
         $mensualPagadoSet = $esParcial ? $this->repo->getMensualPagadoMasivo($idEmpresa, $ids, $anio, $mes) : [];
+        // QUINCENA: quien ya tiene su quincena del mes como novedad (tipo Quincena, cargada a mano
+        // o por plantilla) no entra: el rol mensual ya la descuenta desde Novedades.
+        $quincenaNovSet   = $tipo === 'QUINCENA' ? $this->repo->getEmpleadosConQuincenaNovedad($idEmpresa, $anio, $mes) : [];
 
         $totalCandidatos = count($empleados);
         $excluidosMensualPagado = 0;
@@ -386,6 +393,9 @@ class RolPagoService
                 if ($esParcial && isset($mensualPagadoSet[$idEmp])) {
                     $excluidosMensualPagado++;
                     continue;
+                }
+                if (isset($quincenaNovSet[$idEmp])) {
+                    continue; // su quincena ya está en Novedades (ver getDetalle: aviso quincena_en_novedades)
                 }
 
                 $rubrosF  = $rubrosMap[$idEmp] ?? [];

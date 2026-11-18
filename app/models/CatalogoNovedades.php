@@ -25,7 +25,21 @@ final class CatalogoNovedades
      * los días no laborados (restan del sueldo ganado del mes) y el aviso de salida.
      * En la quincena y en la semana solo hay ingresos (con o sin IESS) y descuentos.
      */
-    public const CODS_SOLO_ROL = ['10', self::COD_AVISO_SALIDA];
+    public const CODS_SOLO_ROL = ['10', self::COD_AVISO_SALIDA, self::COD_QUINCENA];
+
+    /**
+     * Quincena (15): el adelanto de mitad de mes, cargado como novedad (normalmente por la
+     * plantilla Excel, con su monto de ese mes). Funciona igual que el Anticipo: se paga por
+     * egreso (o se marca "ya pagada") y el rol MENSUAL descuenta lo pagado. No convive con
+     * el rol de tipo QUINCENA del mismo empleado y mes: serían dos descuentos de lo mismo
+     * (ver NovedadService::validarQuincenaSinRolQuincena y RolPagoService::generar).
+     */
+    public const COD_QUINCENA = '15';
+
+    public static function esQuincena(string $codigo): bool
+    {
+        return $codigo === self::COD_QUINCENA;
+    }
 
     public static function soloRolMensual(string $codigo): bool
     {
@@ -89,15 +103,22 @@ final class CatalogoNovedades
     /**
      * Tipos que NO se descuentan en el rol al registrarse: se ENTREGAN al empleado y
      * se pagan primero con un egreso (aparecen en Egresos → Nómina); el rol descuenta
-     * solo lo pagado por egreso. Solo el ANTICIPO (3), que es de un único mes.
+     * solo lo pagado por egreso. El ANTICIPO (3) y la QUINCENA (15), que son de un único mes.
      * Los préstamos (7/8/9) se manejan como CUOTA: descuento directo en el rol (una
      * novedad por cuota, manual o por Excel), y el desembolso del capital es un egreso aparte.
+     * En egresos_detalle ambos se pagan como tipo_documento 'ANTICIPO' (id = la novedad).
      */
-    public const CODS_PAGO_EGRESO = ['3'];
+    public const CODS_PAGO_EGRESO = ['3', self::COD_QUINCENA];
 
     public static function esPagoPorEgreso(string $codigo): bool
     {
         return in_array($codigo, self::CODS_PAGO_EGRESO, true);
+    }
+
+    /** Lista SQL de CODS_PAGO_EGRESO para `tipo_codigo IN (...)` (son constantes, no entrada del usuario). */
+    public static function sqlPagoPorEgreso(): string
+    {
+        return "'" . implode("','", self::CODS_PAGO_EGRESO) . "'";
     }
 
     /**
@@ -117,6 +138,8 @@ final class CatalogoNovedades
         ['codigo' => '1',  'nombre' => 'Otros Ingresos'],
         ['codigo' => '2',  'nombre' => 'Descuento'],
         ['codigo' => '3',  'nombre' => 'Anticipo'],
+        // Junto al Anticipo, que funciona igual: así quedan seguidas en la plantilla y los selects.
+        ['codigo' => '15', 'nombre' => 'Quincena'],
         ['codigo' => '4',  'nombre' => 'Horas Nocturnas'],
         ['codigo' => '5',  'nombre' => 'Horas Suplementarias'],
         ['codigo' => '6',  'nombre' => 'Horas Extraordinarias'],

@@ -187,7 +187,7 @@ class EgresoRules
         }
         $lista = implode(', ', array_map(
             fn($n) => $n['tipo_nombre'] . ' ($' . number_format((float) $n['monto'], 2) . ', '
-                . ((string) $n['tipo_codigo'] === '3' ? 'sin pagar' : 'préstamo sin desembolsar') . ')',
+                . (\App\models\CatalogoNovedades::esPagoPorEgreso((string) $n['tipo_codigo']) ? 'sin pagar' : 'préstamo sin desembolsar') . ')',
             $novedades
         ));
         throw new Exception(

@@ -391,7 +391,9 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         <b>Anticipo</b> y <b>Préstamo Empresa</b> tienen dos columnas: <b>ya entregado</b> (el rol
                         los descuenta directo, sin egreso; ese pago no queda en contabilidad, regístrelo con un
                         asiento si aún no está) y <b>por pagar</b> (se pagan en <i>Egresos → Nómina</i> y luego el
-                        rol los descuenta). Con <b>N° de cuotas</b> se crean todas las cuotas mensuales del préstamo.
+                        rol los descuenta). La <b>Quincena</b> funciona igual (<b>ya pagada</b> / <b>por pagar</b>) y se
+                        descuenta en el rol mensual; no se acepta si el empleado ya tiene la quincena de ese mes.
+                        Con <b>N° de cuotas</b> se crean todas las cuotas mensuales del préstamo.
                         La hoja <b>Instrucciones</b> del archivo explica cada columna.
                     </div>
                     <input type="file" id="nov_import_file" class="form-control form-control-sm" accept=".xlsx,.xls">
@@ -564,8 +566,31 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             cont.innerHTML = '';
             try {
                 const fd = new FormData(); fd.append('archivo', fileInput.files[0]);
-                const resp = await fetch(`${urlImport}/importar-excel`, { method: 'POST', body: fd });
-                const json = await resp.json();
+                let resp = await fetch(`${urlImport}/importar-excel`, { method: 'POST', body: fd });
+                let json = await resp.json();
+                // Quincenas de empleados con valor quincena en la ficha: no es error, se confirma y
+                // se vuelve a subir el mismo archivo con la confirmación.
+                if (json.ok && json.requiere_confirmacion) {
+                    const r = await Swal.fire({
+                        icon: 'warning',
+                        title: 'Empleados que ya tienen quincenas',
+                        html: `<div class="small text-start" style="max-height:50vh;overflow-y:auto;">
+                                   <p class="mb-2">La ficha de estos empleados tiene un valor quincena. Si continúa, su quincena queda en Novedades y el rol de QUINCENA de ese mes los omitirá:</p>
+                                   <ul class="mb-0 ps-3">${(json.avisos || []).map(a => `<li>${esc(a)}</li>`).join('')}</ul>
+                               </div>`,
+                        showCancelButton: true,
+                        confirmButtonText: 'Importar de todos modos',
+                        cancelButtonText: 'Cancelar'
+                    });
+                    if (!r.isConfirmed) {
+                        cont.innerHTML = '<div class="alert alert-secondary small py-2 mb-0">Importación cancelada: no se registró ninguna novedad.</div>';
+                        btn.disabled = false; btn.innerHTML = '<i class="bi bi-upload me-1"></i> Importar';
+                        return;
+                    }
+                    const fd2 = new FormData(); fd2.append('archivo', fileInput.files[0]); fd2.append('confirmar_avisos', '1');
+                    resp = await fetch(`${urlImport}/importar-excel`, { method: 'POST', body: fd2 });
+                    json = await resp.json();
+                }
                 if (!json.ok) {
                     cont.innerHTML = `<div class="alert alert-danger small py-2 mb-0">${esc(json.error)}</div>`;
                 } else if (json.errores && json.errores.length) {

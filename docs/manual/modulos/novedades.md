@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips
-version: 1.14
+etiquetas: novedades, novedad, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips, quincena, quincena ya pagada, quincena por pagar, adelanto de quincena, quincena repetida, ya tiene quincenas, valor quincena, concepto repetido, novedad repetida, doble descuento
+version: 1.15
 orden: 20
 estado: activo
 ---
@@ -104,6 +104,46 @@ Un ingreso registrado para la quincena se paga en ella y el rol mensual lo toma
 en cuenta al cerrar el mes: no lo descuenta y, si aporta al IESS, lo suma a la
 base del mes.
 
+## Quincena
+
+La **Quincena** es el adelanto de mitad de mes registrado como novedad, con el
+monto que corresponda ese mes. Funciona igual que el **Anticipo**:
+
+- **Por pagar** (la que se registra con **Nuevo**, o la columna *QUINCENA POR
+  PAGAR* de la plantilla): aparece en **Egresos → Nómina** con la etiqueta
+  *QUINCENA* para pagarla, y el rol mensual descuenta **solo lo pagado**.
+  Mientras no se pague, el rol mensual la muestra en *Pendientes de desembolso* y
+  no deja pagar el rol de ese empleado.
+- **Ya pagada** (columna *QUINCENA YA PAGADA* de la plantilla): ya se le pagó al
+  empleado fuera del sistema; el rol mensual la descuenta directo, sin egreso.
+
+Siempre se descuenta en el **rol mensual** del mes de la novedad: *Afecta a*
+queda fijo en **Rol de Pagos**. En el asiento del rol va a la misma cuenta que
+los anticipos (*Anticipos y Descuentos de nómina*).
+
+**No se puede tener la quincena dos veces.** Una Quincena no se acepta, ni a
+mano ni por plantilla, si el empleado ya tiene la quincena de ese mes:
+
+- otra novedad **Quincena** del mismo mes, o
+- una línea en el **rol de QUINCENA** de ese mes (generado y no anulado).
+
+Al revés, al generar el **rol de QUINCENA** se **omite** a los empleados que ya
+tienen su quincena del mes en Novedades, y el rol lo avisa en *Empleados
+omitidos: su quincena ya está en Novedades*.
+
+**Empleados con valor quincena en la ficha.** Si la ficha del empleado tiene un
+*valor quincena*, el sistema pide confirmación antes de guardar (a mano) o de
+importar (plantilla): *«El empleado ya tiene quincenas…»*. Si continúa, ese mes
+su quincena queda en Novedades y el rol de QUINCENA lo omite.
+
+## Concepto repetido en el mes
+
+Al registrar o editar una novedad a mano, si el empleado ya tiene **otra del
+mismo tipo en el mismo mes** (por ejemplo un segundo *Descuento*), el sistema
+avisa cuántas tiene y de qué valor, y pregunta si desea registrar otra. No lo
+impide: a veces es correcto tener dos. Al editar solo avisa si cambió el
+empleado, el tipo o el periodo.
+
 ## Carga masiva desde una plantilla Excel
 
 Cuando hay muchas novedades del mismo periodo (por ejemplo las horas extra, los
@@ -123,7 +163,7 @@ periodo. No hace falta elegir el tipo de novedad.
 |----------|---------------|
 | IDENTIFICACION, NOMBRE | El empleado (ya vienen escritos) |
 | Dos por cada ingreso que aporta o no al IESS: OTROS INGRESOS (bonos, comisiones), HORAS NOCTURNAS, HORAS SUPLEMENTARIAS y HORAS EXTRAORDINARIAS, cada una **CON IESS** y **SIN IESS** | Vacías: aquí se escribe |
-| Dos para ANTICIPO (**YA ENTREGADO** y **POR PAGAR**) y dos para PRÉSTAMO EMPRESA (**YA DESEMBOLSADO** y **POR DESEMBOLSAR**), más **PRÉSTAMO EMPRESA N° DE CUOTAS** | Vacías: aquí se escribe (ver *Anticipos y préstamos empresa cargados por Excel*) |
+| Dos para ANTICIPO (**YA ENTREGADO** y **POR PAGAR**), dos para QUINCENA (**YA PAGADA** y **POR PAGAR**, ver *Quincena*) y dos para PRÉSTAMO EMPRESA (**YA DESEMBOLSADO** y **POR DESEMBOLSAR**), más **PRÉSTAMO EMPRESA N° DE CUOTAS** | Vacías: aquí se escribe (ver *Anticipos y préstamos empresa cargados por Excel*) |
 | Una por tipo: DESCUENTO, PRÉSTAMO QUIROGRAFARIO, PRÉSTAMO HIPOTECARIO y DÍAS NO LABORADOS | Vacías: aquí se escribe |
 | MES, ANIO, AFECTA_A, FECHA | Ya escritos con lo que eligió en pantalla y la fecha de hoy |
 | OBSERVACION | Opcional |
@@ -336,6 +376,14 @@ filtrado.
   probable es que el archivo ya se haya subido. Borre el valor de esa celda o
   corrija el periodo de la fila. Si de verdad es una segunda novedad por el
   mismo monto, regístrela a mano desde **Nuevo**.
+- **"El empleado ya tiene la quincena de MM/AAAA..."**: ya tiene una novedad
+  Quincena de ese mes o está en el rol de QUINCENA de ese mes. Edite la novedad
+  que ya existe, o anule el rol de quincena / quite al empleado de él.
+- **"La quincena de ... viene más de una vez en el archivo"**: la plantilla trae
+  dos filas con quincena para el mismo empleado y mes. Deje una sola.
+- **El rol de QUINCENA no incluye a un empleado**: su quincena del mes ya está
+  registrada como novedad (ver *Quincena*). Elimine esa novedad si quiere pagarla
+  con el rol de quincena.
 - **"El valor «...» no es un número"**: en las columnas de monto, horas o días
   solo van números (se acepta coma o punto decimal).
 - **"N° DE CUOTAS no válido"**: en *PRÉSTAMO EMPRESA N° DE CUOTAS* va un número
@@ -360,6 +408,7 @@ filtrado.
 
 ## Historial de cambios
 
+- **1.15** — Nuevo tipo **Quincena**, que funciona como el anticipo (*ya pagada* / *por pagar*) y se descuenta en el rol mensual; en la plantilla tiene dos columnas junto al anticipo. No se acepta una segunda quincena del mismo mes ni una quincena para quien ya está en el rol de QUINCENA del mes; si la ficha tiene valor quincena se pide confirmación. Al registrar a mano, aviso si el empleado ya tiene otra novedad del mismo tipo en el mes.
 - **1.14** — Un anticipo *por pagar* o un préstamo empresa *por desembolsar* (a mano o por Excel) pendiente impide pagar el rol de ese período en Egresos hasta pagarlo o desembolsarlo; y ya no se puede pagar el anticipo ni desembolsar el préstamo si el rol donde se descuentan ya se pagó sin descontarlos.
 - **1.13** — **Anticipo y Préstamo Empresa con columnas «ya entregado» y «por
   pagar» en la plantilla Excel.** Lo *por pagar* sigue el camino normal

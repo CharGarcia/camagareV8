@@ -710,7 +710,7 @@ class RolPagoRepository extends BaseRepository
         // Anticipos migrados marcados como desembolsados (sin egreso): cuentan como pagados por su valor.
         try {
             $st2 = $this->db->prepare("SELECT id, valor FROM novedades
-                WHERE id_empresa = :emp AND id IN ($in) AND tipo_codigo = '3'
+                WHERE id_empresa = :emp AND id IN ($in) AND tipo_codigo IN (" . \App\models\CatalogoNovedades::sqlPagoPorEgreso() . ")
                   AND desembolsado_migrado = true AND eliminado = false");
             $st2->execute([':emp' => $idEmpresa]);
             foreach ($st2->fetchAll(PDO::FETCH_ASSOC) as $r) {
@@ -852,7 +852,7 @@ class RolPagoRepository extends BaseRepository
                                   AND ec.eliminado = false AND ed.eliminado = false
                                 GROUP BY ed.id_referencia_documento) pa ON pa.id_referencia_documento = n.id
                      WHERE n.id_empresa = :emp AND n.periodo_anio = :a AND n.periodo_mes = :m AND n.aplica_en = :ap
-                       AND n.tipo_codigo = '3' AND n.estado = 'activo' AND n.eliminado = false
+                       AND n.tipo_codigo IN (" . \App\models\CatalogoNovedades::sqlPagoPorEgreso() . ") AND n.estado = 'activo' AND n.eliminado = false
                        AND n.desembolsado_migrado = false
                        AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
                        AND ROUND(n.valor - COALESCE(pa.total_pagado, 0), 2) > 0
@@ -1346,6 +1346,62 @@ class RolPagoRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute([':emp' => $idEmpresa, ':e' => $idEmpleado, ':t' => $tipoRol, ':a' => $anio, ':m' => $mes]);
         return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * [id_empleado => numero_periodo] de los empleados que ya tienen una línea en un rol de
+     * QUINCENA vigente (no anulado ni eliminado) del mes, en el ambiente actual de la empresa.
+     * Sin `$idsEmpleado`, todos los de ese mes. Para no aceptar además una novedad Quincena
+     * (CatalogoNovedades::COD_QUINCENA): se descontaría dos veces.
+     */
+    public function getEmpleadosConRolQuincena(int $idEmpresa, int $anio, int $mes, array $idsEmpleado = []): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $idsEmpleado))));
+        $filtro = $ids ? ' AND d.id_empleado IN (' . implode(',', $ids) . ')' : '';
+        $sql = "SELECT d.id_empleado, MIN(c.numero_periodo) AS numero_periodo
+                FROM rol_detalle d
+                JOIN rol_cabecera c ON c.id = d.id_rol
+                WHERE d.id_empresa = :emp AND c.tipo_rol = 'QUINCENA'
+                  AND c.periodo_anio = :a AND c.periodo_mes = :m
+                  AND c.eliminado = false AND c.estado <> 'anulado'
+                  AND c.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                  {$filtro}
+                GROUP BY d.id_empleado";
+        $st = $this->db->prepare($sql);
+        $st->execute([':emp' => $idEmpresa, ':a' => $anio, ':m' => $mes]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_empleado']] = (int) $r['numero_periodo'];
+        }
+        return $out;
+    }
+
+    /**
+     * Empleados con una novedad Quincena (CatalogoNovedades::COD_QUINCENA) activa en el mes,
+     * del ambiente actual: [id_empleado => ['empleado' => nombre, 'valor' => suma]]. El rol de
+     * QUINCENA los omite (su quincena ya está en Novedades y la descuenta el rol mensual).
+     */
+    public function getEmpleadosConQuincenaNovedad(int $idEmpresa, int $anio, int $mes): array
+    {
+        $sql = "SELECT n.id_empleado, emp.nombres_apellidos AS empleado, emp.identificacion, SUM(n.valor) AS valor
+                FROM novedades n JOIN empleados emp ON emp.id = n.id_empleado
+                WHERE n.id_empresa = :emp AND n.tipo_codigo = :cod
+                  AND n.periodo_anio = :a AND n.periodo_mes = :m
+                  AND n.estado = 'activo' AND n.eliminado = false
+                  AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :emp)
+                GROUP BY n.id_empleado, emp.nombres_apellidos, emp.identificacion
+                ORDER BY emp.nombres_apellidos";
+        try {
+            $st = $this->db->prepare($sql);
+            $st->execute([':emp' => $idEmpresa, ':cod' => \App\models\CatalogoNovedades::COD_QUINCENA, ':a' => $anio, ':m' => $mes]);
+        } catch (\Throwable $e) {
+            return []; // novedades no desplegado → nadie se omite
+        }
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_empleado']] = ['empleado' => $r['empleado'], 'identificacion' => $r['identificacion'], 'valor' => (float) $r['valor']];
+        }
+        return $out;
     }
 
     /**

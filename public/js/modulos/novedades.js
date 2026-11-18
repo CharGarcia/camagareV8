@@ -342,8 +342,25 @@
             btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>';
 
             try {
-                const resp = await fetch(url, { method: 'POST', body: new FormData(form) });
-                const json = await resp.json();
+                let resp = await fetch(url, { method: 'POST', body: new FormData(form) });
+                let json = await resp.json();
+                // Avisos que no impiden guardar (quincena con valor en la ficha, concepto repetido
+                // en el mes): si el usuario acepta, se reenvía con la confirmación.
+                if (!json.ok && json.requiere_confirmacion) {
+                    const r = await Swal.fire({
+                        icon: 'warning',
+                        title: 'Revise antes de guardar',
+                        html: `<div class="small text-start">${(json.avisos || []).map(a => `<p class="mb-2">${String(a).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))}</p>`).join('')}</div>`,
+                        showCancelButton: true,
+                        confirmButtonText: 'Guardar de todos modos',
+                        cancelButtonText: 'Cancelar'
+                    });
+                    if (!r.isConfirmed) { restaurar(); return; }
+                    const fd = new FormData(form);
+                    fd.append('confirmar_avisos', '1');
+                    resp = await fetch(url, { method: 'POST', body: fd });
+                    json = await resp.json();
+                }
                 if (json.ok) {
                     Swal.fire({ icon: 'success', title: id ? 'Actualizada' : 'Guardada', text: json.msg || 'Novedad guardada.', timer: 1500, showConfirmButton: false });
                     setTimeout(() => {

@@ -712,7 +712,7 @@ class EgresoRepository extends BaseRepository
                 FROM novedades n
                 LEFT JOIN pagado_ant pa ON pa.id_referencia_documento = n.id
                 WHERE n.id_empleado = :id_emp AND n.id_empresa = :id_empresa
-                  AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo = '3'
+                  AND n.eliminado = FALSE AND n.estado = 'activo' AND n.tipo_codigo IN (" . \App\models\CatalogoNovedades::sqlPagoPorEgreso() . ")
                   AND n.desembolsado_migrado = FALSE
                   AND ROUND(n.valor - COALESCE(pa.total_pagado, 0), 2) > 0
                   {$filtroAntPagable}
@@ -1283,7 +1283,7 @@ class EgresoRepository extends BaseRepository
                         LEFT  JOIN pagado_ant pa ON n.id = pa.id_referencia_documento
                         WHERE n.id_empresa = :id_empresa
                           AND n.eliminado = FALSE AND n.estado = 'activo'
-                          AND n.tipo_codigo = '3'
+                          AND n.tipo_codigo IN (" . \App\models\CatalogoNovedades::sqlPagoPorEgreso() . ")
                           AND n.desembolsado_migrado = FALSE
                           AND n.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :id_empresa)
                           AND ROUND(n.valor - COALESCE(pa.total_pagado, 0), 2) > 0
@@ -1639,14 +1639,14 @@ class EgresoRepository extends BaseRepository
         $saldoAnt = $this->sqlSaldoAnticipo('nx', $excluirSql);
         $faltaPre = $this->sqlFaltaDesembolsoPrestamo('nx', $excluirSql);
         return "SELECT nx.tipo_codigo, nx.tipo_nombre,
-                       CASE WHEN nx.tipo_codigo = '3' THEN {$saldoAnt} ELSE nx.valor END AS monto
+                       CASE WHEN nx.tipo_codigo IN (" . \App\models\CatalogoNovedades::sqlPagoPorEgreso() . ") THEN {$saldoAnt} ELSE nx.valor END AS monto
                 FROM novedades nx
                 WHERE nx.id_empresa = {$rd}.id_empresa AND nx.id_empleado = {$rd}.id_empleado
                   AND nx.periodo_anio = {$rc}.periodo_anio AND nx.periodo_mes = {$rc}.periodo_mes
                   AND nx.aplica_en = {$this->sqlAplicaEnDeRol($rc)}
                   AND nx.tipo_ambiente = {$rc}.tipo_ambiente
                   AND nx.estado = 'activo' AND nx.eliminado = FALSE AND nx.desembolsado_migrado = FALSE
-                  AND ((nx.tipo_codigo = '3' AND {$saldoAnt} > 0)
+                  AND ((nx.tipo_codigo IN (" . \App\models\CatalogoNovedades::sqlPagoPorEgreso() . ") AND {$saldoAnt} > 0)
                     OR (nx.tipo_codigo = '9' AND {$faltaPre} > 0))";
     }
 

@@ -120,6 +120,9 @@ class NovedadPlantillaService
         if (CatalogoNovedades::esPrestamo($codigo)) {
             return $entregado ? 'YA DESEMBOLSADO' : 'POR DESEMBOLSAR';
         }
+        if (CatalogoNovedades::esQuincena($codigo)) {
+            return $entregado ? 'YA PAGADA' : 'POR PAGAR';
+        }
         return $entregado ? 'YA ENTREGADO' : 'POR PAGAR';
     }
 
@@ -167,6 +170,12 @@ class NovedadPlantillaService
                 'Con más de 1, se crea una cuota por mes desde el MES/ANIO de la fila, cada una por el valor escrito en la columna del préstamo. Vacía o 1: solo la cuota de ese mes.',
                 '10',
             ];
+        }
+        if ($col['entregado'] !== null && CatalogoNovedades::esQuincena($codigo)) {
+            $control = ' No se acepta si el empleado ya tiene la quincena de ese mes (rol de quincena generado o novedad Quincena registrada); si su ficha tiene valor quincena, se pide confirmación y el rol de quincena de ese mes lo omitirá.';
+            return $col['entregado']
+                ? ['Monto de la quincena.', 'La quincena ya se pagó al empleado: el rol mensual la descuenta directo, sin pedir el pago en Egresos → Nómina. No genera egreso ni asiento del pago.' . $control, '250']
+                : ['Monto de la quincena.', 'La quincena aún no se paga: aparece en Egresos → Nómina para pagarla, y el rol mensual la descuenta solo después de pagada.' . $control, '250'];
         }
         if ($col['entregado'] !== null) {
             $prestamo = CatalogoNovedades::esPrestamo($codigo);
@@ -411,6 +420,14 @@ class NovedadPlantillaService
             '• Use POR PAGAR / POR DESEMBOLSAR cuando todavía hay que entregarlo: se paga en Egresos → Nómina y recién entonces el rol lo descuenta.',
             '• Plantillas descargadas antes, con una sola columna ANTICIPO o PRÉSTAMO EMPRESA: se toman como YA ENTREGADO.',
             '• CONTABILIDAD: lo YA ENTREGADO no genera egreso, así que ese pago no queda contabilizado. El asiento del rol acredita la cuenta de Anticipos o de Préstamos Empresa por Cobrar, pero nada la debita: si la entrega aún no está contabilizada, regístrela con un asiento manual. Lo POR PAGAR sí queda contabilizado con su egreso.',
+        ]);
+
+        $titulo('QUINCENA: ¿YA PAGADA O POR PAGAR?');
+        $lineas([
+            '• Es el adelanto de mitad de mes, con el monto que corresponda ese mes. Se descuenta siempre en el rol MENSUAL del MES/ANIO de la fila, aunque AFECTA_A diga quincena.',
+            '• QUINCENA YA PAGADA: ya se le pagó al empleado (fuera del sistema); el rol mensual la descuenta directo. QUINCENA POR PAGAR: se paga en Egresos → Nómina y recién entonces el rol mensual la descuenta.',
+            '• No use esta columna para un empleado que ya tiene la quincena de ese mes: si ya hay un rol de QUINCENA generado con él, o una novedad Quincena registrada, la carga se rechaza (sería descontarla dos veces).',
+            '• Si la ficha del empleado tiene VALOR QUINCENA, el sistema pide confirmación antes de cargar: al generar el rol de QUINCENA de ese mes, ese empleado se omitirá porque su quincena ya está en Novedades.',
         ]);
 
         $titulo('EJEMPLOS');

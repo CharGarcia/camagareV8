@@ -69,7 +69,7 @@ class RolAsientoService
      *   - ingresos_gravados:     resto de ingresos con aporta_iess=true (rubro_fijo, vacaciones).
      *   - ingresos_no_gravados:  resto de ingresos con aporta_iess=false (otros ingresos, rubro_fijo,
      *                            fondos de reserva, décimo 3°/4° mensualizado).
-     *   - anticipos:             novedad codigo 3 (Anticipo) + "Neteo semanas/quincenas del mes"
+     *   - anticipos:             novedad codigo 3 (Anticipo) y 15 (Quincena) + "Neteo semanas/quincenas del mes"
      *                            (lo ya pagado en quincena/semana, ver AsientoBuilderService::
      *                            sumaRolNoMensualPorEgreso — misma cuenta ANTICIPOSDESCUENTOSNOMINA).
      *   - prestamos:             cuotas de préstamo descontadas en ESTE rol, por código de novedad
@@ -113,7 +113,10 @@ class RolAsientoService
                 if ($origen === 'iess') {
                     continue;
                 }
-                if (($origen === 'novedad' && $codigo === '3') || ($origen === 'neteo' && str_starts_with($concepto, 'Neteo'))) {
+                // Anticipo (3) y Quincena (15): se pagaron por egreso contra ANTICIPOSDESCUENTOSNOMINA,
+                // así que el rol los cruza contra esa misma cuenta.
+                if (($origen === 'novedad' && \App\models\CatalogoNovedades::esPagoPorEgreso((string) $codigo))
+                    || ($origen === 'neteo' && str_starts_with($concepto, 'Neteo'))) {
                     $grp['anticipos'] += $valor;
                 } elseif ($origen === 'novedad' && array_key_exists($codigo, self::PRESTAMOS)) {
                     $grp['prestamos'][$codigo] += $valor;

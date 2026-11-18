@@ -198,6 +198,12 @@ class NovedadesController extends BaseModuloController
         $data['estado']     = 'activo'; // Toda novedad nace activa.
 
         try {
+            // Avisos que se confirman (quincena con valor en la ficha, concepto repetido en el mes):
+            // el modal vuelve a enviar con confirmar_avisos=1 si el usuario acepta.
+            if (empty($_POST['confirmar_avisos']) && ($avisos = $this->service->avisosAntesDeGuardar($data, $data['id_empresa']))) {
+                echo json_encode(['ok' => false, 'requiere_confirmacion' => true, 'avisos' => $avisos]);
+                exit;
+            }
             $id = $this->service->crear($data);
             echo json_encode(['ok' => true, 'msg' => 'Novedad registrada correctamente.', 'id' => $id]);
         } catch (\Throwable $e) {
@@ -219,6 +225,11 @@ class NovedadesController extends BaseModuloController
 
         try {
             if ($id <= 0) throw new \Exception('ID no válido.');
+            if (empty($_POST['confirmar_avisos'])
+                && ($avisos = $this->service->avisosAntesDeGuardar($data, $idEmpresa, $this->service->getDetalle($id, $idEmpresa)))) {
+                echo json_encode(['ok' => false, 'requiere_confirmacion' => true, 'avisos' => $avisos]);
+                exit;
+            }
             $this->service->actualizar($id, $idEmpresa, $data);
             echo json_encode(['ok' => true, 'msg' => 'Novedad actualizada correctamente.']);
         } catch (\Throwable $e) {
@@ -416,7 +427,8 @@ class NovedadesController extends BaseModuloController
                 $_FILES['archivo']['tmp_name'],
                 (int) $_SESSION['id_empresa'],
                 (int) $_SESSION['id_usuario'],
-                (string) ($_FILES['archivo']['name'] ?? '')
+                (string) ($_FILES['archivo']['name'] ?? ''),
+                !empty($_POST['confirmar_avisos'])
             );
             echo json_encode(['ok' => true] + $res);
         } catch (\Throwable $e) {
