@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora, pestaña informacion, quien creo el empleado, quien modifico el empleado, historial de cambios del empleado
-version: 1.15
+etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora, pestaña informacion, quien creo el empleado, quien modifico el empleado, historial de cambios del empleado, pdf de empleados, listado de empleados pdf, exportar empleados, descargar empleados, buscar empleado, buscador, filtros, filtrar empleados, empleados inactivos, empleados por cargo, empleados por departamento, empleados por sueldo, chips
+version: 1.16
 orden: 10
 estado: activo
 ---
@@ -28,6 +28,47 @@ la ficha, el empleado no existe para ninguno de esos procesos.
 Mientras se guarda aparece el aviso **Guardando empleado...** (o **Actualizando
 empleado...** si ya existía); espere a que termine. La ficha **no se cierra** al
 guardar: queda abierta con lo guardado para seguir completándola.
+
+## Buscar y filtrar empleados
+
+**Búsqueda libre.** Escriba cualquier cosa en el cuadro y el listado se filtra
+solo. Busca en identificación, nombres y apellidos, correo, teléfono, dirección,
+cargo, departamento, banco y número de cuenta, por **palabras sueltas** en
+cualquier orden y **sin distinguir tildes ni mayúsculas**. Tipo de
+identificación, sexo, región y estado no entran en la búsqueda libre: se filtran
+desde la ventana de filtros.
+
+**Filtros.** Pulse el **embudo** para abrir la ventana con todos los criterios,
+llene los que necesite y pulse **Aplicar**.
+
+| Bloque | Filtros |
+|--------|---------|
+| Identificación | Tipo de identificación, identificación, nombres y apellidos, estado (activo / inactivo) |
+| Datos personales | Sexo, fecha de nacimiento (desde / hasta), con o sin discapacidad, cargas familiares (mínimo y máximo) |
+| Contacto | Correo, con o sin correo registrado, teléfono, dirección |
+| Trabajo | Cargo, departamento, lugar de trabajo, región |
+| Remuneración | Sueldo base, valor semanal y valor quincena (mínimo y máximo) |
+| Beneficios | Aporta al IESS, participa en utilidades, fondos de reserva, décimo tercero, décimo cuarto |
+| Pago | Banco, tipo de cuenta, con o sin cuenta bancaria |
+| Registro | Fecha de registro (con atajos *Hoy*, *Este mes*, etc.), usuario que registró |
+
+Los selectores de cargo, departamento, lugar de trabajo, banco y usuario listan
+solo lo que la empresa ya usa en sus empleados. Cada filtro aplicado queda como
+una etiqueta (**chip**) dentro del cuadro de búsqueda; la **×** lo quita.
+
+También se puede escribir la sintaxis `clave:valor` directamente, por ejemplo
+`estado:inactivo`, `sueldo:500..1000`, `region:sierra` o `-aporta_iess:si`. Los
+botones **PDF** y **Excel** exportan con la misma búsqueda, filtros y orden de la
+pantalla.
+
+## PDF del listado
+
+El botón **PDF** descarga el listado en una hoja A4 horizontal con el logo y el
+nombre de la empresa, la búsqueda aplicada, un resumen (número de empleados,
+activos, inactivos y total de sueldos base) y la fila de **totales** de sueldo
+base, valor semanal y valor quincena. Incluye las mismas columnas que se ven en
+pantalla: si oculta una columna con el botón de columnas, tampoco sale en el PDF
+y su espacio se reparte entre las columnas de texto.
 
 ## Validaciones
 
@@ -298,6 +339,7 @@ producción**: es un catálogo maestro, siempre el mismo.
 
 ## Historial de cambios
 
+- **1.16** — El listado usa el mismo buscador que Proveedores: búsqueda libre por palabras en más columnas y botón **embudo** con filtros por estado, sexo, cargo, departamento, región, sueldo, beneficios, banco, fecha de registro y más, que quedan como chips en el cuadro. El Excel respeta los filtros y el orden de la pantalla. El botón **PDF** del listado, que antes no generaba nada, descarga ahora el listado con las columnas visibles, un resumen y totales.
 - **1.15** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes, Proveedores y Vendedores; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando empleado...* mientras el servidor responde.
 - **1.14** — Nueva pestaña **Información** en la ventana del empleado (solo niveles 2 y 3, solo lectura): quién lo creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.13** — Campos **Discapacidad** y **% de discapacidad** (pestaña General) y

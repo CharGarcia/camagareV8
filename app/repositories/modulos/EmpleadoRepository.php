@@ -16,6 +16,11 @@ class EmpleadoRepository extends BaseRepository
 
     /**
      * Obtiene el listado de empleados con filtros de búsqueda y paginación.
+     *
+     * $buscar sigue la sintaxis de FiltrosBusqueda: texto libre (por palabras, sin
+     * tildes) sobre las columnas del listado + filtros `clave:valor` que arma el
+     * modal de filtros de la vista (FiltrosModal). Las claves que no están en los
+     * mapas de abajo se ignoran.
      */
     public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idUsuarioFiltro = null): array
     {
@@ -23,7 +28,8 @@ class EmpleadoRepository extends BaseRepository
         $whitelist = [
             'identificacion', 'nombres_apellidos', 'email', 'telefono', 'estado', 'id',
             'sexo', 'cargo', 'departamento', 'sueldo_base', 'valor_semanal', 'valor_quincena',
-            'region', 'nombre_banco'
+            'region', 'nombre_banco', 'fecha_nacimiento', 'direccion', 'tipo_cuenta',
+            'numero_cuenta', 'tipo_id'
         ];
         if (!in_array($ordenCol, $whitelist)) {
             $ordenCol = 'nombres_apellidos';
@@ -36,29 +42,105 @@ class EmpleadoRepository extends BaseRepository
             $params[':id_usuario_filtro'] = $idUsuarioFiltro;
         }
 
-        if ($buscar !== '') {
-            $whereSql .= " AND (e.identificacion ILIKE :buscar OR e.nombres_apellidos ILIKE :buscar OR e.email ILIKE :buscar)";
-            $params[':buscar'] = "%{$buscar}%";
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            // Texto libre sobre las columnas visibles del listado. Tipo Id., Sexo,
+            // Región y Estado no entran: se filtran desde el modal (igual que Proveedores).
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'e.identificacion',
+                'e.nombres_apellidos',
+                'e.email',
+                'e.telefono',
+                'e.direccion',
+                'e.cargo',
+                'e.departamento',
+                'b.nombre_banco',
+                'e.numero_cuenta',
+            ], $parsed['texto_libre'], $params, 'emp_b');
+            if ($cond !== '') {
+                $whereSql .= ' AND ' . $cond;
+            }
         }
+
+        // Sí/No calculados: los NULL se leen como el valor por defecto de la ficha
+        // (aporta IESS y participa en utilidades = Sí; discapacidad = No).
+        $exacto = [
+            'tipo'           => 'e.tipo_id',
+            'estado'         => "COALESCE(e.estado, 'activo')",
+            'sexo'           => 'e.sexo',
+            'region'         => 'e.region',
+            'cargo_sel'      => 'e.cargo',
+            'depto_sel'      => 'e.departamento',
+            'lugar_sel'      => 'e.lugar_trabajo',
+            'id_banco'       => 'e.id_banco_ecuador',
+            'tipo_cuenta'    => 'e.tipo_cuenta',
+            'fondos'         => 'e.fondos_reserva',
+            'decimo_tercero' => 'e.decimo_tercero',
+            'decimo_cuarto'  => 'e.decimo_cuarto',
+            'usuario'        => 'e.created_by',
+            'con_email'      => "CASE WHEN NULLIF(TRIM(COALESCE(e.email, '')), '') IS NULL THEN 'no' ELSE 'si' END",
+            'con_cuenta'     => "CASE WHEN NULLIF(TRIM(COALESCE(e.numero_cuenta, '')), '') IS NULL THEN 'no' ELSE 'si' END",
+            'aporta_iess'    => "CASE WHEN COALESCE(e.aporta_iess, true) THEN 'si' ELSE 'no' END",
+        ];
+        // Columnas de database/migrations/20261008_empleados_utilidades_discapacidad.sql:
+        // si el SQL aún no se aplicó, el filtro se ignora en vez de romper el listado.
+        if ($this->columnaExiste($this->table, 'participa_utilidades')) {
+            $exacto['utilidades'] = "CASE WHEN COALESCE(e.participa_utilidades, true) THEN 'si' ELSE 'no' END";
+        }
+        if ($this->columnaExiste($this->table, 'discapacidad')) {
+            $exacto['discapacidad'] = "CASE WHEN COALESCE(e.discapacidad, false) THEN 'si' ELSE 'no' END";
+        }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($whereSql, $params, $parsed['filtros'], [
+            'texto' => [
+                'nombre'         => 'e.nombres_apellidos',
+                'empleado'       => 'e.nombres_apellidos',
+                'identificacion' => 'e.identificacion',
+                'cedula'         => 'e.identificacion',
+                'email'          => 'e.email',
+                'correo'         => 'e.email',
+                'telefono'       => 'e.telefono',
+                'direccion'      => 'e.direccion',
+                'cargo'          => 'e.cargo',
+                'departamento'   => 'e.departamento',
+                'lugar'          => 'e.lugar_trabajo',
+                'banco'          => 'b.nombre_banco',
+                'cuenta'         => 'e.numero_cuenta',
+            ],
+            'exacto'   => $exacto,
+            'fecha'    => [
+                'nacimiento' => 'e.fecha_nacimiento',
+                'registro'   => 'e.created_at',
+                'created_at' => 'e.created_at',
+            ],
+            'numerico' => [
+                'sueldo'   => 'e.sueldo_base',
+                'semanal'  => 'e.valor_semanal',
+                'quincena' => 'e.valor_quincena',
+                'cargas'   => 'COALESCE(e.cargas_familiares, 0)',
+            ],
+        ]);
 
         $orderExpr = match($ordenCol) {
             'nombre_banco' => 'b.nombre_banco',
             default        => "e.{$ordenCol}"
         };
 
-        // Obtener el conteo total
-        $stTotal = $this->db->prepare("SELECT COUNT(*) FROM {$this->table} e {$whereSql}");
+        // El JOIN de bancos participa del WHERE (texto libre y banco:): el COUNT lo
+        // lleva igual que la consulta de filas para que ambos cuenten lo mismo.
+        $from = "FROM {$this->table} e
+                 LEFT JOIN bancos_ecuador b ON b.id = e.id_banco_ecuador";
+
+        $stTotal = $this->db->prepare("SELECT COUNT(*) {$from} {$whereSql}");
         $stTotal->execute($params);
         $total = (int) $stTotal->fetchColumn();
 
-        // Obtener las filas
         $offset = ($page - 1) * $perPage;
         $sqlRows = "SELECT e.*, b.nombre_banco
-                    FROM {$this->table} e
-                    LEFT JOIN bancos_ecuador b ON b.id = e.id_banco_ecuador
-                    {$whereSql} 
-                    ORDER BY {$orderExpr} {$ordenDir}, b.id DESC";
-        
+                    {$from}
+                    {$whereSql}
+                    ORDER BY {$orderExpr} {$ordenDir}, e.id DESC";
+
         if ($perPage > 0) {
             $sqlRows .= " LIMIT " . (int)$perPage . " OFFSET " . (int)$offset;
         }
@@ -68,6 +150,36 @@ class EmpleadoRepository extends BaseRepository
         $rows = $st->fetchAll(PDO::FETCH_ASSOC);
 
         return ['rows' => $rows, 'total' => $total];
+    }
+
+    /**
+     * Valores que la empresa usa en sus empleados, para los selects del modal de
+     * filtros del listado (solo lo que existe, no catálogos completos).
+     */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        $p = [':id_empresa' => $idEmpresa];
+        $leer = function (string $select, string $join, string $orden, string $extra = '') use ($p): array {
+            $st = $this->db->prepare(
+                "SELECT DISTINCT {$select} FROM {$this->table} e {$join}
+                  WHERE e.id_empresa = :id_empresa AND e.eliminado = false {$extra}
+                  ORDER BY {$orden}"
+            );
+            $st->execute($p);
+            return $st->fetchAll(PDO::FETCH_ASSOC);
+        };
+        $texto = fn(string $col) => array_column(
+            $leer("e.{$col} AS nombre", '', 'nombre', "AND NULLIF(TRIM(e.{$col}), '') IS NOT NULL"),
+            'nombre'
+        );
+
+        return [
+            'bancos'        => $leer('b.id, b.nombre_banco AS nombre', 'JOIN bancos_ecuador b ON b.id = e.id_banco_ecuador', 'nombre'),
+            'cargos'        => $texto('cargo'),
+            'departamentos' => $texto('departamento'),
+            'lugares'       => $texto('lugar_trabajo'),
+            'usuarios'      => $leer('u.id, u.nombre', 'JOIN usuarios u ON u.id = e.created_by', 'u.nombre'),
+        ];
     }
 
     /**

@@ -298,7 +298,9 @@ class EmpleadosController extends BaseModuloController
             'bancos'     => $bancos,
             'vistaConfig'=> $prefsVista,
             'fullWidth'  => true,
-            'idEmpresa'  => $idEmpresa
+            'idEmpresa'  => $idEmpresa,
+            // Selects del modal de filtros: solo valores que la empresa usa en sus empleados.
+            'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
         ]);
     }
 
@@ -378,6 +380,9 @@ class EmpleadosController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info'       => "$from-$to/$total",
             'total'      => $total,
+            // Los enlaces de exportar llevan los mismos filtros y orden que la pantalla.
+            'pdf_url'    => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir),
+            'excel_url'  => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir),
         ]);
         exit;
     }
@@ -470,17 +475,105 @@ class EmpleadosController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
-        $rows = $data['rows'];
-
         try {
-            // Lógica simple de PDF (puedes expandirla con Html2Pdf como en PlanCuentas)
-            echo "Exportando PDF para Empleados... (Se requiere librería Html2Pdf)";
+            $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
+            $rows = $data['rows'];
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            // Mismas columnas que la pantalla, sin las que el usuario ocultó en el listado.
+            $vista   = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
+            $ocultas = is_array($vista['__columnas_ocultas__'] ?? null) ? $vista['__columnas_ocultas__'] : [];
+            $pt      = 6.5;
+            $cols    = [];
+            foreach (self::COLUMNAS_PDF as $clave => [$lbl, $w, $cls, $flex]) {
+                if (!in_array($clave, $ocultas, true)) {
+                    $cols[$clave] = ['clave' => $clave, 'lbl' => $lbl, 'w' => $w, 'cls' => $cls, 'flex' => $flex];
+                }
+            }
+            if ($cols === []) {   // todo oculto: no tiene sentido un PDF vacío
+                $cols['nombres_apellidos'] = ['clave' => 'nombres_apellidos', 'lbl' => 'Nombre', 'w' => 100, 'cls' => '', 'flex' => true];
+            }
+            $cols = \App\Helpers\ReportePdf::completarAnchos($cols);
+            foreach ($cols as &$c) {
+                $clave = $c['clave'];
+                $ancho = \App\Helpers\ReportePdf::anchoPt($c['w'], true);
+                $c['val'] = fn(array $r): string => $this->celdaPdf($clave, $r, $ancho, $pt);
+                if (in_array($clave, ['sueldo_base', 'valor_semanal', 'valor_quincena'], true)) {
+                    $c['tot'] = static fn(array $filas): float => array_sum(array_map(static fn($r) => (float) ($r[$clave] ?? 0), $filas));
+                }
+            }
+            unset($c);
+
+            $empresa  = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $activos  = count(array_filter($rows, static fn($r) => ($r['estado'] ?? 'activo') === 'activo'));
+            $n        = count($rows);
+            $cabecera = \App\Helpers\ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Listado de Empleados')
+                . ($buscar !== '' ? \App\Helpers\ReportePdf::filtros(['Búsqueda' => $buscar]) : '')
+                . \App\Helpers\ReportePdf::indicadores([
+                    ['Empleados', number_format($n)],
+                    ['Activos', number_format($activos), false, '#146c43'],
+                    ['Inactivos', number_format($n - $activos), false, '#6c757d'],
+                    ['Total sueldos base', '$' . number_format(array_sum(array_map(static fn($r) => (float) ($r['sueldo_base'] ?? 0), $rows)), 2), true],
+                ]);
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            \App\Helpers\ReportePdf::escribir($html2pdf, $pt, $cabecera, $cols, $rows,
+                "TOTALES ({$n} " . ($n === 1 ? 'empleado' : 'empleados') . ')',
+                'Sin empleados para la búsqueda aplicada.');
+            $html2pdf->output('Empleados_' . date('Ymd_His') . '.pdf', 'D');
             exit;
         } catch (\Throwable $e) {
-            echo "Error: " . $e->getMessage();
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                header('Content-Type: application/json');
+            }
+            echo json_encode(['ok' => false, 'error' => 'Error al generar el PDF: ' . $e->getMessage()]);
             exit;
         }
+    }
+
+    /**
+     * Columnas del PDF del listado, en el orden de la pantalla: clave data-col =>
+     * [encabezado, ancho %, clase, flex]. Los anchos suman 100 (A4 horizontal); las
+     * `flex` absorben el espacio de las columnas que el usuario ocultó.
+     */
+    private const COLUMNAS_PDF = [
+        'identificacion'    => ['Identificación', 6,   '',            false],
+        'nombres_apellidos' => ['Nombre',         13,  '',            true],
+        'email'             => ['Correo',         8,   '',            true],
+        'telefono'          => ['Teléfono',       5,   '',            false],
+        'sexo'              => ['Sexo',           3,   'text-center', false],
+        'fecha_nacimiento'  => ['F. Nac.',        4.5, 'text-center', false],
+        'direccion'         => ['Dirección',      7,   '',            true],
+        'cargo'             => ['Cargo',          6,   '',            true],
+        'departamento'      => ['Depto.',         5.5, '',            true],
+        'sueldo_base'       => ['Sueldo Base',    5,   'text-end',    false],
+        'valor_semanal'     => ['V. Semanal',     5,   'text-end',    false],
+        'valor_quincena'    => ['V. Quincena',    5,   'text-end',    false],
+        'region'            => ['Región',         4,   '',            false],
+        'nombre_banco'      => ['Banco',          5.5, '',            true],
+        'tipo_cuenta'       => ['T. Cuenta',      4,   '',            false],
+        'numero_cuenta'     => ['N. Cuenta',      5.5, '',            false],
+        'tipo_id'           => ['Tipo ID',        3.5, 'text-center', false],
+        'estado'            => ['Estado',         4.5, 'text-center', false],
+    ];
+
+    /** Contenido HTML (escapado) de una celda del PDF; `$ancho` en puntos para cortar palabras largas. */
+    private function celdaPdf(string $clave, array $r, float $ancho, float $pt): string
+    {
+        $txt = static fn($v): string => \App\Helpers\ReportePdf::texto((string) ($v ?? ''), $ancho, $pt);
+        return match ($clave) {
+            'sueldo_base'      => '<b>' . number_format((float) ($r['sueldo_base'] ?? 0), 2) . '</b>',
+            'valor_semanal', 'valor_quincena' => number_format((float) ($r[$clave] ?? 0), 2),
+            'fecha_nacimiento' => !empty($r['fecha_nacimiento']) ? date('d-m-Y', strtotime((string) $r['fecha_nacimiento'])) : '-',
+            'tipo_id'          => $txt(['cedula' => 'Cédula', 'pasaporte' => 'Pasaporte', 'ruc' => 'RUC'][$r['tipo_id'] ?? ''] ?? ($r['tipo_id'] ?? '')),
+            'region', 'tipo_cuenta', 'estado' => $txt(ucfirst((string) ($r[$clave] ?? ''))),
+            default            => $txt($r[$clave] ?? ''),
+        };
     }
 
     public function exportExcel(): void
@@ -492,7 +585,9 @@ class EmpleadosController extends BaseModuloController
         $perm = $this->getPermisos();
         $idUsuarioFiltro = empty($perm['todo']) ? (int)$_SESSION['id_usuario'] : null;
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, 'nombres_apellidos', 'ASC', $idUsuarioFiltro);
+        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'nombres_apellidos');
+        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'ASC'));
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $idUsuarioFiltro);
         $rows = $data['rows'];
 
         try {

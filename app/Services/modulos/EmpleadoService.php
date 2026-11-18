@@ -35,6 +35,12 @@ class EmpleadoService
         return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $idUsuarioFiltro);
     }
 
+    /** Opciones de los selects del modal de filtros del listado. */
+    public function getOpcionesFiltroListado(int $idEmpresa): array
+    {
+        return $this->repository->getOpcionesFiltroListado($idEmpresa);
+    }
+
     /**
      * Obtiene el detalle completo del empleado, incluyendo periodos y rubros.
      */

@@ -59,12 +59,114 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <div class="card cmg-table-card border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <div class="d-flex align-items-center gap-2">
-            <form id="emp-form-buscar" class="input-group input-group-sm" style="width:300px" onsubmit="event.preventDefault(); window.cambiarPaginaAjax(1);">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="inputBuscar" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar identificación, nombre..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-            </form>
-            <div class="btn-group btn-group-sm">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal), igual que Proveedores: texto libre sobre las
+            // columnas del listado + botón embudo con todos los filtros + chips de los
+            // activos. Las claves (key) deben existir en los mapas de
+            // EmpleadoRepository::getListado().
+            $opcFiltro   = $opcionesFiltro ?? [];
+            $opcIdNombre = fn(string $k) => array_map(fn($x) => ['v' => (string) $x['id'], 'l' => (string) $x['nombre']], $opcFiltro[$k] ?? []);
+            $opcTexto    = fn(string $k) => array_map(fn($x) => ['v' => (string) $x, 'l' => (string) $x], $opcFiltro[$k] ?? []);
+            $opcSiNo     = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $opcDecimo   = [['v' => 'acumula', 'l' => 'Acumula'], ['v' => 'mensualiza', 'l' => 'Mensualiza'], ['v' => 'no_recibe', 'l' => 'No recibe']];
+            $tE = 'Empleado';
+            // Filas de 12 columnas:
+            //   Identificación:  [Tipo 3][Identificación 3][Nombre 3][Estado 3]
+            //   Datos personales:[Sexo 3][Fecha de nacimiento 3][Discapacidad 3][Cargas 3]
+            //   Contacto:        [Correo 3][Con correo 3][Teléfono 3][Dirección 3]
+            //   Trabajo:         [Cargo 3][Departamento 3][Lugar 3][Región 3]
+            //   Remuneración:    [Sueldo 4][Semanal 4][Quincena 4]
+            //   Beneficios:      [Aporta IESS 4][Utilidades 4][Fondos de reserva 4][Décimo 3.º 6][Décimo 4.º 6]
+            //   Pago:            [Banco 4][Tipo de cuenta 4][Cuenta registrada 4]
+            //   Registro:        [Fecha de registro 6][Usuario 6]
+            $filtrosEmpleados = [
+                // ── Identificación ──
+                ['tab' => $tE, 'key' => 'tipo', 'label' => 'Tipo identificación', 'icon' => 'bi-credit-card', 'type' => 'select', 'grupo' => 'Identificación', 'col' => 3, 'options' => [
+                    ['v' => 'cedula',    'l' => 'Cédula'],
+                    ['v' => 'pasaporte', 'l' => 'Pasaporte'],
+                ]],
+                ['tab' => $tE, 'key' => 'identificacion', 'label' => 'Identificación',     'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tE, 'key' => 'nombre',         'label' => 'Nombres y apellidos', 'icon' => 'bi-person',    'type' => 'text', 'grupo' => 'Identificación', 'col' => 3],
+                ['tab' => $tE, 'key' => 'estado',         'label' => 'Estado',             'icon' => 'bi-flag',      'type' => 'select', 'grupo' => 'Identificación', 'col' => 3, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                // ── Datos personales ──
+                ['tab' => $tE, 'key' => 'sexo', 'label' => 'Sexo', 'icon' => 'bi-gender-ambiguous', 'type' => 'select', 'grupo' => 'Datos personales', 'col' => 3, 'options' => [
+                    ['v' => 'M', 'l' => 'Masculino'],
+                    ['v' => 'F', 'l' => 'Femenino'],
+                    ['v' => 'O', 'l' => 'Otro'],
+                ]],
+                ['tab' => $tE, 'key' => 'nacimiento',   'label' => 'Fecha de nacimiento', 'icon' => 'bi-cake2',         'type' => 'date_range',   'grupo' => 'Datos personales', 'col' => 3],
+                ['tab' => $tE, 'key' => 'discapacidad', 'label' => 'Discapacidad',        'icon' => 'bi-universal-access', 'type' => 'select',    'grupo' => 'Datos personales', 'col' => 3, 'options' => $opcSiNo('Con discapacidad', 'Sin discapacidad')],
+                ['tab' => $tE, 'key' => 'cargas',       'label' => 'Cargas familiares',   'icon' => 'bi-people',        'type' => 'number_range', 'grupo' => 'Datos personales', 'col' => 3],
+                // ── Contacto ──
+                ['tab' => $tE, 'key' => 'email',     'label' => 'Correo',            'icon' => 'bi-envelope',       'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tE, 'key' => 'con_email', 'label' => 'Correo registrado', 'icon' => 'bi-envelope-check', 'type' => 'select', 'grupo' => 'Contacto', 'col' => 3, 'options' => $opcSiNo('Con correo', 'Sin correo')],
+                ['tab' => $tE, 'key' => 'telefono',  'label' => 'Teléfono',          'icon' => 'bi-telephone',      'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                ['tab' => $tE, 'key' => 'direccion', 'label' => 'Dirección',         'icon' => 'bi-geo',            'type' => 'text',   'grupo' => 'Contacto', 'col' => 3],
+                // ── Trabajo ──
+                ['tab' => $tE, 'key' => 'cargo_sel', 'label' => 'Cargo',            'icon' => 'bi-briefcase',   'type' => 'select', 'grupo' => 'Trabajo', 'col' => 3, 'options' => $opcTexto('cargos')],
+                ['tab' => $tE, 'key' => 'depto_sel', 'label' => 'Departamento',     'icon' => 'bi-diagram-3',   'type' => 'select', 'grupo' => 'Trabajo', 'col' => 3, 'options' => $opcTexto('departamentos')],
+                ['tab' => $tE, 'key' => 'lugar_sel', 'label' => 'Lugar de trabajo', 'icon' => 'bi-building',    'type' => 'select', 'grupo' => 'Trabajo', 'col' => 3, 'options' => $opcTexto('lugares')],
+                ['tab' => $tE, 'key' => 'region',    'label' => 'Región',           'icon' => 'bi-map',         'type' => 'select', 'grupo' => 'Trabajo', 'col' => 3, 'options' => [
+                    ['v' => 'costa',   'l' => 'Costa'],
+                    ['v' => 'sierra',  'l' => 'Sierra'],
+                    ['v' => 'oriente', 'l' => 'Oriente'],
+                    ['v' => 'insular', 'l' => 'Insular'],
+                ]],
+                // ── Remuneración ──
+                ['tab' => $tE, 'key' => 'sueldo',   'label' => 'Sueldo base',     'icon' => 'bi-cash-stack', 'type' => 'number_range', 'grupo' => 'Remuneración', 'col' => 4],
+                ['tab' => $tE, 'key' => 'semanal',  'label' => 'Valor semanal',   'icon' => 'bi-cash',       'type' => 'number_range', 'grupo' => 'Remuneración', 'col' => 4],
+                ['tab' => $tE, 'key' => 'quincena', 'label' => 'Valor quincena',  'icon' => 'bi-cash',       'type' => 'number_range', 'grupo' => 'Remuneración', 'col' => 4],
+                // ── Beneficios ──
+                ['tab' => $tE, 'key' => 'aporta_iess', 'label' => 'Aporta al IESS',        'icon' => 'bi-shield-check', 'type' => 'select', 'grupo' => 'Beneficios', 'col' => 4, 'options' => $opcSiNo('Sí aporta', 'No aporta')],
+                ['tab' => $tE, 'key' => 'utilidades',  'label' => 'Participa en utilidades', 'icon' => 'bi-pie-chart', 'type' => 'select', 'grupo' => 'Beneficios', 'col' => 4, 'options' => $opcSiNo('Sí participa', 'No participa')],
+                ['tab' => $tE, 'key' => 'fondos',      'label' => 'Fondos de reserva',     'icon' => 'bi-piggy-bank',   'type' => 'select', 'grupo' => 'Beneficios', 'col' => 4, 'options' => [
+                    ['v' => 'no_se_paga', 'l' => 'No se paga'],
+                    ['v' => 'rol',        'l' => 'En rol mensual'],
+                    ['v' => 'desde_anio', 'l' => 'A partir del año'],
+                    ['v' => 'planilla',   'l' => 'Planilla IESS'],
+                ]],
+                ['tab' => $tE, 'key' => 'decimo_tercero', 'label' => 'Décimo tercero', 'icon' => 'bi-gift', 'type' => 'select', 'grupo' => 'Beneficios', 'col' => 6, 'options' => $opcDecimo],
+                ['tab' => $tE, 'key' => 'decimo_cuarto',  'label' => 'Décimo cuarto',  'icon' => 'bi-gift', 'type' => 'select', 'grupo' => 'Beneficios', 'col' => 6, 'options' => $opcDecimo],
+                // ── Pago ──
+                ['tab' => $tE, 'key' => 'id_banco',    'label' => 'Banco',          'icon' => 'bi-bank',        'type' => 'select', 'grupo' => 'Pago', 'col' => 4, 'options' => $opcIdNombre('bancos')],
+                ['tab' => $tE, 'key' => 'tipo_cuenta', 'label' => 'Tipo de cuenta', 'icon' => 'bi-wallet2',     'type' => 'select', 'grupo' => 'Pago', 'col' => 4, 'options' => [
+                    ['v' => 'ahorros',   'l' => 'Ahorros'],
+                    ['v' => 'corriente', 'l' => 'Corriente'],
+                    ['v' => 'virtual',   'l' => 'Virtual'],
+                ]],
+                ['tab' => $tE, 'key' => 'con_cuenta',  'label' => 'Cuenta bancaria', 'icon' => 'bi-credit-card-2-front', 'type' => 'select', 'grupo' => 'Pago', 'col' => 4, 'options' => $opcSiNo('Con cuenta', 'Sin cuenta')],
+                // ── Registro ──
+                ['tab' => $tE, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tE, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',    'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcIdNombre('usuarios')],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorEMP"></div>
+            <input type="hidden" id="inputBuscar" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorEMP',
+                        hiddenInputId: 'inputBuscar',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de empleados',
+                        inputWidth: 420,
+                        extraId: 'fmExtraEMP',   // columnas + PDF + Excel + Importar, pegados al final del grupo
+                        fields: <?= json_encode($filtrosEmpleados, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyEmpleados',   // se atenúa mientras se busca
+                        onApply: () => window.cambiarPaginaAjax && window.cambiarPaginaAjax(1),
+                    }).init();
+                });
+            </script>
+
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraEMP" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'identificacion'    => 'Identificación',
@@ -88,10 +190,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
-                <a id="btnExportPdf" href="<?= $urlBaseEmp ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="PDF"><i class="bi bi-file-earmark-pdf"></i> PDF</a>
-                <a id="btnExportExcel" href="<?= $urlBaseEmp ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Excel"><i class="bi bi-file-earmark-spreadsheet"></i> Excel</a>
+                <a id="btnExportPdf" href="<?= $urlBaseEmp ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
+                <a id="btnExportExcel" href="<?= $urlBaseEmp ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
                 <?php if (!empty($perm['crear'])): ?>
-                    <button type="button" class="btn btn-outline-primary" title="Cargar empleados desde Excel" onclick="window.abrirImportEmp()"><i class="bi bi-upload"></i> Importar</button>
+                    <button type="button" class="btn btn-outline-primary" title="Cargar empleados desde Excel" onclick="window.abrirImportEmp()"><i class="bi bi-upload"></i><span class="d-none d-md-inline"> Importar</span></button>
                 <?php endif; ?>
             </div>
         </div>
@@ -193,6 +295,10 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         async function cargarListado(page = 1) {
             const b = inputB ? inputB.value.trim() : '';
             const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${currentSort}&dir=${currentDir}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras
+            // carga, también al paginar u ordenar.
+            const tbody = document.getElementById('tbodyEmpleados');
+            if (tbody) tbody.classList.add('fm-cargando-target');
             try {
                 const resp = await fetch(uri);
                 const data = await resp.json();
@@ -212,7 +318,11 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                         } else icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
                     });
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error('Error en búsqueda de empleados:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
         }
 
         window.CMG_initSort('empleados', (col, dir) => {
