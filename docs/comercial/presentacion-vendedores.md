@@ -3,7 +3,7 @@
 > **BORRADOR EN CONSTRUCCIÓN** — Documento interno del equipo comercial.
 > No se entrega en PDF hasta que la dirección lo apruebe como versión final.
 
-Versión actual: **0.32** (17-11-2026). El historial de cambios está al final.
+Versión actual: **0.33** (18-11-2026). El historial de cambios está al final.
 
 ---
 
@@ -74,7 +74,7 @@ el sistema por la empresa.
 > electrónicamente al SRI, controla su inventario, sus cobros y pagos, su
 > nómina y su contabilidad, que se hace sola. Lo usa desde el computador o el
 > celular, sus datos están seguros y nosotros se lo dejamos listo y le
-> enseñamos a usarlo, con soporte de lunes a viernes por chat, WhatsApp y
+> enseñamos a usarlo, con soporte de lunes a sábado por chat, WhatsApp y
 > teléfono. Usted se dedica a vender; nosotros nos encargamos de que todo
 > cuadre.»
 
@@ -180,9 +180,8 @@ módulos y usuarios).
 varias empresas, recibe la información completa y a tiempo, y puede recomendar
 el sistema a sus clientes.
 
-> **Por definir (P-06):** qué beneficio recibe el contador o el referido por
-> cada cliente que trae (comisión, descuento, uso sin costo, etc.). Hasta
-> tenerlo, no ofrecer beneficios.
+**Beneficio para el contador:** recibe una **comisión del 20 %** por cada
+empresa que refiera.
 
 ---
 
@@ -456,7 +455,7 @@ programe. Por ejemplo:
 | 8 | **Capacitación** | CaMaGaRe | **En línea**, incluida: hasta **3 horas**, en **3 sesiones de 1 hora**. |
 | 9 | **Pruebas** | Cliente | Puede practicar en **ambiente de pruebas** (sin validez tributaria). |
 | 10 | **Producción** | Cliente | Pasa a **producción** y empieza a emitir documentos reales. |
-| 11 | **Operación y soporte** | Cliente / CaMaGaRe | Trabajo diario con soporte de lunes a viernes (chat, WhatsApp y llamadas), manual y asistente con IA. |
+| 11 | **Operación y soporte** | Cliente / CaMaGaRe | Trabajo diario con soporte de lunes a sábado (chat, WhatsApp y llamadas; horario en 5.3), manual y asistente con IA. |
 | 12 | **Renovación** | Cliente | Paga su suscripción según su modalidad (anual, semestral o mensual). |
 
 **Lo que el vendedor puede prometer:** *«Nosotros le dejamos el sistema listo,
@@ -506,12 +505,22 @@ local nuevo: no depende de nosotros.
 | **Asistente con IA** | Responde preguntas usando el manual del sistema y los documentos que cargue la empresa. |
 | **Novedades del sistema** | Al entrar, una tarjeta avisa de las mejoras nuevas. |
 
-**Horario de soporte:** en principio, **horario laboral de lunes a viernes**, por
-chat, WhatsApp y llamadas. **No prometer** atención en fines de semana ni «24/7».
+**Horario de soporte** (chat, WhatsApp y llamadas):
 
-> **Por definir (P-11):** las horas exactas y los tiempos de respuesta. Pueden
-> cambiar con las políticas de la empresa: hasta tenerlos, no prometer horas ni
-> tiempos.
+| Días | Horario |
+|---|---|
+| Lunes a viernes | 08:30 a 18:00 |
+| Sábados | 08:30 a 14:00 |
+| Domingos | Sin atención |
+
+**Horario extendido en temporadas de mayor demanda:** según la necesidad, el
+horario se puede extender. Por ejemplo, **de marzo a abril**, cuando las
+empresas presentan sus balances a la Superintendencia de Compañías, se puede
+atender **hasta las 20:00 de lunes a viernes**.
+
+> El vendedor promete el horario normal. El horario extendido lo anuncia
+> CaMaGaRe cada temporada; no prometerlo de antemano. Tampoco prometer
+> «24/7» ni tiempos de respuesta.
 
 ### 5.4 Pagos y vencimiento de la suscripción
 
@@ -697,7 +706,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | **Uso del sistema en la nube** | Licencia de uso de los **módulos contratados**, para los establecimientos contratados, mientras la suscripción esté vigente. | Contrato de uso, cláusulas PRIMERA y SEGUNDA |
 | **Usuarios incluidos** | 3 por establecimiento, compartidos en el RUC. | Sección 6.2 |
 | **Servidor, seguridad y respaldos** | Alojamiento en la nube, comunicación cifrada y **respaldos periódicos**. | Contrato, QUINTA; Acuerdo de datos, QUINTA |
-| **Soporte** | De lunes a viernes, por chat de soporte, WhatsApp y llamadas. | Contrato, QUINTA; sección 5.3 |
+| **Soporte** | Lunes a viernes de 08:30 a 18:00 y sábados de 08:30 a 14:00, por chat de soporte, WhatsApp y llamadas. | Contrato, QUINTA; sección 5.3 |
 | **Puesta en marcha** | CaMaGaRe configura la empresa y la firma electrónica, crea los usuarios y carga los datos que entrega el cliente. | Sección 5.2 |
 | **Capacitación** | En línea, incluida: hasta 3 horas en 3 sesiones de 1 hora. | Sección 5.2 |
 | **Implementación** | Sin costo. | Sección 5.2 |
@@ -788,7 +797,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | ¿Qué pasa si me atraso en el pago? | El sistema le avisa antes y después del vencimiento. Si a los **10 días de atraso** el pago sigue pendiente, el servicio se suspende, previo aviso, **sin perder su información**; al pagar se reactiva. |
 | ¿El precio se mantiene cuando renuevo? | El precio vale para el periodo contratado. En la próxima renovación puede **subir o bajar**, según los precios vigentes en ese momento. |
 | ¿Puedo cancelar? | El contrato rige mientras la suscripción esté activa y cualquiera de las partes puede terminarlo con aviso razonable; usted puede pedir la exportación de su información. |
-| ¿Qué horario tiene el soporte? | En **horario laboral, de lunes a viernes**, por el chat del sistema, WhatsApp y llamadas. |
+| ¿Qué horario tiene el soporte? | **Lunes a viernes de 08:30 a 18:00** y **sábados de 08:30 a 14:00**, por el chat del sistema, WhatsApp y llamadas. En temporada de balances (marzo y abril) se puede extender. |
 | ¿Cuánto cuesta la implementación? | **No tiene costo.** |
 | ¿Necesito saber contabilidad? | No. El sistema está diseñado para trabajar sin configuración contable y sin conocimientos contables; la parte contable se puede configurar después. |
 | ¿Quién me configura el sistema? | Nosotros: configuramos su empresa y su firma electrónica, creamos sus usuarios, cargamos sus clientes y productos, y lo capacitamos en línea. Si prefiere, usted también puede hacerlo desde **Configuración → Empresa**. |
@@ -802,7 +811,7 @@ fijo**: sus módulos van incluidos y el vendedor puede sumar módulos sueltos.
 | **«Es caro»** | Compare con lo que hoy cuesta digitar dos veces, los errores y las multas. Muestre el plan **anual** (más barato) y arme solo los módulos que necesita con el Cotizador. |
 | **«Ya tengo un sistema»** | Pregunte qué le falta o qué le cuesta hoy (pregunta 10 de 2.3) y muestre solo eso. Destaque: todo en un solo sistema, contabilidad automática y celular. |
 | **«Mi contador ya me lleva todo»** | Ofrézcalo como herramienta para su contador: recibe la información completa y a tiempo, con ATS y declaraciones listas. Invite al contador a la demo. |
-| **«No tengo tiempo para aprender otro sistema»** | Nosotros se lo dejamos configurado y con sus datos cargados, y lo capacitamos en línea. Muestre lo rápido que se factura, el manual y el soporte de lunes a viernes. |
+| **«No tengo tiempo para aprender otro sistema»** | Nosotros se lo dejamos configurado y con sus datos cargados, y lo capacitamos en línea. Muestre lo rápido que se factura, el manual y el soporte de lunes a sábado. |
 | **«¿Y si se cae internet?»** | Es un sistema en la nube: necesita internet. Funciona en el celular con datos móviles. No prometer funcionamiento sin conexión. |
 | **«Me da miedo perder mis datos»** | Respaldos periódicos, nada se borra físicamente, auditoría y los datos son del cliente, con exportación al terminar (sección 8). |
 | **«Lo pienso»** | Registre la oportunidad en el CRM con una actividad de seguimiento con fecha y envíe la proforma por correo con el botón de aprobación. |
@@ -842,7 +851,7 @@ actualiza su sección y se tacha aquí.
 | # | Pendiente | Sección |
 |---|---|---|
 | P-01 | ✅ **Resuelto (17-11-2026):** CaMaGaRe ERP = Control Administrativo · Manejo Automatizado · Gestión Analítica · Resultados Empresariales. | 1.1 |
-| P-02 | ✅ **Resuelto (16-11-2026):** discurso ajustado a lo definido (puesta en marcha por CaMaGaRe, capacitación en línea, soporte de lunes a viernes). | 1.5 |
+| P-02 | ✅ **Resuelto (16-11-2026):** discurso ajustado a lo definido (puesta en marcha por CaMaGaRe, capacitación en línea, soporte de lunes a sábado). | 1.5 |
 
 ### B. Cliente y mercado
 | # | Pendiente | Sección |
@@ -850,7 +859,7 @@ actualiza su sección y se tacha aquí.
 | P-03 | ✅ **Resuelto (17-11-2026):** emprendedor o profesional independiente, comercio y distribuidora, y empresa obligada a llevar contabilidad. | 2.6 |
 | P-04 | ✅ **Resuelto (17-11-2026):** todo el Ecuador. | 2.6 |
 | P-05 | ✅ **Resuelto (17-11-2026):** no hay tamaño ideal; cualquier empresa dentro de los perfiles. | 2.6 |
-| P-06 | ✅ Sí trabajamos con **contadores y referidos** (17-11-2026). Falta: **qué beneficio** reciben por cliente traído. | 2.6 |
+| P-06 | ✅ **Resuelto (18-11-2026):** los contadores reciben **20 % de comisión** por cada empresa referida. | 2.6 |
 
 ### C. Puesta en marcha y soporte
 | # | Pendiente | Sección |
@@ -859,7 +868,7 @@ actualiza su sección y se tacha aquí.
 | P-08 | ✅ **Resuelto (16-11-2026):** desde 1 hora después de verificado el pago; hasta 1 día según las empresas pendientes. | 5.2 |
 | P-09 | ✅ **Resuelto (16-11-2026):** en línea, incluida, hasta 3 horas en 3 sesiones de 1 hora. | 5.2 |
 | P-10 | ✅ **Resuelto (16-11-2026):** la implementación **no tiene costo**. | 6.2 |
-| P-11 | Soporte en principio en **horario laboral de lunes a viernes**, por chat, WhatsApp y llamadas. **Por definir más adelante:** horas exactas y tiempos de respuesta (pueden cambiar con las políticas de la empresa). | 5.3 |
+| P-11 | ✅ **Resuelto (18-11-2026):** lunes a viernes 08:30–18:00 y sábados 08:30–14:00; horario extendido por temporada (p. ej. marzo–abril hasta 20:00). Los tiempos de respuesta no se prometen. | 5.3 |
 | P-12 | ✅ **Resuelto (16-11-2026):** suspensión a los **10 días de atraso**, previo aviso; la aplica CaMaGaRe desactivando la empresa. | 5.4 |
 
 ### D. Precios
@@ -905,6 +914,7 @@ actualiza su sección y se tacha aquí.
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.33 | 18-11-2026 | Horario de soporte (lun–vie 08:30–18:00, sáb 08:30–14:00, extendido por temporada) y comisión del 20 % para contadores por empresa referida. P-06 y P-11 resueltos |
 | 0.32 | 17-11-2026 | Significado del nombre (CaMaGaRe ERP), mejoras incluidas, costos de terceros, desarrollos a la medida y empresa de demostración. P-01, P-28, P-29, P-30 y P-31 resueltos |
 | 0.31 | 17-11-2026 | P-16 se resuelve en el Cotizador; los cupos de usuarios los controla un usuario nivel 3 (6.2). Bloque Precios cerrado |
 | 0.30 | 17-11-2026 | En la próxima renovación el precio puede subir o bajar: secciones 5.4, 6.2, 8.3 y preguntas frecuentes. Nuevo P-33 (incluirlo en el contrato) |

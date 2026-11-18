@@ -6,7 +6,7 @@
 > decir; esta capacitación es *cómo* aprenderlo y practicarlo.
 > No se entrega en PDF hasta que la dirección lo apruebe.
 
-Versión actual: **0.13** (18-11-2026). El historial está al final.
+Versión actual: **0.14** (18-11-2026). El historial está al final.
 
 ---
 
@@ -157,7 +157,7 @@ sección 9.2.
 | 1 | «Es caro.» | Muestra el plan anual y arma solo lo necesario en el Cotizador. |
 | 2 | «Ya tengo un sistema.» | Pregunta qué le falta antes de mostrar. |
 | 3 | «Mi contador ya me lleva todo.» | Ofrece el sistema como herramienta para el contador e invita al contador a la demo. |
-| 4 | «No tengo tiempo para aprender.» | Nosotros le dejamos todo configurado, con sus datos cargados, y lo capacitamos en línea; luego tiene soporte de lunes a viernes por chat, WhatsApp y llamadas. |
+| 4 | «No tengo tiempo para aprender.» | Nosotros le dejamos todo configurado, con sus datos cargados, y lo capacitamos en línea; luego tiene soporte de lunes a sábado por chat, WhatsApp y llamadas. |
 | 5 | «¿Y si se cae el internet?» | Dice la verdad: necesita internet; no promete funcionamiento sin conexión. |
 | 6 | «Me da miedo perder mis datos.» | Respaldos, nada se borra, los datos son del cliente. |
 | 7 | «Lo pienso.» | Deja una actividad con fecha en el CRM y envía la proforma. |
@@ -187,10 +187,11 @@ con fecha. El CRM avisa las actividades vencidas.
 
 ## 7. Reglas que no se rompen
 
-1. **No prometer lo que no está en la presentación.** El soporte es de **lunes
-   a viernes** (chat, WhatsApp y llamadas): no prometer fines de semana, horas
-   exactas ni tiempos de respuesta. Tiempos de entrega o funciones nuevas se
-   confirman con la dirección.
+1. **No prometer lo que no está en la presentación.** El soporte es de **lunes a
+   viernes de 08:30 a 18:00** y **sábados de 08:30 a 14:00** (chat, WhatsApp y
+   llamadas): no prometer domingos, «24/7», tiempos de respuesta ni el horario
+   extendido de temporada (lo anuncia CaMaGaRe). Tiempos de entrega o funciones
+   nuevas se confirman con la dirección.
 2. **Todo precio sale del Cotizador.** Nada de precios «a ojo». El precio vale
    para el periodo contratado: **en la próxima renovación puede subir o bajar**.
    Nunca prometer que se mantendrá igual.
@@ -301,6 +302,7 @@ La comisión se calcula por **empresas vendidas en el mes**, con estas condicion
 
 | Versión | Fecha | Cambios |
 |---|---|---|
+| 0.14 | 18-11-2026 | Horario de soporte con sábados en la regla 1 y en el juego de roles. |
 | 0.13 | 18-11-2026 | Comisiones cerradas: mínimo $250 con IVA por empresa y 20 % sobre el valor con IVA; ejemplos actualizados. P-C06 resuelto |
 | 0.12 | 17-11-2026 | Comisiones: solo planes anuales, cuenta al pagar el cliente, $250 con IVA incluido. |
 | 0.11 | 17-11-2026 | Nueva sección 10 «Metas y comisiones». Capacitación externa en línea; empresa de demostración. P-C01, P-C02 y P-C03 resueltos; nuevo P-C06 |
