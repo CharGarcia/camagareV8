@@ -12,9 +12,21 @@ $mesActual  = (int) date('n');
     /* Modo del modal Nuevo: "Un empleado" (formulario de siempre) o "Todos los empleados" (cuadrícula). */
     #modalNovedad.nov-modo-todos .nov-solo-uno { display: none !important; }
     #modalNovedad:not(.nov-modo-todos) .nov-solo-todos { display: none !important; }
-    #modalNovedad .novmasivo-scroll { max-height: 52vh; overflow: auto; }
+    /* El <form> va entre .modal-content y .modal-body: sin esto el modal-dialog-scrollable de
+       Bootstrap no limita el alto del body, el contenido se recorta y la rueda no desplaza. */
+    #formNovedad { display: flex; flex-direction: column; min-height: 0; max-height: 100%; }
+    #formNovedad > .modal-body { overflow-y: auto; min-height: 0; }
+    /* Contenedor de la cuadrícula. El listado de fondo activa el app-shell (body.cmg-has-table),
+       cuyo CSS fuerza height:100% / max-height:none en todo "[class*=-scroll]": se anula aquí
+       con un selector de id para que la cuadrícula tenga su propio scroll (vertical y horizontal). */
+    body #modalNovedad .novmasivo-scroll {
+        height: auto !important;
+        max-height: 52vh !important;
+        overflow: auto !important;
+        overscroll-behavior: contain;
+    }
     /* Pantalla completa: la cuadrícula usa todo el alto que dejan los campos comunes. */
-    #modalNovedad.nov-modo-todos .novmasivo-scroll { max-height: calc(100vh - 330px); min-height: 240px; }
+    body #modalNovedad.nov-modo-todos .novmasivo-scroll { max-height: calc(100vh - 330px) !important; min-height: 240px; }
     #nov_tabla_masivo { font-size: .78rem; width: max-content; min-width: 100%; }
     #nov_tabla_masivo thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; white-space: nowrap; vertical-align: top; font-weight: 600; }
     #nov_tabla_masivo tfoot td { position: sticky; bottom: 0; z-index: 2; background: #f8f9fa; font-weight: 600; }

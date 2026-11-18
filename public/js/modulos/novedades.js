@@ -337,7 +337,7 @@
         empleados.forEach(e => {
             const buscar = `${e.nombres_apellidos} ${e.identificacion}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
             b += `<tr data-emp="${e.id}" data-buscar="${esc(buscar)}">
-                    <td class="nov-col-emp" title="${esc(e.nombres_apellidos)} (${esc(e.identificacion)})">${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion)}</span></td>`;
+                    <td class="nov-col-emp" title="${esc(e.nombres_apellidos)}">${esc(e.nombres_apellidos)}</td>`;
             tipos.forEach(t => {
                 const cod = String(t.codigo);
                 if (esAvisoTipo(cod)) {
