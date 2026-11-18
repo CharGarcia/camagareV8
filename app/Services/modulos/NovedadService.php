@@ -55,6 +55,7 @@ class NovedadService
 
     public function crear(array $data): int
     {
+        $data = $this->aplicarMarcaPago($data, null);
         $data = $this->normalizar($data, (int) $data['id_empresa']);
         $idEmpresa = (int) $data['id_empresa'];
         $idUsuario = (int) $data['id_usuario'];
@@ -126,9 +127,10 @@ class NovedadService
      * igual que la registrada a mano con "Nuevo" (sin carga: origen manual), con las mismas
      * reglas, y todo o nada.
      *
-     * $comun: fecha, periodo_mes, periodo_anio, aplica_en, observacion (para todas).
+     * $comun: fecha, periodo_mes, periodo_anio, aplica_en (para todas).
      * $items: [id_empleado, tipo_codigo, valor, aporta_iess ('si'|'no'|null),
-     *          ya_pagado (bool, solo Anticipo/Quincena/Préstamo Empresa), motivo_codigo (Aviso de salida)].
+     *          ya_pagado (bool, solo Anticipo/Quincena/Préstamo Empresa), motivo_codigo (Aviso de salida),
+     *          observacion (la del empleado; vacía = "Tipo - Mes Año")].
      *
      * Devuelve uno de:
      *  - ['errores' => [[empleado, novedad, error], …]]   nada se guardó
@@ -161,7 +163,7 @@ class NovedadService
         }
         $mes  = (int) ($comun['periodo_mes'] ?? 0);
         $anio = (int) ($comun['periodo_anio'] ?? 0);
-        $obs  = trim((string) ($comun['observacion'] ?? ''));
+        // La observación va por empleado (en cada item); vacía = "Tipo - Mes Año" de cada novedad.
 
         // Lo común se revisa una vez, no repetido en cada empleado.
         $fecha = trim((string) ($comun['fecha'] ?? ''));
@@ -209,6 +211,8 @@ class NovedadService
             $yaPagado = $entrega && !empty($it['ya_pagado']);
             $hayYaPagado = $hayYaPagado || $yaPagado;
             $iess = $it['aporta_iess'] ?? null;
+            // Observación del empleado (columna de la cuadrícula); vacía = "Tipo - Mes Año".
+            $obsEmp = mb_substr(trim((string) ($it['observacion'] ?? '')), 0, 250);
 
             $data = [
                 'id_empresa'    => $idEmpresa,
@@ -221,7 +225,7 @@ class NovedadService
                 'valor'         => (float) ($it['valor'] ?? 0),
                 'aplica_en'     => trim((string) ($comun['aplica_en'] ?? 'rol')),
                 'motivo_codigo' => trim((string) ($it['motivo_codigo'] ?? '')),
-                'observacion'   => $obs !== '' ? $obs : $this->observacionPorDefecto($tipo, $mes, $anio),
+                'observacion'   => $obsEmp !== '' ? $obsEmp : $this->observacionPorDefecto($tipo, $mes, $anio),
                 'estado'        => 'activo',
                 'aporta_iess'   => $iess === null || $iess === '' ? null : (string) $iess,
                 // Anticipo / Quincena / Préstamo Empresa ya entregado fuera del sistema: el rol
@@ -428,6 +432,7 @@ class NovedadService
         if (($data['aporta_iess'] ?? null) === null) {
             $data['aporta_iess'] = $old['aporta_iess'] ?? null;
         }
+        $data = $this->aplicarMarcaPago($data, $old);
         $data = $this->normalizar($data, $idEmpresa);
         $this->rules->validate($data);
 
@@ -688,6 +693,48 @@ class NovedadService
         } catch (\Throwable $e) {
             // Silencioso: la novedad ya se guardó.
         }
+    }
+
+    /**
+     * Selector "Por pagar / Ya pagado" del modal (Anticipo, Quincena y Préstamo Empresa):
+     * convierte `ya_pagado` en las marcas de la tabla.
+     *  - Ya pagado: entregado fuera del sistema → `desembolsado_migrado` (el rol lo descuenta
+     *    directo, sin egreso) + `desembolso_manual` (no es migrado: se sigue editando).
+     *  - Por pagar: sin marcas → se paga en Egresos → Nómina y el rol descuenta lo pagado.
+     *  - Sin dato (selector bloqueado, o llamadas que no lo conocen como la generación desde
+     *    asistencia): al editar se conserva lo que tenía; al crear, por pagar.
+     * En los demás tipos la marca no aplica: al editar se limpia (p. ej. un Anticipo que se
+     * cambia a Descuento). Si `ya_pagado` no viene en $data no se toca nada.
+     * El candado de lo ya desembolsado por egreso lo pone bloquearSiYaDesembolsada().
+     */
+    private function aplicarMarcaPago(array $data, ?array $old): array
+    {
+        if (!array_key_exists('ya_pagado', $data)) {
+            return $data;
+        }
+        $ya = $data['ya_pagado'];
+        unset($data['ya_pagado']);
+        $tipo = trim((string) ($data['tipo_codigo'] ?? ''));
+
+        if (!NovedadPlantillaService::requiereEntrega($tipo)) {
+            if ($old !== null) {
+                $data['desembolsado_migrado'] = false;
+                $data['desembolso_manual'] = false;
+            }
+            return $data;
+        }
+        if ($ya === null) {
+            $ya = $old !== null && NovedadRepository::tieneMarcaDesembolso($old);
+        }
+        $ya = (bool) $ya;
+        // Lo cargado por Excel (id_carga) ya se distingue de lo migrado sin esta marca.
+        $manual = $ya && empty($old['id_carga']);
+        if ($manual && !$this->repository->tieneDesembolsoManual()) {
+            throw new Exception('Para marcar una novedad como "Ya pagado" falta aplicar en la base de datos el script database/2026-11-18_novedades_desembolso_manual.sql. Márquela como "Por pagar" o pida que se aplique.');
+        }
+        $data['desembolsado_migrado'] = $ya;
+        $data['desembolso_manual'] = $manual;
+        return $data;
     }
 
     /**

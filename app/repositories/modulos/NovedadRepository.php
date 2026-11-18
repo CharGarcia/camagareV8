@@ -459,6 +459,10 @@ class NovedadRepository extends BaseRepository
     {
         $conIess = $this->tieneMarcaIess();
         $setIess = $conIess ? 'aporta_iess = :aporta_iess,' : '';
+        // Selector "Por pagar / Ya pagado" (NovedadService::aplicarMarcaPago): solo si viene el dato.
+        $conPago   = array_key_exists('desembolsado_migrado', $d);
+        $conManual = $conPago && $this->tieneDesembolsoManual();
+        $setPago   = ($conPago ? 'desembolsado_migrado = :desemb,' : '') . ($conManual ? 'desembolso_manual = :desemb_manual,' : '');
         $sql = "UPDATE {$this->table} SET
                     id_empleado = :id_empleado,
                     tipo_codigo = :tipo_codigo,
@@ -473,6 +477,7 @@ class NovedadRepository extends BaseRepository
                     observacion = :observacion,
                     estado = :estado,
                     {$setIess}
+                    {$setPago}
                     updated_by = :id_u,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false";
@@ -495,6 +500,13 @@ class NovedadRepository extends BaseRepository
         ];
         if ($conIess) {
             $params[':aporta_iess'] = self::paramMarcaIess($d);
+        }
+        // Booleanos como texto: un false de PHP llega a pgsql como '' y falla.
+        if ($conPago) {
+            $params[':desemb'] = !empty($d['desembolsado_migrado']) ? 'true' : 'false';
+        }
+        if ($conManual) {
+            $params[':desemb_manual'] = !empty($d['desembolso_manual']) ? 'true' : 'false';
         }
         $st = $this->db->prepare($sql);
         return $st->execute($params);

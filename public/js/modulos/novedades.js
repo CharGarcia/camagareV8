@@ -134,6 +134,8 @@
         const esAviso = cod !== '' && cod === cat.cod_aviso_salida;
         // Otros Ingresos y horas: los únicos con la opción de IESS.
         const conIess = cod !== '' && Object.prototype.hasOwnProperty.call(cat.iess_por_defecto || {}, cod);
+        // Anticipo, Quincena y Préstamo Empresa: selector Por pagar / Ya pagado.
+        const conPago = cod !== '' && (cat.cods_entrega || []).includes(cod);
 
         const contValor = document.getElementById('nov_container_valor');
         const contIess = document.getElementById('nov_container_iess');
@@ -154,8 +156,9 @@
         }
         // Con el selector de IESS, el valor comparte la fila con él.
         contIess?.classList.toggle('d-none', !conIess);
-        contValor.classList.toggle('col-md-6', !conIess);
-        contValor.classList.toggle('col-md-3', conIess);
+        document.getElementById('nov_container_pago')?.classList.toggle('d-none', !conPago);
+        contValor.classList.toggle('col-md-6', !conIess && !conPago);
+        contValor.classList.toggle('col-md-3', conIess || conPago);
         novSincronizarIess();
         novSincronizarAplica((cat.cods_solo_rol || []).includes(cod));
     };
@@ -274,7 +277,8 @@
         const dialog = document.getElementById('nov_dialog');
         modal?.classList.toggle('nov-modo-todos', modoActual === 'todos');
         dialog?.classList.toggle('modal-lg', modoActual !== 'todos');
-        dialog?.classList.toggle('modal-xl', modoActual === 'todos');
+        // "Todos los empleados": pantalla completa, para ver más filas y columnas de la cuadrícula.
+        dialog?.classList.toggle('modal-fullscreen', modoActual === 'todos');
         const radio = document.getElementById(modoActual === 'todos' ? 'nov_modo_todos' : 'nov_modo_uno');
         if (radio) radio.checked = true;
         const obs = document.getElementById('nov_observacion');
@@ -311,7 +315,7 @@
     function renderGrid(empleados) {
         const tipos = cat().tipos || [];
         const motivos = cat().motivos || [];
-        let h = '<tr><th class="nov-col-emp">Empleado</th>';
+        let h = '<tr><th class="nov-col-emp">Empleado</th><th>Observación<div class="small text-muted fw-normal">(vacía: «Tipo - Mes Año»)</div></th>';
         tipos.forEach(t => {
             const cod = String(t.codigo);
             let extra = '';
@@ -332,7 +336,8 @@
         empleados.forEach(e => {
             const buscar = `${e.nombres_apellidos} ${e.identificacion}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
             b += `<tr data-emp="${e.id}" data-buscar="${esc(buscar)}">
-                    <td class="nov-col-emp" title="${esc(e.nombres_apellidos)} (${esc(e.identificacion)})">${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion)}</span></td>`;
+                    <td class="nov-col-emp" title="${esc(e.nombres_apellidos)} (${esc(e.identificacion)})">${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion)}</span></td>
+                    <td class="p-0"><input type="text" class="form-control nov-m-obs" maxlength="250" placeholder="Tipo - Mes Año" aria-label="Observación de ${esc(e.nombres_apellidos)}"></td>`;
             tipos.forEach(t => {
                 const cod = String(t.codigo);
                 if (esAvisoTipo(cod)) {
@@ -351,9 +356,9 @@
             });
             b += '</tr>';
         });
-        tabla.tBodies[0].innerHTML = b || `<tr><td class="text-center text-muted py-3" colspan="${tipos.length + 1}">La empresa no tiene empleados activos.</td></tr>`;
+        tabla.tBodies[0].innerHTML = b || `<tr><td class="text-center text-muted py-3" colspan="${tipos.length + 2}">La empresa no tiene empleados activos.</td></tr>`;
 
-        let f = '<tr><td class="nov-col-emp">Totales</td>';
+        let f = '<tr><td class="nov-col-emp">Totales</td><td></td>';
         tipos.forEach(t => { f += `<td class="text-end pe-2" data-total="${esc(String(t.codigo))}"></td>`; });
         tabla.tFoot.innerHTML = f + '</tr>';
 
@@ -426,17 +431,19 @@
         const items = [];
         tabla?.querySelectorAll('tbody tr[data-emp]').forEach(tr => {
             const idEmp = parseInt(tr.dataset.emp, 10);
+            // Observación del empleado: vale para todas sus novedades (vacía = "Tipo - Mes Año").
+            const obs = (tr.querySelector('.nov-m-obs')?.value || '').trim();
             tr.querySelectorAll('td[data-tipo]').forEach(td => {
                 const cod = td.dataset.tipo;
                 if (esAvisoTipo(cod)) {
                     const motivo = td.querySelector('.nov-m-motivo')?.value || '';
-                    if (motivo) items.push({ id_empleado: idEmp, tipo_codigo: cod, valor: 0, motivo_codigo: motivo });
+                    if (motivo) items.push({ id_empleado: idEmp, tipo_codigo: cod, valor: 0, motivo_codigo: motivo, observacion: obs });
                     return;
                 }
                 const v = valorCelda(td.querySelector('.nov-m-valor'));
                 if (v === 0) return;
                 const sel = td.querySelector('.nov-m-sel');
-                const it = { id_empleado: idEmp, tipo_codigo: cod, valor: v };
+                const it = { id_empleado: idEmp, tipo_codigo: cod, valor: v, observacion: obs };
                 if (esIessTipo(cod)) it.aporta_iess = sel ? sel.value : null;
                 if (esEntregaTipo(cod)) it.ya_pagado = !!sel && sel.value === 'ya';
                 items.push(it);
@@ -471,7 +478,6 @@
                 fd.append('periodo_mes', document.getElementById('nov_periodo_mes').value);
                 fd.append('periodo_anio', document.getElementById('nov_periodo_anio').value);
                 fd.append('aplica_en', document.getElementById('nov_aplica_en').value);
-                fd.append('observacion', document.getElementById('nov_observacion').value);
                 fd.append('items', JSON.stringify(items));
                 fd.append('token_guardado', tokenMasivo);
                 if (confirmar) fd.append('confirmar_avisos', '1');
@@ -540,6 +546,9 @@
         // Nueva novedad: "Aporta IESS" arranca en Sí (lo habitual en bonos, comisiones y horas).
         novReiniciarIess('si');
         novReiniciarAplica();
+        // Anticipo / Quincena / Préstamo Empresa nuevos: por pagar, como siempre.
+        const selPagoNuevo = document.getElementById('nov_ya_pagado');
+        if (selPagoNuevo) selPagoNuevo.value = 'por';
         setEmpleado('', '');
         obsAuto = '';
         // Toda novedad nace activa: el selector se muestra pero en solo lectura.
@@ -595,6 +604,9 @@
             document.getElementById('nov_periodo_anio').value = d.periodo_anio || '';
             document.getElementById('nov_aplica_en').value = d.aplica_en || 'rol';
             document.getElementById('nov_observacion').value = d.observacion || '';
+            // Marca de entrega guardada (desembolsado_migrado): ya pagado / por pagar.
+            const selPago = document.getElementById('nov_ya_pagado');
+            if (selPago) selPago.value = esSi(d.desembolsado_migrado) ? 'ya' : 'por';
 
             window.novToggleCampos();
 

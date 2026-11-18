@@ -247,7 +247,6 @@ class NovedadesController extends BaseModuloController
             'periodo_mes'  => (int) ($_POST['periodo_mes'] ?? 0),
             'periodo_anio' => (int) ($_POST['periodo_anio'] ?? 0),
             'aplica_en'    => trim($_POST['aplica_en'] ?? 'rol'),
-            'observacion'  => trim($_POST['observacion'] ?? ''),
         ];
         $items = json_decode((string) ($_POST['items'] ?? '[]'), true);
         $items = is_array($items) ? array_values(array_filter($items, 'is_array')) : [];
@@ -585,6 +584,9 @@ class NovedadesController extends BaseModuloController
             'estado'        => trim($_POST['estado'] ?? 'activo'),
             // 'si'/'no'; null si no vino (selector deshabilitado): el Service decide.
             'aporta_iess'   => isset($_POST['aporta_iess']) ? trim((string) $_POST['aporta_iess']) : null,
+            // Anticipo / Quincena / Préstamo Empresa: 'ya' (ya pagado) o 'por' (por pagar); null si
+            // no vino (selector deshabilitado): al editar se conserva lo que tenía.
+            'ya_pagado'     => isset($_POST['ya_pagado']) ? trim((string) $_POST['ya_pagado']) === 'ya' : null,
         ];
     }
 }

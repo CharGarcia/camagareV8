@@ -13,6 +13,8 @@ $mesActual  = (int) date('n');
     #modalNovedad.nov-modo-todos .nov-solo-uno { display: none !important; }
     #modalNovedad:not(.nov-modo-todos) .nov-solo-todos { display: none !important; }
     #modalNovedad .novmasivo-scroll { max-height: 52vh; overflow: auto; }
+    /* Pantalla completa: la cuadrícula usa todo el alto que dejan los campos comunes. */
+    #modalNovedad.nov-modo-todos .novmasivo-scroll { max-height: calc(100vh - 330px); min-height: 240px; }
     #nov_tabla_masivo { font-size: .78rem; width: max-content; min-width: 100%; }
     #nov_tabla_masivo thead th { position: sticky; top: 0; z-index: 2; background: #f8f9fa; white-space: nowrap; vertical-align: top; font-weight: 600; }
     #nov_tabla_masivo tfoot td { position: sticky; bottom: 0; z-index: 2; background: #f8f9fa; font-weight: 600; }
@@ -23,6 +25,7 @@ $mesActual  = (int) date('n');
     #nov_tabla_masivo input.nov-m-valor { width: 70px; text-align: right; }
     #nov_tabla_masivo select.nov-m-sel { width: 78px; }
     #nov_tabla_masivo select.nov-m-motivo { width: 190px; }
+    #nov_tabla_masivo input.nov-m-obs { width: 220px; }
     #nov_tabla_masivo th select { height: 20px; padding: 0 4px; font-size: .72rem; font-weight: 400; }
     #nov_tabla_masivo td.nov-con-valor { background: #fff8e1; }
 </style>
@@ -56,7 +59,7 @@ $mesActual  = (int) date('n');
                             <input type="radio" class="btn-check" name="nov_modo" id="nov_modo_todos" value="todos" autocomplete="off">
                             <label class="btn btn-outline-primary" for="nov_modo_todos"><i class="bi bi-people me-1"></i>Todos los empleados</label>
                         </div>
-                        <span class="small text-muted nov-solo-todos">Escriba el valor solo en las novedades que correspondan a cada empleado: las celdas vacías o en 0 no crean nada.</span>
+                        <span class="small text-muted nov-solo-todos">Escriba el valor solo en las novedades que correspondan a cada empleado: las celdas vacías o en 0 no crean nada. La observación de cada empleado vale para todas sus novedades; vacía, se guarda «Tipo - Mes Año».</span>
                     </div>
                     <div class="row g-3">
                         <div class="col-md-8 position-relative nov-solo-uno">
@@ -100,6 +103,16 @@ $mesActual  = (int) date('n');
                             <div class="form-text small mt-1 d-none" id="nov_iess_aviso">El empleado no aporta al IESS.</div>
                         </div>
 
+                        <!-- Solo Anticipo, Quincena y Préstamo Empresa: ¿ya se entregó fuera del sistema? -->
+                        <div class="col-md-3 d-none nov-solo-uno" id="nov_container_pago">
+                            <label class="form-label mb-1 small fw-bold text-muted" for="nov_ya_pagado">Pago</label>
+                            <select class="form-select form-select-sm shadow-none" name="ya_pagado" id="nov_ya_pagado"
+                                    title="Por pagar: se paga en Egresos → Nómina y el rol descuenta lo pagado. Ya pagado: se entregó fuera del sistema y el rol lo descuenta directo.">
+                                <option value="por">Por pagar</option>
+                                <option value="ya">Ya pagado</option>
+                            </select>
+                        </div>
+
                         <div class="col-md-6 d-none nov-solo-uno" id="nov_container_motivo">
                             <label class="form-label mb-1 small fw-bold text-muted">Motivo de Salida *</label>
                             <select class="form-select form-select-sm shadow-none" name="motivo_codigo" id="nov_motivo_codigo">
@@ -136,10 +149,10 @@ $mesActual  = (int) date('n');
                             <div class="form-text small mt-1 d-none" id="nov_aplica_aviso">Este tipo solo afecta al rol mensual.</div>
                         </div>
 
-                        <div class="col-12">
+                        <!-- En "Todos los empleados" la observación va por empleado (columna de la cuadrícula). -->
+                        <div class="col-12 nov-solo-uno">
                             <label class="form-label mb-1 small fw-bold text-muted">Observación</label>
                             <textarea class="form-control form-control-sm shadow-none" name="observacion" id="nov_observacion" rows="2"></textarea>
-                            <div class="form-text small mt-1 nov-solo-todos">Vale para todas las novedades. Si la deja vacía, cada una se guarda con «Tipo - Mes Año».</div>
                         </div>
 
                         <!-- Cuadrícula "Todos los empleados": una fila por empleado activo, una columna por tipo -->
