@@ -315,7 +315,7 @@
     function renderGrid(empleados) {
         const tipos = cat().tipos || [];
         const motivos = cat().motivos || [];
-        let h = '<tr><th class="nov-col-emp">Empleado</th><th>Observación<div class="small text-muted fw-normal">(vacía: «Tipo - Mes Año»)</div></th>';
+        let h = '<tr><th class="nov-col-emp">Empleado</th>';
         tipos.forEach(t => {
             const cod = String(t.codigo);
             let extra = '';
@@ -329,15 +329,15 @@
             const unidad = esAvisoTipo(cod) ? 'motivo' : unidadCorta(cod);
             h += `<th class="text-center">${esc(t.nombre)}<div class="small text-muted fw-normal">(${esc(unidad)})</div>${extra}</th>`;
         });
-        tabla.tHead.innerHTML = h + '</tr>';
+        // Observación del empleado: última columna.
+        tabla.tHead.innerHTML = h + '<th>Observación<div class="small text-muted fw-normal">(vacía: «Tipo - Mes Año»)</div></th></tr>';
 
         const optMotivos = '<option value="">—</option>' + motivos.map(m => `<option value="${esc(m.codigo)}">${esc(m.nombre)}</option>`).join('');
         let b = '';
         empleados.forEach(e => {
             const buscar = `${e.nombres_apellidos} ${e.identificacion}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
             b += `<tr data-emp="${e.id}" data-buscar="${esc(buscar)}">
-                    <td class="nov-col-emp" title="${esc(e.nombres_apellidos)} (${esc(e.identificacion)})">${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion)}</span></td>
-                    <td class="p-0"><input type="text" class="form-control nov-m-obs" maxlength="250" placeholder="Tipo - Mes Año" aria-label="Observación de ${esc(e.nombres_apellidos)}"></td>`;
+                    <td class="nov-col-emp" title="${esc(e.nombres_apellidos)} (${esc(e.identificacion)})">${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion)}</span></td>`;
             tipos.forEach(t => {
                 const cod = String(t.codigo);
                 if (esAvisoTipo(cod)) {
@@ -354,13 +354,13 @@
                 }
                 b += `<td class="p-0" data-tipo="${esc(cod)}"><div class="d-flex"><input type="number" step="0.01" min="0" class="form-control nov-m-valor" aria-label="${esc(t.nombre)}">${sel}</div></td>`;
             });
-            b += '</tr>';
+            b += `<td class="p-0"><input type="text" class="form-control nov-m-obs" maxlength="250" placeholder="Tipo - Mes Año" aria-label="Observación de ${esc(e.nombres_apellidos)}"></td></tr>`;
         });
         tabla.tBodies[0].innerHTML = b || `<tr><td class="text-center text-muted py-3" colspan="${tipos.length + 2}">La empresa no tiene empleados activos.</td></tr>`;
 
-        let f = '<tr><td class="nov-col-emp">Totales</td><td></td>';
+        let f = '<tr><td class="nov-col-emp">Totales</td>';
         tipos.forEach(t => { f += `<td class="text-end pe-2" data-total="${esc(String(t.codigo))}"></td>`; });
-        tabla.tFoot.innerHTML = f + '</tr>';
+        tabla.tFoot.innerHTML = f + '<td></td></tr>';
 
         document.getElementById('nov_masivo_info').textContent = `${empleados.length} empleado(s) activo(s)`;
         const buscar = document.getElementById('nov_masivo_buscar');
