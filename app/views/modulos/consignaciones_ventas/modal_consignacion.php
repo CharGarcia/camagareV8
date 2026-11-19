@@ -466,6 +466,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         document.getElementById('formConsignacion').reset();
         document.getElementById('cons_id').value = '';
         document.getElementById('cons_id_cliente').value = '';
+        consAsesorAplicado = null; // tras reset() el valor del select ya no viene del documento anterior
         consAplicarVendedor(null); // quita el asesor agregado al vuelo por el documento anterior
         document.getElementById('tituloModalConsignacion').textContent = 'Nueva Consignación en Ventas';
         document.getElementById('cons_estado_badge').textContent = 'Nueva';
@@ -591,6 +592,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         // Con consAplicarVendedor, un asesor que ya no esté en la lista (inactivo, o de otro
         // usuario sin permiso 'todo') se muestra igual en vez de dejar el combo en blanco y
         // perderse al volver a guardar.
+        consAsesorAplicado = null; // no arrastrar el asesor del documento abierto antes
         if (row.id_vendedor) consAplicarVendedor(row.id_vendedor, row.vendedor_nombre);
         if (row.id_bodega) document.getElementById('cons_id_bodega').value = row.id_bodega;
         if (row.id_responsable_traslado) document.getElementById('cons_id_responsable_traslado').value = row.id_responsable_traslado;
@@ -1489,6 +1491,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     function limpiarCliente() {
         document.getElementById('cons_id_cliente').value = '';
         document.getElementById('cons_cliente_busqueda').value = '';
+        consAplicarVendedor(null); // el asesor que puso este cliente se va con él
         const resultsDiv = document.getElementById('cons_cliente_results');
         if(resultsDiv) resultsDiv.classList.add('d-none');
     }
@@ -1581,8 +1584,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
      * combo EN BLANCO sin avisar: la consignación se guardaba sin asesor o con otro. Ahora esa
      * opción se agrega al vuelo, marcada, para que el asesor del cliente quede seleccionado.
      *
+     * Sin vendedor (cliente sin asesor asignado o cliente borrado): si el asesor que está puesto
+     * es el que dejó el cliente/documento anterior, se limpia —si no, la consignación se guardaba
+     * con el vendedor de otro cliente—. Un asesor elegido a mano o el favorito (★) no se tocan.
+     *
      * Devuelve true si quedó un asesor seleccionado.
      */
+    var consAsesorAplicado = null; // id del asesor que puso el último cliente/documento
+
     function consAplicarVendedor(idVendedor, nombreVendedor) {
         const sel = document.getElementById('cons_id_vendedor');
         if (!sel) return false;
@@ -1591,7 +1600,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         // de evaluar el nuevo, para no dejar nombres sueltos de un cliente que ya no está.
         sel.querySelectorAll('option[data-fuera-de-lista="1"]').forEach(o => o.remove());
 
-        if (!idVendedor) return false;
+        if (!idVendedor) {
+            if (consAsesorAplicado !== null && sel.value === consAsesorAplicado) sel.value = '';
+            consAsesorAplicado = null;
+            return false;
+        }
         const idVend = String(idVendedor);
 
         if (!Array.from(sel.options).some(o => o.value === idVend)) {
@@ -1604,6 +1617,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
         }
 
         sel.value = idVend;
+        consAsesorAplicado = idVend;
         return true;
     }
 

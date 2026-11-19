@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, unidad de medida, cajas, caja, ciento, docena, consignar por caja, salen unidades en vez de cajas, medida, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, stock por lote, stock del lote, el stock no se actualiza, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion, anular consignacion, consignacion anulada, anular devuelve el stock, reactivar consignacion anulada, no descuenta inventario, facturacion afecta al inventario, producto no inventariable en consignacion
-version: 1.51
+version: 1.52
 orden: 45
 estado: activo
 ---
@@ -76,9 +76,12 @@ Si el vendedor asignado al cliente **no está en la lista** del campo —porque 
 inactivo, o porque el usuario no tiene **Acceso total** y ese vendedor no le
 pertenece— igualmente se selecciona: se agrega a la lista solo para ese
 documento. Así la consignación queda con el asesor correcto del cliente en vez de
-quedarse en blanco. Si el cliente no tiene vendedor asignado, el campo se deja
-como estaba, para no borrar lo que ya estaba elegido ni el valor marcado como
-favorito con la estrella.
+quedarse en blanco.
+
+Si se cambia a un cliente **sin vendedor asignado**, o se borra el cliente, el
+Asesor que había puesto el cliente anterior se limpia: así la consignación no se
+guarda con el vendedor de otro cliente. Si el asesor fue elegido a mano o es el
+marcado como favorito con la estrella, se deja como estaba.
 
 ## Cargar ítems desde un pedido
 
@@ -630,6 +633,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.52** — Al cambiar a un cliente sin vendedor asignado, o al borrar el cliente, el **Asesor** que había puesto el cliente anterior se limpia (antes se quedaba y la consignación podía guardarse con el vendedor de otro cliente). Un asesor elegido a mano o el favorito no se tocan.
 - **1.51** — La pestaña **Información** pasa a ser la pieza común del sistema (ver la guía *Pestaña Información*); la línea de tiempo se titula *Acciones registradas*.
 - **1.50** — Nueva pestaña **Información** en el modal (solo niveles 2 y 3, solo lectura): quién creó y modificó la consignación, con fecha y hora, la línea de tiempo de sus acciones y los movimientos de inventario que generó, incluidos los anulados.
 - **1.49** — **Anular libera el pedido**: una consignación Anulada ya no cuenta como consumo de su pedido; al anularla se recalcula el estado del pedido (vuelve a *Pendiente* si queda saldo), igual que al eliminarla. La pestaña **Resumen** de una anulada muestra la fila *Anulación* y saldo 0.
