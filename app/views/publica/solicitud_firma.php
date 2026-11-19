@@ -506,7 +506,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         <p class="section-title"><i class="bi bi-file-earmark-image me-1"></i>Tus documentos</p>
         <p class="text-muted small mb-3">Fotos claras y completas de tu cédula y una selfie sosteniéndola. Los documentos de la empresa en PDF. Máximo 5 MB cada uno. Cada archivo se guarda al subirlo.</p>
         <?php if ($tipoPersona === 'juridica'): ?>
-            <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>La cédula y la selfie deben ser <b>del representante legal</b> que consta en el nombramiento, no de la persona que hace el trámite.</div>
+            <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>La cédula y la selfie deben ser <b>del representante legal</b> que consta en el nombramiento.</div>
         <?php endif; ?>
         <?php if (($f['origen'] ?? '') === 'renovacion' && $subidos && $estado === 'borrador'): ?>
             <div class="alert alert-info small py-2">
