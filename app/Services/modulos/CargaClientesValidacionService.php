@@ -262,7 +262,10 @@ class CargaClientesValidacionService
                     $errores[] = 'No tiene permiso para crear clientes en este módulo.';
                 }
             } else {
-                if ($this->firma($datos) === $this->firma($this->datosDesdeExistente($existente))) {
+                // Un valor que no se reconoció (vendedor, provincia, tipo…) se interpretó
+                // como vacío: aunque la huella coincida, la fila SÍ pide un cambio que
+                // no se puede hacer, y el error debe verse.
+                if (!$invalidos && $this->firma($datos) === $this->firma($this->datosDesdeExistente($existente))) {
                     // Idéntica a lo guardado: no se escribe, así que tampoco se
                     // reclama lo que ya estaba (p. ej. el consumidor final sin correo).
                     $accion  = 'sin_cambios';

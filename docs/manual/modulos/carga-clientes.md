@@ -80,7 +80,7 @@ Si cambia la elección después de revisar el archivo, tendrá que revisarlo de 
 | DIRECCION | Hasta 300 caracteres |
 | PROVINCIA / CIUDAD | Como aparecen en las hojas Ref_Provincias y Ref_Ciudades |
 | PLAZO | Días de crédito (0 = contado) |
-| VENDEDOR | Nombre como aparece en Ref_Vendedores, o su identificación si hay dos con el mismo nombre |
+| VENDEDOR | Nombre como aparece en Ref_Vendedores (da igual mayúsculas, minúsculas o tildes), o su identificación si hay dos con el mismo nombre. El vendedor debe estar creado: si no existe, la fila se marca con error y no se cambia |
 | FORMA_PAGO_SRI | Código de la hoja Ref_FormasPago (por ejemplo 20) |
 | ESTADO | Activo o Inactivo |
 | OBSERVACIONES | Notas internas del cliente |
