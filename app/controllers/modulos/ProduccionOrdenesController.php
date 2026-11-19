@@ -113,7 +113,8 @@ class ProduccionOrdenesController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/produccion_ordenes/index', [
             'titulo'      => 'Órdenes de producción',
-            'perm'        => $this->getPermisos(),
+            'fullWidth'   => true,
+            'perm'      => $this->getPermisos(),
             'rutaModulo'  => self::RUTA_MODULO,
             'vistaConfig' => $prefs,
             'instalado'   => $instalado,

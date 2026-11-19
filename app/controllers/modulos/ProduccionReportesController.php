@@ -156,6 +156,7 @@ class ProduccionReportesController extends BaseModuloController
         $config = ProduccionConfiguracionService::crear();
         $this->viewWithLayout('layouts.main', 'modulos/produccion_reportes/index', [
             'titulo'     => 'Reportes de producción',
+            'fullWidth'  => true,
             'perm'       => $this->getPermisos(),
             'rutaModulo' => self::RUTA_MODULO,
             'instalado'  => $config->instalado(),

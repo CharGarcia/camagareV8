@@ -24,6 +24,8 @@
     let recursos = [];
     let seq = 0;
     let previa = null;         // vista previa de la nueva orden
+    let previaSeq = 0;         // descarta respuestas de la vista previa que llegan tarde
+    let caducidadSugerida = ''; // última caducidad puesta por la fórmula (no por el usuario)
     window.POR_pagina = 1;
 
     // ── Utilidades ───────────────────────────────────────────────────────────
@@ -165,7 +167,7 @@
         typeahead(el('pon-formula-txt'), `${URL}/formulas-ajax`,
             f => `<code>${esc(f.codigo)}</code> v${f.version} · ${esc(f.nombre)} <span class="text-muted">→ ${esc(f.producto_nombre)}</span>`,
             f => {
-                if (!f) { el('pon-formula').value = ''; previa = null; pintarPrevia(); return; }
+                if (!f) { el('pon-formula').value = ''; previa = null; previaSeq++; pintarPrevia(); return; }
                 el('pon-formula-txt').value = `${f.codigo} v${f.version} · ${f.nombre}`;
                 el('pon-formula-txt').dataset.elegido = '1';
                 el('pon-formula').value = f.id;
@@ -174,6 +176,7 @@
                 cargarPrevia();
             });
         ['pon-cantidad', 'pon-bodega-insumos'].forEach(id => el(id).addEventListener('change', cargarPrevia));
+        el('pon-tbody').addEventListener('input', e => { if (e.target.classList.contains('pon-real')) e.target.dataset.editado = '1'; });
     }
 
     window.POR_nueva = function (tipo) {
@@ -197,6 +200,8 @@
         el('pon-bodega-destino').value = (CFG.usar_cuarentena && CFG.id_bodega_cuarentena) ? CFG.id_bodega_cuarentena : (CFG.id_bodega_terminado || '');
         el('pon-medida').textContent = 'u';
         previa = null;
+        previaSeq++;
+        caducidadSugerida = '';
         pintarPrevia();
         tokenNueva = token();
         getModalNueva().show();
@@ -204,18 +209,38 @@
 
     function cargarPrevia() {
         const idF = el('pon-formula').value, c = num(el('pon-cantidad').value);
+        const seq = ++previaSeq;
         if (!idF || c <= 0) { previa = null; pintarPrevia(); return; }
         const q = new URLSearchParams({ id_formula: idF, cantidad: String(c), id_bodega_insumos: el('pon-bodega-insumos').value || '0' });
         fetch(`${URL}/vista-previa-ajax?${q}`).then(r => r.json()).then(res => {
+            // Si mientras tanto cambió la fórmula, la cantidad o la bodega, esta respuesta ya no vale.
+            if (seq !== previaSeq) return;
             if (!res.ok) { aviso('error', 'Error', mensajeDe(res)); return; }
             previa = res.data;
-            if (previa.caducidad_sugerida && !el('pon-caducidad').value) el('pon-caducidad').value = previa.caducidad_sugerida;
+            previa._clave = `${idF}|${c}`;
+            // La caducidad la reemplaza la nueva fórmula solo si estaba vacía o la había puesto la anterior;
+            // si el usuario la escribió a mano, se respeta.
+            const cad = el('pon-caducidad');
+            if (!cad.value || cad.value === caducidadSugerida) {
+                cad.value = previa.caducidad_sugerida || '';
+                caducidadSugerida = previa.caducidad_sugerida || '';
+            }
             pintarPrevia();
-        });
+        }).catch(e => console.error('vista previa', e));
     }
 
     function pintarPrevia() {
         const rapida = el('pon-tipo').value === 'rapida';
+        // Lo que el usuario escribió en "Producido real" se conserva si la fórmula y la cantidad no cambiaron
+        // (p. ej. solo cambió la bodega de insumos); si cambiaron, vuelve a lo teórico y se avisa.
+        const editados = {};
+        document.querySelectorAll('#pon-tbody .pon-real[data-editado="1"]').forEach(i => { editados[i.dataset.orden] = i.value; });
+        const claveAnterior = el('pon-tbody').dataset.clave || '';
+        const conservar = previa && previa._clave === claveAnterior;
+        el('pon-tbody').dataset.clave = previa ? previa._clave : '';
+        if (rapida && previa && !conservar && Object.keys(editados).length) {
+            aviso('info', 'Producido real recalculado', 'Cambió la fórmula o la cantidad: lo producido real volvió a la cantidad teórica. Revíselo antes de producir.');
+        }
         if (!previa) {
             el('pon-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Elija la fórmula y la cantidad.</td></tr>';
             el('pon-faltantes').innerHTML = '';
@@ -229,7 +254,9 @@
                 <td class="text-end">${cant(l.cantidad_teorica)}</td>
                 <td class="text-end">${insumo ? cant(l.stock) + (falta ? ` <span class="text-danger small">(faltan ${cant(l.falta)})</span>` : '') : ''}</td>
                 <td class="p-0 pon-col-real ${rapida ? '' : 'd-none'}">${!insumo
-                    ? `<input type="number" step="any" min="0" class="text-end pon-real" data-orden="${l.orden}" value="${num(l.cantidad_teorica)}">`
+                    ? (conservar && editados[l.orden] !== undefined
+                        ? `<input type="number" step="any" min="0" class="text-end pon-real" data-orden="${l.orden}" data-editado="1" value="${esc(editados[l.orden])}">`
+                        : `<input type="number" step="any" min="0" class="text-end pon-real" data-orden="${l.orden}" value="${num(l.cantidad_teorica)}">`)
                     : ''}</td>
             </tr>`;
         }).join('');

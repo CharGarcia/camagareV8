@@ -6,7 +6,7 @@ ruta_modulo: modulos/produccion-formulas
 tipo: modulo
 visibilidad: todos
 etiquetas: formula, receta, lista de materiales, bom, bill of materials, escandallo, ficha tecnica, insumos, materia prima, rendimiento, rinde, merma, coproducto, subproducto, desperdicio, retazo, granel, envasado, formula en porcentaje, mano de obra, costos indirectos, cif, costo estimado, version de formula, activar formula
-version: 1.0
+version: 1.1
 orden: 1
 estado: activo
 ---
@@ -86,3 +86,4 @@ Una fórmula tiene:
 ## Historial de cambios
 
 - **1.0** — Versión inicial.
+- **1.1** — La pantalla ocupa todo el ancho de la ventana, como los demás módulos. El aviso de empresa sin configurar ya no lleva enlace a la Configuración de Producción.

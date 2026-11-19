@@ -6,7 +6,7 @@ ruta_modulo: modulos/produccion-configuracion
 tipo: modulo
 visibilidad: todos
 etiquetas: configuracion de produccion, activar produccion, fabricacion, manufactura, planta, bodega de materia prima, bodega de producto terminado, cuarentena, exigir lote, consumir sin stock, cuentas de produccion, donde van las cuentas de produccion, productos en proceso, reparto de coproductos, asiento de produccion
-version: 1.1
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -74,3 +74,4 @@ de producción, apague **Producción** en *Módulos que contabilizan* (Configura
 
 - **1.0** — Versión inicial.
 - **1.1** — Las cuentas contables y el interruptor de los asientos pasan a **Configuración Contable → Producción**.
+- **1.2** — La pantalla ocupa todo el ancho de la ventana, como los demás módulos.

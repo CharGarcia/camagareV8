@@ -6,7 +6,7 @@ ruta_modulo: modulos/produccion-reportes
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de produccion, cuanto se produjo, produccion por producto, consumo de materia prima, consumo teorico vs real, desperdicio, merma, rendimiento, costo de produccion, costo unitario, desvio de consumo, eficiencia, ordenes cerradas, excel de produccion, pdf de produccion, costo por mes, costo mensual, costos mensuales, costo de produccion mensual, comparativo mensual, mes a mes, tendencia de costos
-version: 1.1
+version: 1.2
 orden: 3
 estado: activo
 ---
@@ -57,3 +57,4 @@ meses sin órdenes cerradas no aparecen.
 
 - **1.0** — Versión inicial.
 - **1.1** — Nueva pestaña **Costo por mes**: costo de producción por concepto, mes a mes, con fila de total.
+- **1.2** — La pantalla ocupa todo el ancho de la ventana, como los demás módulos.

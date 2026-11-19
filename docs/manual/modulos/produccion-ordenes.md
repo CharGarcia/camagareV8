@@ -6,7 +6,7 @@ ruta_modulo: modulos/produccion-ordenes
 tipo: modulo
 visibilidad: todos
 etiquetas: orden de produccion, orden de fabricacion, op, produccion rapida, fabricar, producir, consumir materia prima, consumo de insumos, consumo por peso, bobina, pesar, registro de lote, batch record, lote de produccion, caducidad, costo de produccion, costo real, costo unitario, merma anormal, coproductos, subproductos, cerrar orden, anular orden, trazabilidad de lotes, retiro de mercado, productos en proceso, asiento de produccion
-version: 1.1
+version: 1.3
 orden: 2
 estado: activo
 ---
@@ -59,7 +59,7 @@ Hay dos formas de producir:
 | Cantidad a producir | Sí | Del producto principal. La fórmula se escala a esta cantidad. |
 | Bodega de insumos / de destino | Sí | De dónde salen los insumos y a dónde entra lo producido (cuarentena si está activa). |
 | Lote | No | Lote de lo producido. Si se deja vacío, es el número de la orden. |
-| Caducidad | No | Si la fórmula tiene vida útil, se sugiere sola. |
+| Caducidad | No | Si la fórmula tiene vida útil, se sugiere sola. Si cambia de fórmula, la sugerencia se actualiza; si la escribió a mano, se respeta. |
 | Merma anormal | No | Unidades del producto principal perdidas fuera de lo normal: su costo va a gasto. |
 
 ## Permisos
@@ -101,3 +101,5 @@ Hay dos formas de producir:
 
 - **1.0** — Versión inicial.
 - **1.1** — Las cuentas de los asientos se configuran en **Configuración Contable → Producción**; los asientos se numeran **PR-** y las órdenes cerradas sin asiento entran en el aviso de asientos pendientes.
+- **1.2** — La pantalla ocupa todo el ancho de la ventana, como los demás módulos. El aviso de empresa sin configurar ya no lleva enlace a la Configuración de Producción.
+- **1.3** — Nueva orden / Producción rápida: la caducidad sugerida se actualiza al cambiar de fórmula; la tabla ya no muestra datos de una cantidad anterior al cambiar rápido; lo escrito en *Producido real* se conserva si solo cambia la bodega de insumos y, si cambia la fórmula o la cantidad, se avisa que volvió a lo teórico.

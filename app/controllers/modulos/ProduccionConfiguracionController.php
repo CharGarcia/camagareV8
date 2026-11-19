@@ -38,6 +38,7 @@ class ProduccionConfiguracionController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/produccion_configuracion/index', [
             'titulo'     => 'Configuración de Producción',
+            'fullWidth'  => true,
             'perm'       => $this->getPermisos(),
             'rutaModulo' => self::RUTA_MODULO,
             'instalado'  => $instalado,

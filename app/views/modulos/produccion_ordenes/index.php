@@ -52,8 +52,7 @@ $stat = function (string $id, string $icono, string $color, string $valor, strin
         </div>
     <?php elseif (!$config): ?>
         <div class="alert alert-info py-2 small"><i class="bi bi-info-circle me-1"></i>
-            Producción aún no está configurado en esta empresa. Guarde primero la
-            <a href="<?= rtrim($base, '/') ?>/modulos/produccion-configuracion">Configuración de Producción</a>.
+            Producción aún no está configurado en esta empresa. Guarde primero la Configuración de Producción.
         </div>
     <?php endif; ?>
 

@@ -71,6 +71,7 @@ class ProduccionFormulasController extends BaseModuloController
 
         $this->viewWithLayout('layouts.main', 'modulos/produccion_formulas/index', [
             'titulo'      => 'Fórmulas de producción',
+            'fullWidth'   => true,
             'perm'        => $this->getPermisos(),
             'rutaModulo'  => self::RUTA_MODULO,
             'vistaConfig' => $prefs,
