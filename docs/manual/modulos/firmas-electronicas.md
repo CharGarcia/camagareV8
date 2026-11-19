@@ -340,7 +340,7 @@ firma que nazca de ese enlace queda a su nombre.
 
 ### Ver y cambiar el vendedor en la ficha
 
-En la ficha de la firma (pestaña **Datos**, junto a Observaciones) está el campo
+En la ficha de la firma (pestaña **Datos**, después de Estado Pago) está el campo
 **Vendedor**: muestra a quién se le atribuye la firma (si tiene factura, el de la
 factura).
 
