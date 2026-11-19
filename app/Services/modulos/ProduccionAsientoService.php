@@ -328,6 +328,97 @@ class ProduccionAsientoService
         return $out;
     }
 
+    /**
+     * Vuelve a armar UN asiento de producción con las reglas contables (lo usa «Restaurar
+     * automático» de la pestaña Asiento, después de quitar la marca de edición manual).
+     *   - produccion_cierre:  id_ref = id de la orden.
+     *   - produccion_consumo: id_ref = primer movimiento del consumo (grupo).
+     * Devuelve false si no se pudo (orden anulada, sin contabilización, etc.).
+     */
+    public function regenerar(string $origen, int $idRef, int $idEmpresa, int $idUsuario): bool
+    {
+        if (!$this->config->get($idEmpresa) || !ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, self::CLAVE)) {
+            return false;
+        }
+        $cfg = $this->cuentas($idEmpresa);
+
+        if ($origen === self::ORIGEN_CIERRE) {
+            $orden = $this->repo->getPorId($idRef, $idEmpresa);
+            if (!$orden || $orden['estado'] !== 'cerrada') {
+                return false;
+            }
+            $movs = $this->repo->getMovimientos($idRef, $idEmpresa);
+            $entregas = array_values(array_filter($movs, fn($m) => $m['tipo'] === 'entrega'));
+            $this->asientoCierre($orden, $entregas, $cfg, $this->cuentasProductoOrden($idRef, $idEmpresa), $idEmpresa, $idUsuario);
+            return true;
+        }
+
+        if ($origen === self::ORIGEN_CONSUMO) {
+            $idOrden = $this->repo->getOrdenDeMovimiento($idRef, $idEmpresa);
+            if (!$idOrden) {
+                return false;
+            }
+            $orden = $this->repo->getPorId($idOrden, $idEmpresa);
+            if (!$orden || $orden['estado'] === 'anulada') {
+                return false;
+            }
+            $movs = $this->repo->getMovimientos($idOrden, $idEmpresa);
+            $grupo = null;
+            foreach ($movs as $m) {
+                if ((int) $m['id'] === $idRef) {
+                    $grupo = (int) $m['grupo'];
+                }
+            }
+            $lista = array_values(array_filter($movs, fn($m) => $m['tipo'] === 'consumo' && (int) $m['grupo'] === $grupo));
+            if ($grupo === null || !$lista) {
+                return false;
+            }
+            $this->asientoConsumo($orden, $grupo, $lista, $cfg, $this->cuentasProductoOrden($idOrden, $idEmpresa), $idEmpresa, $idUsuario);
+            return true;
+        }
+        return false;
+    }
+
+    /** Cuenta de inventario propia de cada producto de la orden (ficha del producto). */
+    private function cuentasProductoOrden(int $idOrden, int $idEmpresa): array
+    {
+        $out = [];
+        foreach ($this->repo->getLineas($idOrden, $idEmpresa) as $l) {
+            if (!empty($l['id_producto'])) {
+                $out[(int) $l['id_producto']] = (int) ($l['id_cuenta_inventario'] ?? 0);
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Estado de las cuentas de Producción para mostrarlo en la Configuración de Producción:
+     * por cada cuenta, su etiqueta, si es obligatoria y la cuenta configurada (código y nombre).
+     *
+     * @return array<int, array{campo: string, etiqueta: string, obligatoria: bool, cuenta: ?string}>
+     */
+    public function estadoCuentas(int $idEmpresa): array
+    {
+        $cfg = $this->cuentas($idEmpresa);
+        $ids = array_values(array_filter(array_map('intval', $cfg)));
+        $nombres = [];
+        if ($ids) {
+            $nombres = $this->repo->getNombresCuentas($ids, $idEmpresa);
+        }
+        $obligatorias = ['id_cuenta_materia_prima', 'id_cuenta_en_proceso', 'id_cuenta_terminado'];
+        $out = [];
+        foreach (array_keys(self::CONCEPTOS) as $campo) {
+            $id = (int) ($cfg[$campo] ?? 0);
+            $out[] = [
+                'campo'       => $campo,
+                'etiqueta'    => ProduccionConfiguracionService::ETIQUETAS_CUENTA[$campo] ?? $campo,
+                'obligatoria' => in_array($campo, $obligatorias, true),
+                'cuenta'      => $id ? ($nombres[$id] ?? ('#' . $id)) : null,
+            ];
+        }
+        return $out;
+    }
+
     private function asientoService(): AsientoContableService
     {
         return new AsientoContableService(

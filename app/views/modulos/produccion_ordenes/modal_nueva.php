@@ -15,7 +15,6 @@ foreach ($bodegas as $b) {
             </div>
             <div class="modal-body p-3">
                 <input type="hidden" id="pon-tipo" value="orden">
-                <div id="pon-ayuda" class="alert alert-light border py-2 small mb-3"></div>
 
                 <div class="row g-2">
                     <div class="col-md-6 position-relative">
@@ -23,9 +22,8 @@ foreach ($bodegas as $b) {
                         <div class="input-group input-group-sm">
                             <span class="input-group-text bg-white"><i class="bi bi-diagram-3"></i></span>
                             <input type="text" id="pon-formula-txt" class="form-control" placeholder="Buscar por código, nombre o producto…" autocomplete="off">
-                            <input type="hidden" id="pon-formula" value="">
                         </div>
-                        <div id="pon-formula-dd" class="list-group position-absolute shadow por-dd d-none" style="width:calc(100% - 12px);"></div>
+                        <input type="hidden" id="pon-formula" value="">
                     </div>
                     <div class="col-md-2">
                         <label class="form-label small fw-bold">Cantidad a producir *</label>
@@ -73,15 +71,20 @@ foreach ($bodegas as $b) {
                     <div class="small fw-bold">Lo que se va a consumir y producir</div>
                     <div class="small" id="pon-faltantes"></div>
                 </div>
-                <div class="table-responsive border rounded">
-                    <table class="table table-sm mb-0 por-lineas" style="font-size:.78rem;">
-                        <thead class="table-light"><tr>
-                            <th style="width:110px;">Tipo</th><th>Producto</th><th style="width:80px;">Unidad</th>
-                            <th style="width:120px;" class="text-end">Teórico</th><th style="width:120px;" class="text-end">Stock</th>
-                            <th style="width:130px;" class="text-end pon-col-real d-none">Producido real</th>
+                <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+                    <div class="table-responsive" style="max-height: 350px;">
+                    <table class="table table-sm table-detalle por-lineas mb-0 text-nowrap">
+                        <thead><tr class="table-light border-bottom">
+                            <th class="ps-3 py-2 small fw-bold text-muted" style="width:120px;">Tipo</th><th class="py-2 small fw-bold text-muted">Producto</th><th class="py-2 small fw-bold text-muted" style="width:100px;">Unidad</th>
+                            <th class="py-2 small fw-bold text-muted text-end" style="width:130px;">Teórico</th><th class="py-2 small fw-bold text-muted text-end" style="width:130px;">Stock</th>
+                            <th class="py-2 small fw-bold text-muted text-end pon-col-real d-none" style="width:130px;">Producido real</th>
                         </tr></thead>
                         <tbody id="pon-tbody"><tr><td colspan="6" class="text-center text-muted py-3">Elija la fórmula y la cantidad.</td></tr></tbody>
                     </table>
+                    </div>
+                    <div class="p-2 border-top bg-light d-flex justify-content-end align-items-center">
+                        <div class="small fw-bold text-muted pe-3">Items: <span id="pon-count">0</span></div>
+                    </div>
                 </div>
                 <div class="row g-2 mt-2 pon-col-real d-none">
                     <div class="col-md-3">

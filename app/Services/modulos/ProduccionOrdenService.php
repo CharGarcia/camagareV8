@@ -129,6 +129,43 @@ class ProduccionOrdenService
         return $this->repo->getResumen($idEmpresa, $idUsuarioFiltro, $filtros, $buscar);
     }
 
+    /**
+     * Agrega a cada línea de la orden la unidad en que se escribió en la fórmula (unidad_formula) y
+     * cuántas unidades del producto vale una de ella (factor_formula). Solo es para MOSTRAR y CAPTURAR
+     * en pantalla: la orden, el stock y el kardex siguen en la unidad del producto, y la pantalla
+     * convierte antes de enviar. La línea se empareja con la de la fórmula por rol + producto (una
+     * fórmula usada en órdenes ya no se modifica, y un producto no se repite en el mismo rol).
+     * Sin unidad propia (o fuera de fórmula): factor 1 y la unidad del producto.
+     */
+    private function unidadesDeFormula(array $lineasOrden, int $idFormula, int $idEmpresa): array
+    {
+        $porClave = [];
+        if ($idFormula > 0) {
+            foreach ($this->formulas->getLineas($idFormula, $idEmpresa) as $lf) {
+                if (!empty($lf['id_producto'])) {
+                    $porClave[$lf['rol'] . ':' . (int) $lf['id_producto']] = $lf;
+                }
+            }
+        }
+        foreach ($lineasOrden as &$l) {
+            $l['unidad_formula'] = (string) ($l['medida_nombre'] ?? '');
+            $l['factor_formula'] = 1.0;
+            $lf = $porClave[($l['rol'] ?? '') . ':' . (int) ($l['id_producto'] ?? 0)] ?? null;
+            $fuera = in_array($l['fuera_formula'] ?? false, [true, 't', 'true', 1, '1'], true);
+            if (!$lf || $fuera || empty($lf['id_unidad_medida']) || empty($lf['producto_id_medida'])
+                || ($lf['modo_cantidad'] ?? '') === 'porcentaje') {
+                continue;
+            }
+            $conv = $this->inventarioService()->cantidadEnUnidadProducto(1.0, (int) $lf['id_unidad_medida'], (int) $lf['producto_id_medida'], $idEmpresa);
+            if ($conv['convertida'] && $conv['cantidad'] > 0) {
+                $l['unidad_formula'] = (string) ($lf['unidad_nombre'] ?? $conv['unidad_linea']);
+                $l['factor_formula'] = (float) $conv['cantidad'];
+            }
+        }
+        unset($l);
+        return $lineasOrden;
+    }
+
     /** Orden completa para el modal. */
     public function getCompleta(int $id, int $idEmpresa): ?array
     {
@@ -136,7 +173,7 @@ class ProduccionOrdenService
         if (!$o) {
             return null;
         }
-        $o['lineas']       = $this->repo->getLineas($id, $idEmpresa);
+        $o['lineas']       = $this->unidadesDeFormula($this->repo->getLineas($id, $idEmpresa), (int) ($o['id_formula'] ?? 0), $idEmpresa);
         $o['recursos']     = $this->repo->getRecursos($id, $idEmpresa);
         $o['movimientos']  = $this->repo->getMovimientos($id, $idEmpresa);
         $o['trazabilidad'] = $this->repo->getTrazabilidad($id, $idEmpresa);
@@ -149,18 +186,26 @@ class ProduccionOrdenService
      * Teórico de una fórmula para una cantidad, con el stock de la bodega de insumos y
      * los faltantes (pantalla "nueva orden" y producción rápida, antes de confirmar).
      */
-    public function vistaPrevia(int $idFormula, float $cantidad, int $idBodegaInsumos, int $idEmpresa): array
+    public function vistaPrevia(int $idFormula, float $cantidad, int $idBodegaInsumos, int $idEmpresa, int $idUsuario, int $nivel): array
     {
         $f = $this->formulas->getPorId($idFormula, $idEmpresa);
         if (!$f) {
             throw new \DomainException('La fórmula no existe.');
         }
-        $lineas = $this->escalar($f, $this->formulas->getLineas($idFormula, $idEmpresa), $cantidad);
+        if (($f['estado'] ?? '') !== 'vigente') {
+            throw new \DomainException('Solo se puede producir con una fórmula vigente.');
+        }
+        // El stock de la bodega de insumos solo se muestra si el usuario tiene acceso a ella.
+        if ($idBodegaInsumos > 0 && !$this->bodegas()->validarAccesoUsuario($idUsuario, $idBodegaInsumos, $idEmpresa, $nivel)) {
+            throw new \DomainException('No tiene acceso a la bodega de insumos.');
+        }
+        $lineasFormula = $this->formulas->getLineas($idFormula, $idEmpresa);
+        $lineas = $this->escalar($f, $lineasFormula, $cantidad);
         $ids = array_filter(array_map(fn($l) => $l['rol'] === 'insumo' ? (int) $l['id_producto'] : 0, $lineas));
         $stocks = $idBodegaInsumos > 0 ? $this->repo->getStocks($ids, $idBodegaInsumos, $idEmpresa) : [];
         $productos = $this->formulas->getProductos(array_filter(array_column($lineas, 'id_producto')), $idEmpresa);
         $faltan = 0;
-        foreach ($lineas as &$l) {
+        foreach ($lineas as $i => &$l) {
             $p = $productos[(int) ($l['id_producto'] ?? 0)] ?? [];
             $l['producto_codigo'] = $p['codigo'] ?? '';
             $l['producto_nombre'] = $p['nombre'] ?? ($l['descripcion'] ?? '');
@@ -170,6 +215,23 @@ class ProduccionOrdenService
                 $l['falta'] = max(0.0, round($l['cantidad_teorica'] - $l['stock'], 6));
                 if ($l['falta'] > self::EPS) {
                     $faltan++;
+                }
+            }
+
+            // Para mostrar: la cantidad en la unidad en que se escribió la fórmula (gramos, quintales…).
+            // cantidad_teorica, stock y falta siguen en la unidad del producto (la del inventario).
+            $l['unidad_formula']    = $l['medida_nombre'];
+            $l['cantidad_formula']  = $l['cantidad_teorica'];
+            $l['factor_formula']    = 1.0; // 1 unidad de la fórmula = factor unidades del producto
+            $lf = $lineasFormula[$i] ?? [];
+            if (!empty($lf['id_unidad_medida']) && !empty($lf['producto_id_medida']) && ($lf['modo_cantidad'] ?? '') !== 'porcentaje') {
+                $conv = $this->inventarioService()->cantidadEnUnidadProducto(
+                    1.0, (int) $lf['id_unidad_medida'], (int) $lf['producto_id_medida'], $idEmpresa
+                );
+                if ($conv['convertida'] && $conv['cantidad'] > 0) {
+                    $l['unidad_formula']   = (string) ($lf['unidad_nombre'] ?? $conv['unidad_linea']);
+                    $l['factor_formula']   = (float) $conv['cantidad'];
+                    $l['cantidad_formula'] = round($l['cantidad_teorica'] / $conv['cantidad'], 6);
                 }
             }
         }
@@ -192,6 +254,9 @@ class ProduccionOrdenService
     private function escalar(array $formula, array $lineasFormula, float $cantidad): array
     {
         $base = (float) $formula['cantidad_base'];
+        // Una línea escrita en otra unidad (gramos, quintales…) se pasa a la unidad del producto:
+        // la orden, el stock y el kardex van siempre en esa unidad.
+        $lineasFormula = ProduccionFormulaService::crear()->lineasEnUnidadProducto($lineasFormula, (int) $formula['id_empresa']);
         $out = [];
         foreach ($lineasFormula as $i => $l) {
             $out[] = [
@@ -675,6 +740,53 @@ class ProduccionOrdenService
 
         if ($propia) {
             (new ProduccionAsientoService())->contabilizarSeguro($idOrden, $idEmpresa, $idUsuario);
+        }
+    }
+
+    /**
+     * Verifica si la orden se puede cerrar con estos datos SIN cerrarla: ejecuta el cierre real
+     * (mismas reglas: estado, fecha, período contable, stock, lotes exigidos, cantidades, costos)
+     * dentro de una transacción que SIEMPRE se deshace. Nada del cierre hace commit propio y el
+     * asiento solo se genera fuera de una transacción ajena, así que no queda nada grabado.
+     *
+     * @return array{ok: bool, problema?: string, resumen?: array}
+     */
+    public function verificarCierre(int $idOrden, array $salidas, float $mermaAnormal, ?array $recursos, bool $consumirPendiente,
+                                    string $fecha, int $idEmpresa, int $idUsuario, int $nivel): array
+    {
+        $db = Database::getConnection();
+        if ($db->inTransaction()) {
+            throw new \LogicException('La verificación del cierre necesita su propia transacción.');
+        }
+        $db->beginTransaction();
+        try {
+            $this->cerrar($idOrden, $salidas, $mermaAnormal, $recursos, $consumirPendiente, $fecha,
+                'verificacion-cierre-' . bin2hex(random_bytes(8)), $idEmpresa, $idUsuario, $nivel);
+            $o = $this->repo->getPorId($idOrden, $idEmpresa) ?? [];
+            $consumidos = 0;
+            foreach ($this->repo->getMovimientos($idOrden, $idEmpresa) as $m) {
+                if (($m['tipo'] ?? '') === 'consumo') {
+                    $consumidos++;
+                }
+            }
+            return [
+                'ok'      => true,
+                'resumen' => [
+                    'cantidad'        => (float) ($o['cantidad_producida'] ?? 0),
+                    'medida'          => (string) ($o['medida_nombre'] ?? ''),
+                    'producto'        => trim(($o['producto_codigo'] ?? '') . ' - ' . ($o['producto_nombre'] ?? ''), ' -'),
+                    'bodega'          => (string) ($o['bodega_destino_nombre'] ?? ''),
+                    'costo_total'     => (float) ($o['costo_total'] ?? 0),
+                    'costo_merma'     => (float) ($o['costo_merma'] ?? 0),
+                    'consumos'        => $consumidos,
+                ],
+            ];
+        } catch (\DomainException $e) {
+            return ['ok' => false, 'problema' => $e->getMessage()];
+        } finally {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
         }
     }
 

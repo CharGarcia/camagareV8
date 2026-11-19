@@ -38,6 +38,11 @@ class ConfiguracionContableController extends BaseModuloController
      */
     private function tieneAccesoProduccion(): bool
     {
+        // Nivel 3 siempre (no necesita modulos_asignados); si la empresa no usa Producción, ya lo
+        // quita tiposAsientoSinUso().
+        if ((int) ($_SESSION['nivel'] ?? 1) >= 3) {
+            return true;
+        }
         $rutas = \App\Services\modulos\ProduccionConfiguracionService::RUTAS;
         if (!$this->repository->empresaTieneRutas((int) $_SESSION['id_empresa'], $rutas)) {
             return false;

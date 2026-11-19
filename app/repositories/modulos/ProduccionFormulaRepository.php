@@ -58,11 +58,58 @@ class ProduccionFormulaRepository extends BaseRepository
                 $where .= " AND {$cond}";
             }
         }
-        FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'] ?? [], [
-            'texto'    => ['codigo' => 'f.codigo', 'nombre' => 'f.nombre', 'producto' => 'p.nombre'],
-            'exacto'   => ['estado' => 'f.estado'],
-            'fecha'    => ['modificado' => 'f.updated_at'],
-            'numerico' => ['version' => 'f.version'],
+        // «insumo:harina» / «salida:afrecho»: fórmulas que usan (o producen) un producto, por código o nombre.
+        // No es una columna de la fórmula: va como EXISTS sobre sus líneas (con PDO, nunca concatenado).
+        $filtros = $parsed['filtros'] ?? [];
+        foreach (['insumo' => "= 'insumo'", 'salida' => "<> 'insumo'"] as $clave => $condRol) {
+            if (!isset($filtros[$clave])) {
+                continue;
+            }
+            $f = $filtros[$clave];
+            unset($filtros[$clave]);
+            $valores = is_array($f['valor']) ? $f['valor'] : [$f['valor']];
+            $partes = [];
+            foreach (array_values($valores) as $i => $v) {
+                $v = trim((string) $v);
+                if ($v === '') {
+                    continue;
+                }
+                $ph = ":pfl_{$clave}_{$i}";
+                $params[$ph] = '%' . $v . '%';
+                $partes[] = "(lp.nombre ILIKE {$ph} OR lp.codigo ILIKE {$ph})";
+            }
+            if (!$partes) {
+                continue;
+            }
+            $where .= ' AND ' . (!empty($f['neg']) ? 'NOT ' : '') . "EXISTS (SELECT 1 FROM produccion_formulas_lineas fl
+                         INNER JOIN productos lp ON lp.id = fl.id_producto
+                         WHERE fl.id_formula = f.id AND fl.eliminado = false AND fl.rol {$condRol}
+                           AND (" . implode(' OR ', $partes) . '))';
+        }
+
+        FiltrosBusqueda::aplicarFiltros($where, $params, $filtros, [
+            'texto'    => [
+                'codigo'          => 'f.codigo',
+                'nombre'          => 'f.nombre',
+                'producto'        => 'p.nombre',
+                'producto_codigo' => 'p.codigo',
+            ],
+            'exacto'   => [
+                'estado'  => 'f.estado',
+                'metodo'  => "COALESCE(NULLIF(f.metodo_reparto, ''), 'config')",
+                'usuario' => 'f.created_by',
+            ],
+            'fecha'    => [
+                'registro'   => 'f.created_at',
+                'modificado' => 'f.updated_at',
+            ],
+            'numerico' => [
+                'version'  => 'f.version',
+                'rinde'    => 'f.cantidad_base',
+                'vida'     => 'f.vida_util_dias',
+                'insumos'  => "(SELECT COUNT(*) FROM produccion_formulas_lineas l WHERE l.id_formula = f.id AND l.eliminado = false AND l.rol = 'insumo')",
+                'salidas'  => "(SELECT COUNT(*) FROM produccion_formulas_lineas l WHERE l.id_formula = f.id AND l.eliminado = false AND l.rol <> 'insumo')",
+            ],
         ]);
 
         $from = "FROM produccion_formulas f INNER JOIN productos p ON p.id = f.id_producto";
@@ -90,6 +137,20 @@ class ProduccionFormulaRepository extends BaseRepository
         return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
+    /** Usuarios que registraron fórmulas en la empresa (select «Usuario» del modal de filtros). */
+    public function getUsuariosConFormulas(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM produccion_formulas f
+               INNER JOIN usuarios u ON u.id = f.created_by
+              WHERE f.id_empresa = :e AND f.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // ────────────────────────────────────────────────────────────────
     // FICHA
     // ────────────────────────────────────────────────────────────────
@@ -110,14 +171,32 @@ class ProduccionFormulaRepository extends BaseRepository
         return $st->fetch(PDO::FETCH_ASSOC) ?: null;
     }
 
+    /**
+     * ¿Ya se aplicó database/2026-11-19_produccion_formulas_unidad_medida.sql? Sin la columna,
+     * todas las líneas van en la unidad del producto (lo de siempre) y la unidad elegida no se guarda.
+     */
+    public function tieneUnidadLinea(): bool
+    {
+        return $this->columnaExiste('produccion_formulas_lineas', 'id_unidad_medida');
+    }
+
     public function getLineas(int $idFormula, int $idEmpresa): array
     {
+        // unidad_nombre: la unidad en que está escrita la cantidad de la línea (la elegida o, si no
+        // hay, la del producto). producto_id_medida / id_tipo_medida: para convertir y para el selector.
+        $conUnidad = $this->tieneUnidadLinea();
+        $selUnidad = $conUnidad
+            ? 'COALESCE(uml.nombre, um.nombre) AS unidad_nombre'
+            : 'NULL::integer AS id_unidad_medida, um.nombre AS unidad_nombre';
+        $joinUnidad = $conUnidad ? 'LEFT JOIN unidades_medida uml ON uml.id = l.id_unidad_medida' : '';
         $st = $this->db->prepare(
             "SELECT l.*, p.codigo AS producto_codigo, p.nombre AS producto_nombre,
-                    um.nombre AS medida_nombre, p.costo_producto, p.precio_base
+                    um.nombre AS medida_nombre, p.costo_producto, p.precio_base,
+                    p.id_medida AS producto_id_medida, um.id_tipo AS id_tipo_medida, {$selUnidad}
                FROM produccion_formulas_lineas l
                LEFT JOIN productos p ON p.id = l.id_producto
                LEFT JOIN unidades_medida um ON um.id = p.id_medida
+               {$joinUnidad}
               WHERE l.id_formula = :f AND l.id_empresa = :e AND l.eliminado = false
               ORDER BY CASE l.rol WHEN 'principal' THEN 0 WHEN 'coproducto' THEN 1 WHEN 'subproducto' THEN 2
                                   WHEN 'desperdicio' THEN 3 ELSE 4 END, l.orden, l.id"
@@ -159,13 +238,13 @@ class ProduccionFormulaRepository extends BaseRepository
             $where .= " AND {$cond}";
         }
         $st = $this->db->prepare(
-            "SELECT f.id, f.codigo, f.nombre, f.version, f.cantidad_base, f.id_producto,
+            "SELECT f.id, f.codigo, COALESCE(NULLIF(f.nombre, ''), p.nombre) AS nombre, f.nombre AS descripcion, f.version, f.cantidad_base, f.id_producto,
                     p.codigo AS producto_codigo, p.nombre AS producto_nombre, um.nombre AS medida_nombre
                FROM produccion_formulas f
               INNER JOIN productos p ON p.id = f.id_producto
                LEFT JOIN unidades_medida um ON um.id = p.id_medida
               {$where}
-              ORDER BY f.nombre LIMIT 30"
+              ORDER BY COALESCE(NULLIF(f.nombre, ''), p.nombre) LIMIT 30"
         );
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
@@ -227,15 +306,18 @@ class ProduccionFormulaRepository extends BaseRepository
             )->execute([':f' => $idFormula, ':e' => $idEmpresa, ':uid' => $idUsuario]);
         }
 
+        $conUnidad = $this->tieneUnidadLinea();
         $stL = $this->db->prepare(
             "INSERT INTO produccion_formulas_lineas
                 (id_empresa, id_formula, rol, id_producto, descripcion, modo_cantidad, cantidad, merma_pct,
-                 exige_lote, reparto_pct, valor_neto_realizable, orden, observaciones, created_by, updated_by)
+                 exige_lote, reparto_pct, valor_neto_realizable, orden, observaciones, created_by, updated_by"
+                . ($conUnidad ? ', id_unidad_medida' : '') . ")
              VALUES (:e, :f, :rol, :id_producto, :descripcion, :modo, :cantidad, :merma,
-                     :exige_lote, :reparto, :vnr, :orden, :obs, :uid, :uid)"
+                     :exige_lote, :reparto, :vnr, :orden, :obs, :uid, :uid" . ($conUnidad ? ', :unidad' : '') . ')'
         );
         foreach ($lineas as $i => $l) {
-            $stL->execute([
+            $extra = $conUnidad ? [':unidad' => !empty($l['id_unidad_medida']) ? (int) $l['id_unidad_medida'] : null] : [];
+            $stL->execute($extra + [
                 ':e' => $idEmpresa, ':f' => $idFormula, ':uid' => $idUsuario,
                 ':rol'         => $l['rol'],
                 ':id_producto' => $l['id_producto'],
@@ -303,6 +385,31 @@ class ProduccionFormulaRepository extends BaseRepository
         return (int) $st->fetchColumn();
     }
 
+    /**
+     * Candado del código automático de fórmulas de la empresa (§8: leer → calcular → escribir).
+     * Se libera solo al COMMIT/ROLLBACK: llamarlo dentro de la transacción, antes de siguienteCodigo().
+     */
+    public function lockCodigo(int $idEmpresa): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('formula_codigo:' || CAST(:e AS TEXT)))");
+        $st->execute([':e' => $idEmpresa]);
+    }
+
+    /**
+     * Siguiente código automático: F-000001, F-000002… por empresa. Cuenta también las eliminadas
+     * (un código no se reutiliza) e ignora los códigos escritos a mano antes (F-PAN001, etc.).
+     */
+    public function siguienteCodigo(int $idEmpresa): string
+    {
+        $st = $this->db->prepare(
+            "SELECT COALESCE(MAX(CAST(regexp_replace(codigo, '^F-', '') AS BIGINT)), 0) + 1
+               FROM produccion_formulas
+              WHERE id_empresa = :e AND codigo ~ '^F-[0-9]{1,12}$'"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return 'F-' . str_pad((string) (int) $st->fetchColumn(), 6, '0', STR_PAD_LEFT);
+    }
+
     public function existeCodigo(string $codigo, int $idEmpresa, int $exceptoId = 0, int $version = 0): bool
     {
         $st = $this->db->prepare(
@@ -338,7 +445,7 @@ class ProduccionFormulaRepository extends BaseRepository
             $where .= " AND {$cond}";
         }
         $st = $this->db->prepare(
-            "SELECT p.id, p.codigo, p.nombre, p.costo_producto, p.precio_base, p.id_medida, um.nombre AS medida_nombre
+            "SELECT p.id, p.codigo, p.nombre, p.costo_producto, p.precio_base, p.id_medida, um.nombre AS medida_nombre, um.id_tipo AS id_tipo_medida
                FROM productos p
                LEFT JOIN unidades_medida um ON um.id = p.id_medida
               {$where}
@@ -368,7 +475,7 @@ class ProduccionFormulaRepository extends BaseRepository
         }
         $st = $this->db->prepare(
             'SELECT p.id, p.codigo, p.nombre, p.inventariable, p.tipo_produccion, p.costo_producto,
-                    p.precio_base, p.id_medida, p.id_cuenta_inventario, um.nombre AS medida_nombre
+                    p.precio_base, p.id_medida, p.id_cuenta_inventario, um.nombre AS medida_nombre, um.id_tipo AS id_tipo_medida
                FROM productos p
                LEFT JOIN unidades_medida um ON um.id = p.id_medida
               WHERE p.id_empresa = :e AND p.eliminado = false AND p.id IN (' . implode(', ', $marcas) . ')'

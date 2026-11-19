@@ -716,6 +716,14 @@ class AsientosContablesController extends BaseModuloController
      */
     private function regenerarDesdeDocumento(string $moduloOrigen, int $idReferencia, int $idEmpresa): bool
     {
+        // Producción: una orden tiene varios asientos (uno por consumo y el de cierre) y el id de
+        // referencia del consumo es un movimiento, no la orden: lo regenera su propio service.
+        if (in_array($moduloOrigen, [\App\Services\modulos\ProduccionAsientoService::ORIGEN_CONSUMO,
+                                     \App\Services\modulos\ProduccionAsientoService::ORIGEN_CIERRE], true)) {
+            return (new \App\Services\modulos\ProduccionAsientoService())
+                ->regenerar($moduloOrigen, $idReferencia, $idEmpresa, (int) $_SESSION['id_usuario']);
+        }
+
         $clave = self::CLAVE_SINCRONIZADOR[$moduloOrigen] ?? null;
         if ($clave === null) {
             return false;

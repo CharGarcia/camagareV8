@@ -335,7 +335,9 @@ eliminado (boolean), deleted_at, deleted_by
     Si se abrió **encima de otro modal** (`CMG_modalSobreOtro(modalEl)`, `public/js/app.js`) y es un alta,
     **se cierra solo** y avisa *«… creado y seleccionado»*; desde su propio listado no se cierra.
     Ref.: `clientes_modal.js`, `proveedores_modal.js`, `productos_modal.js`, `empleados_modal.js`,
-    `transportistas_modal.js`, `vendedores_modal.js` (`vendedorGuardado`), `vehiculos_modal.js`.
+    `transportistas_modal.js`, `vendedores_modal.js` (`vendedorGuardado`), `vehiculos_modal.js`,
+    `bodegas_modal.js` (`bodegaGuardado`; partial `bodegas/modal.php`; desde una pantalla sin modal
+    se abre con `abrirModalBodegaCrear({ cerrarAlCrear: true })`, ref. Configuración de Producción).
     Un modal de catálogo que vive **dentro de otro partial** (p. ej. Categoría/Marca en `productos/modal.php`)
     lo incluye el partial **junto con su JS**, y ese JS se protege contra doble carga
     (`if (window.__CMG_xModal) return;`), para que funcione en toda página que abra el partial.

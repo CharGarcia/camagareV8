@@ -6,7 +6,7 @@ ruta_modulo: modulos/bodegas
 tipo: modulo
 visibilidad: todos
 etiquetas: bodegas, bodega, almacen, deposito, sucursal, ubicacion, stock por bodega, saldo por bodega, existencias por bodega, valor del inventario por bodega, cuanto hay en cada bodega, saldo al costo, saldo a precio de venta, establecimiento de la bodega, local, en que establecimiento esta la bodega, acceso por usuario, quitar acceso a una bodega, bodegas asignadas, no veo una bodega
-version: 1.4
+version: 1.5
 orden: 30
 estado: activo
 ---
@@ -128,6 +128,7 @@ movimientos. Si ya no se usa, es preferible dejarla sin stock y no operar con el
 
 ## Historial de cambios
 
+- **1.5** — La ficha de la bodega también se puede abrir desde **Configuración de Producción** (botón **+** de cada bodega) para crearla sin salir de esa pantalla.
 - **1.4** — El listado muestra el **saldo de cada bodega**: productos con existencias, unidades, saldo al costo y saldo a precio de venta, con fila de totales; el mismo resumen aparece en la ficha. Nuevo buscador con **filtros** (como Proveedores), orden por varias columnas y PDF/Excel con los saldos. Los mensajes se muestran en ventanas emergentes (también la confirmación de eliminar).
 - **1.3** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes y demás catálogos; la estrella de favorito sigue funcionando. Al guardar, la ficha ya no se cierra y muestra el aviso *Guardando / Actualizando bodega...* mientras el servidor responde.
 - **1.2** — El acceso por usuario ahora también filtra la **información** del

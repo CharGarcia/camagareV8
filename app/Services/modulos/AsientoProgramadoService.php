@@ -741,8 +741,12 @@ class AsientoProgramadoService
             $sinUso = array_values(array_diff($sinUso, ['ajuste_inventario']));
         }
 
-        // «Producción» además exige que la empresa tenga el módulo (algún submódulo asignado).
-        if (!in_array('produccion', $sinUso, true)
+        // «Producción» además exige que la empresa tenga el módulo. Lo tiene si ya lo usa (guardó la
+        // Configuración de Producción o tiene órdenes: eso solo lo hace quien tiene acceso) o si
+        // algún usuario lo tiene asignado. Sin lo primero, una empresa trabajada solo por el
+        // superadministrador (nivel 3, que no necesita modulos_asignados) nunca veía la sección.
+        $usaProduccion = (bool) array_intersect(self::TABLAS_POR_TIPO_ASIENTO['produccion'], $conDatos);
+        if (!in_array('produccion', $sinUso, true) && !$usaProduccion
             && !$this->repo->empresaTieneRutas($idEmpresa, ProduccionConfiguracionService::RUTAS)) {
             $sinUso[] = 'produccion';
         }

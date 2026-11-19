@@ -88,6 +88,13 @@ class ProduccionFormulasController extends BaseModuloController
             'tiposRecurso' => ProduccionFormulaRules::TIPOS_RECURSO,
             'basesRecurso' => ProduccionFormulaRules::BASES_RECURSO,
             'metodos'     => ProduccionConfiguracionService::METODOS_REPARTO,
+            // Select «Usuario que registró» del modal de filtros del buscador.
+            'usuariosFiltro' => $instalado ? $this->service->repo()->getUsuariosConFormulas($idEmpresa) : [],
+            // Botón «Registrar nuevo producto» del modal (crear al vuelo, §9): permiso de ESE módulo.
+            'permProductos'  => \App\Helpers\Permisos::porRuta('modulos/productos'),
+            // Selector «Unidad» de las líneas: unidades activas (se filtran por el tipo de la del producto).
+            'unidades'       => $instalado ? (new \App\repositories\modulos\UnidadesMedidaRepository())->getActive($idEmpresa) : [],
+            'unidadLinea'    => $instalado && $this->service->repo()->tieneUnidadLinea(),
             'base'        => BASE_URL,
         ]);
     }
@@ -145,7 +152,10 @@ class ProduccionFormulasController extends BaseModuloController
             $mod = !empty($r['updated_at']) ? date('d-m-Y H:i:s', strtotime((string) $r['updated_at'])) : '';
             $html .= '<tr class="pfo-row" role="button" onclick="window.PFO_abrir(' . (int) $r['id'] . ')">'
                 . '<td class="ps-3" data-col="codigo"><code>' . htmlspecialchars((string) $r['codigo']) . '</code></td>'
-                . '<td data-col="nombre">' . htmlspecialchars((string) $r['nombre']) . '</td>'
+                // Descripción opcional: vacía, se muestra (atenuado) el nombre del producto.
+                . '<td data-col="nombre">' . (trim((string) $r['nombre']) !== ''
+                    ? htmlspecialchars((string) $r['nombre'])
+                    : '<span class="text-muted">' . htmlspecialchars((string) $r['producto_nombre']) . '</span>') . '</td>'
                 . '<td data-col="producto">' . htmlspecialchars(trim($r['producto_codigo'] . ' - ' . $r['producto_nombre'], ' -')) . '</td>'
                 . '<td class="text-center" data-col="version">v' . (int) $r['version'] . '</td>'
                 . '<td class="text-end" data-col="cantidad_base">' . rtrim(rtrim(number_format((float) $r['cantidad_base'], 6, '.', ''), '0'), '.')
@@ -259,6 +269,8 @@ class ProduccionFormulasController extends BaseModuloController
             $productos = $this->service->repo()->getProductos($ids, $idEmpresa);
             foreach ($d['lineas'] as &$l) {
                 $l['costo_producto'] = $productos[(int) ($l['id_producto'] ?? 0)]['costo_producto'] ?? 0;
+                $l['medida_nombre']  = $productos[(int) ($l['id_producto'] ?? 0)]['medida_nombre'] ?? '';
+                $l['producto_id_medida'] = $productos[(int) ($l['id_producto'] ?? 0)]['id_medida'] ?? null;
             }
             unset($l);
             $cfg = $this->service->config()->get($idEmpresa);
@@ -311,7 +323,7 @@ class ProduccionFormulasController extends BaseModuloController
             }
             (new \App\Services\ReportService())->exportToExcel(
                 'Fórmulas',
-                ['Código', 'Nombre', 'Producto', 'Versión', 'Rinde', 'Unidad', 'Insumos', 'Salidas', 'Estado', 'Modificado'],
+                ['Código', 'Descripción', 'Producto', 'Versión', 'Rinde', 'Unidad', 'Insumos', 'Salidas', 'Estado', 'Modificado'],
                 $data,
                 'Formulas_Produccion',
                 (string) ($empresa['nombre'] ?? '')
@@ -342,7 +354,7 @@ class ProduccionFormulasController extends BaseModuloController
                 <h2>FÓRMULAS DE PRODUCCIÓN</h2>
                 <table>
                     <thead><tr>
-                        <th style="width:11%">Código</th><th style="width:25%">Nombre</th><th style="width:28%">Producto</th>
+                        <th style="width:11%">Código</th><th style="width:25%">Descripción</th><th style="width:28%">Producto</th>
                         <th style="width:7%" class="c">Versión</th><th style="width:12%" class="r">Rinde</th>
                         <th style="width:8%" class="c">Ins./Sal.</th><th style="width:9%" class="c">Estado</th>
                     </tr></thead>

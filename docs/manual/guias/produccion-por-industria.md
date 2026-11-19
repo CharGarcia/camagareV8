@@ -1,11 +1,11 @@
 ---
 titulo: Cómo configurar la producción según su industria
-resumen: Ejemplos paso a paso del módulo Producción para una imprenta (bobina de cartulina a cajas), un laboratorio de cosméticos (granel y envasado), un camal (coproductos) y una panadería (producción rápida).
+resumen: Ejemplos paso a paso del módulo Producción para una imprenta (bobina de cartulina a cajas), un laboratorio de cosméticos (granel y envasado), un camal (coproductos) y una panadería (producción diaria).
 categoria: Producción
 tipo: guia
 visibilidad: todos
 etiquetas: ejemplo de produccion, como fabricar, imprenta, cajas de carton, bobina, cartulina, cosmeticos, crema, granel, envasado, laboratorio, camal, desposte, cortes de carne, coproductos, panaderia, pan, produccion diaria, fabrica, manufactura, formula en porcentaje, consumo por peso, retazo, subproducto
-version: 1.0
+version: 1.1
 orden: 60
 estado: activo
 ---
@@ -50,7 +50,8 @@ Producción**. Estos ejemplos sirven de punto de partida.
 ## Panadería: producción diaria
 
 1. Fórmula *Pan enrollado*, rinde **120 panes**, con harina, levadura, sal y manteca.
-2. Cada día use **Producción rápida**: elija la fórmula, la cantidad y pulse **Producir**. El sistema consume los insumos y da entrada al pan en un solo paso.
+2. Cada día cree una orden con **Nueva**: elija la fórmula y la cantidad, y pulse **Crear orden**.
+3. Abra la orden, pestaña **Cerrar**, marque **Consumir lo pendiente según la fórmula** (toma el lote que vence primero), indique los panes obtenidos y pulse **Cerrar orden**: se consumen los insumos y el pan entra al inventario.
 
 ## Qué no hay que hacer
 
@@ -59,4 +60,5 @@ Producción**. Estos ejemplos sirven de punto de partida.
 
 ## Historial de cambios
 
+- **1.1** — Panadería: la producción diaria se hace con una orden (**Nueva** y luego **Cerrar** consumiendo lo pendiente); ya no hay botón de Producción rápida.
 - **1.0** — Versión inicial.

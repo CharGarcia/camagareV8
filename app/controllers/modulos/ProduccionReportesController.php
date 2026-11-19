@@ -4,14 +4,21 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\ColumnasReporte;
+use App\Helpers\ReportePdf;
 use App\models\Empresa;
 use App\repositories\modulos\ProduccionReporteRepository;
 use App\Services\modulos\ProduccionConfiguracionService;
+use App\Services\modulos\ReportePersonalizacionService;
 
 /**
  * Reportes de producción (modulos/produccion-reportes): producción por producto, consumo
  * de insumos (teórico vs. real), órdenes cerradas con costo y merma, y costo por mes. Solo documentos de
  * producción (AmbienteReporte). Sin acceso total, cada usuario ve solo sus órdenes.
+ *
+ * Cada pestaña es una vista de ColumnasReporte::CATALOGO: pantalla, Excel y PDF se pintan
+ * recorriendo lo que resuelve ReportePersonalizacionService (botón «Personalizar», CLAUDE.md §9).
+ * El PDF usa las piezas comunes de ReportePdf (logo, filtros aplicados, indicadores, listado).
  * Solo lectura: el controlador pide los datos al repositorio y los presenta.
  */
 class ProduccionReportesController extends BaseModuloController
@@ -23,6 +30,23 @@ class ProduccionReportesController extends BaseModuloController
         'consumo'   => ['titulo' => 'Consumo de insumos',      'icono' => 'bi-box-arrow-up'],
         'ordenes'   => ['titulo' => 'Órdenes cerradas',        'icono' => 'bi-list-check'],
         'mes'       => ['titulo' => 'Costo por mes',           'icono' => 'bi-calendar3'],
+    ];
+
+    /** Formato de cada columna (las del catálogo de ColumnasReporte): txt | num | money | pct | fecha. */
+    private const FORMATO = [
+        'ordenes' => 'num', 'teorico' => 'num', 'real' => 'num', 'diferencia' => 'num', 'producido' => 'num',
+        'cantidad_planificada' => 'num', 'cantidad_producida' => 'num', 'cantidad_merma' => 'num',
+        'diferencia_pct' => 'pct', 'rendimiento_pct' => 'pct',
+        'costo' => 'money', 'costo_unitario' => 'money', 'costo_materiales' => 'money', 'costo_mano_obra' => 'money',
+        'costo_cif' => 'money', 'valor_subproductos' => 'money', 'costo_merma' => 'money', 'desvio_consumo' => 'money',
+        'costo_total' => 'money',
+        'fecha_fin' => 'fecha',
+    ];
+
+    /** Columnas que se suman en la fila de totales del PDF (las de importe y el conteo de órdenes). */
+    private const SUMAN = [
+        'ordenes', 'costo', 'costo_materiales', 'costo_mano_obra', 'costo_cif', 'valor_subproductos', 'costo_merma',
+        'desvio_consumo', 'costo_total',
     ];
 
     private ProduccionReporteRepository $repo;
@@ -40,10 +64,17 @@ class ProduccionReportesController extends BaseModuloController
 
     private function filtros(): array
     {
+        $fecha = static fn(string $v, string $def): string => preg_match('/^\d{4}-\d{2}-\d{2}$/', $v) ? $v : $def;
         return [
-            'desde'    => trim((string) ($_GET['desde'] ?? date('Y-m-01'))),
-            'hasta'    => trim((string) ($_GET['hasta'] ?? date('Y-m-d'))),
-            'producto' => trim((string) ($_GET['producto'] ?? '')),
+            'desde'       => $fecha(trim((string) ($_GET['desde'] ?? '')), date('Y-m-01')),
+            'hasta'       => $fecha(trim((string) ($_GET['hasta'] ?? '')), date('Y-m-d')),
+            'id_producto' => max(0, (int) ($_GET['id_producto'] ?? 0)),
+            'id_insumo'   => max(0, (int) ($_GET['id_insumo'] ?? 0)),
+            'responsable' => mb_substr(trim((string) ($_GET['responsable'] ?? '')), 0, 100),
+            'id_formula'  => max(0, (int) ($_GET['id_formula'] ?? 0)),
+            'id_bodega'   => max(0, (int) ($_GET['id_bodega'] ?? 0)),
+            // Filtro por usuario solo con acceso total: sin él ya ve únicamente sus órdenes.
+            'id_usuario'  => empty($this->getPermisos()['todo']) ? 0 : max(0, (int) ($_GET['id_usuario'] ?? 0)),
         ];
     }
 
@@ -58,35 +89,10 @@ class ProduccionReportesController extends BaseModuloController
         return isset(self::PESTANAS[$p]) ? $p : 'producido';
     }
 
-    /** Columnas de cada pestaña: [clave, título, tipo (txt|num|money|pct|fecha)]. */
-    private static function columnas(string $pestana): array
+    /** Columnas de la vista ya resueltas para la empresa (pantalla / excel / pdf + orientación). */
+    private function columnas(string $pestana): array
     {
-        return match ($pestana) {
-            'consumo' => [
-                ['codigo', 'Código', 'txt'], ['nombre', 'Insumo', 'txt'], ['medida', 'Unidad', 'txt'], ['ordenes', 'Órdenes', 'num'],
-                ['teorico', 'Teórico', 'num'], ['real', 'Real', 'num'], ['diferencia', 'Diferencia', 'num'],
-                ['diferencia_pct', 'Dif. %', 'pct'], ['costo', 'Costo', 'money'],
-            ],
-            'ordenes' => [
-                ['numero', 'Número', 'txt'], ['fecha_fin', 'Cierre', 'fecha'], ['nombre', 'Producto', 'txt'], ['lote', 'Lote', 'txt'],
-                ['cantidad_planificada', 'Planificado', 'num'], ['cantidad_producida', 'Producido', 'num'],
-                ['rendimiento_pct', 'Rendim. %', 'pct'], ['cantidad_merma', 'Merma', 'num'],
-                ['costo_materiales', 'Materiales', 'money'], ['costo_mano_obra', 'Mano obra', 'money'], ['costo_cif', 'CIF', 'money'],
-                ['valor_subproductos', 'Subprod.', 'money'], ['costo_merma', 'Costo merma', 'money'],
-                ['desvio_consumo', 'Desvío consumo', 'money'], ['costo_total', 'Costo total', 'money'],
-            ],
-            'mes' => [
-                ['mes', 'Mes', 'txt'], ['ordenes', 'Órdenes', 'num'], ['producido', 'Producido', 'num'],
-                ['costo_materiales', 'Materiales', 'money'], ['costo_mano_obra', 'Mano obra', 'money'], ['costo_cif', 'CIF', 'money'],
-                ['valor_subproductos', 'Subprod.', 'money'], ['costo_merma', 'Costo merma', 'money'],
-                ['costo_total', 'Costo total', 'money'], ['costo_unitario', 'Costo unit.', 'money'],
-            ],
-            default => [
-                ['codigo', 'Código', 'txt'], ['nombre', 'Producto', 'txt'], ['rol', 'Tipo', 'txt'], ['medida', 'Unidad', 'txt'],
-                ['ordenes', 'Órdenes', 'num'], ['teorico', 'Teórico', 'num'], ['real', 'Producido', 'num'],
-                ['costo', 'Costo', 'money'], ['costo_unitario', 'Costo unit.', 'money'],
-            ],
-        };
+        return ReportePersonalizacionService::crear()->resolver((int) $_SESSION['id_empresa'], self::RUTA_MODULO, $pestana);
     }
 
     private function datos(string $pestana): array
@@ -135,12 +141,12 @@ class ProduccionReportesController extends BaseModuloController
         return $rows;
     }
 
-    private static function celda($v, string $tipo): string
+    private static function celda($v, string $clave): string
     {
         if ($v === null || $v === '') {
             return '';
         }
-        return match ($tipo) {
+        return match (self::FORMATO[$clave] ?? 'txt') {
             'num'   => rtrim(rtrim(number_format((float) $v, 4, '.', ','), '0'), '.'),
             'money' => number_format((float) $v, 2, '.', ','),
             'pct'   => number_format((float) $v, 2, '.', ',') . ' %',
@@ -149,20 +155,77 @@ class ProduccionReportesController extends BaseModuloController
         };
     }
 
+    /** Descripción legible de los filtros aplicados (caja del PDF y encabezado del Excel). */
+    private function filtrosTexto(array $f): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $out = ['Período (cierre)' => date('d-m-Y', strtotime($f['desde'])) . ' al ' . date('d-m-Y', strtotime($f['hasta']))];
+        if ($f['id_formula']) {
+            foreach ($this->repo->formulasParaFiltro($idEmpresa) as $x) {
+                if ((int) $x['id'] === $f['id_formula']) {
+                    $out['Fórmula'] = $x['codigo'] . ' v' . $x['version'] . ' · ' . $x['nombre'];
+                }
+            }
+        }
+        if ($f['id_bodega']) {
+            foreach (ProduccionConfiguracionService::crear()->repo()->getBodegas($idEmpresa) as $b) {
+                if ((int) $b['id'] === $f['id_bodega']) {
+                    $out['Bodega de destino'] = $b['nombre'];
+                }
+            }
+        }
+        if ($f['id_usuario']) {
+            foreach ((new \App\repositories\modulos\ProduccionOrdenRepository())->getUsuariosConOrdenes($idEmpresa) as $u) {
+                if ((int) $u['id'] === $f['id_usuario']) {
+                    $out['Usuario'] = $u['nombre'];
+                }
+            }
+        }
+        if ($f['id_producto']) {
+            foreach ($this->repo->productosParaFiltro($idEmpresa) as $p) {
+                if ((int) $p['id'] === $f['id_producto']) {
+                    $out['Producto fabricado'] = $p['codigo'] . ' - ' . $p['nombre'];
+                }
+            }
+        }
+        if ($f['id_insumo']) {
+            foreach ($this->repo->insumosParaFiltro($idEmpresa) as $p) {
+                if ((int) $p['id'] === $f['id_insumo']) {
+                    $out['Insumo'] = $p['codigo'] . ' - ' . $p['nombre'];
+                }
+            }
+        }
+        foreach (['responsable' => 'Responsable'] as $k => $lbl) {
+            if ($f[$k] !== '') {
+                $out[$lbl] = $f[$k];
+            }
+        }
+        return $out;
+    }
+
     public function index(): void
     {
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $config = ProduccionConfiguracionService::crear();
+        $instalado = $config->instalado();
+        $cfg = $instalado ? $config->get($idEmpresa) : null;
         $this->viewWithLayout('layouts.main', 'modulos/produccion_reportes/index', [
             'titulo'     => 'Reportes de producción',
             'fullWidth'  => true,
             'perm'       => $this->getPermisos(),
             'rutaModulo' => self::RUTA_MODULO,
-            'instalado'  => $config->instalado(),
-            'config'     => $config->instalado() ? $config->get($idEmpresa) : null,
+            'instalado'  => $instalado,
+            'config'     => $cfg,
             'filtros'    => $this->filtros(),
             'pestanas'   => self::PESTANAS,
+            // Catálogos de los filtros.
+            'formulas'   => $cfg ? $this->repo->formulasParaFiltro($idEmpresa) : [],
+            'productos'  => $cfg ? $this->repo->productosParaFiltro($idEmpresa) : [],
+            'insumos'    => $cfg ? $this->repo->insumosParaFiltro($idEmpresa) : [],
+            'bodegas'    => $cfg ? $config->repo()->getBodegas($idEmpresa) : [],
+            'usuarios'   => $cfg && !empty($this->getPermisos()['todo'])
+                ? (new \App\repositories\modulos\ProduccionOrdenRepository())->getUsuariosConOrdenes($idEmpresa) : [],
             'base'       => BASE_URL,
         ]);
     }
@@ -171,21 +234,23 @@ class ProduccionReportesController extends BaseModuloController
     {
         $this->requireLeer();
         $pestana = $this->pestana();
-        $cols = self::columnas($pestana);
+        $cols = $this->columnas($pestana)['pantalla'];
         $rows = $this->datos($pestana);
 
         $html = '<thead class="table-light"><tr>';
-        foreach ($cols as [$k, $t, $tipo]) {
-            $html .= '<th class="' . ($tipo === 'txt' || $tipo === 'fecha' ? '' : 'text-end') . '">' . $t . '</th>';
+        $i = 0;
+        foreach ($cols as $clave => $c) {
+            $html .= '<th class="' . ($i++ === 0 ? 'ps-3 ' : '') . ColumnasReporte::claseAlinear($c['alinear']) . '">' . htmlspecialchars($c['titulo']) . '</th>';
         }
         $html .= '</tr></thead><tbody>';
         if ($rows === []) {
-            $html .= '<tr><td colspan="' . count($cols) . '" class="text-center text-muted py-4">Sin órdenes cerradas en el período.</td></tr>';
+            $html .= '<tr><td colspan="' . count($cols) . '" class="text-center text-muted py-4">Sin órdenes cerradas con los filtros aplicados.</td></tr>';
         }
         foreach ($rows as $r) {
             $html .= empty($r['_total']) ? '<tr>' : '<tr class="fw-bold table-light">';
-            foreach ($cols as [$k, , $tipo]) {
-                $html .= '<td class="' . ($tipo === 'txt' || $tipo === 'fecha' ? '' : 'text-end') . '">' . self::celda($r[$k] ?? null, $tipo) . '</td>';
+            $i = 0;
+            foreach ($cols as $clave => $c) {
+                $html .= '<td class="' . ($i++ === 0 ? 'ps-3 ' : '') . ColumnasReporte::claseAlinear($c['alinear']) . '">' . self::celda($r[$clave] ?? null, $clave) . '</td>';
             }
             $html .= '</tr>';
         }
@@ -201,22 +266,24 @@ class ProduccionReportesController extends BaseModuloController
     {
         $this->requireLeer();
         $pestana = $this->pestana();
-        $cols = self::columnas($pestana);
+        $cols = $this->columnas($pestana)['excel'];
         try {
             $data = [];
             foreach ($this->datos($pestana) as $r) {
                 $fila = [];
-                foreach ($cols as [$k, , $tipo]) {
-                    $v = $r[$k] ?? null;
+                foreach ($cols as $clave => $c) {
+                    $v = $r[$clave] ?? null;
+                    $tipo = self::FORMATO[$clave] ?? 'txt';
                     $fila[] = in_array($tipo, ['num', 'money', 'pct'], true) ? ($v === null ? null : (float) $v)
                         : ($tipo === 'fecha' && $v ? date('d-m-Y', strtotime((string) $v)) : (string) ($v ?? ''));
                 }
                 $data[] = $fila;
             }
             $empresa = (new Empresa())->getPorId((int) $_SESSION['id_empresa']) ?? [];
+            $titulos = array_map(static fn(array $c): string => (string) ($c['excel'][0] ?? $c['titulo']), $cols);
             (new \App\Services\ReportService())->exportToExcel(
                 self::PESTANAS[$pestana]['titulo'],
-                array_column($cols, 1),
+                array_values($titulos),
                 $data,
                 'Produccion_' . $pestana,
                 (string) ($empresa['nombre'] ?? '')
@@ -227,43 +294,62 @@ class ProduccionReportesController extends BaseModuloController
         exit;
     }
 
+    /**
+     * PDF con el formato común de reportes (ReportePdf): encabezado con el logo del
+     * establecimiento, caja «Filtros aplicados», indicadores y listado con totales; columnas
+     * y orientación según la personalización de la empresa.
+     */
     public function exportPdf(): void
     {
         $this->requireLeer();
         $pestana = $this->pestana();
-        $cols = self::columnas($pestana);
-        $rows = $this->datos($pestana);
-        $f = $this->filtros();
+        $res     = $this->columnas($pestana);
+        $f       = $this->filtros();
+        $idEmpresa = (int) $_SESSION['id_empresa'];
         try {
-            $empresa = (new Empresa())->getPorId((int) $_SESSION['id_empresa']) ?? [];
-            $ancho = round(100 / count($cols), 2) . '%';
-            ob_start();
-            ?>
-            <style>
-                table { width: 100%; border-collapse: collapse; font-family: Arial, sans-serif; font-size: 7pt; }
-                th { background: #f2f2f2; border: 1px solid #ccc; padding: 3px; text-align: left; }
-                td { border: 1px solid #ccc; padding: 3px; }
-                .r { text-align: right; }
-                h1 { margin: 0; font-size: 13pt; text-align: center; } h2 { margin: 3px 0 10px; font-size: 9pt; text-align: center; color: #666; }
-            </style>
-            <page backtop="10mm" backbottom="10mm" backleft="8mm" backright="8mm" orientation="landscape">
-                <h1><?= htmlspecialchars((string) ($empresa['nombre'] ?? '')) ?></h1>
-                <h2><?= htmlspecialchars(mb_strtoupper(self::PESTANAS[$pestana]['titulo'])) ?> · <?= date('d-m-Y', strtotime($f['desde'])) ?> al <?= date('d-m-Y', strtotime($f['hasta'])) ?></h2>
-                <table>
-                    <thead><tr><?php foreach ($cols as [, $t, $tipo]): ?><th style="width:<?= $ancho ?>" class="<?= in_array($tipo, ['txt', 'fecha'], true) ? '' : 'r' ?>"><?= $t ?></th><?php endforeach; ?></tr></thead>
-                    <tbody>
-                    <?php foreach ($rows as $r): ?>
-                        <tr><?php foreach ($cols as [$k, , $tipo]): ?><td style="width:<?= $ancho ?><?= empty($r['_total']) ? '' : ';font-weight:bold;background:#f2f2f2' ?>" class="<?= in_array($tipo, ['txt', 'fecha'], true) ? '' : 'r' ?>"><?= self::celda($r[$k] ?? null, $tipo) ?></td><?php endforeach; ?></tr>
-                    <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </page>
-            <?php
-            $html = ob_get_clean();
-            $pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
-            $pdf->writeHTML($html);
-            $pdf->output('Produccion_' . $pestana . '_' . date('Ymd_His') . '.pdf', 'D');
+            // La fila TOTAL del «Costo por mes» se reemplaza por la fila de totales del listado.
+            $rows = array_values(array_filter($this->datos($pestana), static fn(array $r): bool => empty($r['_total'])));
+            $empresa = (new Empresa())->getPorId($idEmpresa) ?? [];
+            $resumen = ProduccionConfiguracionService::crear()->get($idEmpresa)
+                ? $this->repo->resumen($idEmpresa, $f, $this->idUsuarioFiltro()) : [];
+
+            $columnas = $res['pdf'];
+            $anchos = ColumnasReporte::anchosPdf(array_map(static fn(array $c): float => (float) $c['ancho'], $columnas));
+            $cols = [];
+            foreach ($columnas as $clave => $c) {
+                $col = [
+                    'lbl' => $c['corto'],
+                    'w'   => $anchos[$clave],
+                    'cls' => ColumnasReporte::claseAlinear($c['alinear']),
+                    'val' => static fn(array $r): string => self::celda($r[$clave] ?? null, $clave),
+                ];
+                if (in_array($clave, self::SUMAN, true)) {
+                    $col['tot'] = static fn(array $filas): float => array_sum(array_map(static fn($r) => (float) ($r[$clave] ?? 0), $filas));
+                    if ((self::FORMATO[$clave] ?? '') === 'num') {
+                        $col['fmt'] = static fn(float $v): string => number_format($v, 0, '.', ',');
+                    }
+                }
+                $cols[] = $col;
+            }
+
+            $kpis = [
+                ['Órdenes cerradas', (string) (int) ($resumen['ordenes'] ?? 0)],
+                ['Materiales', '$' . number_format((float) ($resumen['materiales'] ?? 0), 2)],
+                ['Mano de obra + CIF', '$' . number_format((float) ($resumen['conversion'] ?? 0), 2)],
+                ['Costo producido', '$' . number_format((float) ($resumen['costo'] ?? 0), 2), true],
+                ['Merma anormal', '$' . number_format((float) ($resumen['merma'] ?? 0), 2), false, '#b02a37'],
+            ];
+            $cabecera = ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Reportes de producción', self::PESTANAS[$pestana]['titulo'])
+                . ReportePdf::filtros($this->filtrosTexto($f))
+                . ReportePdf::indicadores($kpis);
+
+            $horizontal = (bool) $res['horizontal'];
+            $pt = ColumnasReporte::fuentePdf(count($cols), $horizontal);
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf($horizontal ? 'L' : 'P', 'A4', 'es');
+            ReportePdf::escribir($html2pdf, $pt, $cabecera, $cols, $rows, 'TOTALES', 'Sin órdenes cerradas con los filtros aplicados.');
+            $html2pdf->output('Produccion_' . $pestana . '_' . date('Ymd_His') . '.pdf', 'D');
         } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             header('Content-Type: text/html');
             echo 'Error al generar PDF: ' . htmlspecialchars($e->getMessage());
         }

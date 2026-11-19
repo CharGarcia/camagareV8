@@ -995,6 +995,7 @@ TXT;
 
         $tipos = $this->repository->getTiposFirma($idEmpresa);
         $this->rules->validarPortal($data, array_map(static fn($t) => (int) $t['id'], $tipos));
+        unset($data['confirma_representante']);   // solo se valida (Rules); no es columna
         $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         $data['nombre_producto'] = $this->nombreProducto($tipos, (int) $data['id_producto']);
 
@@ -1148,6 +1149,7 @@ TXT;
 
         $tipos = $this->repository->getTiposFirma($idEmpresa);
         $this->rules->validarPortal($data, array_map(static fn($t) => (int) $t['id'], $tipos));
+        unset($data['confirma_representante']);   // solo se valida (Rules); no es columna
         $this->validarTipoPersonaFirma($idEmpresa, (int) ($data['id_producto'] ?? 0) ?: null, (string) ($data['tipo_persona'] ?? 'natural'));
         $data['nombre_producto'] = $this->nombreProducto($tipos, (int) $data['id_producto']);
 

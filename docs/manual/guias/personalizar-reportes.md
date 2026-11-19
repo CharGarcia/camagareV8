@@ -1,11 +1,11 @@
 ---
 titulo: Personalizar un reporte para toda la empresa
-resumen: El administrador elige qué columnas muestra un reporte en pantalla, Excel y PDF, y si el PDF sale vertical u horizontal. Aplica a todos los usuarios de la empresa. Disponible en Reporte de Ventas, Reporte de Compras, Cuentas por Cobrar, Cuentas por Pagar, Reporte de Cartera y Reporte Consolidado.
+resumen: El administrador elige qué columnas muestra un reporte en pantalla, Excel y PDF, y si el PDF sale vertical u horizontal. Aplica a todos los usuarios de la empresa. Disponible en Reporte de Ventas, Reporte de Compras, Cuentas por Cobrar, Cuentas por Pagar, Reporte de Cartera, Reporte Consolidado y Reportes de producción.
 categoria: Reportes
 tipo: guia
 visibilidad: todos
-etiquetas: personalizar reporte, personalizar, columnas del reporte, ocultar columnas, mostrar columnas, quitar columna, no quiero ver una columna, columnas del pdf, columnas del excel, orientación del pdf, pdf horizontal, pdf vertical, hoja horizontal, hoja vertical, apaisado, retrato, configurar reporte, reporte por empresa, botón personalizar, no veo el botón personalizar, restablecer reporte, solo administradores, nivel 2, nivel 3, reporte de compras, reporte de ventas, cuentas por cobrar, cuentas por pagar, cartera, agregar columna, columna ruc, columna vendedor, raya, columna no disponible, reporte de cartera, estado de cuenta, reporte consolidado
-version: 1.4
+etiquetas: personalizar reporte, reportes de produccion, personalizar, columnas del reporte, ocultar columnas, mostrar columnas, quitar columna, no quiero ver una columna, columnas del pdf, columnas del excel, orientación del pdf, pdf horizontal, pdf vertical, hoja horizontal, hoja vertical, apaisado, retrato, configurar reporte, reporte por empresa, botón personalizar, no veo el botón personalizar, restablecer reporte, solo administradores, nivel 2, nivel 3, reporte de compras, reporte de ventas, cuentas por cobrar, cuentas por pagar, cartera, agregar columna, columna ruc, columna vendedor, raya, columna no disponible, reporte de cartera, estado de cuenta, reporte consolidado
+version: 1.5
 orden: 37
 estado: activo
 ---
@@ -35,6 +35,7 @@ tal como lo dejó el administrador.
 | Reporte de Ventas | Sí | Todas sus agrupaciones; se eligen las columnas a ocultar |
 | Reporte de Cartera | Sí | El estado de cuenta de cada cliente o proveedor (también lo que se envía por correo) |
 | Reporte Consolidado de Transacciones | Sí | La tabla y el PDF (resumen por documento). El Excel, que es el detalle por hoja, no se personaliza |
+| Reportes de producción | Sí | Las cuatro pestañas (producción por producto, consumo de insumos, órdenes cerradas y costo por mes) |
 
 En Cuentas por Cobrar y Cuentas por Pagar las vistas *Por cliente / Por
 proveedor*, *Por producto* y *Por antigüedad* tienen una estructura propia y no
@@ -125,6 +126,7 @@ confirmación antes de hacerlo.
 
 ## Historial de cambios
 
+- **1.5** (19-11-2026) — Disponible en **Reportes de producción** (sus cuatro pestañas; en *Órdenes cerradas*, columnas opcionales Fórmula, Responsable y Bodega).
 - **1.4** (16-11-2026) — Disponible en el **Reporte Consolidado de Transacciones** (pantalla y PDF).
 
 - **1.3** (11-11-2026) — Disponible en el **Reporte de Cartera** (estado de cuenta por cliente o proveedor).

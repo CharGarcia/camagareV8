@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\controllers\modulos;
 
+use App\Helpers\Permisos;
+use App\models\Empresa;
 use App\Services\modulos\ProduccionConfiguracionService;
 
 /**
@@ -45,8 +47,23 @@ class ProduccionConfiguracionController extends BaseModuloController
             'config'     => $cfg,
             'bodegas'    => $instalado ? $this->service->repo()->getBodegas($idEmpresa) : [],
             'metodos'    => ProduccionConfiguracionService::METODOS_REPARTO,
+            // Tarjeta «Cuentas contables»: estado de las 6 cuentas (se configuran en Configuración
+            // Contable → Producción), si la contabilización está encendida y si el usuario puede ir allá.
+            'cuentasContables'   => $cfg ? (new \App\Services\modulos\ProduccionAsientoService())->estadoCuentas($idEmpresa) : [],
+            'contabilizaProd'    => $cfg ? \App\Services\modulos\ContabilidadInterruptorService::crear()->contabiliza($idEmpresa, \App\Services\modulos\ProduccionAsientoService::CLAVE) : false,
+            'permConfigContable' => Permisos::porRuta('modulos/configuracion-contable'),
+            // Crear bodega al vuelo (modal reutilizable de Bodegas): permisos de ESE módulo.
+            'permBodegas'      => Permisos::porRuta('modulos/bodegas'),
+            'establecimientos' => $instalado ? (new Empresa())->getEstablecimientos($idEmpresa) : [],
             'base'       => BASE_URL,
         ]);
+    }
+
+    /** Bodegas para los selectores (se recargan tras crear una bodega desde esta pantalla). */
+    public function bodegasAjax(): void
+    {
+        $this->requireLeer();
+        $this->json(['ok' => true, 'data' => $this->service->repo()->getBodegas((int) $_SESSION['id_empresa'])]);
     }
 
     public function guardarAjax(): void

@@ -90,7 +90,9 @@ class ProduccionFormulaService
         }
 
         $d = [
-            'codigo'         => mb_strtoupper($txt($in['codigo'] ?? '')),
+            // El código lo asigna guardar(); lo que llegue de la pantalla se ignora.
+            'codigo'         => '',
+            // Descripción opcional (columna «nombre», NOT NULL: vacía se guarda como '').
             'nombre'         => $txt($in['nombre'] ?? ''),
             'id_producto'    => (int) ($in['id_producto'] ?? 0),
             'cantidad_base'  => $num($in['cantidad_base'] ?? 0),
@@ -126,6 +128,8 @@ class ProduccionFormulaService
                 'reparto_pct'           => $rol === 'coproducto' ? $numOpc($l['reparto_pct'] ?? null) : null,
                 'valor_neto_realizable' => $rol === 'subproducto' ? $numOpc($l['valor_neto_realizable'] ?? null) : null,
                 'observaciones'         => $txt($l['observaciones'] ?? '') ?: null,
+                // Unidad en que está escrita la cantidad (null = la del producto). La valida guardar().
+                'id_unidad_medida'      => (int) ($l['id_unidad_medida'] ?? 0) ?: null,
             ];
         }
 
@@ -145,6 +149,79 @@ class ProduccionFormulaService
         return $d;
     }
 
+    // ────────────────────────────────────────────────────────────────
+    // UNIDAD DE MEDIDA POR LÍNEA
+    // ────────────────────────────────────────────────────────────────
+    // La cantidad de un insumo u otra salida se puede escribir en otra unidad del MISMO tipo que
+    // la del producto (gramos de un insumo en kilos, quintales…). Se guarda tal cual en la fórmula,
+    // y al producir/estimar se convierte a la unidad del producto: stock, kardex y órdenes van
+    // siempre en la unidad del producto (InventarioService::cantidadEnUnidadProducto).
+
+    private ?InventarioService $inventarioService = null;
+
+    private function inventarioService(): InventarioService
+    {
+        if ($this->inventarioService === null) {
+            $this->inventarioService = new InventarioService(new InventarioRepository(), $this->log);
+        }
+        return $this->inventarioService;
+    }
+
+    /**
+     * Deja en cada línea solo una unidad válida: de otro tipo, inexistente, igual a la del producto,
+     * en «% del lote» o sin producto → null (= la unidad del producto).
+     *
+     * @param array<int, array> $productos id => fila de getProductos()
+     */
+    private function depurarUnidades(array $lineas, array $productos, int $idEmpresa): array
+    {
+        foreach ($lineas as &$l) {
+            $idProd = (int) ($l['id_producto'] ?? 0);
+            if (($l['rol'] ?? '') === 'principal' || empty($l['id_unidad_medida']) || !$idProd
+                || ($l['modo_cantidad'] ?? '') === 'porcentaje' || empty($productos[$idProd]['id_medida'])) {
+                $l['id_unidad_medida'] = null;
+                continue;
+            }
+            $l['id_unidad_medida'] = $this->inventarioService()->unidadLineaGuardable(
+                (int) $l['id_unidad_medida'], (int) $productos[$idProd]['id_medida'], $idEmpresa
+            );
+        }
+        unset($l);
+        return $lineas;
+    }
+
+    /**
+     * Copia de las líneas con la cantidad pasada a la unidad del producto (lo que usan el escalado
+     * de las órdenes y el costo estimado). «% del lote» no se toca: ya es un porcentaje de lo que
+     * se produce. Si falta la unidad o el factor, la cantidad queda tal cual.
+     */
+    public function lineasEnUnidadProducto(array $lineas, int $idEmpresa): array
+    {
+        $faltan = [];
+        foreach ($lineas as $l) {
+            if (!empty($l['id_unidad_medida']) && !empty($l['id_producto']) && !isset($l['producto_id_medida'])) {
+                $faltan[] = (int) $l['id_producto'];
+            }
+        }
+        $productos = $faltan ? $this->repo->getProductos($faltan, $idEmpresa) : [];
+
+        foreach ($lineas as &$l) {
+            if (empty($l['id_unidad_medida']) || empty($l['id_producto']) || ($l['modo_cantidad'] ?? '') === 'porcentaje') {
+                continue;
+            }
+            $idMedidaProd = (int) ($l['producto_id_medida'] ?? ($productos[(int) $l['id_producto']]['id_medida'] ?? 0));
+            if (!$idMedidaProd) {
+                continue;
+            }
+            $conv = $this->inventarioService()->cantidadEnUnidadProducto(
+                (float) $l['cantidad'], (int) $l['id_unidad_medida'], $idMedidaProd, $idEmpresa
+            );
+            $l['cantidad'] = $conv['cantidad'];
+        }
+        unset($l);
+        return $lineas;
+    }
+
     /** Crea (id = 0) o actualiza una fórmula en borrador o vigente sin órdenes. */
     public function guardar(int $id, array $in, int $idEmpresa, int $idUsuario): int
     {
@@ -154,6 +231,7 @@ class ProduccionFormulaService
         $ids = array_filter(array_map(fn($l) => (int) ($l['id_producto'] ?? 0), $d['lineas']));
         $productos = $this->repo->getProductos($ids, $idEmpresa);
         $this->rules->validar($d, $productos, $d['metodo_reparto'] ?? (string) $cfg['metodo_reparto']);
+        $d['lineas'] = $this->depurarUnidades($d['lineas'], $productos, $idEmpresa);
 
         $previo = null;
         if ($id > 0) {
@@ -170,13 +248,22 @@ class ProduccionFormulaService
         }
 
         $version = $previo ? (int) $previo['version'] : $this->repo->siguienteVersion($d['id_producto'], $idEmpresa);
-        if ($this->repo->existeCodigo($d['codigo'], $idEmpresa, $id, $version)) {
-            throw new \DomainException("Ya existe otra fórmula con el código «{$d['codigo']}» en la versión {$version}.");
-        }
 
         $db = Database::getConnection();
         $db->beginTransaction();
         try {
+            // El código lo pone el sistema: al crear, el siguiente F-000001… (bajo candado, §8);
+            // al modificar, el que ya tenía (no se cambia desde la pantalla).
+            if ($previo) {
+                $d['codigo'] = (string) $previo['codigo'];
+            } else {
+                $this->repo->lockCodigo($idEmpresa);
+                $d['codigo'] = $this->repo->siguienteCodigo($idEmpresa);
+            }
+            if ($this->repo->existeCodigo($d['codigo'], $idEmpresa, $id, $version)) {
+                throw new \DomainException("Ya existe otra fórmula con el código «{$d['codigo']}» en la versión {$version}.");
+            }
+
             if ($previo) {
                 $this->repo->actualizarCabecera($id, $d, $idEmpresa, $idUsuario);
             } else {
@@ -219,6 +306,7 @@ class ProduccionFormulaService
             'cantidad' => (float) $l['cantidad'], 'merma_pct' => (float) $l['merma_pct'],
             'exige_lote' => !empty($l['exige_lote']), 'reparto_pct' => $l['reparto_pct'],
             'valor_neto_realizable' => $l['valor_neto_realizable'], 'observaciones' => $l['observaciones'],
+            'id_unidad_medida' => !empty($l['id_unidad_medida']) ? (int) $l['id_unidad_medida'] : null,
         ], $f['lineas']);
         $recursos = array_map(fn($r) => [
             'tipo' => $r['tipo'], 'descripcion' => $r['descripcion'], 'base' => $r['base'],
@@ -320,6 +408,8 @@ class ProduccionFormulaService
     {
         $inv = new InventarioRepository();
         $base = (float) $formula['cantidad_base'];
+        // Cantidades en la unidad del producto: el costo promedio del kardex es por esa unidad.
+        $formula['lineas'] = $this->lineasEnUnidadProducto($formula['lineas'], $idEmpresa);
         $lineas = [];
         $mp = 0.0;
         foreach ($formula['lineas'] as $l) {
@@ -333,7 +423,7 @@ class ProduccionFormulaService
                 $mp += $teorica * $unit;
             }
             $lineas[] = ['id' => $l['id'] ?? null, 'rol' => $l['rol'], 'cantidad' => $teorica, 'costo_unitario' => round($unit, 6),
-                         'costo_total' => round($teorica * $unit, 2)];
+                         'costo_total' => round($teorica * $unit, 2), 'medida' => (string) ($l['medida_nombre'] ?? '')];
         }
         $mp = round($mp, 2);
         $mo = 0.0;

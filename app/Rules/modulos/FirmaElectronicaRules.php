@@ -93,6 +93,13 @@ class FirmaElectronicaRules
     {
         $errores = $this->erroresTitular($data);
 
+        // Representante legal: el cliente confirma que los datos son del representante y no de
+        // quien llena el enlace (contador, asistente). Solo si el portal envió la casilla.
+        if (($data['tipo_persona'] ?? '') === 'juridica' && array_key_exists('confirma_representante', $data)
+            && empty($data['confirma_representante'])) {
+            $errores[] = 'Confirme que los datos ingresados son del representante legal de la empresa (no de quien llena la solicitud).';
+        }
+
         if (empty($data['id_producto']) || !in_array((int) $data['id_producto'], $idsProductosValidos, true)) {
             $errores[] = 'Seleccione la validez de la firma.';
         }

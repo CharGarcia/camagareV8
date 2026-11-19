@@ -152,6 +152,31 @@ class InformacionRegistro
             'tabla'  => 'egresos_cabecera',
             'nombre' => 'el egreso',
         ],
+        // Producción: la orden mueve stock (consumos y entregas: referencia_id = id de la orden).
+        'modulos/produccion-ordenes' => [
+            'tabla'     => 'produccion_ordenes',
+            'nombre'    => 'la orden de producción',
+            'kardex'    => ['produccion_consumo', 'produccion_entrega'],
+            'etiquetas' => [
+                'CREAR_ORDEN'   => 'Orden creada',
+                'CONSUMO_ORDEN' => 'Consumo de insumos registrado',
+                'CERRAR_ORDEN'  => 'Orden cerrada: lo producido entró al inventario',
+                'ANULAR_ORDEN'  => 'Orden anulada',
+                'ELIMINAR_ORDEN' => 'Orden eliminada',
+            ],
+        ],
+        'modulos/produccion-formulas' => [
+            'tabla'     => 'produccion_formulas',
+            'nombre'    => 'la fórmula',
+            'etiquetas' => [
+                'NUEVA_VERSION' => 'Nueva versión creada',
+                'CREAR_FORMULA' => 'Fórmula creada',
+                'ACTUALIZAR_FORMULA' => 'Fórmula modificada',
+                'INACTIVAR_FORMULA' => 'Fórmula inactivada',
+                'ACTIVAR_FORMULA' => 'Fórmula activada (vigente)',
+                'ELIMINAR_FORMULA' => 'Fórmula eliminada',
+            ],
+        ],
         // Administración del condominio: el modal con pestaña Información es el de la cuota
         // extraordinaria (condominios_aportes).
         'modulos/condominios-config' => [

@@ -85,11 +85,36 @@ class ProduccionOrdenRepository extends BaseRepository
                 $where .= " AND {$cond}";
             }
         }
+        // Claves del buscador con filtros (FiltrosModal de la vista): deben coincidir con sus «key».
         FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'] ?? [], [
-            'texto'    => ['numero' => 'o.numero', 'producto' => 'p.nombre', 'lote' => 'o.lote', 'responsable' => 'o.responsable'],
-            'exacto'   => ['estado' => 'o.estado', 'tipo' => 'o.tipo'],
-            'fecha'    => ['fecha' => 'o.fecha_inicio', 'cierre' => 'o.fecha_fin'],
-            'numerico' => ['cantidad' => 'o.cantidad_producida', 'costo' => 'o.costo_total'],
+            'texto'    => [
+                'numero'          => 'o.numero',
+                'producto'        => 'p.nombre',
+                'producto_codigo' => 'p.codigo',
+                'lote'            => 'o.lote',
+                'responsable'     => 'o.responsable',
+                'observaciones'   => 'o.observaciones',
+            ],
+            'exacto'   => [
+                'estado'         => 'o.estado',
+                'tipo'           => 'o.tipo',
+                'bodega_insumos' => 'o.id_bodega_insumos',
+                'bodega_destino' => 'o.id_bodega_destino',
+                'usuario'        => 'o.created_by',
+                'asiento'        => "CASE WHEN o.id_asiento_cierre IS NOT NULL THEN 'si' ELSE 'no' END",
+            ],
+            'fecha'    => [
+                'fecha'     => 'o.fecha_inicio',
+                'cierre'    => 'o.fecha_fin',
+                'caducidad' => 'o.fecha_caducidad',
+                'registro'  => 'o.created_at',
+            ],
+            'numerico' => [
+                'planificado' => 'o.cantidad_planificada',
+                'cantidad'    => 'o.cantidad_producida',
+                'costo'       => 'o.costo_total',
+                'merma'       => 'o.costo_merma',
+            ],
         ]);
         return $where;
     }
@@ -121,6 +146,56 @@ class ProduccionOrdenRepository extends BaseRepository
         return ['total' => $total, 'rows' => $st->fetchAll(PDO::FETCH_ASSOC)];
     }
 
+    /** Orden a la que pertenece un movimiento (asiento de consumo: id_ref = movimiento). */
+    public function getOrdenDeMovimiento(int $idMovimiento, int $idEmpresa): ?int
+    {
+        $st = $this->db->prepare("SELECT id_orden FROM produccion_ordenes_movimientos WHERE id = :id AND id_empresa = :e");
+        $st->execute([':id' => $idMovimiento, ':e' => $idEmpresa]);
+        $v = $st->fetchColumn();
+        return $v !== false ? (int) $v : null;
+    }
+
+    /**
+     * «código - nombre» de varias cuentas del plan de la empresa.
+     *
+     * @param int[] $ids
+     * @return array<int, string>
+     */
+    public function getNombresCuentas(array $ids, int $idEmpresa): array
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+        if (!$ids) {
+            return [];
+        }
+        $marcas = [];
+        $params = [':e' => $idEmpresa];
+        foreach ($ids as $i => $id) {
+            $marcas[] = ":c{$i}";
+            $params[":c{$i}"] = $id;
+        }
+        $st = $this->db->prepare('SELECT id, codigo, nombre FROM plan_cuentas WHERE id_empresa = :e AND id IN (' . implode(', ', $marcas) . ')');
+        $st->execute($params);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id']] = trim($r['codigo'] . ' - ' . $r['nombre'], ' -');
+        }
+        return $out;
+    }
+
+    /** Usuarios que registraron órdenes en la empresa (select «Usuario» del modal de filtros). */
+    public function getUsuariosConOrdenes(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM produccion_ordenes o
+               INNER JOIN usuarios u ON u.id = o.created_by
+              WHERE o.id_empresa = :e AND o.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     public function getResumen(int $idEmpresa, ?int $idUsuarioFiltro, array $filtros, string $buscar): array
     {
         $params = [];
@@ -145,7 +220,7 @@ class ProduccionOrdenRepository extends BaseRepository
     {
         $st = $this->db->prepare(
             "SELECT o.*, p.codigo AS producto_codigo, p.nombre AS producto_nombre, um.nombre AS medida_nombre,
-                    f.codigo AS formula_codigo, f.nombre AS formula_nombre, f.instrucciones AS formula_instrucciones,
+                    f.codigo AS formula_codigo, COALESCE(NULLIF(f.nombre, ''), p.nombre) AS formula_nombre, f.instrucciones AS formula_instrucciones,
                     f.cantidad_base AS formula_cantidad_base, f.vida_util_dias,
                     bi.nombre AS bodega_insumos_nombre, bd.nombre AS bodega_destino_nombre,
                     u.nombre AS creado_por, uu.nombre AS modificado_por

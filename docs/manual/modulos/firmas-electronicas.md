@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.22
+etiquetas: firma electronica, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, datos del representante legal, datos equivocados, puso sus datos en vez del representante, contador lleno la solicitud, confirmar representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.23
 orden: 20
 estado: activo
 ---
@@ -67,6 +67,20 @@ solicitudes nuevas; las firmas que ya lo tenían lo conservan (con sus datos de
 departamento y del representante legal). Uanataca exige también la
 **fecha de nacimiento**, el **sexo**, los **dos apellidos por separado** y, con
 cédula, el **código dactilar**.
+
+### Datos del representante legal, no de quien llena el enlace
+
+En una firma de **Representante legal**, la firma se emite a nombre de esa
+persona, así que la identificación, los datos personales, el celular, el correo,
+la ubicación y la cédula/selfie deben ser **los del representante legal que
+consta en el nombramiento**, aunque quien llene el enlace sea el contador o un
+asistente. Para evitar confusiones, al elegir *Representante legal* el
+formulario del cliente:
+
+- muestra un aviso amarillo explicando que todos los datos son del representante legal;
+- cambia los títulos a **Identificación del representante legal** y **Datos personales del representante legal**;
+- repite el aviso en el paso de documentos (cédula y selfie);
+- pide marcar la casilla **Confirmo que los datos ingresados son del representante legal**. Sin ella no deja continuar (el servidor también la exige).
 
 ## Cómo se usa
 
@@ -791,6 +805,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.23** — Enlace del cliente, firma de **Representante legal**: aviso de que todos los datos (identificación, datos personales, contacto, ubicación, cédula y selfie) son del representante legal y no de quien llena la solicitud, títulos de sección «… del representante legal» y casilla obligatoria de confirmación (validada también en el servidor).
 - **3.22** — Columna **Términos** en el listado (también en Excel y PDF): muestra *Aceptó* con la fecha y hora en que el titular marcó la casilla desde el enlace, o *No registra* (firma creada a mano o antes de pedir la casilla). Se puede ordenar, ocultar y filtrar (**Aceptó términos** en los filtros).
 - **3.21** — Un enlace (fijo, de vendedor o enviado) ya no registra una solicitud si el titular tiene una firma **emitida y vigente** con los mismos datos (identificación, tipo de persona y RUC de la empresa o «con RUC»); tampoco al editar una solicitud iniciada. Las renovaciones no cambian.
 - **3.20** — **Términos y protección de datos personales**: el cliente debe marcar una casilla de aceptación antes de enviar sus datos (enlace enviado, enlace fijo y enlace por vendedor). Se guarda la fecha, la IP, el navegador y el texto aceptado. Texto base del sistema, editable por empresa en el engranaje (pestaña General). No afecta a las solicitudes ya iniciadas. Requiere `database/20261112_firmas_terminos_aceptacion.sql`.

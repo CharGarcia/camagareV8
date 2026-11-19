@@ -28,12 +28,8 @@ class ProduccionFormulaRules
      */
     public function validar(array $d, array $productos, string $metodoReparto): void
     {
-        if (trim($d['codigo']) === '') {
-            throw new \DomainException('Indique el código de la fórmula.');
-        }
-        if (trim($d['nombre']) === '') {
-            throw new \DomainException('Indique el nombre de la fórmula.');
-        }
+        // El código lo genera el sistema (ProduccionFormulaService) y la descripción («nombre» en la
+        // base) es opcional: si viene vacía, en pantallas y reportes se muestra el producto.
         if ((int) $d['id_producto'] <= 0 || !isset($productos[(int) $d['id_producto']])) {
             throw new \DomainException('Elija el producto que se fabrica (salida principal).');
         }

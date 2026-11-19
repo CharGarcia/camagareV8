@@ -109,7 +109,6 @@ class ProduccionOrdenesController extends BaseModuloController
         $cfg       = $instalado ? $config->get($idEmpresa) : null;
 
         $res = $cfg ? $this->service->getListado($idEmpresa, $buscar, 1, $perPage, $orden, $this->idUsuarioFiltro(), $filtros) : ['total' => 0, 'rows' => []];
-        $resumen = $cfg ? $this->service->getResumen($idEmpresa, $this->idUsuarioFiltro(), $filtros, $buscar) : [];
 
         $this->viewWithLayout('layouts.main', 'modulos/produccion_ordenes/index', [
             'titulo'      => 'Órdenes de producción',
@@ -124,7 +123,8 @@ class ProduccionOrdenesController extends BaseModuloController
             'perPage'     => $perPage,
             'buscar'      => $buscar,
             'filtros'     => $filtros,
-            'resumen'     => $resumen,
+            // Select «Usuario que registró» del modal de filtros del buscador.
+            'usuariosFiltro' => $cfg ? $this->service->repo()->getUsuariosConOrdenes($idEmpresa) : [],
             'bodegas'     => $cfg ? $this->bodegasDelUsuario($idEmpresa) : [],
             'estados'     => ProduccionOrdenRules::ESTADOS,
             'tipos'       => ProduccionOrdenRules::TIPOS,
@@ -146,7 +146,7 @@ class ProduccionOrdenesController extends BaseModuloController
         $filtros = $this->filtros();
 
         if (!$this->service->config()->get($idEmpresa)) {
-            $this->json(['ok' => true, 'rows' => $this->renderFilas([]), 'page' => 1, 'pages' => 1, 'info' => '0-0/0', 'resumen' => []]);
+            $this->json(['ok' => true, 'rows' => $this->renderFilas([]), 'page' => 1, 'pages' => 1, 'info' => '0-0/0']);
         }
         $res   = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $orden, $this->idUsuarioFiltro(), $filtros);
         $total = (int) $res['total'];
@@ -160,7 +160,6 @@ class ProduccionOrdenesController extends BaseModuloController
             'page'      => $page,
             'pages'     => max(1, (int) ceil($total / max(1, $perPage))),
             'info'      => "{$from}-{$to}/{$total}",
-            'resumen'   => $this->service->getResumen($idEmpresa, $this->idUsuarioFiltro(), $filtros, $buscar),
             'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?' . $q,
             'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?' . $q,
         ]);
@@ -234,12 +233,15 @@ class ProduccionOrdenesController extends BaseModuloController
     public function vistaPreviaAjax(): void
     {
         $this->requireLeer();
+        [$idEmpresa, $idUsuario, $nivel] = $this->sesion();
         try {
             $this->json(['ok' => true, 'data' => $this->service->vistaPrevia(
                 (int) ($_GET['id_formula'] ?? 0),
                 (float) str_replace(',', '.', (string) ($_GET['cantidad'] ?? 0)),
                 (int) ($_GET['id_bodega_insumos'] ?? 0),
-                (int) $_SESSION['id_empresa']
+                $idEmpresa,
+                $idUsuario,
+                $nivel
             )]);
         } catch (\Throwable $e) {
             $this->fallo($e, __FUNCTION__);
@@ -342,6 +344,28 @@ class ProduccionOrdenesController extends BaseModuloController
             $this->json(['ok' => true, 'id' => $id, 'mensaje' => $this->service->fueRepetido()
                 ? 'Esta orden ya estaba cerrada; no se registró otra entrada.'
                 : 'Orden cerrada: lo producido entró al inventario con su costo real.' . (!empty($o['asiento_aviso']) ? ' Aviso contable: ' . $o['asiento_aviso'] : '')]);
+        } catch (\Throwable $e) {
+            $this->fallo($e, __FUNCTION__);
+        }
+    }
+
+    /**
+     * Revisa si la orden se puede cerrar con los datos de la pantalla (fecha, cantidades, consumir
+     * lo pendiente…) sin cerrarla: ejecuta el cierre y lo deshace. Devuelve el problema o un resumen.
+     */
+    public function verificarCierreAjax(): void
+    {
+        $this->requireActualizar();
+        [$idEmpresa, $idUsuario, $nivel] = $this->sesion();
+        try {
+            $id = (int) ($_POST['id'] ?? 0);
+            $this->ordenPropia($id);
+            $salidas  = json_decode((string) ($_POST['salidas'] ?? '[]'), true) ?: [];
+            $recursos = isset($_POST['recursos']) ? (json_decode((string) $_POST['recursos'], true) ?: []) : null;
+            $res = $this->service->verificarCierre($id, $salidas, (float) str_replace(',', '.', (string) ($_POST['merma'] ?? 0)), $recursos,
+                ($_POST['consumir_pendiente'] ?? '') === '1', trim((string) ($_POST['fecha'] ?? '')),
+                $idEmpresa, $idUsuario, $nivel);
+            $this->json(['ok' => true] + ['puede' => $res['ok']] + $res);
         } catch (\Throwable $e) {
             $this->fallo($e, __FUNCTION__);
         }

@@ -5,8 +5,8 @@ categoria: Producción
 ruta_modulo: modulos/produccion-reportes
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de produccion, cuanto se produjo, produccion por producto, consumo de materia prima, consumo teorico vs real, desperdicio, merma, rendimiento, costo de produccion, costo unitario, desvio de consumo, eficiencia, ordenes cerradas, excel de produccion, pdf de produccion, costo por mes, costo mensual, costos mensuales, costo de produccion mensual, comparativo mensual, mes a mes, tendencia de costos
-version: 1.2
+etiquetas: filtros de produccion, personalizar reporte de produccion, pdf de produccion, reporte de produccion, cuanto se produjo, produccion por producto, consumo de materia prima, consumo teorico vs real, desperdicio, merma, rendimiento, costo de produccion, costo unitario, desvio de consumo, eficiencia, ordenes cerradas, excel de produccion, pdf de produccion, costo por mes, costo mensual, costos mensuales, costo de produccion mensual, comparativo mensual, mes a mes, tendencia de costos
+version: 1.6
 orden: 3
 estado: activo
 ---
@@ -26,9 +26,29 @@ Tiene cuatro pestañas, cada una con PDF y Excel:
 
 ## Cómo se usa
 
-1. Elija el rango de fechas de cierre y, si quiere, un producto fabricado.
-2. Pulse **Mostrar**.
-3. Cambie de pestaña o descargue el PDF o el Excel.
+1. Elija el rango de fechas de cierre y los filtros que necesite (ver la tabla de abajo).
+2. Pulse **Mostrar**. **Limpiar** quita todos los filtros menos el período.
+3. Cambie de pestaña o descargue el PDF o el Excel: ambos respetan los filtros y las columnas elegidas.
+
+| Filtro | Qué hace |
+|--------|----------|
+| Cierre desde / hasta | Órdenes cerradas en ese período (por defecto, el mes en curso). |
+| Fórmula | Buscador: escriba parte del código o del nombre y elija la fórmula. Solo las órdenes hechas con ella (incluye fórmulas inactivas). Borrar o Supr quita la fórmula elegida. |
+| Bodega de destino | Bodega a la que entró lo producido. |
+| Usuario | Quién registró la orden. Solo aparece para quien tiene acceso total. |
+| Responsable | Texto del campo Responsable de la orden. |
+| Producto fabricado | Buscador: escriba parte del código o del nombre y elija de la lista (solo productos que tienen fórmula u orden). Borrar o Supr quita el producto elegido. |
+| Insumo | Buscador con lista (productos usados como insumo en fórmulas u órdenes). Muestra las órdenes que consumieron ese insumo y, en *Consumo de insumos*, solo ese insumo. Borrar o Supr lo quita. |
+
+La tarjeta de arriba resume el período filtrado: órdenes cerradas, materiales, mano de obra + CIF, costo producido y merma anormal.
+
+## Personalizar columnas y PDF
+
+Un administrador (niveles 2 y 3) ve el botón **Personalizar** junto al título: elige, para **toda la empresa**, qué columnas salen en pantalla, Excel y PDF de cada pestaña, y si el PDF sale vertical u horizontal. En *Órdenes cerradas* hay además columnas opcionales apagadas por defecto: **Fórmula**, **Responsable** y **Bodega**. Ver [Personalizar reportes](guias/personalizar-reportes).
+
+## El PDF
+
+Tiene el mismo formato que los demás reportes: logo y nombre de la empresa, título y pestaña, la caja **Filtros aplicados**, los indicadores del período, el listado con sus columnas y una fila de **TOTALES** con los importes y el número de órdenes. *Producción por producto* y *Consumo de insumos* salen verticales; *Órdenes cerradas* y *Costo por mes*, horizontales (se puede cambiar con Personalizar).
 
 ## Costo por mes: ver la tendencia del costo de producción
 
@@ -58,3 +78,7 @@ meses sin órdenes cerradas no aparecen.
 - **1.0** — Versión inicial.
 - **1.1** — Nueva pestaña **Costo por mes**: costo de producción por concepto, mes a mes, con fila de total.
 - **1.2** — La pantalla ocupa todo el ancho de la ventana, como los demás módulos.
+- **1.3** — Nuevos filtros (fórmula, bodega de destino, usuario, responsable e insumo), botón **Personalizar** (columnas de pantalla, Excel y PDF por empresa) y PDF con el formato común de reportes (logo, filtros aplicados, indicadores y totales).
+- **1.4** — Se quitó el filtro Tipo (ya no existe la producción rápida); la Fórmula se elige con un buscador y todos los filtros y botones caben en una sola fila.
+- **1.5** — El filtro Producto fabricado también se elige de una lista con buscador.
+- **1.6** — El filtro Insumo también se elige de una lista con buscador.

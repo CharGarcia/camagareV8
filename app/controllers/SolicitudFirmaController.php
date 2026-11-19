@@ -267,6 +267,8 @@ class SolicitudFirmaController extends Controller
             'facturacion_telefono'  => $mismos ? null : $fn($str('facturacion_telefono')),
             // Aceptación de términos y tratamiento de datos: solo cuenta al crear la solicitud.
             'acepta_terminos'       => !empty($_POST['acepta_terminos']),
+            // Representante legal: confirma que los datos son los suyos y no los de quien llena el formulario.
+            'confirma_representante' => !empty($_POST['confirma_representante']),
             'terminos_ip'           => (string) ($_SERVER['REMOTE_ADDR'] ?? ''),
             'terminos_user_agent'   => (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''),
         ];

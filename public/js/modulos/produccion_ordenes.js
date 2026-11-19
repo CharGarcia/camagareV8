@@ -66,14 +66,36 @@
     }
     function nombreLinea(l) { return l.id_producto ? `${l.producto_codigo} - ${l.producto_nombre}` : (l.descripcion || '—'); }
 
-    function typeahead(input, url, render, onPick) {
+    /**
+     * Buscador con lista desplegable. La lista se coloca en el contenedor `.position-relative` del campo
+     * (no dentro de un `.input-group`, que deformaría sus esquinas). `opts.minChars = 0` muestra la lista
+     * apenas se hace clic en el campo, sin escribir nada.
+     */
+    function typeahead(input, url, render, onPick, opts) {
+        const minChars = opts && opts.minChars !== undefined ? opts.minChars : 2;
+        const cont = input.closest('.position-relative') || input.parentElement;
         const dd = document.createElement('div');
         dd.className = 'list-group position-absolute shadow por-dd d-none';
         dd.style.minWidth = '340px';
-        input.parentElement.style.position = 'relative';
-        input.parentElement.appendChild(dd);
+        dd.style.width = '100%';
+        cont.style.position = 'relative';
+        cont.appendChild(dd);
         let timer = null;
         const cerrar = () => { dd.classList.add('d-none'); dd.innerHTML = ''; };
+        const buscar = (q) => {
+            fetch(`${url}?q=${encodeURIComponent(q)}`).then(r => r.json()).then(res => {
+                if (document.activeElement !== input) return;
+                const data = res.data || [];
+                dd._data = data;
+                dd.innerHTML = data.length
+                    ? data.map((x, i) => `<button type="button" class="list-group-item list-group-item-action small py-1" data-i="${i}">${render(x)}</button>`).join('')
+                    : '<div class="list-group-item small text-muted">Sin resultados.</div>';
+                dd.classList.remove('d-none');
+            });
+        };
+        if (minChars === 0) {
+            input.addEventListener('focus', () => { if (input.dataset.elegido !== '1' && !input.value.trim()) buscar(''); });
+        }
         input.addEventListener('keydown', e => {
             if ((e.key === 'Backspace' || e.key === 'Delete') && input.dataset.elegido === '1') {
                 e.preventDefault();
@@ -87,17 +109,8 @@
             if (input.dataset.elegido === '1') { input.dataset.elegido = ''; onPick(null); }
             clearTimeout(timer);
             const q = input.value.trim();
-            if (q.length < 2) { cerrar(); return; }
-            timer = setTimeout(() => {
-                fetch(`${url}?q=${encodeURIComponent(q)}`).then(r => r.json()).then(res => {
-                    const data = res.data || [];
-                    dd._data = data;
-                    dd.innerHTML = data.length
-                        ? data.map((x, i) => `<button type="button" class="list-group-item list-group-item-action small py-1" data-i="${i}">${render(x)}</button>`).join('')
-                        : '<div class="list-group-item small text-muted">Sin resultados.</div>';
-                    dd.classList.remove('d-none');
-                });
-            }, 250);
+            if (q.length < Math.max(minChars, 1) && !(minChars === 0 && q === '')) { cerrar(); return; }
+            timer = setTimeout(() => buscar(q), 250);
         });
         dd.addEventListener('mousedown', e => {
             const b = e.target.closest('[data-i]');
@@ -112,11 +125,10 @@
 
     // ── Listado ──────────────────────────────────────────────────────────────
 
+    // Texto y filtros viajan juntos en «b» como clave:valor: el buscador con filtros (FiltrosModal)
+    // escribe ahí estado, tipo, fechas, bodegas, etc.
     function params() {
-        return new URLSearchParams({
-            b: el('por-buscar')?.value || '', desde: el('por-desde')?.value || '', hasta: el('por-hasta')?.value || '',
-            estado: el('por-estado')?.value || '', tipo: el('por-tipo')?.value || '',
-        });
+        return new URLSearchParams({ b: el('por-buscar')?.value || '' });
     }
 
     window.POR_buscar = function (p) {
@@ -134,24 +146,13 @@
             const b = el('por-paginacion').querySelectorAll('button');
             b[0].disabled = res.page <= 1;
             b[1].disabled = res.page >= res.pages;
-            const r = res.resumen || {};
-            el('por-stat-ordenes').textContent = r.ordenes || 0;
-            el('por-stat-abiertas').textContent = r.abiertas || 0;
-            el('por-stat-cerradas').textContent = r.cerradas || 0;
-            el('por-stat-costo').textContent = money(r.costo || 0);
-            el('por-stat-merma').textContent = money(r.merma || 0);
             if (res.pdf_url) el('por-pdf').href = res.pdf_url;
             if (res.excel_url) el('por-excel').href = res.excel_url;
             if (sorter) sorter.refreshIcons();
         }).catch(e => console.error('POR_buscar', e)).finally(() => tbody.classList.remove('opacity-50'));
     };
 
-    window.POR_limpiar = function () {
-        ['por-buscar', 'por-desde', 'por-hasta', 'por-estado', 'por-tipo'].forEach(id => { if (el(id)) el(id).value = ''; });
-        window.POR_buscar(1);
-    };
-
-    el('por-buscar')?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); window.POR_buscar(1); } });
+    // El buscador (FiltrosModal) llama a POR_buscar(1) por su cuenta (onApply) al escribir o filtrar.
 
     const sorter = window.CMG_initSort ? window.CMG_initSort(window.POR_MODULO, (col, dir, sorts) => {
         window.currentSorts = sorts;
@@ -174,7 +175,7 @@
                 el('pon-medida').textContent = f.medida_nombre || 'u';
                 if (!num(el('pon-cantidad').value)) el('pon-cantidad').value = num(f.cantidad_base);
                 cargarPrevia();
-            });
+            }, { minChars: 0 });
         ['pon-cantidad', 'pon-bodega-insumos'].forEach(id => el(id).addEventListener('change', cargarPrevia));
         el('pon-tbody').addEventListener('input', e => { if (e.target.classList.contains('pon-real')) e.target.dataset.editado = '1'; });
     }
@@ -185,9 +186,6 @@
         el('pon-tipo').value = rapida ? 'rapida' : 'orden';
         el('pon-titulo').textContent = rapida ? 'Producción rápida' : 'Nueva orden de producción';
         el('pon-icono').className = rapida ? 'bi bi-lightning-charge text-warning me-2' : 'bi bi-gear-wide-connected text-primary me-2';
-        el('pon-ayuda').innerHTML = rapida
-            ? '<i class="bi bi-lightning-charge text-warning me-1"></i>En un solo paso: se consumen los insumos de la fórmula y lo producido entra al inventario con su costo real.'
-            : '<i class="bi bi-info-circle text-primary me-1"></i>La orden queda planificada. Después registra los consumos (parciales, por peso, con lote) y la cierra con lo que realmente obtuvo.';
         el('pon-btn-guardar').innerHTML = rapida ? '<i class="bi bi-lightning-charge me-1"></i> Producir' : '<i class="bi bi-check-lg me-1"></i> Crear orden';
         el('pon-btn-guardar').dataset.html = el('pon-btn-guardar').innerHTML;
         el('pon-btn-guardar').disabled = false;
@@ -241,6 +239,7 @@
         if (rapida && previa && !conservar && Object.keys(editados).length) {
             aviso('info', 'Producido real recalculado', 'Cambió la fórmula o la cantidad: lo producido real volvió a la cantidad teórica. Revíselo antes de producir.');
         }
+        if (el('pon-count')) el('pon-count').textContent = previa ? previa.lineas.length : 0;
         if (!previa) {
             el('pon-tbody').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Elija la fórmula y la cantidad.</td></tr>';
             el('pon-faltantes').innerHTML = '';
@@ -249,10 +248,16 @@
         el('pon-tbody').innerHTML = previa.lineas.map(l => {
             const insumo = l.rol === 'insumo';
             const falta = insumo && num(l.falta) > 0;
+            // Se muestra en la unidad en que se escribió la fórmula (p. ej. GRAMO). El inventario va en la
+            // unidad del producto (p. ej. KILOGRAMO): debajo del teórico se ve la equivalencia.
+            const f = num(l.factor_formula) || 1;
+            const otraUnidad = Math.abs(f - 1) > 1e-12;
+            const enFormula = v => cant(num(v) / f);
             return `<tr class="${falta ? 'table-danger' : ''}">
-                <td>${badgeRol(l.rol)}</td><td>${esc(nombreLinea(l))}</td><td class="small text-muted">${esc(l.medida_nombre)}</td>
-                <td class="text-end">${cant(l.cantidad_teorica)}</td>
-                <td class="text-end">${insumo ? cant(l.stock) + (falta ? ` <span class="text-danger small">(faltan ${cant(l.falta)})</span>` : '') : ''}</td>
+                <td>${badgeRol(l.rol)}</td><td>${esc(nombreLinea(l))}</td><td class="small text-muted">${esc(l.unidad_formula || l.medida_nombre)}</td>
+                <td class="text-end">${cant(l.cantidad_formula ?? l.cantidad_teorica)}${otraUnidad
+                    ? `<div class="small text-muted" title="Así se descuenta del inventario">= ${cant(l.cantidad_teorica)} ${esc(l.medida_nombre)}</div>` : ''}</td>
+                <td class="text-end"${otraUnidad ? ` title="${cant(l.stock)} ${esc(l.medida_nombre)}"` : ''}>${insumo ? enFormula(l.stock) + (falta ? ` <span class="text-danger small">(faltan ${enFormula(l.falta)})</span>` : '') : ''}</td>
                 <td class="p-0 pon-col-real ${rapida ? '' : 'd-none'}">${!insumo
                     ? (conservar && editados[l.orden] !== undefined
                         ? `<input type="number" step="any" min="0" class="text-end pon-real" data-orden="${l.orden}" data-editado="1" value="${esc(editados[l.orden])}">`
@@ -270,6 +275,8 @@
         const rapida = el('pon-tipo').value === 'rapida';
         if (!el('pon-formula').value) { aviso('warning', 'Falta la fórmula', 'Elija una fórmula vigente.'); return; }
         if (num(el('pon-cantidad').value) <= 0) { aviso('warning', 'Falta la cantidad', 'Indique cuánto va a producir.'); return; }
+        if (!el('pon-fecha').value) { aviso('warning', 'Falta la fecha', 'Indique la fecha de la orden.'); return; }
+        if (el('pon-fecha').value > hoy()) { aviso('warning', 'Fecha no válida', 'La fecha de la orden no puede ser futura.'); return; }
         if (!el('pon-bodega-insumos').value || !el('pon-bodega-destino').value) { aviso('warning', 'Faltan las bodegas', 'Elija la bodega de insumos y la de destino.'); return; }
 
         enCurso = true;
@@ -323,6 +330,19 @@
         }).catch(e => { console.error(e); aviso('error', 'Error', 'No se pudo abrir la orden.'); });
     };
 
+    // ── Unidad de la fórmula en la orden ─────────────────────────────────────
+    // Cada línea trae unidad_formula y factor_formula (1 unidad de la fórmula = factor unidades del
+    // producto). Plan, Consumir y Cerrar muestran y reciben las cantidades en la unidad de la fórmula;
+    // al enviar se multiplican por el factor: el servidor, el stock y el kardex siguen en la unidad
+    // del producto.
+    const fac = l => num(l && l.factor_formula) || 1;
+    const uni = l => (l && (l.unidad_formula || l.medida_nombre)) || '';
+    const otraUnidad = l => Math.abs(fac(l) - 1) > 1e-12;
+    const aFormula = (v, l) => num(v) / fac(l);
+    const aProducto = (v, l) => +(num(v) * fac(l)).toFixed(6);
+    const equivalencia = (v, l) => otraUnidad(l)
+        ? `<div class="small text-muted" title="Así se mueve en el inventario">= ${cant(v)} ${esc(l.medida_nombre || '')}</div>` : '';
+
     function cargarOrden(o) {
         orden = o;
         consumoExtra = [];
@@ -351,12 +371,14 @@
             const real = num(l.cantidad_real), teo = num(l.cantidad_teorica);
             const mostrarReal = insumo || o.estado === 'cerrada';
             const dif = mostrarReal ? real - teo : 0;
+            const stock = (o.stocks || {})[l.id_producto] || 0;
             return `<tr>
                 <td>${badgeRol(l.rol)}${l.fuera_formula ? ' <span class="small text-muted">fuera de fórmula</span>' : ''}</td>
-                <td>${esc(nombreLinea(l))}</td><td class="small text-muted">${esc(l.medida_nombre || '')}</td>
-                <td class="text-end">${cant(teo)}</td><td class="text-end">${mostrarReal ? cant(real) : '—'}</td>
-                <td class="text-end ${dif > 0 ? 'text-danger' : (dif < 0 ? 'text-success' : '')}">${mostrarReal ? cant(dif) : ''}</td>
-                <td class="text-end">${insumo ? cant((o.stocks || {})[l.id_producto] || 0) : ''}</td>
+                <td>${esc(nombreLinea(l))}</td><td class="small text-muted">${esc(uni(l))}</td>
+                <td class="text-end">${cant(aFormula(teo, l))}${equivalencia(teo, l)}</td>
+                <td class="text-end">${mostrarReal ? cant(aFormula(real, l)) + equivalencia(real, l) : '—'}</td>
+                <td class="text-end ${dif > 0 ? 'text-danger' : (dif < 0 ? 'text-success' : '')}">${mostrarReal ? cant(aFormula(dif, l)) : ''}</td>
+                <td class="text-end"${otraUnidad(l) ? ` title="${cant(stock)} ${esc(l.medida_nombre || '')}"` : ''}>${insumo ? cant(aFormula(stock, l)) : ''}</td>
                 <td class="text-end">${insumo || o.estado === 'cerrada' ? money(l.costo_real) : ''}</td>
             </tr>`;
         }).join('');
@@ -367,7 +389,6 @@
         if (primera) bootstrap.Tab.getOrCreateInstance(primera).show();
 
         el('por-fecha-consumo').value = hoy();
-        el('por-fecha-cierre').value = hoy();
         el('por-merma').value = 0;
         const pendiente = o.lineas.some(l => l.rol === 'insumo' && num(l.cantidad_teorica) - num(l.cantidad_real) > 0.000001);
         el('por-consumir-pendiente').checked = pendiente && !o.lineas.some(l => l.rol === 'insumo' && num(l.cantidad_real) > 0);
@@ -386,18 +407,18 @@
         el('por-btn-asiento').classList.toggle('d-none', !(o.asiento_aviso && PERM.actualizar && o.estado !== 'anulada'));
         el('por-aviso-asiento').classList.toggle('d-none', !o.asiento_aviso);
         el('por-aviso-asiento').innerHTML = o.asiento_aviso ? `<i class="bi bi-exclamation-triangle me-1"></i>Asiento pendiente: ${esc(o.asiento_aviso)}` : '';
-        el('por-auditoria').innerHTML = [o.creado_por ? `Creó: ${esc(o.creado_por)}` : '', o.modificado_por ? `Última acción: ${esc(o.modificado_por)}` : ''].filter(Boolean).join(' · ');
+        // Quién creó/modificó y el historial están en la pestaña «Información» (InformacionRegistro).
     }
 
     function pintarConsumir() {
         if (!orden) return;
         const filas = orden.lineas.filter(l => l.rol === 'insumo').map(l => ({
-            key: 'l' + l.id, id_linea: l.id, id_producto: l.id_producto, nombre: nombreLinea(l), medida: l.medida_nombre || '',
-            pendiente: Math.max(0, num(l.cantidad_teorica) - num(l.cantidad_real)), exige: !!l.exige_lote && l.exige_lote !== 'f',
-        })).concat(consumoExtra.map(x => ({ key: 'x' + x.uid, id_linea: 0, id_producto: x.id_producto, nombre: x.producto, medida: x.medida, pendiente: 0, extra: x.uid })));
+            key: 'l' + l.id, id_linea: l.id, id_producto: l.id_producto, nombre: nombreLinea(l), medida: uni(l), factor: fac(l),
+            pendiente: Math.max(0, aFormula(num(l.cantidad_teorica) - num(l.cantidad_real), l)), exige: !!l.exige_lote && l.exige_lote !== 'f',
+        })).concat(consumoExtra.map(x => ({ key: 'x' + x.uid, id_linea: 0, id_producto: x.id_producto, nombre: x.producto, medida: x.medida, factor: 1, pendiente: 0, extra: x.uid })));
 
         el('por-tbody-consumir').innerHTML = filas.length ? filas.map(f => `
-            <tr data-key="${f.key}" data-linea="${f.id_linea}" data-producto="${f.id_producto}">
+            <tr data-key="${f.key}" data-linea="${f.id_linea}" data-producto="${f.id_producto}" data-factor="${f.factor}">
                 <td>${esc(f.nombre)} <span class="small text-muted">${esc(f.medida)}</span>${f.exige || CFG.exigir_lote_insumos ? ' <i class="bi bi-upc text-primary" title="Exige lote"></i>' : ''}${f.extra ? ' <span class="small text-muted">fuera de fórmula</span>' : ''}</td>
                 <td class="text-end">${cant(f.pendiente)}</td>
                 <td class="text-center"><input type="checkbox" class="form-check-input m-0 por-peso" style="width:auto;height:auto;"></td>
@@ -405,8 +426,9 @@
                 <td class="p-0"><input type="number" step="any" min="0" class="text-end por-pi" disabled></td>
                 <td class="p-0"><input type="number" step="any" min="0" class="text-end por-pf" disabled></td>
                 <td class="p-0"><select class="por-lote"><option value="">Automático (vence primero)</option></select></td>
-                <td class="text-center">${f.extra ? `<button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="window.POR_quitarExtra(${f.extra})"><i class="bi bi-x-lg"></i></button>` : ''}</td>
+                <td class="text-center">${f.extra ? `<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="window.POR_quitarExtra(${f.extra})" title="Eliminar ítem"><i class="bi bi-trash3 fs-6"></i></button>` : ''}</td>
             </tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted py-3">La orden no tiene insumos.</td></tr>';
+        if (el('por-count-consumir')) el('por-count-consumir').textContent = filas.length;
 
         el('por-tbody-consumir').querySelectorAll('tr[data-key]').forEach(tr => {
             const peso = tr.querySelector('.por-peso');
@@ -419,16 +441,17 @@
             pi.addEventListener('input', calc);
             pf.addEventListener('input', calc);
             const sel = tr.querySelector('.por-lote');
-            sel.addEventListener('focus', () => cargarLotes(sel, +tr.dataset.producto), { once: true });
+            sel.addEventListener('focus', () => cargarLotes(sel, +tr.dataset.producto, num(tr.dataset.factor) || 1), { once: true });
         });
     }
 
-    function cargarLotes(sel, idProducto) {
+    function cargarLotes(sel, idProducto, factor) {
+        factor = factor || 1; // el saldo del lote viene en la unidad del producto: se muestra en la de la fórmula
         fetch(`${URL}/lotes-ajax?id_producto=${idProducto}&id_bodega=${orden.id_bodega_insumos}`).then(r => r.json()).then(res => {
             (res.lotes || []).forEach(l => {
                 const o = document.createElement('option');
                 o.value = l.numero_lote;
-                o.textContent = `${l.numero_lote} · ${cant(l.stock_lote)}${l.fecha_caducidad ? ' · vence ' + fecha(l.fecha_caducidad) : ''}`;
+                o.textContent = `${l.numero_lote} · ${cant(num(l.stock_lote) / factor)}${l.fecha_caducidad ? ' · vence ' + fecha(l.fecha_caducidad) : ''}`;
                 sel.appendChild(o);
             });
             if (!(res.lotes || []).length) {
@@ -450,14 +473,17 @@
         const items = [];
         el('por-tbody-consumir').querySelectorAll('tr[data-key]').forEach(tr => {
             const peso = tr.querySelector('.por-peso').checked;
+            const factor = num(tr.dataset.factor) || 1; // lo escrito está en la unidad de la fórmula
             const item = { id_linea: +tr.dataset.linea, id_producto: +tr.dataset.producto, numero_lote: tr.querySelector('.por-lote').value };
             if (peso) {
-                item.peso_inicial = tr.querySelector('.por-pi').value;
-                item.peso_final = tr.querySelector('.por-pf').value;
-                if (item.peso_inicial === '' || item.peso_final === '') return;
+                const pi = tr.querySelector('.por-pi').value, pf = tr.querySelector('.por-pf').value;
+                if (pi === '' || pf === '') return;
+                item.peso_inicial = String(+(num(pi) * factor).toFixed(6));
+                item.peso_final = String(+(num(pf) * factor).toFixed(6));
             } else {
-                item.cantidad = tr.querySelector('.por-cant').value;
-                if (num(item.cantidad) <= 0) return;
+                const cantidad = tr.querySelector('.por-cant').value;
+                if (num(cantidad) <= 0) return;
+                item.cantidad = String(+(num(cantidad) * factor).toFixed(6));
             }
             items.push(item);
         });
@@ -482,10 +508,10 @@
         const sal = orden.lineas.filter(l => l.rol !== 'insumo');
         el('por-tbody-cerrar').innerHTML = sal.map(l => {
             const conLote = l.rol !== 'desperdicio' && l.id_producto;
-            return `<tr data-linea="${l.id}">
-                <td>${badgeRol(l.rol)}</td><td>${esc(nombreLinea(l))} <span class="small text-muted">${esc(l.medida_nombre || '')}</span></td>
-                <td class="text-end">${cant(l.cantidad_teorica)}</td>
-                <td class="p-0"><input type="number" step="any" min="0" class="text-end por-sal-cant" value="${+num(l.cantidad_teorica).toFixed(6)}"></td>
+            return `<tr data-linea="${l.id}" data-factor="${fac(l)}">
+                <td>${badgeRol(l.rol)}</td><td>${esc(nombreLinea(l))} <span class="small text-muted">${esc(uni(l))}</span></td>
+                <td class="text-end">${cant(aFormula(l.cantidad_teorica, l))}${equivalencia(l.cantidad_teorica, l)}</td>
+                <td class="p-0"><input type="number" step="any" min="0" class="text-end por-sal-cant" value="${+aFormula(l.cantidad_teorica, l).toFixed(6)}"></td>
                 <td class="p-0">${conLote ? `<input type="text" maxlength="50" class="por-sal-lote" value="${esc(orden.lote || '')}">` : ''}</td>
                 <td class="p-0">${conLote ? `<input type="date" class="por-sal-cad" value="${esc((orden.fecha_caducidad || '').slice(0, 10))}">` : ''}</td>
             </tr>`;
@@ -501,42 +527,139 @@
                 <td class="p-0"><select onchange="window.POR_setRec(${r.uid}, 'base', this.value)">${opc(BASES_REC, r.base)}</select></td>
                 <td class="p-0"><input type="number" step="any" min="0" class="text-end" value="${r.cantidad}" oninput="window.POR_setRec(${r.uid}, 'cantidad', this.value)"></td>
                 <td class="p-0"><input type="number" step="any" min="0" class="text-end" value="${r.tarifa}" oninput="window.POR_setRec(${r.uid}, 'tarifa', this.value)"></td>
-                <td class="text-center"><button type="button" class="btn btn-link btn-sm text-danger p-0" onclick="window.POR_quitarRec(${r.uid})"><i class="bi bi-x-lg"></i></button></td>
-            </tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted py-2">Sin mano de obra ni costos indirectos.</td></tr>';
+                <td class="text-center"><button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0" onclick="window.POR_quitarRec(${r.uid})" title="Eliminar ítem"><i class="bi bi-trash3 fs-6"></i></button></td>
+            </tr>`).join('') : '<tr><td colspan="6" class="text-center text-muted py-3">Sin mano de obra ni costos indirectos.</td></tr>';
+        if (el('por-count-recursos')) el('por-count-recursos').textContent = recursos.length;
     }
     window.POR_setRec = (uid, campo, v) => { const r = recursos.find(x => x.uid === uid); if (r) r[campo] = v; };
     window.POR_quitarRec = uid => { recursos = recursos.filter(x => x.uid !== uid); pintarRecursos(); };
     window.POR_agregarRecurso = () => { recursos.push({ uid: ++seq, tipo: 'mo', descripcion: '', base: 'unidad', cantidad: 1, tarifa: 0 }); pintarRecursos(); };
 
-    window.POR_cerrar = function () {
-        if (enCurso || !orden) return;
+    // ── Cerrar la orden (botón de la barra superior) ─────────────────────────
+    // 1) Pide la fecha de cierre. 2) Verifica TODO sin cerrar: lo de la pantalla (cantidad del
+    // principal, consumos) y, en el servidor, el cierre completo deshecho al final (estado, fecha,
+    // período contable, stock, lotes exigidos, costos). 3) Muestra la lista de comprobación y,
+    // si todo está bien, el resumen de lo que entrará al inventario; recién ahí se cierra.
+    function datosCierre() {
         const salidas = {};
         el('por-tbody-cerrar').querySelectorAll('tr[data-linea]').forEach(tr => {
+            const factor = num(tr.dataset.factor) || 1; // lo escrito está en la unidad de la fórmula
+            const v = tr.querySelector('.por-sal-cant').value;
             salidas[tr.dataset.linea] = {
-                cantidad: tr.querySelector('.por-sal-cant').value,
+                cantidad: v === '' ? '' : String(+(num(v) * factor).toFixed(6)),
                 numero_lote: tr.querySelector('.por-sal-lote')?.value || '',
                 fecha_caducidad: tr.querySelector('.por-sal-cad')?.value || '',
             };
         });
-        const principal = orden.lineas.find(l => l.rol === 'principal');
-        if (!principal || num(salidas[principal.id]?.cantidad) <= 0) { aviso('warning', 'Falta lo producido', 'Indique cuánto se obtuvo del producto principal.'); return; }
-
-        confirmar('¿Cerrar la orden?', 'Lo producido entra al inventario con su costo real y la orden ya no se podrá modificar (solo anular).', 'Sí, cerrar', '#198754').then(si => {
-            if (!si) return;
-            enCurso = true;
-            const listo = boton('por-btn-cerrar', 'Cerrando…');
-            post('cerrar-ajax', {
+        return {
+            salidas,
+            datos: {
                 id: orden.id, salidas: JSON.stringify(salidas), merma: el('por-merma').value || '0',
                 recursos: JSON.stringify(recursos.map(r => ({ tipo: r.tipo, descripcion: r.descripcion, base: r.base, cantidad: r.cantidad, tarifa: r.tarifa }))),
-                consumir_pendiente: el('por-consumir-pendiente').checked ? '1' : '0', fecha: el('por-fecha-cierre').value, token_guardado: tokenCierre,
-            }).then(res => {
-                if (!res.ok) { aviso('error', 'No se cerró', mensajeDe(res)); return; }
-                aviso('success', 'Orden cerrada', res.mensaje);
+                consumir_pendiente: el('por-consumir-pendiente').checked ? '1' : '0',
+            },
+        };
+    }
+
+    function itemCheck(ok, texto) {
+        return `<li class="mb-1"><i class="bi ${ok ? 'bi-check-circle-fill text-success' : 'bi-x-circle-fill text-danger'} me-2"></i>${texto}</li>`;
+    }
+
+    window.POR_cerrar = async function () {
+        if (enCurso || !orden) return;
+        if (typeof Swal === 'undefined') { aviso('error', 'No disponible', 'No se pudo abrir la ventana de cierre.'); return; }
+        const { salidas, datos } = datosCierre();
+        const hoyStr = hoy();
+        const desde = String(orden.fecha_inicio || '').slice(0, 10);
+
+        // 1) Fecha de cierre
+        const r1 = await Swal.fire({
+            icon: 'question',
+            title: 'Cerrar la orden',
+            html: `<div class="text-start small">
+                       <label class="form-label fw-bold mb-1" for="por-swal-fecha">Fecha de cierre</label>
+                       <input type="date" id="por-swal-fecha" class="form-control" value="${hoyStr}" max="${hoyStr}" ${desde ? `min="${desde}"` : ''}>
+                       <div class="form-text">Es la fecha con que lo producido entra al inventario y del asiento. No puede ser futura ni anterior a la orden (${fecha(desde)}).</div>
+                   </div>`,
+            showCancelButton: true,
+            confirmButtonText: '<i class="bi bi-search me-1"></i> Verificar',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#0d6efd',
+            focusConfirm: false,
+            preConfirm: () => {
+                const v = document.getElementById('por-swal-fecha').value;
+                if (!v) { Swal.showValidationMessage('Indique la fecha de cierre.'); return false; }
+                if (v > hoyStr) { Swal.showValidationMessage('La fecha de cierre no puede ser futura.'); return false; }
+                if (desde && v < desde) { Swal.showValidationMessage(`No puede ser anterior a la fecha de la orden (${fecha(desde)}).`); return false; }
+                return v;
+            },
+        });
+        if (!r1.isConfirmed) return;
+        const fechaCierre = r1.value;
+
+        // 2) Verificación
+        const principal = orden.lineas.find(l => l.rol === 'principal');
+        const cantPrincipal = principal ? num(salidas[principal.id]?.cantidad) : 0;
+        const hayConsumo = orden.lineas.some(l => l.rol === 'insumo' && num(l.cantidad_real) > 0);
+        const pendiente = datos.consumir_pendiente === '1';
+        const checks = [
+            [true, `Fecha de cierre: <b>${fecha(fechaCierre)}</b>`],
+            [cantPrincipal > 0, cantPrincipal > 0
+                ? `Producto principal obtenido: <b>${cant(aFormula(cantPrincipal, principal))} ${esc(uni(principal))}</b>`
+                : 'Falta indicar cuánto se obtuvo del producto principal (pestaña <b>Cerrar</b>, columna Obtenido).'],
+            [hayConsumo || pendiente, hayConsumo
+                ? (pendiente ? 'Insumos: hay consumos registrados y se consumirá lo pendiente según la fórmula.' : 'Insumos: se usan solo los consumos ya registrados.')
+                : (pendiente ? 'Insumos: se consumirá todo lo de la fórmula (el lote que vence primero).'
+                             : 'No hay consumos registrados: registre lo consumido o marque <b>Consumir lo pendiente según la fórmula</b>.')],
+        ];
+
+        Swal.fire({ title: 'Verificando…', text: 'Revisando stock, lotes, período contable y costos.', allowOutsideClick: false, showConfirmButton: false, didOpen: () => Swal.showLoading() });
+        let res;
+        try {
+            res = await post('verificar-cierre-ajax', { ...datos, fecha: fechaCierre });
+        } catch (e) {
+            console.error(e);
+            aviso('error', 'Error', 'No se pudo verificar: no se recibió respuesta del servidor.');
+            return;
+        }
+        if (!res.ok) { aviso('error', 'No se pudo verificar', mensajeDe(res)); return; }
+        checks.push([!!res.puede, res.puede
+            ? 'Stock, lotes, período contable y costos: <b>todo en orden</b>.'
+            : `Revisión del sistema: ${esc(res.problema || 'no se puede cerrar.')}`]);
+
+        const todoOk = checks.every(c => c[0]);
+        const lista = `<ul class="list-unstyled text-start small mb-0">${checks.map(c => itemCheck(c[0], c[1])).join('')}</ul>`;
+        if (!todoOk) {
+            await Swal.fire({ icon: 'warning', title: 'Todavía no se puede cerrar', html: lista, confirmButtonText: 'Entendido', confirmButtonColor: '#0d6efd' });
+            return;
+        }
+
+        const s = res.resumen || {};
+        const resumen = `<div class="text-start small border rounded p-2 mt-2 bg-light">
+                Entrarán <b>${cant(s.cantidad)} ${esc(s.medida || '')}</b> de <b>${esc(s.producto || '')}</b>
+                a la bodega <b>${esc(s.bodega || '')}</b>, con un costo de <b>${money(s.costo_total)}</b>.
+                ${num(s.costo_merma) > 0 ? `<br>Merma anormal a gasto: <b>${money(s.costo_merma)}</b>.` : ''}
+                <div class="text-muted mt-1">Después de cerrar, la orden ya no se puede modificar (solo anular).</div>
+            </div>`;
+        const r2 = await Swal.fire({
+            icon: 'success', title: 'Todo listo para cerrar', html: lista + resumen,
+            showCancelButton: true, confirmButtonText: '<i class="bi bi-flag me-1"></i> Sí, cerrar orden', cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#198754',
+        });
+        if (!r2.isConfirmed) return;
+
+        // 3) Cierre real
+        enCurso = true;
+        const listo = boton('por-btn-cerrar', 'Cerrando…');
+        post('cerrar-ajax', { ...datos, fecha: fechaCierre, token_guardado: tokenCierre })
+            .then(r => {
+                if (!r.ok) { aviso('error', 'No se cerró', mensajeDe(r)); return; }
+                aviso('success', 'Orden cerrada', r.mensaje);
                 window.POR_buscar(window.POR_pagina);
                 return window.POR_abrir(orden.id);
-            }).catch(e => { console.error(e); aviso('error', 'Error', 'No se recibió respuesta del servidor. Vuelva a pulsar: si la orden ya se cerró, no entrará otra vez al inventario.'); })
-              .finally(() => { enCurso = false; listo(); });
-        });
+            })
+            .catch(e => { console.error(e); aviso('error', 'Error', 'No se recibió respuesta del servidor. Vuelva a pulsar: si la orden ya se cerró, no entrará otra vez al inventario.'); })
+            .finally(() => { enCurso = false; listo(); });
     };
 
     function pintarMovimientos() {
@@ -592,21 +715,68 @@
         el('por-traza').innerHTML = `<div class="row g-3">${tabla('consumo', 'Lotes de insumo usados')}${tabla('entrega', 'Lotes producidos')}</div>`;
     }
 
-    function pintarAsientos() {
+    // ── Pestaña Asiento: pieza estándar editable (asiento_contable_tab.js) ───
+    // Una orden tiene varios asientos (uno por cada consumo y el de cierre). El selector elige cuál
+    // se muestra; el componente lo carga desde Asientos Contables, permite corregirlo y guardarlo
+    // (quien puede actualizar ese módulo) y «Restaurar automático» lo vuelve a armar con las reglas.
+    let asientoTab = null;
+    const asientoCfg = {
+        prefijo: 'por',
+        moduloOrigen: 'produccion_cierre',
+        soloRegistrado: true,
+        cuentasUrl: `${window.BASE_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
+        asientosUrl: `${window.BASE_URL}/modulos/asientos-contables`,
+    };
+    function getAsientoTab() {
+        if (!asientoTab && typeof window.crearAsientoTab === 'function' && el('por-asiento-tbody')) {
+            asientoTab = window.crearAsientoTab(asientoCfg);
+        }
+        return asientoTab;
+    }
+
+    function nombreAsiento(x, i, total) {
+        const tipo = x.modulo_origen === 'produccion_cierre' ? 'Cierre de la orden' : `Consumo de insumos${total > 1 ? ' ' + (i + 1) : ''}`;
+        const numero = x.numero_comprobante || '';
+        return `${tipo}${numero ? ' · ' + numero : ''} · ${fecha(x.fecha_asiento)}`;
+    }
+
+    function cargarAsientoElegido() {
         const a = orden.asientos || [];
+        const x = a[+el('por-asiento-sel').value];
+        const tab = getAsientoTab();
+        if (!x || !tab) return;
+        asientoCfg.moduloOrigen = x.modulo_origen;   // el componente lee la configuración en cada carga
+        el('por-asiento-info').innerHTML = (x.editado_manual === true || x.editado_manual === 't')
+            ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">Editado a mano</span>' : '';
+        tab.cargar(+x.id_referencia_origen);
+    }
+
+    function pintarAsientos() {
+        if (!el('pane-por-asiento')) return; // sin permiso para ver asientos no existe la pestaña
+        const a = orden.asientos || [];
+        const vacio = el('por-asiento-vacio'), contenido = el('por-asiento-contenido');
         if (!a.length) {
-            el('por-asientos').innerHTML = `<div class="text-muted">${orden.asiento_aviso ? esc(orden.asiento_aviso) : 'Esta orden no tiene asientos (la contabilización de producción está apagada o todavía no hay importes).'}</div>`;
+            vacio.innerHTML = orden.asiento_aviso
+                ? `<i class="bi bi-exclamation-triangle text-danger me-1"></i>${esc(orden.asiento_aviso)}`
+                : 'Esta orden todavía no tiene asientos: se generan al registrar consumos y al cerrarla, si la contabilización de Producción está encendida en Configuración Contable.';
+            vacio.classList.remove('d-none');
+            contenido.classList.add('d-none');
             return;
         }
-        el('por-asientos').innerHTML = a.map(x => `
-            <div class="border rounded mb-2">
-                <div class="bg-light px-2 py-1 d-flex justify-content-between"><span><b>${esc(x.concepto)}</b></span>
-                    <span>${fecha(x.fecha_asiento)} · ${esc(x.estado)}</span></div>
-                <table class="table table-sm mb-0"><thead><tr><th>Cuenta</th><th>Detalle</th><th class="text-end">Debe</th><th class="text-end">Haber</th></tr></thead>
-                <tbody>${(x.detalles || []).map(d => `<tr><td><code>${esc(d.codigo_cuenta)}</code> ${esc(d.nombre_cuenta)}</td><td>${esc(d.referencia_detalle || '')}</td>
-                    <td class="text-end">${num(d.debe) ? money(d.debe) : ''}</td><td class="text-end">${num(d.haber) ? money(d.haber) : ''}</td></tr>`).join('')}</tbody></table>
-            </div>`).join('');
+        vacio.classList.add('d-none');
+        contenido.classList.remove('d-none');
+        // Por defecto, el de cierre (si existe); si no, el último consumo.
+        const iCierre = a.findIndex(x => x.modulo_origen === 'produccion_cierre');
+        let nConsumo = 0;
+        const totalConsumos = a.filter(x => x.modulo_origen !== 'produccion_cierre').length;
+        el('por-asiento-sel').innerHTML = a.map((x, i) => {
+            const idx = x.modulo_origen === 'produccion_cierre' ? 0 : nConsumo++;
+            return `<option value="${i}">${esc(nombreAsiento(x, idx, totalConsumos))}</option>`;
+        }).join('');
+        el('por-asiento-sel').value = String(iCierre >= 0 ? iCierre : a.length - 1);
+        cargarAsientoElegido();
     }
+    el('por-asiento-sel')?.addEventListener('change', cargarAsientoElegido);
 
     // ── Acciones de la orden ─────────────────────────────────────────────────
 

@@ -210,6 +210,14 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 <?php endif; ?>
             </div>
             <div class="form-text small" id="ayudaTipoPersona"></div>
+            <?php // Muchos clientes llenaban los datos de quien hace el trámite (contador, asistente) en vez de los del representante legal. ?>
+            <div class="alert alert-warning small py-2 mt-2 mb-0 solo-juridica d-none" id="avisoRepresentante">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                <b>Importante:</b> la firma se emite a nombre del <b>representante legal</b>. La identificación, los datos personales,
+                el celular, el correo, la ubicación y los documentos (cédula y selfie) deben ser <b>del representante legal que consta
+                en el nombramiento</b>, no de la persona que está llenando esta solicitud. La entidad certificadora valida su identidad
+                y, si los datos no coinciden con el nombramiento, la solicitud será rechazada.
+            </div>
         </div>
     </div>
 
@@ -297,7 +305,8 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
 
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
-            <p class="section-title"><i class="bi bi-card-text me-1"></i>Identificación</p>
+            <p class="section-title"><i class="bi bi-card-text me-1"></i>Identificación<span class="solo-juridica d-none"> del representante legal</span></p>
+            <p class="small text-warning-emphasis mb-2 solo-juridica d-none"><i class="bi bi-person-exclamation me-1"></i>Cédula del representante legal, no la de quien llena la solicitud.</p>
             <div class="row g-2">
                 <div class="col-12 col-sm-4">
                     <label class="form-label">Tipo <span class="req">*</span></label>
@@ -333,7 +342,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
 
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
-            <p class="section-title"><i class="bi bi-person me-1"></i>Datos personales</p>
+            <p class="section-title"><i class="bi bi-person me-1"></i>Datos personales<span class="solo-juridica d-none"> del representante legal</span></p>
             <div class="row g-2">
                 <div class="col-6 col-sm-3">
                     <label class="form-label">Primer apellido <span class="req">*</span></label>
@@ -374,7 +383,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 <div class="col-12 col-sm-6">
                     <label class="form-label">Correo electrónico <span class="req">*</span></label>
                     <input type="email" class="form-control form-control-sm" name="correo" data-caso="minus" value="<?= $e($f['correo'] ?? ($sol['correo_destino'] ?? '')) ?>">
-                    <div class="form-text small">Aquí te llegará la factura y la activación de tu firma.</div>
+                    <div class="form-text small">Aquí te llegará la factura y la activación de tu firma.<span class="solo-juridica d-none"> Debe ser el correo y el celular del representante legal: ahí llega la activación de la firma.</span></div>
                 </div>
             </div>
         </div>
@@ -454,6 +463,18 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
     </div>
     <?php endif; ?>
 
+    <div class="card border-warning shadow-sm rounded-3 mb-3 solo-juridica d-none" id="bloqueConfirmaRep">
+        <div class="card-body p-3">
+            <div class="form-check mb-0">
+                <input class="form-check-input" type="checkbox" id="confirma_representante" name="confirma_representante" value="1">
+                <label class="form-check-label small" for="confirma_representante">
+                    Confirmo que la identificación, los datos personales y de contacto ingresados son <b>del representante legal</b>
+                    de la empresa que consta en el nombramiento. <span class="req">*</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
     <?php if ($terminos !== ''): ?>
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
@@ -484,6 +505,9 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
     <div class="card-body p-3">
         <p class="section-title"><i class="bi bi-file-earmark-image me-1"></i>Tus documentos</p>
         <p class="text-muted small mb-3">Fotos claras y completas de tu cédula y una selfie sosteniéndola. Los documentos de la empresa en PDF. Máximo 5 MB cada uno. Cada archivo se guarda al subirlo.</p>
+        <?php if ($tipoPersona === 'juridica'): ?>
+            <div class="alert alert-warning small py-2"><i class="bi bi-exclamation-triangle-fill me-1"></i>La cédula y la selfie deben ser <b>del representante legal</b> que consta en el nombramiento, no de la persona que hace el trámite.</div>
+        <?php endif; ?>
         <?php if (($f['origen'] ?? '') === 'renovacion' && $subidos && $estado === 'borrador'): ?>
             <div class="alert alert-info small py-2">
                 <i class="bi bi-info-circle me-1"></i>Cargamos los documentos de tu solicitud anterior. Revisa que sigan
@@ -662,7 +686,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
     if (form) {
         const ayudas = {
             natural: 'Para uso personal o si tienes RUC como persona natural.',
-            juridica: 'Eres el representante legal de la empresa (consta en el nombramiento).',
+            juridica: 'Firma para el representante legal de la empresa (el que consta en el nombramiento). Todos los datos que siguen son los suyos.',
             miembro: 'Trabajas en la empresa y el representante legal te autoriza a firmar por ella.',
         };
         const toggleJuridica = () => {
@@ -676,6 +700,10 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             const cargo = document.getElementById('cargo');
             if (cargo && tipo === 'juridica' && !cargo.value.trim()) cargo.value = 'Representante legal';
             document.querySelectorAll('.solo-miembro').forEach(el => el.classList.toggle('d-none', tipo !== 'miembro'));
+            // Representante legal: avisos de que los datos son los suyos, no los de quien llena el formulario.
+            document.querySelectorAll('.solo-juridica').forEach(el => el.classList.toggle('d-none', tipo !== 'juridica'));
+            const chkRep = document.getElementById('confirma_representante');
+            if (chkRep && tipo !== 'juridica') chkRep.checked = false;
             document.getElementById('ayudaTipoPersona').textContent = ayudas[tipo] || '';
             // Solo las firmas para este tipo de persona (data-para vacío = sirve para ambos).
             const esEmpresa = tipo === 'juridica' || tipo === 'miembro';
@@ -887,6 +915,13 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
         form.addEventListener('submit', async (ev) => {
             ev.preventDefault();
             if (guardando) return;
+            const tipoSel = form.querySelector('[name="tipo_persona"]:checked')?.value || 'natural';
+            const chkRepLegal = document.getElementById('confirma_representante');
+            if (tipoSel === 'juridica' && chkRepLegal && !chkRepLegal.checked) {
+                aviso('Confirme que los datos ingresados son del representante legal de la empresa (no de quien llena la solicitud).');
+                chkRepLegal.focus();
+                return;
+            }
             if (chkTerminos && !chkTerminos.checked) {
                 aviso('Para continuar debe aceptar los términos y condiciones y el tratamiento de sus datos personales.');
                 chkTerminos.focus();
