@@ -403,6 +403,53 @@
     // El pago ya facturado no cambia mientras la factura siga activa (el servidor lo conserva igual). El tipo de firma sí, hasta que se emita.
     const CAMPOS_FACTURADOS = ['#firma_estado_pago'];
 
+    /** Vendedor de la firma (el de la factura si la tiene). Si ya no está activo, se muestra igual. */
+    function setVendedorFirma(id, nombre) {
+        const sel = document.getElementById('firma_id_vendedor');
+        if (!sel) return;
+        sel.querySelectorAll('option[data-temporal]').forEach(o => o.remove());
+        const val = id ? String(id) : '';
+        if (val && !Array.from(sel.options).some(o => o.value === val)) {
+            const o = new Option(`${nombre || 'Vendedor'} (inactivo)`, val);
+            o.dataset.temporal = '1';
+            sel.appendChild(o);
+        }
+        sel.value = val;
+        sel.dataset.prev = val;
+    }
+
+    // Firma ya registrada: el vendedor se guarda al elegirlo, en cualquier estado (también
+    // aprobada o emitida) y, si tiene factura activa, también en la factura.
+    document.getElementById('firma_id_vendedor')?.addEventListener('change', async function () {
+        const id = _idFirmaActual || document.getElementById('firma_id_modal')?.value;
+        if (!id) return;   // firma nueva: va con Guardar
+        const previo = this.dataset.prev || '';
+        const nombre = this.value ? this.options[this.selectedIndex].text : 'sin vendedor';
+        if (!(await confirmar(`¿Cambiar el vendedor de esta firma a «${nombre}»? Si tiene factura, también cambia en la factura.`, 'Sí, cambiar'))) {
+            this.value = previo;
+            return;
+        }
+        this.disabled = true;
+        try {
+            const fd = new FormData();
+            fd.append('id', id);
+            fd.append('id_vendedor', this.value);
+            const json = await (await fetch(`${urlBase}/cambiarVendedorAjax`, { method: 'POST', body: fd })).json();
+            mostrarAlerta(json.msg || json.error || 'No se pudo cambiar el vendedor.', json.ok ? 'success' : 'danger');
+            if (json.ok) {
+                this.dataset.prev = this.value;
+                if (window.fetchSearchFirmas) window.fetchSearchFirmas();
+            } else {
+                this.value = previo;
+            }
+        } catch {
+            mostrarAlerta('Error de conexión.', 'danger');
+            this.value = previo;
+        } finally {
+            this.disabled = false;
+        }
+    });
+
     function aplicarBloqueoFirma() {
         const conFactura = esFirmaBloqueada();
         const soloLectura = esFirmaSoloLectura();
@@ -424,6 +471,11 @@
         document.querySelector('#tab-firma-general')?.querySelectorAll('input, select, textarea').forEach(el => {
             el.disabled = soloLectura || el.matches('#firma_estado, #firma_estado_pago') || (conFactura && CAMPOS_FACTURADOS.some(s => el.matches(s)));
         });
+        // Vendedor: siempre editable en una firma registrada (se guarda aparte, ver listener).
+        const selVen = document.getElementById('firma_id_vendedor');
+        const yaRegistrada = !!(_idFirmaActual || document.getElementById('firma_id_modal')?.value);
+        if (selVen && yaRegistrada) selVen.disabled = false;
+        document.getElementById('firma_vendedor_nota')?.classList.toggle('d-none', !yaRegistrada);
         // Pago y Facturación: fijos mientras exista la factura activa o la solicitud esté cerrada
         ['#tab-firma-pago', '#tab-firma-fact'].forEach(sel => {
             document.querySelector(sel)?.querySelectorAll('input, select, textarea').forEach(el => {
@@ -804,6 +856,7 @@
 
         const conRucEl = document.getElementById('firma_con_ruc');
         if (conRucEl) conRucEl.checked = false;
+        setVendedorFirma(null);
 
         mostrarCamposJuridica('natural');
         filtrarFirmasPorTipoPersona('natural');
@@ -896,6 +949,7 @@
         setVal('firma_estado_pago',    data.estado_pago || 'pendiente');
         setVal('firma_tipo_pago',      data.tipo_pago || '');
         setVal('firma_observaciones',  data.observaciones || '');
+        setVendedorFirma(data.vendedor_id, data.vendedor_nombre);
 
         // Con RUC checkbox
         const conRucEl = document.getElementById('firma_con_ruc');

@@ -397,6 +397,21 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         placeholder="Notas internas, indicaciones especiales…"></textarea>
                                 </div>
 
+                                <?php if (!empty($vendedoresFirma)): ?>
+                                <!-- Vendedor (comisión): en una firma registrada se guarda al elegirlo, en cualquier estado -->
+
+                                <div class="col-md-4">
+                                    <label class="form-label small fw-bold text-muted mb-1" for="firma_id_vendedor">Vendedor</label>
+                                    <select class="form-select form-select-sm shadow-none" name="id_vendedor" id="firma_id_vendedor">
+                                        <option value="">— Sin vendedor —</option>
+                                        <?php foreach ($vendedoresFirma as $vf): ?>
+                                            <option value="<?= (int) $vf['id_vendedor'] ?>"><?= htmlspecialchars($vf['nombre']) ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div class="form-text small d-none" id="firma_vendedor_nota">Se guarda al elegirlo (también en la factura, si la tiene).</div>
+                                </div>
+                                <?php endif; ?>
+
                             </div>
                         </div><!-- /tab-firma-general -->
 

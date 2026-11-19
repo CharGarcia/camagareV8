@@ -215,7 +215,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
                 <i class="bi bi-exclamation-triangle-fill me-1"></i>
                 <b>Importante:</b> la firma se emite a nombre del <b>representante legal</b>. La identificación, los datos personales,
                 el celular, el correo, la ubicación y los documentos (cédula y selfie) deben ser <b>del representante legal que consta
-                en el nombramiento</b>, no de la persona que está llenando esta solicitud. La entidad certificadora valida su identidad
+                en el nombramiento</b>. La entidad certificadora valida su identidad
                 y, si los datos no coinciden con el nombramiento, la solicitud será rechazada.
             </div>
         </div>
@@ -306,7 +306,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
     <div class="card border-0 shadow-sm rounded-3 mb-3">
         <div class="card-body p-3">
             <p class="section-title"><i class="bi bi-card-text me-1"></i>Identificación<span class="solo-juridica d-none"> del representante legal</span></p>
-            <p class="small text-warning-emphasis mb-2 solo-juridica d-none"><i class="bi bi-person-exclamation me-1"></i>Cédula del representante legal, no la de quien llena la solicitud.</p>
+            <p class="small text-warning-emphasis mb-2 solo-juridica d-none"><i class="bi bi-person-exclamation me-1"></i>Cédula del representante legal.</p>
             <div class="row g-2">
                 <div class="col-12 col-sm-4">
                     <label class="form-label">Tipo <span class="req">*</span></label>
@@ -918,7 +918,7 @@ $nacionalidades = ['Ecuatoriana', 'Colombiana', 'Peruana', 'Venezolana', 'Cubana
             const tipoSel = form.querySelector('[name="tipo_persona"]:checked')?.value || 'natural';
             const chkRepLegal = document.getElementById('confirma_representante');
             if (tipoSel === 'juridica' && chkRepLegal && !chkRepLegal.checked) {
-                aviso('Confirme que los datos ingresados son del representante legal de la empresa (no de quien llena la solicitud).');
+                aviso('Confirme que los datos ingresados son del representante legal de la empresa.');
                 chkRepLegal.focus();
                 return;
             }

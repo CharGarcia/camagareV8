@@ -106,6 +106,7 @@ class FirmaElectronicaService
         $this->repository->beginTransaction();
         try {
             $id = $this->repository->create($data);
+            $this->aplicarVendedorNueva($id, (int) $data['id_empresa'], $data);
             $this->repository->crearEvento((int) $data['id_empresa'], $id, 'creada', 'Solicitud registrada', null, true, (int) $data['id_usuario']);
 
             $this->logService->registrar(
@@ -644,6 +645,67 @@ TXT;
         if (!$this->repository->tieneVendedor()) {
             throw new Exception('Falta aplicar en la base de datos el script 20261110_firmas_enlaces_vendedor.sql.');
         }
+    }
+
+    /** Vendedor elegido al crear la firma desde la ficha (si el formulario lo envió). */
+    private function aplicarVendedorNueva(int $idFirma, int $idEmpresa, array $data): void
+    {
+        $nuevo = (int) ($data['id_vendedor'] ?? 0);
+        if ($nuevo <= 0 || !$this->repository->tieneVendedor()) {
+            return;
+        }
+        if (!$this->repository->getVendedorActivo($nuevo, $idEmpresa)) {
+            throw new Exception('El vendedor elegido no existe o está inactivo.');
+        }
+        $this->repository->setVendedorFirma($idFirma, $idEmpresa, $nuevo);
+    }
+
+    /**
+     * Cambia el vendedor de una firma ya registrada, en cualquier estado (también aprobada o
+     * emitida): la comisión puede corregirse después. Se refleja en la solicitud (enlace) de
+     * la que nació y, si tiene factura activa, en la factura — por FacturaVentaService, que
+     * ya admite cambiar el vendedor de una factura autorizada (el vendedor no va al SRI).
+     */
+    public function cambiarVendedor(int $idFirma, int $idEmpresa, int $idUsuario, ?int $idVendedor): string
+    {
+        $this->exigirVendedores();
+        $firma = $this->repository->findById($idFirma, $idEmpresa);
+        if (!$firma) {
+            throw new Exception('La firma electrónica no existe o ha sido eliminada.');
+        }
+        $vendedor = null;
+        if ($idVendedor) {
+            $vendedor = $this->repository->getVendedorActivo($idVendedor, $idEmpresa);
+            if (!$vendedor) {
+                throw new Exception('El vendedor elegido no existe o está inactivo.');
+            }
+        }
+
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        try {
+            $this->repository->lockFirma($idFirma);
+            $this->repository->setVendedorFirma($idFirma, $idEmpresa, $idVendedor);
+            if (!empty($firma['id_solicitud'])) {
+                $this->repository->setVendedorSolicitud((int) $firma['id_solicitud'], $idEmpresa, $idVendedor);
+            }
+            $idFactura = $this->facturaActiva($firma);
+            if ($idFactura) {
+                $this->facturaService()->actualizarVendedor($idFactura, $idVendedor, $idEmpresa, $idUsuario);
+            }
+            $this->logService->registrar($idUsuario, $idEmpresa, 'cambiar_vendedor', 'firmas_electronicas', $idFirma,
+                ['id_vendedor' => $firma['id_vendedor'] ?? null],
+                ['id_vendedor' => $idVendedor, 'vendedor' => $vendedor['nombre'] ?? null, 'id_factura' => $idFactura]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        $quien = $vendedor ? 'a ' . $vendedor['nombre'] : 'a «sin vendedor»';
+        return 'Vendedor cambiado ' . $quien . ($idFactura ? ' (también en la factura).' : '.');
     }
 
     /** Vendedor de la firma para su factura: solo si sigue activo en la empresa. */

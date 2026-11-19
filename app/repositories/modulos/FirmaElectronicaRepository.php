@@ -242,7 +242,8 @@ class FirmaElectronicaRepository extends BaseRepository
                 'tipo_firma'     => 'f.nombre_producto',
                 'empresa'        => "CONCAT_WS(' ', f.ruc_empresa, f.nombre_empresa)",
             ],
-            'exacto' => ($conVendedor ? ['id_vendedor' => 'ven.id'] : [])
+            // id_vendedor: 'sin' = firmas sin vendedor (ni en la firma ni en su factura).
+            'exacto' => ($conVendedor ? ['id_vendedor' => "COALESCE(ven.id::text, 'sin')"] : [])
                 + ($conTerminos ? ['terminos' => "CASE WHEN f.terminos_aceptados_at IS NOT NULL THEN 'si' ELSE 'no' END"] : []) + [
                 'estado'              => 'f.estado',
                 'estado_pago'         => 'f.estado_pago',
@@ -273,7 +274,7 @@ class FirmaElectronicaRepository extends BaseRepository
                         LEFT JOIN vendedores    ven ON ven.id = COALESCE(
                             CASE WHEN v.id IS NOT NULL AND v.eliminado = false THEN v.id_vendedor END, f.id_vendedor)";
         }
-        $colVendedor = $conVendedor ? 'ven.nombre AS vendedor_nombre,' : 'NULL AS vendedor_nombre,';
+        $colVendedor = $conVendedor ? 'ven.id AS vendedor_id, ven.nombre AS vendedor_nombre,' : 'NULL AS vendedor_id, NULL AS vendedor_nombre,';
         $colTerminos = $conTerminos ? 'f.terminos_aceptados_at,' : 'NULL AS terminos_aceptados_at,';
 
         $cols = ($conVendedor ? ['vendedor' => 'ven.nombre'] : []) + [
@@ -367,8 +368,26 @@ class FirmaElectronicaRepository extends BaseRepository
              ORDER BY u.nombre"
         );
         $st->execute($params);
+        $usuarios = $st->fetchAll(PDO::FETCH_ASSOC);
 
-        return ['productos' => $productos, 'usuarios' => $st->fetchAll(PDO::FETCH_ASSOC)];
+        // Vendedores que aparecen en alguna firma (mismo criterio que la columna Vendedor:
+        // el de la factura si la tiene, si no el de la firma), activos o no.
+        $vendedores = [];
+        if ($this->tieneVendedor()) {
+            $st = $this->db->prepare(
+                "SELECT DISTINCT ven.id, ven.nombre
+                 FROM {$this->table} f
+                 LEFT JOIN ventas_cabecera v ON v.id = f.id_factura
+                 JOIN vendedores ven ON ven.id = COALESCE(
+                      CASE WHEN v.id IS NOT NULL AND v.eliminado = false THEN v.id_vendedor END, f.id_vendedor)
+                 {$whereSql}
+                 ORDER BY ven.nombre"
+            );
+            $st->execute($params);
+            $vendedores = $st->fetchAll(PDO::FETCH_ASSOC);
+        }
+
+        return ['productos' => $productos, 'usuarios' => $usuarios, 'vendedores' => $vendedores];
     }
 
     public function getDetalleCompleto(int $id, int $idEmpresa): ?array

@@ -109,9 +109,14 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
             $opcionesFiltro  = $opcionesFiltro ?? [];
             $opcionesProducto = array_map(static fn($p) => ['v' => (string) $p['id'], 'l' => (string) $p['nombre']], $opcionesFiltro['productos'] ?? []);
             $opcionesUsuario  = array_map(static fn($u) => ['v' => (string) $u['id'], 'l' => (string) $u['nombre']], $opcionesFiltro['usuarios'] ?? []);
+            // Vendedores con firmas (vacío si falta el SQL de vendedores: entonces no se muestra el filtro).
+            $opcionesVendedor = array_map(static fn($u) => ['v' => (string) $u['id'], 'l' => (string) $u['nombre']], $opcionesFiltro['vendedores'] ?? []);
+            if ($opcionesVendedor) {
+                $opcionesVendedor[] = ['v' => 'sin', 'l' => '— Sin vendedor —'];
+            }
             // Filas de 12 columnas:
             //   Firma:   [Fecha de registro 6][Estado 3][Pago 3]
-            //            [Factura 4][Tipo de firma 4][Usuario que registró 4]
+            //            [Factura 4][Tipo de firma 4][Usuario que registró 4] (con vendedores: 3+3+3 + [Vendedor 3])
             //            [Caducidad 6][Vigencia 6]
             //   Titular: [Nombres 4][Apellidos 4][Identificación 4]
             //            [Tipo de identificación 4][Tipo de persona 4][Con RUC 4]
@@ -143,6 +148,7 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 ]],
                 ['key' => 'id_producto',         'label' => 'Tipo de firma',          'icon' => 'bi-pen',                 'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => $opcionesProducto],
                 ['key' => 'usuario',             'label' => 'Usuario que registró',   'icon' => 'bi-person-badge',        'type' => 'select',     'grupo' => 'Firma',   'col' => 4, 'options' => $opcionesUsuario],
+                ['key' => 'id_vendedor',         'label' => 'Vendedor',               'icon' => 'bi-person-workspace',    'type' => 'select',     'grupo' => 'Firma',   'col' => 3, 'options' => $opcionesVendedor],
                 ['key' => 'caducidad',           'label' => 'Fecha de vencimiento',   'icon' => 'bi-calendar-x',          'type' => 'date_range', 'grupo' => 'Firma',   'col' => 6],
                 ['key' => 'vigencia',            'label' => 'Vigencia',               'icon' => 'bi-hourglass-split',     'type' => 'select',     'grupo' => 'Firma',   'col' => 6, 'options' => [
                     ['v' => 'vigente',    'l' => 'Vigente (más de 30 días)'],
@@ -174,6 +180,16 @@ $to      = $total > 0 ? min($page * $perPage, $total) : 0;
                 ['key' => 'correo',              'label' => 'Correo',                 'icon' => 'bi-envelope',            'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
                 ['key' => 'empresa',             'label' => 'Empresa (RUC o nombre)', 'icon' => 'bi-briefcase',           'type' => 'text',       'grupo' => 'Titular', 'col' => 4],
             ];
+            // Con vendedores: [Factura 3][Tipo de firma 3][Usuario 3][Vendedor 3]. Sin ellos no hay filtro Vendedor.
+            $filtrosFirmas = array_values(array_filter(array_map(static function (array $c) use ($opcionesVendedor) {
+                if (!$opcionesVendedor) {
+                    return $c['key'] === 'id_vendedor' ? null : $c;
+                }
+                if (in_array($c['key'], ['factura', 'id_producto', 'usuario'], true)) {
+                    $c['col'] = 3;
+                }
+                return $c;
+            }, $filtrosFirmas)));
             ?>
             <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
             <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>

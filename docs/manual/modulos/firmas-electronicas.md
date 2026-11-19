@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, datos del representante legal, datos equivocados, puso sus datos en vez del representante, contador lleno la solicitud, confirmar representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.23
+etiquetas: firma electronica, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, cambiar vendedor de la firma, filtrar por vendedor, firmas por vendedor, firmas sin vendedor, quitar vendedor, asignar vendedor, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, datos del representante legal, datos equivocados, puso sus datos en vez del representante, contador lleno la solicitud, confirmar representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.27
 orden: 20
 estado: activo
 ---
@@ -338,10 +338,29 @@ comisión. Cada vendedor tiene su propio enlace público y su propio QR.
 También puede elegir el **Vendedor** al usar **Enviar link** (campo opcional): la
 firma que nazca de ese enlace queda a su nombre.
 
+### Ver y cambiar el vendedor en la ficha
+
+En la ficha de la firma (pestaña **Datos**, junto a Observaciones) está el campo
+**Vendedor**: muestra a quién se le atribuye la firma (si tiene factura, el de la
+factura).
+
+- **Firma nueva**: elija el vendedor antes de **Guardar** (o déjela sin vendedor).
+- **Firma ya registrada**: el vendedor se cambia **en cualquier estado**, también
+  aprobada o emitida. Al elegir otro, el sistema pide confirmación y lo **guarda
+  de inmediato** (no hace falta pulsar Guardar).
+- Si la firma tiene **factura activa**, la factura también cambia de vendedor
+  (igual que hacerlo desde Facturas de Venta; el vendedor no viaja al SRI, así
+  que sirve aunque la factura esté autorizada).
+- El cambio queda también en el enlace del que nació la solicitud y en el
+  historial (pestaña Información).
+- Un vendedor que ya está inactivo se ve como «(inactivo)»; solo se pueden elegir
+  vendedores activos.
+- Requiere permiso de **modificar** en Firmas Electrónicas.
+
 | Dónde se ve | Qué muestra |
 |-------------|-------------|
 | Listado de firmas | Columna **Vendedor** (se puede ordenar y ocultar). El buscador encuentra por el nombre del vendedor, y `vendedor:nombre` filtra solo por él |
-| Excel del listado | Columna **Vendedor**, para sumar las firmas de cada uno |
+| Excel y PDF del listado | Columna **Vendedor**, para sumar las firmas de cada uno (respetan los filtros aplicados, también el de Vendedor) |
 | Enlaces enviados | El vendedor de cada enlace, bajo el destinatario |
 | Factura de la firma | Sale con ese **vendedor**: la comisión se calcula con los reportes de ventas por vendedor, solo sobre firmas pagadas |
 
@@ -700,11 +719,14 @@ La ventana solo se cierra con la X, Cancelar, Aplicar o Limpiar filtros.
 
 | Bloque | Filtros |
 |--------|---------|
-| Firma | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado del trámite, estado del pago, factura (por facturar, borrador, facturado, anulado), tipo de firma, usuario que registró, fecha de vencimiento, vigencia (vigente, por vencer en 30 días, vencida, sin fecha) |
+| Firma | Fecha de registro (con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado*, *Este año*), estado del trámite, estado del pago, factura (por facturar, borrador, facturado, anulado), tipo de firma, usuario que registró, **vendedor** (o *Sin vendedor*), fecha de vencimiento, vigencia (vigente, por vencer en 30 días, vencida, sin fecha) |
 | Titular | Nombres, apellidos, identificación, tipo de identificación, tipo de persona, con o sin RUC, teléfono, correo, empresa (RUC o nombre) |
 
-Los selectores *Tipo de firma* y *Usuario que registró* listan solo lo que ya
-aparece en las firmas registradas.
+Los selectores *Tipo de firma*, *Usuario que registró* y *Vendedor* listan solo
+lo que ya aparece en las firmas registradas. El filtro **Vendedor** usa el mismo
+criterio que la columna Vendedor (el de la factura si la firma la tiene, si no el
+de la firma) e incluye vendedores ya inactivos; *Sin vendedor* muestra las firmas
+que no tienen ninguno. El filtro también se respeta en el PDF y el Excel.
 
 **Chips.** Cada filtro aplicado aparece como una etiqueta **dentro del cuadro de
 búsqueda**. La **×** quita solo ese filtro, y con el cuadro vacío la tecla
@@ -805,6 +827,10 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.27** — El **PDF** del listado incluye la columna **Vendedor** (el Excel ya la tenía).
+- **3.26** — Filtro **Vendedor** en la ventana de filtros del listado (incluye *Sin vendedor*), con el mismo criterio que la columna Vendedor; se aplica también al PDF y al Excel.
+- **3.25** — El **Vendedor** de la ficha se puede cambiar en cualquier estado (también aprobada o emitida): se guarda al elegirlo, con confirmación, y si la firma tiene factura activa también cambia el vendedor de la factura.
+- **3.24** — Campo **Vendedor** en la ficha (pestaña Datos): se ve a quién se atribuye la firma y se puede cambiar o quitar mientras no tenga factura activa (con factura se cambia en Facturas de Venta). El cambio se refleja también en el enlace de la solicitud.
 - **3.23** — Enlace del cliente, firma de **Representante legal**: aviso de que todos los datos (identificación, datos personales, contacto, ubicación, cédula y selfie) son del representante legal y no de quien llena la solicitud, títulos de sección «… del representante legal» y casilla obligatoria de confirmación (validada también en el servidor).
 - **3.22** — Columna **Términos** en el listado (también en Excel y PDF): muestra *Aceptó* con la fecha y hora en que el titular marcó la casilla desde el enlace, o *No registra* (firma creada a mano o antes de pedir la casilla). Se puede ordenar, ocultar y filtrar (**Aceptó términos** en los filtros).
 - **3.21** — Un enlace (fijo, de vendedor o enviado) ya no registra una solicitud si el titular tiene una firma **emitida y vigente** con los mismos datos (identificación, tipo de persona y RUC de la empresa o «con RUC»); tampoco al editar una solicitud iniciada. Las renovaciones no cambian.

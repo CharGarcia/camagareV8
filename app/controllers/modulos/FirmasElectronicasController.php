@@ -308,6 +308,8 @@ class FirmasElectronicasController extends BaseModuloController
         $idEmpresa = (int) $_SESSION['id_empresa'];
 
         $data                = $this->recogerFormulario();
+        // En una firma ya registrada el vendedor se cambia aparte (cambiarVendedorAjax), en cualquier estado.
+        unset($data['id_vendedor']);
         $data['id_empresa']  = $idEmpresa;
         $data['id_usuario']  = (int) $_SESSION['id_usuario'];
         $data['updated_by']  = (int) $_SESSION['id_usuario'];
@@ -465,27 +467,30 @@ class FirmasElectronicasController extends BaseModuloController
                 <table>
                     <thead>
                         <tr>
-                            <th style="width:19%">Nombre</th>
-                            <th style="width:11%">Identificación</th>
-                            <th style="width:16%">Tipo Firma</th>
-                            <th style="width:10%">Teléfono</th>
-                            <th style="width:16%">Correo</th>
-                            <th style="width:8%">Pago</th>
-                            <th style="width:8%">Estado</th>
-                            <th style="width:12%">Términos</th>
+                            <?php // Html2Pdf: el ancho va en cada <th> y <td> (si no, las columnas se descuadran). ?>
+                            <th style="width:17%">Nombre</th>
+                            <th style="width:10%">Identificación</th>
+                            <th style="width:14%">Tipo Firma</th>
+                            <th style="width:12%">Vendedor</th>
+                            <th style="width:9%">Teléfono</th>
+                            <th style="width:14%">Correo</th>
+                            <th style="width:7%">Pago</th>
+                            <th style="width:7%">Estado</th>
+                            <th style="width:10%">Términos</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($rows as $r): ?>
                             <tr>
-                                <td><?= htmlspecialchars(($r['nombres'] ?? '') . ' ' . ($r['apellidos'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars($r['numero_identificacion'] ?? '') ?></td>
-                                <td><?= htmlspecialchars($r['nombre_producto'] ?? '—') ?></td>
-                                <td><?= htmlspecialchars($r['telefono'] ?? '—') ?></td>
-                                <td><?= htmlspecialchars($r['correo'] ?? '—') ?></td>
-                                <td><?= htmlspecialchars(ucfirst($r['estado_pago'] ?? '')) ?></td>
-                                <td><?= htmlspecialchars(ucfirst($r['estado'] ?? '')) ?></td>
-                                <td><?= !empty($r['terminos_aceptados_at']) ? 'Sí, ' . date('d-m-Y H:i:s', strtotime($r['terminos_aceptados_at'])) : 'No registra' ?></td>
+                                <td style="width:17%"><?= htmlspecialchars(($r['nombres'] ?? '') . ' ' . ($r['apellidos'] ?? '')) ?></td>
+                                <td style="width:10%"><?= htmlspecialchars($r['numero_identificacion'] ?? '') ?></td>
+                                <td style="width:14%"><?= htmlspecialchars($r['nombre_producto'] ?? '—') ?></td>
+                                <td style="width:12%"><?= htmlspecialchars((string) (($r['vendedor_nombre'] ?? '') ?: '—')) ?></td>
+                                <td style="width:9%"><?= htmlspecialchars($r['telefono'] ?? '—') ?></td>
+                                <td style="width:14%"><?= htmlspecialchars($r['correo'] ?? '—') ?></td>
+                                <td style="width:7%"><?= htmlspecialchars(ucfirst($r['estado_pago'] ?? '')) ?></td>
+                                <td style="width:7%"><?= htmlspecialchars(ucfirst($r['estado'] ?? '')) ?></td>
+                                <td style="width:10%"><?= !empty($r['terminos_aceptados_at']) ? 'Sí, ' . date('d-m-Y H:i:s', strtotime($r['terminos_aceptados_at'])) : 'No registra' ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -659,6 +664,21 @@ class FirmasElectronicasController extends BaseModuloController
                 ]
             );
             return ['msg' => 'Trámite actualizado.'];
+        });
+    }
+
+    /**
+     * Cambia solo el vendedor de una firma ya registrada, en cualquier estado (también
+     * aprobada o emitida). Si tiene factura activa, la factura cambia de vendedor también.
+     */
+    public function cambiarVendedorAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            return ['msg' => $this->service->cambiarVendedor(
+                (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'],
+                (int) ($_POST['id_vendedor'] ?? 0) ?: null
+            )];
         });
     }
 
@@ -967,7 +987,10 @@ class FirmasElectronicasController extends BaseModuloController
             'facturacion_direccion'     => mb_strtoupper(trim($_POST['facturacion_direccion'] ?? ''), 'UTF-8'),
             'facturacion_correo'        => mb_strtolower(trim($_POST['facturacion_correo'] ?? ''), 'UTF-8'),
             'facturacion_telefono'      => trim($_POST['facturacion_telefono'] ?? ''),
-        ];
+        ] + (array_key_exists('id_vendedor', $_POST)
+            // Solo si el select vino (con factura activa va deshabilitado y no se envía).
+            ? ['id_vendedor' => (int) $_POST['id_vendedor'] ?: null]
+            : []);
     }
 
     private function badgeEstado(string $estado): string
