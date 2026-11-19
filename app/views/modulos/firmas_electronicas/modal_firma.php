@@ -355,12 +355,14 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 </div>
 
                                 <!-- Dirección -->
-                                <?php // Con vendedores: [Dirección 5][Estado 2][Pago 2][Vendedor 3]; sin ellos la dirección ocupa 8. ?>
-                                <div class="<?= !empty($vendedoresFirma) ? 'col-md-5' : 'col-8' ?>">
+                                <?php // Fila: [Provincia 2][Ciudad 2][Dirección: el resto]. Debajo: [Estado 2][Pago 2][Vendedor 3][Observaciones: el resto]. ?>
+                                <div class="col-12 col-md">
                                     <label class="form-label small fw-bold text-muted mb-1">Dirección <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="direccion"
                                         id="firma_direccion" minlength="10" maxlength="255" placeholder="Calle, número, sector… (mín. 10 caracteres)" data-caso="mayus">
                                 </div>
+
+                                <div class="w-100 m-0 p-0"></div><?php // salto de fila: Estado Trámite empieza la siguiente ?>
 
                                 <!-- Estado trámite, estado pago y caducidad -->
                                 <div class="col-md-2">
@@ -404,8 +406,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                 </div>
                                 <?php endif; ?>
 
-                                <!-- Observaciones -->
-                                <div class="col-12">
+                                <!-- Observaciones: ocupa lo que sobra de la fila -->
+                                <div class="col-12 col-md">
                                     <label class="form-label small fw-bold text-muted mb-1" for="firma_observaciones">Observaciones</label>
                                     <input type="text" class="form-control form-control-sm shadow-none" name="observaciones"
                                         id="firma_observaciones" maxlength="1000"
