@@ -314,25 +314,29 @@
             // Una cuenta puede recibir valores de varios conceptos (p. ej. ventas e ICE): se agrupan
             // por concepto para que se vea de qué parte del documento viene cada uno.
             const variosConceptos = new Set(lineas.map(l => l.referencia_detalle)).size > 1;
+            // Estilos en línea: la ventana (SweetAlert) centra el texto y parte palabras; así la
+            // descripción va a la izquierda (y baja de renglón si es larga) y las cifras a la derecha, sin partirse.
+            const CEL_D = 'text-align:left;white-space:normal;overflow-wrap:anywhere;vertical-align:middle;';
+            const CEL_N = 'text-align:right;white-space:nowrap;vertical-align:middle;';
             let filas = '', total = 0, sinDetalle = [];
             lineas.forEach(l => {
                 const items = Array.isArray(l.desglose) ? l.desglose : [];
                 if (!items.length) { sinDetalle.push(l); return; }
                 if (variosConceptos) {
-                    filas += `<tr class="table-light"><td colspan="3" class="small fw-bold text-muted">${escHtml(l.referencia_detalle || 'Concepto')}</td></tr>`;
+                    filas += `<tr class="table-light"><td colspan="3" class="small fw-bold text-muted" style="${CEL_D}">${escHtml(l.referencia_detalle || 'Concepto')}</td></tr>`;
                 }
                 items.forEach(it => {
                     total += Number(it.valor) || 0;
                     filas += `<tr>
-                        <td class="text-start">${escHtml(it.descripcion)}</td>
-                        <td class="text-end text-muted">${fmtCant(it.cantidad)}</td>
-                        <td class="text-end">${fmt(it.valor)}</td></tr>`;
+                        <td style="${CEL_D}">${escHtml(it.descripcion)}</td>
+                        <td class="text-muted" style="${CEL_N}">${fmtCant(it.cantidad)}</td>
+                        <td style="${CEL_N}">${fmt(it.valor)}</td></tr>`;
                 });
             });
             sinDetalle.forEach(l => {
                 const v = lado === 'debe' ? l.debe : l.haber;
                 total += Number(v) || 0;
-                filas += `<tr><td class="text-start fst-italic">${escHtml(l.referencia_detalle || 'Valor del documento')}</td><td></td><td class="text-end">${fmt(v)}</td></tr>`;
+                filas += `<tr><td class="fst-italic" style="${CEL_D}">${escHtml(l.referencia_detalle || 'Valor del documento')}</td><td style="${CEL_N}"></td><td style="${CEL_N}">${fmt(v)}</td></tr>`;
             });
             total = typeof window.CMG_r2 === 'function' ? window.CMG_r2(total) : Number(total.toFixed(2));
 
@@ -343,10 +347,11 @@
                 const difiere = Math.abs(total - valorLinea) >= 0.01;
                 html = `
                     <div class="table-responsive" style="max-height:55vh;">
-                      <table class="table table-sm table-hover mb-2" style="font-size:.8rem;">
-                        <thead class="table-light"><tr><th class="text-start">Línea del documento</th><th class="text-end">Cant.</th><th class="text-end">Valor</th></tr></thead>
+                      <table class="table table-sm table-hover mb-2" style="font-size:.8rem;width:100%;table-layout:fixed;">
+                        <colgroup><col><col style="width:80px;"><col style="width:110px;"></colgroup>
+                        <thead class="table-light"><tr><th style="${CEL_D}">Línea del documento</th><th style="${CEL_N}">Cant.</th><th style="${CEL_N}">Valor</th></tr></thead>
                         <tbody>${filas}</tbody>
-                        <tfoot><tr class="fw-bold"><td class="text-start">Total</td><td></td><td class="text-end">${fmt(total)}</td></tr></tfoot>
+                        <tfoot><tr class="fw-bold"><td style="${CEL_D}">Total</td><td style="${CEL_N}"></td><td style="${CEL_N}">${fmt(total)}</td></tr></tfoot>
                       </table>
                     </div>
                     ${difiere ? `<div class="alert alert-warning py-1 px-2 small mb-0 text-start"><i class="bi bi-exclamation-triangle me-1"></i>La suma (${fmt(total)}) no coincide con el valor de esta línea (${fmt(valorLinea)}): el asiento se editó a mano, lleva un ajuste por redondeo o la configuración contable cambió después de generarlo.</div>` : ''}`;
