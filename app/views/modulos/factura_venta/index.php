@@ -1523,6 +1523,7 @@ $totalPages = $totalPagesOriginal;
 ?>
 
 <script src="<?= BASE_URL ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
+<script src="<?= BASE_URL ?>/js/components/ficha_producto_fila.js?v=<?= asset_ver('/js/components/ficha_producto_fila.js') ?>"></script>
 <?php require MVC_APP . '/views/partials/iva_modos_punto.php'; ?>
 <script>
     // Ajustar z-index de los backdrops dinámicamente para modales anidados
@@ -4560,6 +4561,12 @@ $totalPages = $totalPagesOriginal;
         });
     }
 
+    // --- FICHA DEL PRODUCTO EN CADA FILA (ícono ⓘ) ---
+    // La tarjeta vive en public/js/components/ficha_producto_fila.js (compartida con Recibos).
+    function fvPintarInfoProducto(row, info) {
+        if (typeof window.CMG_pintarInfoProducto === 'function') window.CMG_pintarInfoProducto(row, info);
+    }
+
     // --- ÍTEMS ---
     function agregarFila() {
         const tbody = document.getElementById('m-tbodyDetalle');
@@ -4593,8 +4600,9 @@ $totalPages = $totalPagesOriginal;
                 <div class="mt-1 small fw-bold text-muted span-saldo-info d-none" style="font-size:0.68rem;">
                     <i class="bi bi-box-seam me-1 text-primary"></i>Saldo: <span class="lbl-saldo-valor">0.00</span>
                 </div>
-                <span class="span-ubicacion-info d-none" style="position:absolute; top:4px; right:6px; cursor:default; z-index:2;">
-                    <i class="bi bi-geo-alt-fill text-secondary"></i>
+                <span class="span-info-producto d-none" role="button" tabindex="-1" aria-label="Información del producto"
+                    style="position:absolute; top:4px; right:6px; cursor:pointer; z-index:2; line-height:1;">
+                    <i class="bi bi-info-circle-fill text-secondary"></i>
                 </span>
             </td>
             <td class="col-adicional${EMPRESA_CONFIG.mostrar_columna_adicional_factura ? '' : ' d-none'}">
@@ -4718,17 +4726,18 @@ $totalPages = $totalPagesOriginal;
             row.querySelector('.input-casillero').value = p.id_casillero_venta || '';
             row.querySelector('.input-codigo-auxiliar').value = p.codigo_auxiliar || '';
 
-            // Ubicación física del producto (módulo Productos): ícono con tooltip, solo si existe.
-            const spanUbic = row.querySelector('.span-ubicacion-info');
-            if (spanUbic) {
-                if (p.ubicacion) {
-                    spanUbic.title = 'Ubicación: ' + p.ubicacion;
-                    spanUbic.classList.remove('d-none');
-                } else {
-                    spanUbic.title = '';
-                    spanUbic.classList.add('d-none');
-                }
-            }
+            // Ficha del producto (ícono ⓘ): categoría, marca, códigos, ubicación, saldo.
+            fvPintarInfoProducto(row, {
+                nombre: p.nombre,
+                codigo: p.codigo,
+                codigo_auxiliar: p.codigo_auxiliar,
+                codigo_barras: p.codigo_barras,
+                categoria: p.nombre_categoria,
+                marca: p.nombre_marca,
+                unidad: p.nombre_medida,
+                ubicacion: p.ubicacion,
+                tipo_produccion: p.tipo_produccion
+            });
 
             // Datos de ICE
             row.querySelector('.input-ice-pct').value = p.valor_ice || 0;
@@ -5141,6 +5150,7 @@ $totalPages = $totalPagesOriginal;
                 inputCodigoVisible.value = '';
                 dropdownGlobal.classList.add('d-none');
                 tr.querySelector('.input-id-producto').value = '';
+                fvPintarInfoProducto(tr, null);
             }
             if (e.key === 'Enter') {
                 const firstBtn = dropdownGlobal.querySelector('button');
@@ -5178,6 +5188,7 @@ $totalPages = $totalPagesOriginal;
                 inputDesc.value = '';
                 dropdownGlobal.classList.add('d-none');
                 tr.querySelector('.input-id-producto').value = '';
+                fvPintarInfoProducto(tr, null);
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
@@ -5496,6 +5507,7 @@ $totalPages = $totalPagesOriginal;
     function seleccionarItemLibre(descripcion, row) {
         row.querySelector('.input-descripcion').value = descripcion;
         row.querySelector('.input-id-producto').value = ''; // Sin ID de producto
+        fvPintarInfoProducto(row, null);
         // Si el usuario ya escribió un código propio en la columna "Código" (que no
         // coincidió con ningún producto existente, o si coincidiera ya se habría
         // autoseleccionado), se respeta y se usa como código del nuevo producto al
@@ -6411,17 +6423,19 @@ $totalPages = $totalPagesOriginal;
                 const inputAdi = tr.querySelector('.input-adicional');
                 if (inputAdi) inputAdi.value = d.info_adicional || '';
 
-                // Ubicación física del producto (dato en vivo, no se guarda en el detalle).
-                const spanUbicReload = tr.querySelector('.span-ubicacion-info');
-                if (spanUbicReload) {
-                    if (d.producto_ubicacion) {
-                        spanUbicReload.title = 'Ubicación: ' + d.producto_ubicacion;
-                        spanUbicReload.classList.remove('d-none');
-                    } else {
-                        spanUbicReload.title = '';
-                        spanUbicReload.classList.add('d-none');
-                    }
-                }
+                // Ficha del producto (ícono ⓘ): datos en vivo del catálogo, no del detalle.
+                // Solo líneas con producto de catálogo; un ítem libre no tiene ficha.
+                fvPintarInfoProducto(tr, d.id_producto ? {
+                    nombre: d.producto_nombre,
+                    codigo: d.producto_codigo,
+                    codigo_auxiliar: d.codigo_auxiliar,
+                    codigo_barras: d.producto_codigo_barras,
+                    categoria: d.producto_categoria,
+                    marca: d.producto_marca,
+                    unidad: d.producto_unidad_base,
+                    ubicacion: d.producto_ubicacion,
+                    tipo_produccion: d.tipo_produccion
+                } : null);
 
                 // Control de visibilidad de Lotes, Caducidad y NUP según configuración y tipo de producto.
                 // OJO: d.inventariable/d.tipo_produccion vienen del producto ACTUAL (JOIN en vivo,

@@ -20,18 +20,27 @@ $puedeEditar = \App\Helpers\AsientoPestana::puedeEditar();
   .asiento-sin-centro .asiento-col-centro, .asiento-sin-proyecto .asiento-col-proyecto { display: none; }
 </style>
 <div class="border rounded-3 overflow-hidden bg-white shadow-sm">
+  <!-- Número del asiento registrado: el componente lo muestra solo cuando el documento ya tiene
+       asiento (en la vista previa todavía no existe número). -->
+  <div class="d-none px-3 py-1 border-bottom bg-light small align-items-center gap-3 flex-wrap" id="<?= $p ?>-asiento-cab">
+    <span><i class="bi bi-journal-text me-1 text-primary"></i>Asiento N.&deg; <strong id="<?= $p ?>-asiento-numero"></strong></span>
+    <span class="text-muted" id="<?= $p ?>-asiento-fecha"></span>
+    <button type="button" class="btn btn-sm btn-outline-danger ms-auto py-0 px-2" id="<?= $p ?>-asiento-pdf" title="PDF del asiento contable">
+      <i class="bi bi-file-earmark-pdf"></i>
+    </button>
+  </div>
   <div class="table-responsive" style="max-height: 350px;">
     <table class="table table-sm table-detalle mb-0 text-nowrap asiento-sin-centro asiento-sin-proyecto" id="<?= $p ?>-asiento-table">
       <thead>
         <tr class="table-light border-bottom">
-          <th class="ps-3 py-2 small fw-bold text-muted" style="width:35%;">Cuenta Contable</th>
+          <th class="ps-3 py-2 small fw-bold text-muted" style="width:30%;">Cuenta Contable</th>
           <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:13%;">D&eacute;bito / Debe</th>
           <th class="py-2 small fw-bold text-muted text-end pe-3" style="width:13%;">Cr&eacute;dito / Haber</th>
           <!-- Centro de costo / proyecto por línea: el componente muestra cada columna solo si la
                empresa tiene registros de ese tipo o si alguna línea ya trae uno. -->
           <th class="py-2 small fw-bold text-muted asiento-col-centro" style="width:14%;">Centro de costo</th>
           <th class="py-2 small fw-bold text-muted asiento-col-proyecto" style="width:14%;">Proyecto</th>
-          <th class="py-2 small fw-bold text-muted" style="width:11%;">Referencia</th>
+          <th class="py-2 small fw-bold text-muted" style="width:30%;min-width:320px;">Referencia</th>
           <th style="width:40px;"></th>
         </tr>
       </thead>

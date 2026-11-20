@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar
-version: 1.32
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, categoria del producto, marca del producto, ver marca, ver categoria, informacion del producto, ficha del producto, codigo de barras, ubicacion del producto, donde esta el producto, icono i, pasar el mouse
+version: 1.33
 orden: 35
 estado: activo
 ---
@@ -88,6 +88,24 @@ recibos, sin afectar a los demás usuarios, a las columnas del listado ni a los
 anchos que tenga en Facturas de Venta (cada módulo guarda los suyos). Si al
 ensanchar ya no cabe toda la tabla, aparece una barra para desplazarse a los lados
 en lugar de achicar Cantidad, Precio o IVA.
+
+### Ficha del producto en cada línea (ícono ⓘ)
+
+Cada línea con un producto del catálogo muestra un **ícono ⓘ** en la esquina superior
+derecha de la descripción. Al **pasar el puntero** encima (o al **tocarlo** en celular o
+tablet) se abre una tarjeta con:
+
+- **Categoría** y **marca** del producto.
+- **Código**, **código auxiliar** y **código de barras**.
+- **Unidad base** del producto.
+- **Ubicación** en bodega (la que se registró en el módulo Productos).
+- **Saldo en la bodega**, cuando el recibo afecta al inventario.
+- Si es **bien** o **servicio**.
+
+Sirve para confirmar que se eligió el producto correcto. La tarjeta se cierra al sacar
+el puntero, al tocar fuera o con **Esc**. Los datos salen del **catálogo actual** del
+producto (no de cuando se guardó el recibo); los ítems **libres** no tienen ícono y la
+tarjeta no muestra el costo. Funciona igual que en Facturas de Venta.
 
 ## Qué genera
 
@@ -261,6 +279,7 @@ propio texto, se respeta.
 
 ## Historial de cambios
 
+- **1.33** — Nuevo **ícono ⓘ** en cada línea de producto: al pasar el puntero (o tocarlo en celular) muestra categoría, marca, códigos, unidad base, ubicación y saldo en bodega. Reemplaza al ícono de ubicación, que mostraba solo la ubicación. Ver *Ficha del producto en cada línea (ícono ⓘ)*.
 - **1.32** — Nueva pestaña **Información** en la ventana de el recibo (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.31** — Pestaña **Pagos**: registrar un cobro pide **confirmar monto y forma de cobro**, y después de cada cobro el **Monto queda vacío** en lugar de traer el saldo restante. Las **observaciones** del cobro usan el mismo formato que Ingresos (*Cobro recibo de venta 4; Cobrado con …*); antes decían *Cobro de recibo 001-…*.
 - **1.30** — Los **decimales de cantidad y precio** salen del **establecimiento de la serie** del recibo, no del primer establecimiento de la empresa: en la ventana (al elegir la serie), al guardar, en el PDF y al **generar la factura desde el recibo** (o el recibo desde una factura borrador), que usan la configuración del establecimiento del documento de origen.

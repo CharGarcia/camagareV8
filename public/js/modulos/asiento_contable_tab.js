@@ -78,6 +78,10 @@
             docEtiqueta:p ? `${p}-asiento-doc-etiqueta` : null,
             docTotal:   p ? `${p}-asiento-doc-total` : null,
             docEstado:  p ? `${p}-asiento-doc-estado` : null,
+            cab:        p ? `${p}-asiento-cab` : null,
+            numero:     p ? `${p}-asiento-numero` : null,
+            fecha:      p ? `${p}-asiento-fecha` : null,
+            pdf:        p ? `${p}-asiento-pdf` : null,
         };
 
         const $ = (id) => (id ? document.getElementById(id) : null);
@@ -241,6 +245,22 @@
             }
         }
 
+        /** Número (y fecha) del asiento registrado; se oculta mientras no haya asiento. */
+        function pintarNumero() {
+            const cab = $(ids.cab);
+            if (!cab) return;
+            const num = cabecera ? String(cabecera.numero_comprobante || (cabecera.id ? '#' + cabecera.id : '')) : '';
+            if (!num) { cab.classList.add('d-none'); cab.classList.remove('d-flex'); return; }
+            const elNum = $(ids.numero), elFecha = $(ids.fecha);
+            if (elNum) elNum.textContent = num;
+            if (elFecha) {
+                const f = String(cabecera.fecha_asiento || '');
+                elFecha.textContent = /^\d{4}-\d{2}-\d{2}$/.test(f) ? 'Fecha: ' + f.split('-').reverse().join('-') : '';
+            }
+            cab.classList.remove('d-none');
+            cab.classList.add('d-flex');
+        }
+
         // ── Líneas ────────────────────────────────────────────────────────────────
 
         function agregarLinea(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '', extra = null) {
@@ -268,7 +288,7 @@
                 <td class="align-middle p-0"><input type="number" step="0.01" class="form-control text-end border-0 bg-transparent fw-medium input-haber text-primary" ${ro} placeholder="0.00" value="${hv.toFixed(2) === '0.00' ? '' : hv.toFixed(2)}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
                 <td class="align-middle p-0 asiento-col-centro"><select class="form-select form-select-sm border-0 bg-transparent input-centro-costo" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.centros, ex.id_centro_costo, ex.nombre_centro_costo)}</select></td>
                 <td class="align-middle p-0 asiento-col-proyecto"><select class="form-select form-select-sm border-0 bg-transparent input-proyecto" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.proyectos, ex.id_proyecto, ex.nombre_proyecto)}</select></td>
-                <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" ${ro} placeholder="${editable ? 'Referencia' : ''}" value="${referencia}" style="padding:0 4px;height:20px;font-size:0.78rem;"></td>
+                <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" ${ro} placeholder="${editable ? 'Referencia' : ''}" value="${escHtml(referencia)}" title="${escHtml(referencia)}" style="padding:0 4px;height:20px;font-size:0.78rem;min-width:320px;"></td>
                 <td class="text-center p-0 align-middle" style="width:40px;">
                     ${editable ? '<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0 btn-del-asiento-linea" title="Eliminar línea"><i class="bi bi-trash3 fs-6"></i></button>' : ''}
                 </td>`;
@@ -280,6 +300,8 @@
             const inpDebe = tr.querySelector('.input-debe');
             const inpHaber = tr.querySelector('.input-haber');
             const inpRef = tr.querySelector('.input-referencia');
+            // Referencias largas: el texto completo se ve al pasar el mouse.
+            inpRef.addEventListener('input', () => { inpRef.title = inpRef.value; });
 
             pintarColumnasDim();
             if (!editable) { recalcular(); return; }
@@ -469,6 +491,7 @@
             if (!tbody) return;
             idDocumento = parseInt(id) || 0;
             cabecera = null;
+            pintarNumero();
             cuadreDoc = null;
             editable = false;
             guardable = false;
@@ -490,6 +513,7 @@
                 // Solo se guarda desde aquí un asiento existente. Los botones existen solo si
                 // el usuario puede actualizar asientos contables (la vista no los renderiza
                 // sin ese permiso).
+                pintarNumero();
                 guardable = !!(ids.save && $(ids.save) && cabecera.modificable);
                 editable = guardable;
                 pintarBotones();
@@ -894,6 +918,20 @@
         if (btnSave) btnSave.addEventListener('click', guardar);
         const btnRestore = $(ids.restore);
         if (btnRestore) btnRestore.addEventListener('click', restaurar);
+
+        // PDF del asiento registrado (mismo PDF que el módulo Asientos Contables). El botón está
+        // en la barra del número, que solo se ve cuando el documento ya tiene asiento.
+        const btnPdf = $(ids.pdf);
+        if (btnPdf) btnPdf.addEventListener('click', () => {
+            if (!cabecera || !cabecera.id) return;
+            if (manual && guardable) {
+                Swal.fire('Cambios sin guardar', 'Guarde el asiento antes de generar el PDF: el PDF muestra el asiento registrado.', 'info');
+                return;
+            }
+            const url = `${urlAsientos()}/exportarPdfAjax?id=${cabecera.id}`;
+            if (typeof window.CMG_pdfDocumento === 'function') window.CMG_pdfDocumento(url);
+            else window.location.href = url;
+        });
 
         return {
             cargar,

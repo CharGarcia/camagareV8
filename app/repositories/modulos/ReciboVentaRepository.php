@@ -453,9 +453,16 @@ class ReciboVentaRepository extends BaseRepository
     {
         $sql = "SELECT d.*, COALESCE(p.nombre, d.descripcion) as producto_nombre, p.codigo as producto_codigo,
                        p.id_tipo_medida, p.id_medida as id_medida_base,
-                       p.tipo_produccion, p.inventariable, p.ubicacion as producto_ubicacion
+                       p.tipo_produccion, p.inventariable, p.ubicacion as producto_ubicacion,
+                       -- Ficha del producto (ícono ⓘ de la fila): datos en vivo del catálogo.
+                       p.codigo_barras as producto_codigo_barras,
+                       cat.nombre as producto_categoria, mar.nombre as producto_marca,
+                       umb.nombre as producto_unidad_base
                 FROM recibos_venta_detalle d
                 LEFT JOIN productos p ON d.id_producto = p.id
+                LEFT JOIN unidades_medida umb ON umb.id = p.id_medida
+                LEFT JOIN categorias cat ON cat.id = p.id_categoria
+                LEFT JOIN marcas mar ON mar.id = p.id_marca
                 WHERE d.id_recibo = ?
                 ORDER BY d.id ASC";
         return $this->query($sql, [$idRecibo])->fetchAll();
