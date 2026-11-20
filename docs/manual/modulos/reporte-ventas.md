@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: personalizar, personalizar columnas, ocultar columnas, columnas del pdf, columnas del excel, pdf horizontal, pdf vertical, orientacion del pdf, reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, total de una categoria, solo lo de la categoria, la factura completa, el total no cuadra con el filtro, filtrar por producto, filtrar por variante, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente, motivo de la nota de credito, columna motivo, por que se hizo la nota de credito, razon de la devolucion, rentabilidad, utilidad, utilidad por producto, utilidad bruta, ganancia, cuanto gane, margen, margen de ganancia, markup, costo de ventas, costo de lo vendido, rentabilidad por categoria, rentabilidad por marca, rentabilidad por mes, producto mas rentable, productos que dejan perdida, vendido bajo el costo, ocultar costos al vendedor
-version: 1.25
+etiquetas: personalizar, personalizar columnas, ocultar columnas, columnas del pdf, columnas del excel, pdf horizontal, pdf vertical, orientacion del pdf, reporte de ventas, ventas, cuanto vendi, por cliente, por vendedor, por producto, estadisticas, exportar, pdf, excel, establecimientos, sucursales, matriz, mismo ruc, consolidado por ruc, borradores, borrador, facturas en borrador, incluir borradores, documentos sin autorizar, pendientes de enviar al sri, ordenar, ordenamiento, ordenar por columna, de mayor a menor, quien compro mas, saldo por cobrar, saldo x cobrar, cuanto me debe el cliente, nro facturas, numero de documentos, cartera en el reporte de ventas, acceso total, permiso de ver todos, registros propios, solo mis ventas, no veo las ventas de otro, cada usuario ve lo suyo, documentos migrados no aparecen, cartera del vendedor, mis clientes, clientes asignados, vendedor vinculado, usuario del sistema, el vendedor no ve nada, asesor solo ve sus clientes, nivel de usuario, administrador ve todo, el asesor ve las ventas de todos, imprimir el reporte, logo en el pdf, el pdf sale angosto, el pdf no ocupa la hoja, nombre del producto cortado, filtros aplicados en el pdf, encabezado del pdf, totales repetidos en el pdf, pdf horizontal, numero de pagina, boton buscar, no se actualiza, no cambia al elegir, hay que pulsar buscar, boton amarillo, filtros sin aplicar, unidades vendidas, unidades por mes, cantidades por mes, cuantas unidades vendi, ventas por producto y mes, producto por mes, rotacion mensual, tabla por meses, una columna por mes, marca, categoria, filtrar por marca, filtrar por categoria, total de una categoria, solo lo de la categoria, la factura completa, el total no cuadra con el filtro, filtrar por producto, filtrar por variante, fila de totales, total al final de la tabla, no sale el total en pantalla, suma de la tabla, ventas de una marca, ventas de una categoria, linea de productos, participacion por producto, porcentaje de ventas, porcentaje de unidades, % venta, % unidades, unidad de medida, total venta sin iva, producto mas vendido, cajero, por cajero, por usuario, ventas por usuario, ventas de un cajero, quien facturo, recibos de venta, recibos no aparecen, no salen los recibos, recibos en borrador, todos los documentos, facturas y recibos juntos, facturas recibos y notas de credito, ventas totales, grafico, ocultar grafico, acordeon, vendedores que puede ver, solo algunos vendedores, ocultar vendedores, coordinador de zona, ver las ventas de ciertos vendedores, donde esta el resumen diario, cliente por categoria, categorias por cliente, que compro cada cliente, cuanto compro cada cliente de cada categoria, productos por cliente, unidades por cliente, una columna por categoria, total general por cliente, motivo de la nota de credito, columna motivo, por que se hizo la nota de credito, razon de la devolucion, rentabilidad, utilidad, utilidad por producto, utilidad bruta, ganancia, cuanto gane, margen, margen de ganancia, markup, costo de ventas, costo de lo vendido, rentabilidad por categoria, rentabilidad por marca, rentabilidad por mes, producto mas rentable, productos que dejan perdida, vendido bajo el costo, ocultar costos al vendedor, rentabilidad por cliente, rentabilidad por vendedor, cliente mas rentable, utilidad por vendedor, cuanto deja cada cliente, solo servicios, solo productos, bienes y servicios, tipo de produccion, separar productos de servicios
+version: 1.26
 orden: 10
 estado: activo
 ---
@@ -25,6 +25,7 @@ qué, en el periodo que se indique.
 | Cajero | Documentos de un usuario concreto: el **responsable** del documento (casi siempre el mismo que la columna *Usuario* del detallado, que muestra quién lo registró). Lista los usuarios asignados a la empresa. A un usuario que solo ve sus propios documentos (o los de su vendedor) no se le muestra: su alcance ya lo limita |
 | Producto / Variante | Solo lo vendido de los productos cuya descripción o código (o variante) contiene el texto. Ver la sección *Filtrar por producto, variante, marca o categoría* |
 | Marca / Categoría | Solo los productos de esa marca o categoría (las de la ficha del producto). Están en la primera fila, a continuación de *Agrupar por*. Ver la sección *Filtrar por producto, variante, marca o categoría* |
+| Tipo | *Todos*, **Solo productos** o **Solo servicios**, según el *Tipo de producción* de la ficha del producto (bien o servicio). Como Marca y Categoría, cuenta solo esas líneas, en todas las vistas y en las tarjetas de totales. Las líneas sin producto del catálogo (concepto libre) no entran cuando se elige un tipo |
 | Borradores | *Sin borradores* (por defecto), *Con borradores* o *Solo borradores*. Ver la sección *Documentos en borrador* |
 
 Los filtros se combinan: *las ventas del producto X al cliente Y en marzo*.
@@ -317,9 +318,9 @@ firmas) en las fechas *Desde* y *Hasta* del filtro:
   GENERAL y el mismo orden; con más de cuatro categorías el PDF sale en hoja
   horizontal.
 
-## Rentabilidad: utilidad por producto, categoría, marca y mes
+## Rentabilidad: utilidad por producto, categoría, marca, mes, cliente y vendedor
 
-En **Agrupar por** hay un grupo **Rentabilidad (utilidad)** con cuatro vistas que
+En **Agrupar por** hay un grupo **Rentabilidad (utilidad)** con seis vistas que
 responden a *cuánto se ganó* con lo vendido en las fechas *Desde* y *Hasta*:
 
 | Vista | Una fila por |
@@ -328,12 +329,15 @@ responden a *cuánto se ganó* con lo vendido en las fechas *Desde* y *Hasta*:
 | **Rentabilidad por Categoría** | Cada categoría de la ficha del producto. |
 | **Rentabilidad por Marca** | Cada marca de la ficha del producto. |
 | **Rentabilidad por Mes** | Cada mes del período (el filtro *Mes* pasa a *Todos*). |
+| **Rentabilidad por Cliente** | Cada cliente (nombre y, debajo, su cédula o RUC). |
+| **Rentabilidad por Vendedor** | Cada vendedor del documento; los documentos sin vendedor van en **Sin vendedor**. |
 
 ### Columnas de la rentabilidad
 
 | Columna | Qué es |
 |---------|--------|
-| Productos | Cuántos productos distintos se vendieron en esa categoría, marca o mes. |
+| Productos | Cuántos productos distintos se vendieron en esa categoría, marca, mes, cliente o vendedor (en *por Cliente* viene apagada en pantalla y PDF). |
+| Clientes | Solo en *por Vendedor*: cuántos clientes distintos atendió. |
 | Cantidad | Unidades vendidas, tal como están en cada línea (sin convertir unidades). |
 | Venta sin IVA | Subtotal de las líneas, sin impuestos y ya con el descuento. |
 | Costo | Costo de lo vendido (ver *De dónde sale el costo*). |
@@ -379,6 +383,15 @@ nota bajo los indicadores.
   categoría, borradores y establecimientos. Por ejemplo, *Rentabilidad por
   Producto* con el filtro *Categoría* muestra la utilidad de cada producto de esa
   categoría, y con el filtro *Vendedor* muestra cuánto dejó la cartera de ese vendedor.
+- **Ver un solo producto**: en *Rentabilidad por Producto*, escriba el producto en el
+  filtro **Producto**. Combinado con *Cliente* o *Vendedor*, muestra cuánto dejó cada
+  producto con ese cliente o ese vendedor.
+- **Solo productos o solo servicios**: el filtro **Tipo** separa la rentabilidad de
+  los bienes de la de los servicios (por el *Tipo de producción* de la ficha).
+- El **vendedor** es el del documento, el mismo que usa el filtro *Vendedor*; no se
+  toma el vendedor asignado al cliente.
+- En **consolidado por RUC**, el mismo cliente de varios establecimientos (o con
+  cédula y RUC) sale una sola vez, y los vendedores se juntan por nombre.
 - En **consolidado por RUC**, las categorías y las marcas de los distintos
   establecimientos se juntan **por nombre**.
 - Los productos sin categoría o sin marca van en **Sin categoría** / **Sin marca**.
@@ -392,7 +405,7 @@ La rentabilidad muestra el costo de los productos. Un administrador puede
 **ocultársela a un usuario de nivel 1** (por ejemplo, a un vendedor): en
 *Configuración → Permisos por módulo*, tarjeta **Pestañas que puede ver — Reporte
 de Ventas**, se desmarca **Rentabilidad (costo y utilidad)**. Ese usuario deja de
-ver las cuatro vistas en *Agrupar por*. Sin configurar, todos las ven; los niveles
+ver las vistas de rentabilidad en *Agrupar por*. Sin configurar, todos las ven; los niveles
 2 y 3 siempre.
 
 ## Ordenar los resultados
@@ -585,6 +598,7 @@ El paso a paso está en la guía *Personalizar un reporte para toda la empresa*.
 
 ## Historial de cambios
 
+- **1.26** (20-11-2026) — Nuevas vistas **Rentabilidad por Cliente** y **Rentabilidad por Vendedor** (con clientes y productos distintos). Nuevo filtro **Tipo** (*Solo productos* / *Solo servicios*), que aplica a todas las vistas del reporte, al PDF y al Excel.
 - **1.25** (20-11-2026) — Nuevas agrupaciones de **Rentabilidad**: por **Producto**, por **Categoría**, por **Marca** y por **Mes**, con venta sin IVA, costo de lo vendido (del kardex; si no hubo movimiento, se estima con la ficha del producto), utilidad, margen %, markup % y % de la utilidad. También llegan a la tarjeta **Utilidad bruta**, al gráfico, al PDF y al Excel. El administrador puede ocultárselas a un usuario de nivel 1 en *Permisos por módulo*.
 - **1.24** (16-11-2026) — Con muchas filas, los **títulos de las columnas quedan fijos** bajo la tarjeta de filtros al bajar por la lista y la fila de **TOTAL** (más oscura que el resto) queda **pegada al borde inferior de la pantalla** hasta llegar al final: títulos y totales se ven a la vez. El PDF y el Excel no cambian.
 - **1.23** (10-11-2026) — Nuevo botón **Personalizar** (solo administradores): columnas a ocultar por agrupación, por separado para pantalla, Excel y PDF, y orientación del PDF, para toda la empresa.

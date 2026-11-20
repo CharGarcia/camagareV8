@@ -365,6 +365,17 @@ class ReporteVentasRepository extends BaseRepository
             'mes'              => '',
             'productos'        => '',
         ],
+        'RENT_CLIENTE' => self::ORDEN_RENTABILIDAD + [
+            '_def'             => ['utilidad', 'DESC'],
+            'cliente_nombre'   => '',
+            'productos'        => '',
+        ],
+        'RENT_VENDEDOR' => self::ORDEN_RENTABILIDAD + [
+            '_def'             => ['utilidad', 'DESC'],
+            'vendedor_nombre'  => '',
+            'clientes'         => '',
+            'productos'        => '',
+        ],
     ];
 
     /** Columnas de importes comunes a las vistas de rentabilidad (lista blanca de orden). */
@@ -853,6 +864,15 @@ class ReporteVentasRepository extends BaseRepository
                                 AND pat.{$atributo} IN (" . implode(',', $ph) . "))";
         }
 
+        // Tipo de producto de la ficha (productos.tipo_produccion): '01' bien, '02' servicio.
+        // Sin valor en la ficha cuenta como bien (el mismo por defecto que el módulo Productos).
+        // Una línea sin producto del catálogo (concepto libre) no entra.
+        if (in_array($filtros['tipo_produccion'] ?? '', ['01', '02'], true)) {
+            $conds[] = "EXISTS (SELECT 1 FROM productos ptp WHERE ptp.id = {d}.id_producto
+                                AND COALESCE(NULLIF(TRIM(ptp.tipo_produccion), ''), '01') = :tipo_produccion)";
+            $params[':tipo_produccion'] = $filtros['tipo_produccion'];
+        }
+
         if (trim((string) ($filtros['producto_texto'] ?? '')) !== '') {
             $conds[] = "({d}.descripcion ILIKE :prodtxt OR {d}.codigo_principal ILIKE :prodtxt)";
             $params[':prodtxt'] = '%' . trim((string) $filtros['producto_texto']) . '%';
@@ -1286,7 +1306,7 @@ class ReporteVentasRepository extends BaseRepository
      * `venta_sin_costo` suma lo vendido cuyo costo quedó en 0 (sin costo en el kardex ni en
      * la ficha): su utilidad sale igual a la venta, y la pantalla lo advierte.
      */
-    private function getRentabilidadPlano(int|array $idEmpresa, array $filtros): array
+    private function getRentabilidadPlano(int|array $idEmpresa, array $filtros, string $vista = 'RENT_PRODUCTO'): array
     {
         $tipo = (string) ($filtros['tipo_documento'] ?? 'FACTURA');
         if (!isset(self::KARDEX_DOCUMENTO[$tipo])) {
@@ -1297,6 +1317,38 @@ class ReporteVentasRepository extends BaseRepository
         [$refTipo, $refMov] = self::KARDEX_DOCUMENTO[$tipo];
         $params[':rk_tipo'] = $refTipo;
         $params[':rk_mov']  = $refMov;
+
+        // Dimensión extra según la vista (solo en esas: multiplica las filas). Cliente: el
+        // del documento. Vendedor: el del documento —el mismo que usa el filtro Vendedor—;
+        // la NC sin columna id_vendedor (SQL no aplicado) toma el de la factura que modifica.
+        $dimLin = $dimJoin = $dimGrp = $dimLc = $dimSel = $dimJoinFin = $dimGrpFin = '';
+        if ($vista === 'RENT_CLIENTE') {
+            $dimLin     = ', v.id_cliente AS id_tercero';
+            $dimGrp     = ', v.id_cliente';
+            $dimLc      = ', l.id_tercero';
+            $dimSel     = ", lc.id_tercero AS id_cliente, COALESCE(cli.nombre, '') AS cliente_nombre, COALESCE(cli.identificacion, '') AS cliente_ruc";
+            $dimJoinFin = 'LEFT JOIN clientes cli ON cli.id = lc.id_tercero';
+            $dimGrpFin  = ', lc.id_tercero, cli.nombre, cli.identificacion';
+        } elseif ($vista === 'RENT_VENDEDOR') {
+            if ($f['vendedor']) {
+                $dimLin = ', NULLIF(v.id_vendedor, 0) AS id_tercero';
+                $dimGrp = ', v.id_vendedor';
+            } else {
+                $dimJoin = "LEFT JOIN LATERAL (SELECT NULLIF(fvnc.id_vendedor, 0) AS id_vendedor
+                                              FROM ventas_cabecera fvnc
+                                              WHERE " . $this->condicionFacturaDeNc('v', 'fvnc') . "
+                                              LIMIT 1) vnc ON true";
+                $dimLin = ', vnc.id_vendedor AS id_tercero';
+                $dimGrp = ', vnc.id_vendedor';
+            }
+            // El cliente también viaja: la vista cuenta los clientes distintos de cada vendedor.
+            $dimLin    .= ', v.id_cliente';
+            $dimGrp    .= ', v.id_cliente';
+            $dimLc      = ', l.id_tercero, l.id_cliente';
+            $dimSel     = ", lc.id_tercero AS id_vendedor, COALESCE(TRIM(ven.nombre), '') AS vendedor_nombre, lc.id_cliente";
+            $dimJoinFin = 'LEFT JOIN vendedores ven ON ven.id = lc.id_tercero';
+            $dimGrpFin  = ', lc.id_tercero, ven.nombre, lc.id_cliente';
+        }
 
         // lin: una fila por documento + producto (lid la identifica). kx: costo del kardex por
         // documento + producto. Lo que el kardex descargó de un producto que NO es línea del
@@ -1315,11 +1367,13 @@ class ReporteVentasRepository extends BaseRepository
                        MAX(d.codigo_principal) AS codigo_linea,
                        SUM(d.cantidad) AS cantidad,
                        SUM(d.precio_total_sin_impuesto) AS venta
+                       {$dimLin}
                 FROM {$f['det']} d
                 JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
                 LEFT JOIN productos p ON p.id = d.id_producto
+                {$dimJoin}
                 WHERE {$where}
-                GROUP BY v.id, v.id_empresa, d.id_producto, TO_CHAR(v.fecha_emision, 'YYYY-MM'), COALESCE(p.nombre, d.descripcion)
+                GROUP BY v.id, v.id_empresa, d.id_producto, TO_CHAR(v.fecha_emision, 'YYYY-MM'), COALESCE(p.nombre, d.descripcion){$dimGrp}
             ),
             kx AS (
                 SELECT k.id_empresa, k.referencia_id, k.id_producto, SUM(k.costo_total) AS costo
@@ -1358,7 +1412,7 @@ class ReporteVentasRepository extends BaseRepository
                 GROUP BY l.lid
             ),
             lc AS (
-                SELECT l.mes, l.id_producto, l.producto_nombre, l.codigo_linea, l.cantidad, l.venta,
+                SELECT l.mes, l.id_producto, l.producto_nombre, l.codigo_linea, l.cantidad, l.venta{$dimLc},
                        (kx.referencia_id IS NOT NULL OR ex.lid IS NOT NULL) AS con_kardex,
                        CASE WHEN kx.referencia_id IS NOT NULL OR ex.lid IS NOT NULL
                             THEN COALESCE(kx.costo, 0) + COALESCE(ex.costo, 0)
@@ -1379,11 +1433,13 @@ class ReporteVentasRepository extends BaseRepository
                    SUM(lc.costo)    AS costo,
                    SUM(CASE WHEN lc.con_kardex THEN 0 ELSE lc.costo END) AS costo_estimado,
                    SUM(CASE WHEN COALESCE(lc.costo, 0) <= 0 AND lc.venta > 0 THEN lc.venta ELSE 0 END) AS venta_sin_costo
+                   {$dimSel}
             FROM lc
             LEFT JOIN productos p    ON p.id = lc.id_producto
             LEFT JOIN categorias cat ON cat.id = p.id_categoria
             LEFT JOIN marcas mar     ON mar.id = p.id_marca
-            GROUP BY lc.mes, lc.id_producto, p.codigo, lc.producto_nombre, cat.nombre, mar.nombre
+            {$dimJoinFin}
+            GROUP BY lc.mes, lc.id_producto, p.codigo, lc.producto_nombre, cat.nombre, mar.nombre{$dimGrpFin}
         ";
 
         $st = $this->db->prepare($sql);
@@ -1393,7 +1449,7 @@ class ReporteVentasRepository extends BaseRepository
 
     /**
      * Rentabilidad de lo vendido (venta sin impuestos − costo), agrupada por $vista:
-     * RENT_PRODUCTO, RENT_CATEGORIA, RENT_MARCA o RENT_MES. Respeta todos los filtros del
+     * RENT_PRODUCTO, RENT_CATEGORIA, RENT_MARCA, RENT_MES, RENT_CLIENTE o RENT_VENDEDOR. Respeta todos los filtros del
      * reporte (fechas, cliente, vendedor, cajero, producto, marca, categoría, alcance §6…).
      *
      * En el neto (Facturas − NC / Todos) las notas de crédito restan venta, unidades y
@@ -1401,12 +1457,14 @@ class ReporteVentasRepository extends BaseRepository
      * lo vendido, no lo devuelto.
      *
      * Categoría y marca se agrupan por NOMBRE (sin distinguir mayúsculas ni espacios): en
-     * consolidado cada establecimiento tiene las suyas y las homónimas van juntas.
+     * consolidado cada establecimiento tiene las suyas y las homónimas van juntas. El cliente
+     * se agrupa por identificación (IdentificacionTercero::claveGrupo: cédula y RUC del mismo
+     * titular juntos, y el mismo cliente de varios establecimientos) y el vendedor por nombre.
      *
      * Campos de cada fila: cantidad_vendida, total_venta, costo, utilidad, margen (% sobre
      * la venta), markup (% sobre el costo; null sin costo), pct_utilidad (participación
      * en la utilidad del reporte), costo_estimado, venta_sin_costo, productos (distintos),
-     * precio_promedio y costo_promedio (por unidad).
+     * precio_promedio y costo_promedio (por unidad), clientes (distintos; vista por vendedor).
      */
     public function getRentabilidad(int|array $idEmpresa, array $filtros, string $vista): array
     {
@@ -1417,7 +1475,7 @@ class ReporteVentasRepository extends BaseRepository
 
         $grupos = [];
         foreach ($fuentes as [$fuente, $signo]) {
-            foreach ($this->getRentabilidadPlano($idEmpresa, array_merge($filtros, ['tipo_documento' => $fuente])) as $r) {
+            foreach ($this->getRentabilidadPlano($idEmpresa, array_merge($filtros, ['tipo_documento' => $fuente]), $vista) as $r) {
                 $prodKey = !empty($r['id_producto']) ? 'p' . (int) $r['id_producto'] : 'd' . mb_strtolower(trim((string) $r['producto_nombre']));
                 $cat     = trim((string) $r['categoria_nombre']);
                 $mar     = trim((string) $r['marca_nombre']);
@@ -1425,6 +1483,8 @@ class ReporteVentasRepository extends BaseRepository
                     'RENT_CATEGORIA' => mb_strtolower($cat),
                     'RENT_MARCA'     => mb_strtolower($mar),
                     'RENT_MES'       => (string) $r['mes'],
+                    'RENT_CLIENTE'   => \App\Helpers\IdentificacionTercero::claveGrupo((string) ($r['cliente_ruc'] ?? ''), 'id:' . (int) ($r['id_cliente'] ?? 0)),
+                    'RENT_VENDEDOR'  => mb_strtolower(trim((string) ($r['vendedor_nombre'] ?? ''))),
                     default          => $prodKey,
                 };
                 if (!isset($grupos[$k])) {
@@ -1435,12 +1495,17 @@ class ReporteVentasRepository extends BaseRepository
                         'categoria_nombre' => $cat,
                         'marca_nombre'     => $mar,
                         'mes'              => (string) $r['mes'],
+                        'id_cliente'       => isset($r['id_cliente']) ? (int) $r['id_cliente'] : null,
+                        'cliente_nombre'   => (string) ($r['cliente_nombre'] ?? ''),
+                        'cliente_ruc'      => (string) ($r['cliente_ruc'] ?? ''),
+                        'vendedor_nombre'  => trim((string) ($r['vendedor_nombre'] ?? '')),
                         'cantidad_vendida' => 0.0,
                         'total_venta'      => 0.0,
                         'costo'            => 0.0,
                         'costo_estimado'   => 0.0,
                         'venta_sin_costo'  => 0.0,
                         '_productos'       => [],
+                        '_clientes'        => [],
                     ];
                 }
                 $g = &$grupos[$k];
@@ -1452,6 +1517,9 @@ class ReporteVentasRepository extends BaseRepository
                     $g['venta_sin_costo'] += (float) $r['venta_sin_costo'];
                 }
                 $g['_productos'][$prodKey] = true;
+                if (!empty($r['id_cliente'])) {
+                    $g['_clientes'][(int) $r['id_cliente']] = true;
+                }
                 unset($g);
             }
         }
@@ -1462,7 +1530,8 @@ class ReporteVentasRepository extends BaseRepository
                 $g[$c] = round($g[$c], 2);
             }
             $g['productos']       = count($g['_productos']);
-            unset($g['_productos']);
+            $g['clientes']        = count($g['_clientes']);
+            unset($g['_productos'], $g['_clientes']);
             $g['utilidad']        = round($g['total_venta'] - $g['costo'], 2);
             $g['margen']          = abs($g['total_venta']) > 0.004 ? round($g['utilidad'] / $g['total_venta'] * 100, 2) : 0.0;
             $g['markup']          = abs($g['costo']) > 0.004 ? round($g['utilidad'] / $g['costo'] * 100, 2) : null;

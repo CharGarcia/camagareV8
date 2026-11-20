@@ -337,6 +337,22 @@ final class ColumnasReporte
                         'productos' => ['titulo' => 'Productos', 'nombre' => 'Productos distintos vendidos'],
                     ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_IMPORTES,
                 ],
+                'RENT_CLIENTE' => [
+                    'titulo' => 'Rentabilidad por cliente', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'cliente_ruc'    => ['titulo' => 'RUC/Cédula', 'nombre' => 'RUC/Cédula (columna aparte)', 'no' => ['pantalla', 'pdf']],
+                        'cliente_nombre' => ['titulo' => 'Cliente', 'fija' => true],
+                        'productos'      => ['titulo' => 'Productos', 'nombre' => 'Productos distintos comprados', 'pantalla' => false, 'pdf' => false],
+                    ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_IMPORTES,
+                ],
+                'RENT_VENDEDOR' => [
+                    'titulo' => 'Rentabilidad por vendedor', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'vendedor_nombre' => ['titulo' => 'Vendedor', 'fija' => true],
+                        'clientes'        => ['titulo' => 'Clientes', 'nombre' => 'Clientes distintos atendidos'],
+                        'productos'       => ['titulo' => 'Productos', 'nombre' => 'Productos distintos vendidos'],
+                    ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_IMPORTES,
+                ],
             ],
         ],
         // Reporte de Cartera: el estado de cuenta de cada cliente/proveedor. Una sola vista;

@@ -203,6 +203,8 @@ class ReporteVentasController extends BaseModuloController
             // los expande a las homónimas de los demás establecimientos.
             'id_marca'       => (int)($_REQUEST['id_marca'] ?? 0),
             'id_categoria'   => (int)($_REQUEST['id_categoria'] ?? 0),
+            // Tipo de producto de la ficha: '01' solo bienes, '02' solo servicios, '' todos.
+            'tipo_produccion' => in_array((string) ($_REQUEST['tipo_produccion'] ?? ''), ['01', '02'], true) ? (string) $_REQUEST['tipo_produccion'] : '',
             'producto_texto' => trim($_REQUEST['producto_texto'] ?? ''),
             'variante_texto' => trim($_REQUEST['variante_texto'] ?? ''),
             'estado'         => $_REQUEST['estado'] ?? 'TODOS',
@@ -369,6 +371,8 @@ class ReporteVentasController extends BaseModuloController
             case 'RENT_CATEGORIA':
             case 'RENT_MARCA':
             case 'RENT_MES':
+            case 'RENT_CLIENTE':
+            case 'RENT_VENDEDOR':
                 return [$this->repository->getRentabilidad($idEmpresa, $filtros, (string) $filtros['agrupar_por']), []];
             default:
                 return [$this->repository->getReporteDetallado($idEmpresa, $filtros), []];
@@ -394,7 +398,7 @@ class ReporteVentasController extends BaseModuloController
             'VARIANTE'     => 8,
             'PRODUCTO_MES' => 3 + count($meses),
             'CLIENTE_CATEGORIA' => 3 + count($meses),
-            'RENT_PRODUCTO', 'RENT_CATEGORIA', 'RENT_MARCA', 'RENT_MES' => count(self::clavesRentabilidad($agrupar, 'pantalla')),
+            'RENT_PRODUCTO', 'RENT_CATEGORIA', 'RENT_MARCA', 'RENT_MES', 'RENT_CLIENTE', 'RENT_VENDEDOR' => count(self::clavesRentabilidad($agrupar, 'pantalla')),
             default        => 6,
         });
     }
@@ -437,6 +441,8 @@ class ReporteVentasController extends BaseModuloController
         'RENT_CATEGORIA' => ['categoria_nombre', 'productos'],
         'RENT_MARCA'     => ['marca_nombre', 'productos'],
         'RENT_MES'       => ['mes', 'productos'],
+        'RENT_CLIENTE'   => ['cliente_ruc', 'cliente_nombre', 'productos'],
+        'RENT_VENDEDOR'  => ['vendedor_nombre', 'clientes', 'productos'],
     ];
     private const RENT_IMPORTES = ['cantidad_vendida', 'precio_promedio', 'costo_promedio', 'total_venta', 'costo',
                                    'utilidad', 'margen', 'markup', 'pct_utilidad', 'costo_estimado', 'venta_sin_costo'];
@@ -492,6 +498,7 @@ class ReporteVentasController extends BaseModuloController
             'categoria_nombre' => $v !== '' ? $v : 'Sin categoría',
             'marca_nombre'     => $v !== '' ? $v : 'Sin marca',
             'mes'              => self::formatearMes($v),
+            'vendedor_nombre'  => $v !== '' ? $v : 'Sin vendedor',
             default            => $v,
         };
     }
@@ -537,6 +544,9 @@ class ReporteVentasController extends BaseModuloController
                 : "<td>" . $e($r['marca_nombre'] ?? '') . "</td>",
             'mes'              => "<td class='ps-4'><span class='fw-bold'>" . self::formatearMes((string) ($r['mes'] ?? '')) . "</span></td>",
             'productos'        => "<td class='text-center'>" . (int) ($r['productos'] ?? 0) . "</td>",
+            'cliente_nombre'   => "<td class='ps-4'><span class='fw-bold'>" . $e($r['cliente_nombre'] ?? '') . "</span><br><small class='text-muted'>" . $e($r['cliente_ruc'] ?? '') . "</small></td>",
+            'vendedor_nombre'  => "<td class='ps-4'><span class='fw-bold" . (trim((string) ($r['vendedor_nombre'] ?? '')) === '' ? ' text-muted' : '') . "'>" . $e(self::etiquetaRentabilidad($r, 'vendedor_nombre')) . "</span></td>",
+            'clientes'         => "<td class='text-center'>" . (int) ($r['clientes'] ?? 0) . "</td>",
             'cantidad_vendida' => "<td class='text-end'>" . self::fmtCantidad((float) ($r['cantidad_vendida'] ?? 0)) . "</td>",
             'precio_promedio'  => "<td class='text-end'>" . number_format((float) ($r['precio_promedio'] ?? 0), 2) . "</td>",
             'costo_promedio'   => "<td class='text-end'>" . number_format((float) ($r['costo_promedio'] ?? 0), 2) . "</td>",
@@ -1188,9 +1198,9 @@ class ReporteVentasController extends BaseModuloController
                 $headers = array_map(static fn (string $k): string => (string) ($catR[$k]['titulo'] ?? $k), $clavesR);
                 $valor   = static function (array $r, string $k) {
                     return match ($k) {
-                        'producto_codigo', 'producto_nombre' => (string) ($r[$k] ?? ''),
-                        'categoria_nombre', 'marca_nombre', 'mes' => self::etiquetaRentabilidad($r, $k),
-                        'productos'        => (int) ($r[$k] ?? 0),
+                        'producto_codigo', 'producto_nombre', 'cliente_ruc', 'cliente_nombre' => (string) ($r[$k] ?? ''),
+                        'categoria_nombre', 'marca_nombre', 'mes', 'vendedor_nombre' => self::etiquetaRentabilidad($r, $k),
+                        'productos', 'clientes' => (int) ($r[$k] ?? 0),
                         'cantidad_vendida' => (float) ($r[$k] ?? 0),
                         'markup'           => ($r[$k] ?? null) === null ? '' : (float) $r[$k],
                         default            => round((float) ($r[$k] ?? 0), in_array($k, ['precio_promedio', 'costo_promedio'], true) ? 4 : 2),
@@ -1259,7 +1269,7 @@ class ReporteVentasController extends BaseModuloController
                 'MES'      => array_merge(['mes', 'cantidad_facturas'], $montos),
                 'PRODUCTO_MES'      => array_merge(['producto_codigo', 'producto_nombre'], $dinamicas, ['total_unidades']),
                 'CLIENTE_CATEGORIA' => array_merge(['cliente_ruc', 'cliente_nombre'], $dinamicas, ['total_unidades', 'total_venta']),
-                'RENT_PRODUCTO', 'RENT_CATEGORIA', 'RENT_MARCA', 'RENT_MES' => self::clavesRentabilidad($agr, 'excel'),
+                'RENT_PRODUCTO', 'RENT_CATEGORIA', 'RENT_MARCA', 'RENT_MES', 'RENT_CLIENTE', 'RENT_VENDEDOR' => self::clavesRentabilidad($agr, 'excel'),
                 default    => array_merge(
                     $consolidado ? [null] : [],
                     ['fecha_emision', 'numero_factura', 'cliente_nombre', 'cliente_ruc'],
@@ -1477,6 +1487,8 @@ class ReporteVentasController extends BaseModuloController
         'RENT_CATEGORIA' => 'Rentabilidad por categoría',
         'RENT_MARCA'     => 'Rentabilidad por marca',
         'RENT_MES'       => 'Rentabilidad por mes',
+        'RENT_CLIENTE'   => 'Rentabilidad por cliente',
+        'RENT_VENDEDOR'  => 'Rentabilidad por vendedor',
     ];
 
     /** Qué cuenta cada fila del listado, para la etiqueta "TOTALES GENERALES (N …)". */
@@ -1488,6 +1500,8 @@ class ReporteVentasController extends BaseModuloController
             'RENT_CATEGORIA' => $n === 1 ? 'categoría' : 'categorías',
             'RENT_MARCA'     => $n === 1 ? 'marca'     : 'marcas',
             'RENT_MES'       => $n === 1 ? 'mes'       : 'meses',
+            'RENT_CLIENTE'   => $n === 1 ? 'cliente'   : 'clientes',
+            'RENT_VENDEDOR'  => $n === 1 ? 'vendedor'  : 'vendedores',
             'VARIANTE' => $n === 1 ? 'variante'  : 'variantes',
             'FECHA'    => $n === 1 ? 'día'       : 'días',
             'CAJERO'   => $n === 1 ? 'cajero'    : 'cajeros',
@@ -1683,11 +1697,12 @@ class ReporteVentasController extends BaseModuloController
             $ocultasPdf = $this->ocultas($agrupar, 'pdf');
             $claves = array_values(array_filter(self::clavesRentabilidad($agrupar, 'pdf'), static fn ($k) => !isset($ocultasPdf[$k])));
             $catR   = \App\Helpers\ColumnasReporte::columnas($this->getRutaModulo(), $agrupar);
-            $anchos = ['producto_codigo' => 10, 'categoria_nombre' => 11, 'marca_nombre' => 11, 'productos' => 8,
+            $anchos = ['producto_codigo' => 10, 'categoria_nombre' => 11, 'marca_nombre' => 11, 'productos' => 8, 'clientes' => 8,
                        'cantidad_vendida' => 8, 'precio_promedio' => 8, 'costo_promedio' => 8, 'total_venta' => 11,
                        'costo' => 11, 'utilidad' => 11, 'margen' => 7, 'markup' => 9, 'pct_utilidad' => 8];
             $desc   = ['RENT_PRODUCTO' => 'producto_nombre', 'RENT_CATEGORIA' => 'categoria_nombre',
-                       'RENT_MARCA' => 'marca_nombre', 'RENT_MES' => 'mes'][$agrupar];
+                       'RENT_MARCA' => 'marca_nombre', 'RENT_MES' => 'mes',
+                       'RENT_CLIENTE' => 'cliente_nombre', 'RENT_VENDEDOR' => 'vendedor_nombre'][$agrupar];
             $fijo   = 0;
             foreach ($claves as $k) {
                 if ($k !== $desc) { $fijo += $anchos[$k] ?? 8; }
@@ -1709,13 +1724,23 @@ class ReporteVentasController extends BaseModuloController
                     case 'categoria_nombre':
                     case 'marca_nombre':
                     case 'mes':
+                    case 'vendedor_nombre':
                         $col['cls'] = '';
                         $col['val'] = static fn (array $r): string => ($k === $desc ? "<span style='font-weight:bold;'>" : '<span>')
                             . $wrap(self::etiquetaRentabilidad($r, $k), $pt((int) floor($w)), $ptFila) . '</span>';
                         break;
+                    case 'cliente_nombre':
+                        // Nombre en negrita y, debajo, la cédula o RUC (como en pantalla).
+                        $col['cls'] = '';
+                        $col['val'] = static fn (array $r): string => "<span style='font-weight:bold;'>"
+                            . $wrap((string) ($r['cliente_nombre'] ?? ''), $pt((int) floor($w)), $ptFila) . '</span>'
+                            . (trim((string) ($r['cliente_ruc'] ?? '')) !== ''
+                                ? "<br><span class='sub'>" . htmlspecialchars((string) $r['cliente_ruc']) . '</span>' : '');
+                        break;
                     case 'productos':
+                    case 'clientes':
                         $col['cls'] = 'text-center';
-                        $col['val'] = static fn (array $r): string => (string) (int) ($r['productos'] ?? 0);
+                        $col['val'] = static fn (array $r): string => (string) (int) ($r[$k] ?? 0);
                         break;
                     case 'cantidad_vendida':
                         $col['fmt'] = $cant;
@@ -2208,6 +2233,9 @@ class ReporteVentasController extends BaseModuloController
         }
         if ($categoriaTxt !== '') {
             $out['Categoría'] = $categoriaTxt;
+        }
+        if (($filtros['tipo_produccion'] ?? '') !== '') {
+            $out['Tipo de producto'] = $filtros['tipo_produccion'] === '02' ? 'Solo servicios' : 'Solo productos (bienes)';
         }
         if (trim((string) ($filtros['variante_texto'] ?? '')) !== '') {
             $out['Variante'] = trim((string) $filtros['variante_texto']);

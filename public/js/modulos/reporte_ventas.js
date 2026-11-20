@@ -459,6 +459,8 @@ function RV_dibujarGrafico(rawData, agrupacion) {
             datos = datos.slice(0, 30);
             labels = datos.map(r => agrupacion === 'RENT_CATEGORIA' ? (r.categoria_nombre || 'Sin categoría')
                                  : agrupacion === 'RENT_MARCA' ? (r.marca_nombre || 'Sin marca')
+                                 : agrupacion === 'RENT_CLIENTE' ? r.cliente_nombre
+                                 : agrupacion === 'RENT_VENDEDOR' ? (r.vendedor_nombre || 'Sin vendedor')
                                  : r.producto_nombre);
         }
         dataTotales = datos.map(r => parseFloat(r.utilidad) || 0);
@@ -693,6 +695,23 @@ const RV_COLUMNAS = {
         def: ['mes', 'ASC'],
         cols: [
             ['mes',               'Mes',              'ps-4'],
+            ['productos',         'Productos',        'text-center'],
+            ...RV_colsRentabilidad(false),
+        ]
+    },
+    RENT_CLIENTE: {
+        def: ['utilidad', 'DESC'],
+        cols: [
+            ['cliente_nombre',    'Cliente',          'ps-4'],
+            ['productos',         'Productos',        'text-center'],
+            ...RV_colsRentabilidad(false),
+        ]
+    },
+    RENT_VENDEDOR: {
+        def: ['utilidad', 'DESC'],
+        cols: [
+            ['vendedor_nombre',   'Vendedor',         'ps-4'],
+            ['clientes',          'Clientes',         'text-center'],
             ['productos',         'Productos',        'text-center'],
             ...RV_colsRentabilidad(false),
         ]

@@ -71,6 +71,8 @@
                                     <option value="RENT_CATEGORIA">Rentabilidad por Categoría</option>
                                     <option value="RENT_MARCA">Rentabilidad por Marca</option>
                                     <option value="RENT_MES">Rentabilidad por Mes</option>
+                                    <option value="RENT_CLIENTE">Rentabilidad por Cliente</option>
+                                    <option value="RENT_VENDEDOR">Rentabilidad por Vendedor</option>
                                 </optgroup>
                             <?php endif; ?>
                         </select>
@@ -99,6 +101,19 @@
                             <?php foreach (($categorias ?? []) as $ct): ?>
                                 <option value="<?= (int)$ct['id'] ?>"><?= htmlspecialchars($ct['nombre']) ?></option>
                             <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="form-label small fw-bold mb-1 text-muted text-uppercase d-flex align-items-center" style="font-size:.65rem;"
+                               title="Tipo de producción de la ficha del producto: bien o servicio">
+                            <i class="bi bi-box-seam me-1"></i>Tipo
+                            <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'rv_tipo_produccion', 'tipo_produccion') ?>
+                        </label>
+                        <select name="tipo_produccion" id="rv_tipo_produccion" class="form-select form-select-sm shadow-none border" style="width:130px;" onchange="window.RV_filtrosCambiados()">
+                            <option value="" selected>Todos</option>
+                            <option value="01">Solo productos</option>
+                            <option value="02">Solo servicios</option>
                         </select>
                     </div>
 
