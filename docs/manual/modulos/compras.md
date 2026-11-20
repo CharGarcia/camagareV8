@@ -823,7 +823,7 @@ En la pestaña **Pagos** de la compra se registran pagos totales o parciales
 
 En la pestaña **Asiento contable** cada línea es una cuenta con la suma de todo lo que
 la compra lleva a esa cuenta (por ejemplo, *Proveedores 84,10* junta todas las líneas
-del comprobante). El ícono **ⓘ** al final de la línea abre una ventana con las **líneas
+del comprobante). El ícono **ⓘ** junto al nombre de la cuenta abre una ventana con las **líneas
 de la compra** que forman ese valor y el total:
 
 - **Cuenta por pagar**: subtotal + IVA + ICE de cada línea.

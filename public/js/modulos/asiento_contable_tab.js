@@ -264,22 +264,23 @@
         // ── Desglose de una línea («¿De dónde sale este valor?») ─────────────────
         // El servidor arma el asiento que corresponde al documento con las líneas que forman cada
         // valor; aquí se buscan las de la misma cuenta y el mismo lado (Debe/Haber) que la fila.
-        let desgloseCache = null;   // { id, promesa } — se pide una vez por documento abierto
+        let desgloseCache = null;   // { id, promesa, json } — se pide una vez por documento abierto
 
         function pedirDesglose() {
             if (!desgloseCache || desgloseCache.id !== idDocumento) {
                 const id = idDocumento;
-                desgloseCache = {
-                    id,
-                    promesa: fetch(`${cfg.desgloseUrl}?id=${encodeURIComponent(id)}`)
-                        .then(r => r.json())
-                        .catch(() => ({ ok: false, error: 'No se pudo consultar el desglose. Verifique su conexión.' })),
-                };
+                const entrada = { id, json: null };
+                entrada.promesa = fetch(`${cfg.desgloseUrl}?id=${encodeURIComponent(id)}`)
+                    .then(r => r.json())
+                    .catch(() => ({ ok: false, error: 'No se pudo consultar el desglose. Verifique su conexión.' }))
+                    .then(json => {
+                        if (json.ok) entrada.json = json;                     // ya listo: la próxima vez no hay espera
+                        else if (desgloseCache === entrada) desgloseCache = null; // un error no se queda guardado
+                        return json;
+                    });
+                desgloseCache = entrada;
             }
-            return desgloseCache.promesa.then(json => {
-                if (!json.ok) desgloseCache = null;   // un error no se queda guardado
-                return json;
-            });
+            return desgloseCache.promesa;
         }
 
         async function abrirDesglose(tr) {
@@ -293,10 +294,18 @@
             const fmt = (n) => (Number(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const fmtCant = (n) => (n === null || n === undefined) ? '' : (Number(n) || 0).toLocaleString('es-EC', { maximumFractionDigits: 6 });
 
-            Swal.fire({ title: 'Consultando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            const json = await pedirDesglose();
+            // El aviso «Consultando…» solo cuando de verdad hay que esperar al servidor. Con el
+            // desglose ya en memoria, abrirlo y reemplazarlo enseguida dejaba el spinner de su
+            // didOpen (que corre tarde) pegado en la ventana del resultado: se quedaba cargando.
+            let json = (desgloseCache && desgloseCache.id === idDocumento) ? desgloseCache.json : null;
+            if (!json) {
+                Swal.fire({ title: 'Consultando…', allowOutsideClick: false, showConfirmButton: false });
+                Swal.showLoading();
+                json = await pedirDesglose();
+            }
             if (!json.ok) {
-                Swal.fire('Desglose no disponible', escHtml(json.error || 'No se pudo armar el desglose.'), 'info');
+                Swal.fire({ title: 'Desglose no disponible', html: escHtml(json.error || 'No se pudo armar el desglose.'),
+                            icon: 'info', showConfirmButton: true, didOpen: () => Swal.hideLoading() });
                 return;
             }
 
@@ -347,6 +356,8 @@
                 html: `<div class="small text-muted mb-2">${lado === 'debe' ? 'Debe' : 'Haber'}: <strong>${fmt(valorLinea)}</strong></div>${html}`,
                 width: 640,
                 confirmButtonText: 'Cerrar',
+                showConfirmButton: true,
+                didOpen: () => Swal.hideLoading(),   // por si quedó un spinner de una consulta anterior
             });
         }
 
@@ -369,7 +380,10 @@
             const estiloSel = 'padding:0 4px;height:20px;font-size:0.78rem;';
             tr.innerHTML = `
                 <td class="ps-3 position-relative align-middle p-0">
-                    <input type="text" class="form-control border-0 bg-transparent input-cuenta-nombre" ${ro} placeholder="${editable ? 'Escriba código o cuenta contable...' : ''}" value="${nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : ''}" style="padding:0 4px;height:20px;font-size:0.78rem;">
+                    <div class="d-flex align-items-center">
+                        ${cfg.desgloseUrl && idDocumento > 0 ? '<button type="button" class="btn btn-link btn-sm text-info p-0 ms-1 shadow-none border-0 btn-desglose-asiento-linea flex-shrink-0" title="¿De dónde sale este valor?"><i class="bi bi-info-circle"></i></button>' : ''}
+                        <input type="text" class="form-control border-0 bg-transparent input-cuenta-nombre" ${ro} placeholder="${editable ? 'Escriba código o cuenta contable...' : ''}" value="${nombre ? (codigo ? codigo + ' - ' + nombre : nombre) : ''}" style="padding:0 4px;height:20px;font-size:0.78rem;">
+                    </div>
                     <input type="hidden" class="input-id-cuenta-contable" value="${idCuenta}">
                     <div class="list-group position-absolute w-100 shadow rounded-3 d-none select-cuenta-dropdown" style="z-index:1050;max-height:200px;overflow-y:auto;"></div>
                 </td>
@@ -378,8 +392,7 @@
                 <td class="align-middle p-0 asiento-col-centro"><select class="form-select form-select-sm border-0 bg-transparent input-centro-costo" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.centros, ex.id_centro_costo, ex.nombre_centro_costo)}</select></td>
                 <td class="align-middle p-0 asiento-col-proyecto"><select class="form-select form-select-sm border-0 bg-transparent input-proyecto" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.proyectos, ex.id_proyecto, ex.nombre_proyecto)}</select></td>
                 <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" ${ro} placeholder="${editable ? 'Referencia' : ''}" value="${escHtml(referencia)}" title="${escHtml(referencia)}" style="padding:0 4px;height:20px;font-size:0.78rem;min-width:320px;"></td>
-                <td class="text-center p-0 align-middle text-nowrap" style="width:40px;">
-                    ${cfg.desgloseUrl && idDocumento > 0 ? '<button type="button" class="btn btn-link btn-sm text-info p-0 shadow-none border-0 btn-desglose-asiento-linea me-1" title="¿De dónde sale este valor?"><i class="bi bi-info-circle"></i></button>' : ''}
+                <td class="text-center p-0 align-middle" style="width:40px;">
                     ${editable ? '<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0 btn-del-asiento-linea" title="Eliminar línea"><i class="bi bi-trash3 fs-6"></i></button>' : ''}
                 </td>`;
             tbody.appendChild(tr);

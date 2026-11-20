@@ -209,7 +209,7 @@ Si la operación requiere comprobante válido para el cliente, hay que emitir
 ## ¿De dónde sale cada valor del asiento?
 
 En la pestaña **Asiento contable** cada línea es una cuenta con la suma de todo lo que
-el recibo lleva a esa cuenta. El ícono **ⓘ** al final de la línea abre una ventana con
+el recibo lleva a esa cuenta. El ícono **ⓘ** junto al nombre de la cuenta abre una ventana con
 las **líneas del recibo** que forman ese valor (cantidad y valor de cada una) y el
 total. Lo que no corresponde a ninguna línea (centavos de redondeo, un movimiento de
 inventario de un producto que no está en el detalle) aparece como *Diferencia con el

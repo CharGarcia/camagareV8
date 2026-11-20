@@ -830,7 +830,7 @@ lleva a esa cuenta. Por ejemplo, si la factura tiene *Producto 1* por 20 y *Prod
 por 30, el asiento muestra una sola línea *Cuentas por cobrar 50*.
 
 Para ver de qué se compone, en la pestaña **Asiento contable** haga clic en el ícono
-**ⓘ** al final de la línea. Se abre una ventana con:
+**ⓘ** junto al nombre de la cuenta. Se abre una ventana con:
 
 - cada **línea de la factura** que forma ese valor, con su cantidad y su valor
   (para *Cuentas por cobrar*: subtotal + IVA de la línea; para *Ventas*: el subtotal;
