@@ -93,6 +93,8 @@ class ReporteVentasController extends BaseModuloController
             'establecimientos' => $establecimientos,
             // Columnas que la empresa ocultó en pantalla, por vista (botón «Personalizar»)
             'columnasOcultas'  => $this->ocultasPantallaPorVista(),
+            // Vistas de rentabilidad (muestran el costo): pestaña «Rentabilidad» de permisos-modulos.
+            'verRentabilidad'  => $this->puedeVerRentabilidad(),
             'fullWidth'   => true,
             'base'        => BASE_URL
         ]);
@@ -182,6 +184,11 @@ class ReporteVentasController extends BaseModuloController
     private function getFiltrosDesdeRequest(): array
     {
         $agrupar = strtoupper(trim((string) ($_REQUEST['agrupar_por'] ?? 'NINGUNO')));
+        // Las vistas de rentabilidad muestran el costo: solo para quien tiene visible la
+        // pestaña «Rentabilidad» (permisos-modulos). Si no, el reporte sale detallado.
+        if (self::esRentabilidad($agrupar) && !$this->puedeVerRentabilidad()) {
+            $agrupar = 'NINGUNO';
+        }
         return [
             'tipo_documento' => $_REQUEST['tipo_documento'] ?? 'FACTURA',
             'agrupar_por'    => isset(self::AGRUPACION_LBL[$agrupar]) ? $agrupar : 'NINGUNO',
@@ -358,6 +365,11 @@ class ReporteVentasController extends BaseModuloController
             case 'CLIENTE_CATEGORIA':
                 $r = $this->repository->getReporteClienteCategoria($idEmpresa, $filtros);
                 return [$r['rows'], $r['categorias']];
+            case 'RENT_PRODUCTO':
+            case 'RENT_CATEGORIA':
+            case 'RENT_MARCA':
+            case 'RENT_MES':
+                return [$this->repository->getRentabilidad($idEmpresa, $filtros, (string) $filtros['agrupar_por']), []];
             default:
                 return [$this->repository->getReporteDetallado($idEmpresa, $filtros), []];
         }
@@ -382,8 +394,186 @@ class ReporteVentasController extends BaseModuloController
             'VARIANTE'     => 8,
             'PRODUCTO_MES' => 3 + count($meses),
             'CLIENTE_CATEGORIA' => 3 + count($meses),
+            'RENT_PRODUCTO', 'RENT_CATEGORIA', 'RENT_MARCA', 'RENT_MES' => count(self::clavesRentabilidad($agrupar, 'pantalla')),
             default        => 6,
         });
+    }
+
+    // ─── Rentabilidad (venta sin impuestos − costo de lo vendido) ─────────────
+    // Cuatro vistas de «Agrupar por» (RENT_*). Las filas las arma
+    // ReporteVentasRepository::getRentabilidad(); las columnas son las del catálogo
+    // App\Helpers\ColumnasReporte, en este orden.
+
+    /** ¿La agrupación es una de rentabilidad? */
+    private static function esRentabilidad(string $agrupar): bool
+    {
+        return str_starts_with($agrupar, 'RENT_');
+    }
+
+    /**
+     * ¿El usuario puede ver la rentabilidad? Es la pestaña «Rentabilidad» de la tarjeta
+     * «Pestañas que puede ver» (/config/permisos-modulos, catálogo PestanasModulo): sin
+     * configuración la ve; niveles 2 y 3 siempre.
+     */
+    private ?bool $verRentabilidad = null;
+
+    private function puedeVerRentabilidad(): bool
+    {
+        if ($this->verRentabilidad === null) {
+            $vis = \App\Services\modulos\PestanasModuloService::crear()->visibles(
+                (int) ($_SESSION['id_empresa'] ?? 0),
+                (int) ($_SESSION['id_usuario'] ?? 0),
+                (int) ($_SESSION['nivel'] ?? 1),
+                $this->getRutaModulo()
+            );
+            $this->verRentabilidad = (bool) ($vis['rentabilidad'] ?? true);
+        }
+        return $this->verRentabilidad;
+    }
+
+    /** Columna descriptiva y columnas de importes de cada vista, en orden. */
+    private const RENT_DESCRIPTIVAS = [
+        'RENT_PRODUCTO'  => ['producto_codigo', 'producto_nombre', 'categoria_nombre', 'marca_nombre'],
+        'RENT_CATEGORIA' => ['categoria_nombre', 'productos'],
+        'RENT_MARCA'     => ['marca_nombre', 'productos'],
+        'RENT_MES'       => ['mes', 'productos'],
+    ];
+    private const RENT_IMPORTES = ['cantidad_vendida', 'precio_promedio', 'costo_promedio', 'total_venta', 'costo',
+                                   'utilidad', 'margen', 'markup', 'pct_utilidad', 'costo_estimado', 'venta_sin_costo'];
+
+    /**
+     * Claves de las columnas de una vista de rentabilidad que existen en un medio
+     * ('pantalla' | 'excel' | 'pdf'), en orden, SIN quitar las que la empresa ocultó
+     * (eso lo hace cada medio). Sale del catálogo: las que no están (p. ej. el precio
+     * promedio fuera de la vista por producto) o no existen en ese medio no van.
+     */
+    private static function clavesRentabilidad(string $agrupar, string $medio): array
+    {
+        $cat = \App\Helpers\ColumnasReporte::columnas('modulos/reporte_ventas', $agrupar);
+        $out = [];
+        foreach (array_merge(self::RENT_DESCRIPTIVAS[$agrupar] ?? [], self::RENT_IMPORTES) as $k) {
+            if (isset($cat[$k]) && !in_array($medio, (array) ($cat[$k]['no'] ?? []), true)) {
+                $out[] = $k;
+            }
+        }
+        return $out;
+    }
+
+    /** Totales de rentabilidad sobre las filas del reporte (tarjeta de control y PDF). */
+    private static function totalesRentabilidad(array $rows): array
+    {
+        $venta = round(self::sumarCampo($rows, 'total_venta'), 2);
+        $costo = round(self::sumarCampo($rows, 'costo'), 2);
+        $util  = round($venta - $costo, 2);
+        return [
+            'cantidad_vendida' => self::sumarCampo($rows, 'cantidad_vendida'),
+            'total_venta'      => $venta,
+            'costo'            => $costo,
+            'utilidad'         => $util,
+            'margen'           => abs($venta) > 0.004 ? round($util / $venta * 100, 2) : 0.0,
+            'markup'           => abs($costo) > 0.004 ? round($util / $costo * 100, 2) : null,
+            'pct_utilidad'     => $rows ? 100.0 : 0.0,
+            'costo_estimado'   => round(self::sumarCampo($rows, 'costo_estimado'), 2),
+            'venta_sin_costo'  => round(self::sumarCampo($rows, 'venta_sin_costo'), 2),
+        ];
+    }
+
+    /** Porcentaje con dos decimales, o una raya si no aplica (markup sin costo). */
+    private static function fmtPct($v): string
+    {
+        return $v === null || $v === '' ? '—' : number_format((float) $v, 2) . '%';
+    }
+
+    /** Texto de la descripción de una fila de rentabilidad (categoría/marca vacía → «Sin …»). */
+    private static function etiquetaRentabilidad(array $r, string $clave): string
+    {
+        $v = trim((string) ($r[$clave] ?? ''));
+        return match ($clave) {
+            'categoria_nombre' => $v !== '' ? $v : 'Sin categoría',
+            'marca_nombre'     => $v !== '' ? $v : 'Sin marca',
+            'mes'              => self::formatearMes($v),
+            default            => $v,
+        };
+    }
+
+    /**
+     * Aviso del costo de una fila (pantalla): parte estimada con la ficha del producto
+     * (ventas que no movieron inventario) y ventas sin ningún costo (su utilidad = venta).
+     */
+    private static function avisoCostoHtml(array $r): string
+    {
+        $avisos = [];
+        if (abs((float) ($r['costo_estimado'] ?? 0)) > 0.004) {
+            $avisos[] = 'Incluye $' . number_format((float) $r['costo_estimado'], 2)
+                      . ' estimado con el costo de la ficha del producto (ventas que no movieron inventario).';
+        }
+        if ((float) ($r['venta_sin_costo'] ?? 0) > 0.004) {
+            $avisos[] = 'Ventas por $' . number_format((float) $r['venta_sin_costo'], 2)
+                      . ' sin costo registrado: su utilidad sale igual a la venta.';
+        }
+        if (!$avisos) {
+            return '';
+        }
+        $cls = (float) ($r['venta_sin_costo'] ?? 0) > 0.004 ? 'text-warning' : 'text-info';
+        return " <i class='bi bi-exclamation-triangle-fill {$cls} small' title='" . htmlspecialchars(implode(' ', $avisos), ENT_QUOTES) . "'></i>";
+    }
+
+    /** Celdas de una fila de rentabilidad en pantalla: clave => <td>, en el orden del catálogo. */
+    private function celdasRentabilidad(array $r, string $agrupar): array
+    {
+        $e     = static fn ($v): string => htmlspecialchars((string) ($v ?? ''));
+        $util  = (float) ($r['utilidad'] ?? 0);
+        $clsU  = $util < 0 ? 'text-danger' : 'text-success';
+        $marg  = (float) ($r['margen'] ?? 0);
+        $clsM  = $marg < 0 ? 'text-danger' : '';
+        $porClave = [
+            'producto_codigo'  => "<td class='ps-4'><span class='fw-bold'>" . $e($r['producto_codigo'] ?? '') . "</span></td>",
+            'producto_nombre'  => "<td>" . $e($r['producto_nombre'] ?? '') . "</td>",
+            'categoria_nombre' => $agrupar === 'RENT_CATEGORIA'
+                ? "<td class='ps-4'><span class='fw-bold" . (trim((string) ($r['categoria_nombre'] ?? '')) === '' ? ' text-muted' : '') . "'>" . $e(self::etiquetaRentabilidad($r, 'categoria_nombre')) . "</span></td>"
+                : "<td>" . $e($r['categoria_nombre'] ?? '') . "</td>",
+            'marca_nombre'     => $agrupar === 'RENT_MARCA'
+                ? "<td class='ps-4'><span class='fw-bold" . (trim((string) ($r['marca_nombre'] ?? '')) === '' ? ' text-muted' : '') . "'>" . $e(self::etiquetaRentabilidad($r, 'marca_nombre')) . "</span></td>"
+                : "<td>" . $e($r['marca_nombre'] ?? '') . "</td>",
+            'mes'              => "<td class='ps-4'><span class='fw-bold'>" . self::formatearMes((string) ($r['mes'] ?? '')) . "</span></td>",
+            'productos'        => "<td class='text-center'>" . (int) ($r['productos'] ?? 0) . "</td>",
+            'cantidad_vendida' => "<td class='text-end'>" . self::fmtCantidad((float) ($r['cantidad_vendida'] ?? 0)) . "</td>",
+            'precio_promedio'  => "<td class='text-end'>" . number_format((float) ($r['precio_promedio'] ?? 0), 2) . "</td>",
+            'costo_promedio'   => "<td class='text-end'>" . number_format((float) ($r['costo_promedio'] ?? 0), 2) . "</td>",
+            'total_venta'      => "<td class='text-end'>" . number_format((float) ($r['total_venta'] ?? 0), 2) . "</td>",
+            'costo'            => "<td class='text-end text-nowrap'>" . number_format((float) ($r['costo'] ?? 0), 2) . self::avisoCostoHtml($r) . "</td>",
+            'utilidad'         => "<td class='text-end fw-bold {$clsU}'>" . number_format($util, 2) . "</td>",
+            'margen'           => "<td class='text-end {$clsM}'>" . self::fmtPct($r['margen'] ?? 0) . "</td>",
+            'markup'           => "<td class='text-end'>" . self::fmtPct($r['markup'] ?? null) . "</td>",
+            'pct_utilidad'     => "<td class='text-end pe-4'>" . self::fmtPct($r['pct_utilidad'] ?? 0) . "</td>",
+        ];
+        $celdas = [];
+        foreach (self::clavesRentabilidad($agrupar, 'pantalla') as $k) {
+            $celdas[$k] = $porClave[$k] ?? '<td></td>';
+        }
+        return $celdas;
+    }
+
+    /** Fila de totales de las vistas de rentabilidad (pantalla). */
+    private function renderFilaTotalesRentabilidadHtml(array $rows, string $agrupar, array $ocultas = []): string
+    {
+        $t    = self::totalesRentabilidad($rows);
+        $n    = count($rows);
+        $clsU = $t['utilidad'] < 0 ? 'text-danger' : 'text-success';
+        $tot  = [
+            'cantidad_vendida' => "<td class='text-end'>" . self::fmtCantidad((float) $t['cantidad_vendida']) . "</td>",
+            'total_venta'      => "<td class='text-end'>" . number_format($t['total_venta'], 2) . "</td>",
+            'costo'            => "<td class='text-end text-nowrap'>" . number_format($t['costo'], 2) . self::avisoCostoHtml($t) . "</td>",
+            'utilidad'         => "<td class='text-end {$clsU}'>" . number_format($t['utilidad'], 2) . "</td>",
+            'margen'           => "<td class='text-end'>" . self::fmtPct($t['margen']) . "</td>",
+            'markup'           => "<td class='text-end'>" . self::fmtPct($t['markup']) . "</td>",
+            'pct_utilidad'     => "<td class='text-end pe-4'>" . self::fmtPct($t['pct_utilidad']) . "</td>",
+        ];
+        $celdas = [];
+        foreach (self::clavesRentabilidad($agrupar, 'pantalla') as $k) {
+            $celdas[$k] = $tot[$k] ?? null;
+        }
+        return self::filaTotalesHtml('TOTAL (' . $n . ' ' . $this->sustantivoFilas($agrupar, $n) . ')', $celdas, $ocultas);
     }
 
     /** Cantidad de unidades: sin decimales si es entera, con dos si no. */
@@ -566,6 +756,8 @@ class ReporteVentasController extends BaseModuloController
                     echo $this->renderFilaTotalesClienteCategoriaHtml($rows, $meses, $ocultas);
                 } elseif ($filtros['agrupar_por'] === 'PRODUCTO') {
                     echo $this->renderFilaTotalesProductoHtml($rows, $ocultas);
+                } elseif (self::esRentabilidad((string) $filtros['agrupar_por'])) {
+                    echo $this->renderFilaTotalesRentabilidadHtml($rows, (string) $filtros['agrupar_por'], $ocultas);
                 } else {
                     echo $this->renderFilaTotalesMontosHtml($rows, (string) $filtros['agrupar_por'], self::conMotivo($filtros), $ocultas);
                 }
@@ -588,6 +780,8 @@ class ReporteVentasController extends BaseModuloController
                 'categorias'  => ($filtros['agrupar_por'] === 'CLIENTE_CATEGORIA' && $meses)
                     ? array_map(static fn ($k, $v) => [(string) $k, (string) $v], array_keys($meses), $meses)
                     : [],
+                // Totales de las vistas de rentabilidad (tarjeta «Utilidad bruta»); null en las demás.
+                'rentabilidad' => self::esRentabilidad((string) $filtros['agrupar_por']) ? self::totalesRentabilidad($rows) : null,
                 'consolidado' => $consolidado,
                 'borradores'  => $filtros['borradores'],
                 // Columnas ocultas en pantalla con que se pintaron las filas: la cabecera usa las mismas.
@@ -621,6 +815,10 @@ class ReporteVentasController extends BaseModuloController
 
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
+        if (self::esRentabilidad($agruparPor)) {
+            return '<tr class="align-middle">' . self::unirCeldas($this->celdasRentabilidad($r, $agruparPor), $ocultas) . '</tr>';
+        }
+
         $attrs = '';
         if (!in_array($agruparPor, ['CLIENTE', 'PRODUCTO', 'VARIANTE', 'FECHA', 'CAJERO', 'MES', 'PRODUCTO_MES', 'CLIENTE_CATEGORIA'], true) && !empty($r['id'])) {
             // En el neto (Facturas − NC) cada fila trae su propio tipo; si no, deriva del filtro.
@@ -981,6 +1179,44 @@ class ReporteVentasController extends BaseModuloController
                         [self::sumarCategoria($rows, null), round(self::sumarCampo($rows, 'total_venta'), 2)]
                     );
                 }
+            } elseif (self::esRentabilidad((string) $filtros['agrupar_por'])) {
+                // Rentabilidad: las columnas del catálogo para el Excel (incluye el costo estimado
+                // con la ficha y la venta sin costo, que en pantalla van como aviso) y la fila TOTAL.
+                $agrR    = (string) $filtros['agrupar_por'];
+                $clavesR = self::clavesRentabilidad($agrR, 'excel');
+                $catR    = \App\Helpers\ColumnasReporte::columnas($this->getRutaModulo(), $agrR);
+                $headers = array_map(static fn (string $k): string => (string) ($catR[$k]['titulo'] ?? $k), $clavesR);
+                $valor   = static function (array $r, string $k) {
+                    return match ($k) {
+                        'producto_codigo', 'producto_nombre' => (string) ($r[$k] ?? ''),
+                        'categoria_nombre', 'marca_nombre', 'mes' => self::etiquetaRentabilidad($r, $k),
+                        'productos'        => (int) ($r[$k] ?? 0),
+                        'cantidad_vendida' => (float) ($r[$k] ?? 0),
+                        'markup'           => ($r[$k] ?? null) === null ? '' : (float) $r[$k],
+                        default            => round((float) ($r[$k] ?? 0), in_array($k, ['precio_promedio', 'costo_promedio'], true) ? 4 : 2),
+                    };
+                };
+                $exportData = [];
+                foreach ($rows as $r) {
+                    $exportData[] = array_map(static fn (string $k) => $valor($r, $k), $clavesR);
+                }
+                if ($rows) {
+                    $t = self::totalesRentabilidad($rows);
+                    $n = count($rows);
+                    // La etiqueta va en la primera columna que la empresa no ocultó en el Excel.
+                    $ocR  = $this->ocultas($agrR, 'excel');
+                    $iEtq = 0;
+                    foreach ($clavesR as $i => $k) {
+                        if (!isset($ocR[$k])) { $iEtq = $i; break; }
+                    }
+                    $fila = [];
+                    foreach ($clavesR as $i => $k) {
+                        $fila[] = $i === $iEtq ? 'TOTAL (' . $n . ' ' . $this->sustantivoFilas($agrR, $n) . ')'
+                            : (array_key_exists($k, $t) && !in_array($k, ['precio_promedio', 'costo_promedio'], true)
+                                ? ($t[$k] === null ? '' : $t[$k]) : '');
+                    }
+                    $exportData[] = $fila;
+                }
             } else {
                 // Consolidado: columna "Estab." al inicio con el establecimiento dueño del documento.
                 // Con borradores: columna "Estado" para distinguirlos de los documentos válidos.
@@ -1023,6 +1259,7 @@ class ReporteVentasController extends BaseModuloController
                 'MES'      => array_merge(['mes', 'cantidad_facturas'], $montos),
                 'PRODUCTO_MES'      => array_merge(['producto_codigo', 'producto_nombre'], $dinamicas, ['total_unidades']),
                 'CLIENTE_CATEGORIA' => array_merge(['cliente_ruc', 'cliente_nombre'], $dinamicas, ['total_unidades', 'total_venta']),
+                'RENT_PRODUCTO', 'RENT_CATEGORIA', 'RENT_MARCA', 'RENT_MES' => self::clavesRentabilidad($agr, 'excel'),
                 default    => array_merge(
                     $consolidado ? [null] : [],
                     ['fecha_emision', 'numero_factura', 'cliente_nombre', 'cliente_ruc'],
@@ -1173,7 +1410,7 @@ class ReporteVentasController extends BaseModuloController
         <page backtop="7mm" backbottom="7mm" backleft="3mm" backright="3mm" footer="page">
         <?= $this->encabezadoPdf($idEmpresaActiva, $nombreEmpresa, $titulo) ?>
         <?= $this->bloqueFiltrosPdf($filtrosTxt) ?>
-        <?= $this->bloqueTotalesPdf($totales) ?>
+        <?= self::esRentabilidad($agrupar) ? $this->bloqueRentabilidadPdf($rows) : $this->bloqueTotalesPdf($totales) ?>
         <table>
             <thead><tr><?= $encabezados ?></tr></thead>
             <tbody><?= $cuerpo ?></tbody>
@@ -1236,6 +1473,10 @@ class ReporteVentasController extends BaseModuloController
         'MES'          => 'Por mes',
         'PRODUCTO_MES' => 'Unidades por producto y mes',
         'CLIENTE_CATEGORIA' => 'Unidades por cliente y categoría',
+        'RENT_PRODUCTO'  => 'Rentabilidad por producto',
+        'RENT_CATEGORIA' => 'Rentabilidad por categoría',
+        'RENT_MARCA'     => 'Rentabilidad por marca',
+        'RENT_MES'       => 'Rentabilidad por mes',
     ];
 
     /** Qué cuenta cada fila del listado, para la etiqueta "TOTALES GENERALES (N …)". */
@@ -1243,7 +1484,10 @@ class ReporteVentasController extends BaseModuloController
     {
         return match ($agrupar) {
             'CLIENTE', 'CLIENTE_CATEGORIA' => $n === 1 ? 'cliente' : 'clientes',
-            'PRODUCTO', 'PRODUCTO_MES' => $n === 1 ? 'producto' : 'productos',
+            'PRODUCTO', 'PRODUCTO_MES', 'RENT_PRODUCTO' => $n === 1 ? 'producto' : 'productos',
+            'RENT_CATEGORIA' => $n === 1 ? 'categoría' : 'categorías',
+            'RENT_MARCA'     => $n === 1 ? 'marca'     : 'marcas',
+            'RENT_MES'       => $n === 1 ? 'mes'       : 'meses',
             'VARIANTE' => $n === 1 ? 'variante'  : 'variantes',
             'FECHA'    => $n === 1 ? 'día'       : 'días',
             'CAJERO'   => $n === 1 ? 'cajero'    : 'cajeros',
@@ -1432,6 +1676,77 @@ class ReporteVentasController extends BaseModuloController
             ];
         }
 
+        if (self::esRentabilidad($agrupar)) {
+            // Rentabilidad: ancho fijo para cada importe y la columna descriptiva (producto,
+            // categoría, marca o mes) se lleva lo que sobra. Las columnas que la empresa
+            // ocultó en el PDF se quitan aquí mismo, antes de repartir el ancho.
+            $ocultasPdf = $this->ocultas($agrupar, 'pdf');
+            $claves = array_values(array_filter(self::clavesRentabilidad($agrupar, 'pdf'), static fn ($k) => !isset($ocultasPdf[$k])));
+            $catR   = \App\Helpers\ColumnasReporte::columnas($this->getRutaModulo(), $agrupar);
+            $anchos = ['producto_codigo' => 10, 'categoria_nombre' => 11, 'marca_nombre' => 11, 'productos' => 8,
+                       'cantidad_vendida' => 8, 'precio_promedio' => 8, 'costo_promedio' => 8, 'total_venta' => 11,
+                       'costo' => 11, 'utilidad' => 11, 'margen' => 7, 'markup' => 9, 'pct_utilidad' => 8];
+            $desc   = ['RENT_PRODUCTO' => 'producto_nombre', 'RENT_CATEGORIA' => 'categoria_nombre',
+                       'RENT_MARCA' => 'marca_nombre', 'RENT_MES' => 'mes'][$agrupar];
+            $fijo   = 0;
+            foreach ($claves as $k) {
+                if ($k !== $desc) { $fijo += $anchos[$k] ?? 8; }
+            }
+            $wDesc  = max(14, 100 - $fijo);
+            $escala = $fijo > 0 ? (100 - $wDesc) / $fijo : 1;   // si no cabe, se encogen los fijos
+            $cant   = static fn ($v): string => self::fmtCantidad((float) $v);
+            $pct    = static fn ($v): string => self::fmtPct($v);
+            $tR     = static fn (string $campo): callable => static fn (array $rows) => self::totalesRentabilidad($rows)[$campo];
+
+            $cols = [];
+            foreach ($claves as $k) {
+                $w   = $k === $desc ? $wDesc : round(($anchos[$k] ?? 8) * $escala, 2);
+                $lbl = (string) ($catR[$k]['corto'] ?? $catR[$k]['titulo'] ?? $k);
+                $col = ['lbl' => $lbl, 'w' => $w, 'cls' => 'text-end'];
+                switch ($k) {
+                    case 'producto_codigo':
+                    case 'producto_nombre':
+                    case 'categoria_nombre':
+                    case 'marca_nombre':
+                    case 'mes':
+                        $col['cls'] = '';
+                        $col['val'] = static fn (array $r): string => ($k === $desc ? "<span style='font-weight:bold;'>" : '<span>')
+                            . $wrap(self::etiquetaRentabilidad($r, $k), $pt((int) floor($w)), $ptFila) . '</span>';
+                        break;
+                    case 'productos':
+                        $col['cls'] = 'text-center';
+                        $col['val'] = static fn (array $r): string => (string) (int) ($r['productos'] ?? 0);
+                        break;
+                    case 'cantidad_vendida':
+                        $col['fmt'] = $cant;
+                        $col['tot'] = $sumar('cantidad_vendida');
+                        $col['val'] = static fn (array $r): string => $cant($r['cantidad_vendida'] ?? 0);
+                        break;
+                    case 'precio_promedio':
+                    case 'costo_promedio':
+                        $col['val'] = static fn (array $r): string => $num($r[$k] ?? 0);
+                        break;
+                    case 'margen':
+                    case 'markup':
+                    case 'pct_utilidad':
+                        $col['fmt'] = $pct;
+                        $col['tot'] = $tR($k);
+                        $col['val'] = static fn (array $r): string => $pct($r[$k] ?? null);
+                        break;
+                    case 'utilidad':
+                        $col['tot'] = $tR('utilidad');
+                        $col['val'] = static fn (array $r): string => "<span style='font-weight:bold;" . ((float) ($r['utilidad'] ?? 0) < 0 ? 'color:#b02a37;' : '') . "'>"
+                            . $num($r['utilidad'] ?? 0) . '</span>';
+                        break;
+                    default: // total_venta, costo
+                        $col['tot'] = $tR($k);
+                        $col['val'] = static fn (array $r): string => $num($r[$k] ?? 0);
+                }
+                $cols[] = $col;
+            }
+            return $cols;
+        }
+
         if ($agrupar === 'PRODUCTO_MES') {
             // Código y total fijos; los meses se reparten lo que queda hasta dejar a la
             // descripción al menos un 22 %, y cada mes se acota entre 4 % y 9 %.
@@ -1604,13 +1919,15 @@ class ReporteVentasController extends BaseModuloController
             $c   = $cols[$i];
             $val = '';
             if (!empty($c['tot'])) {
-                $monto = $c['tot'] instanceof \Closure
-                    ? (float) ($c['tot'])($rows)
-                    : (float) ($totales[$c['tot']] ?? 0);
+                $crudo = $c['tot'] instanceof \Closure
+                    ? ($c['tot'])($rows)
+                    : ($totales[$c['tot']] ?? 0);
+                $monto = (float) $crudo;
                 if (isset($c['fmt'])) {
-                    // Formato propio de la columna (unidades, sin símbolo de moneda).
-                    $val = ($c['fmt'])($monto);
-                } elseif ($c['lbl'] === 'Documentos') {
+                    // Formato propio de la columna (unidades, %, sin símbolo de moneda). Recibe el
+                    // valor tal cual: un null (markup sin costo) se pinta como raya.
+                    $val = ($c['fmt'])($crudo === null ? null : $monto);
+                } elseif ($c['lbl'] === 'Documentos' || $c['lbl'] === 'Productos') {
                     $val = number_format($monto, 0);
                 } elseif ($c['lbl'] === 'Total') {
                     $val = "<span style='color:#146c43;'>$" . number_format($monto, 2) . '</span>';
@@ -1642,6 +1959,40 @@ class ReporteVentasController extends BaseModuloController
             . $kpi('IVA', '$' . number_format((float) ($totales['total_iva'] ?? 0), 2))
             . $kpi('GRAN TOTAL', '$' . number_format((float) ($totales['gran_total'] ?? 0), 2), true)
             . '</tr></table>';
+    }
+
+    /**
+     * Banda de indicadores de las vistas de rentabilidad: venta sin impuestos, costo,
+     * utilidad y margen (los mismos de la tarjeta «Utilidad bruta» de la pantalla) y, si
+     * hubo, el aviso de ventas sin costo o con costo estimado con la ficha del producto.
+     */
+    private function bloqueRentabilidadPdf(array $rows): string
+    {
+        $t   = self::totalesRentabilidad($rows);
+        $kpi = static function (string $lbl, string $val, bool $destacar = false): string {
+            $cls = $destacar ? 'k-val k-tot' : 'k-val';
+            return "<td style='width:25%;'><span class='k-lbl'>" . htmlspecialchars($lbl) . '</span><br>'
+                 . "<span class='{$cls}'>" . $val . '</span></td>';
+        };
+        $html = '<table class="kpis"><tr>'
+            . $kpi('VENTA SIN IMPUESTOS', '$' . number_format($t['total_venta'], 2))
+            . $kpi('COSTO DE LO VENDIDO', '$' . number_format($t['costo'], 2))
+            . $kpi('UTILIDAD BRUTA', '$' . number_format($t['utilidad'], 2), true)
+            . $kpi('MARGEN SOBRE LA VENTA', self::fmtPct($t['margen']))
+            . '</tr></table>';
+        $notas = [];
+        if (abs($t['costo_estimado']) > 0.004) {
+            $notas[] = 'El costo incluye $' . number_format($t['costo_estimado'], 2)
+                     . ' estimado con el costo de la ficha del producto (ventas que no movieron inventario).';
+        }
+        if ($t['venta_sin_costo'] > 0.004) {
+            $notas[] = 'Ventas por $' . number_format($t['venta_sin_costo'], 2)
+                     . ' no tienen costo registrado: su utilidad sale igual a la venta.';
+        }
+        if ($notas) {
+            $html .= "<p style='font-size:7pt;color:#8a5a00;margin:0 0 6px 0;'>" . htmlspecialchars(implode(' ', $notas)) . '</p>';
+        }
+        return $html;
     }
 
     /**

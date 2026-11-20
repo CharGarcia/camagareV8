@@ -64,6 +64,15 @@
                             <option value="MES">Por Mes</option>
                             <option value="PRODUCTO_MES">Unidades por Producto / Mes</option>
                             <option value="CLIENTE_CATEGORIA">Unidades por Cliente / Categoría</option>
+                            <?php if (!empty($verRentabilidad)): ?>
+                                <?php // Venta sin impuestos − costo de lo vendido. Se ocultan por usuario en permisos-modulos (pestaña «Rentabilidad»). ?>
+                                <optgroup label="Rentabilidad (utilidad)">
+                                    <option value="RENT_PRODUCTO">Rentabilidad por Producto</option>
+                                    <option value="RENT_CATEGORIA">Rentabilidad por Categoría</option>
+                                    <option value="RENT_MARCA">Rentabilidad por Marca</option>
+                                    <option value="RENT_MES">Rentabilidad por Mes</option>
+                                </optgroup>
+                            <?php endif; ?>
                         </select>
                     </div>
 
@@ -294,6 +303,17 @@
                     <div>
                         <div class="cmg-control-card__stat-value text-success">$<span id="stat-total">0.00</span></div>
                         <div class="cmg-control-card__stat-label">Gran Total<span id="stat-total-nota"></span></div>
+                    </div>
+                </div>
+                <?php // Solo en las vistas de rentabilidad: utilidad bruta, margen y costo de lo vendido. ?>
+                <div class="cmg-control-card__stat d-none" id="rv-stat-rentabilidad">
+                    <i class="bi bi-graph-up-arrow bg-success bg-opacity-10 text-success"></i>
+                    <div>
+                        <div class="cmg-control-card__stat-value"><span id="stat-utilidad">$0.00</span> <small class="text-muted fw-normal" style="font-size:.7rem;">(<span id="stat-margen">0.00%</span>)</small></div>
+                        <div class="cmg-control-card__stat-label">
+                            Utilidad bruta · Costo $<span id="stat-costo">0.00</span> de $<span id="stat-venta-neta">0.00</span>
+                            <i class="bi bi-exclamation-triangle-fill text-warning ms-1 d-none" id="stat-rent-aviso"></i>
+                        </div>
                     </div>
                 </div>
             </div>

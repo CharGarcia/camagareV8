@@ -338,6 +338,44 @@ class ReporteVentasRepository extends BaseRepository
             'total_unidades' => 'total_unidades {dir}',
             'total_venta'    => 'total_venta {dir}',
         ],
+        // Rentabilidad (venta − costo): las filas se agregan en PHP (getRentabilidad), así
+        // que estas entradas solo son la lista blanca y el orden por defecto; ordena
+        // ordenarFilas() por el campo de la fila con el mismo nombre.
+        'RENT_PRODUCTO' => self::ORDEN_RENTABILIDAD + [
+            '_def'             => ['utilidad', 'DESC'],
+            'producto_codigo'  => '',
+            'producto_nombre'  => '',
+            'categoria_nombre' => '',
+            'marca_nombre'     => '',
+            'precio_promedio'  => '',
+            'costo_promedio'   => '',
+        ],
+        'RENT_CATEGORIA' => self::ORDEN_RENTABILIDAD + [
+            '_def'             => ['utilidad', 'DESC'],
+            'categoria_nombre' => '',
+            'productos'        => '',
+        ],
+        'RENT_MARCA' => self::ORDEN_RENTABILIDAD + [
+            '_def'             => ['utilidad', 'DESC'],
+            'marca_nombre'     => '',
+            'productos'        => '',
+        ],
+        'RENT_MES' => self::ORDEN_RENTABILIDAD + [
+            '_def'             => ['mes', 'ASC'],
+            'mes'              => '',
+            'productos'        => '',
+        ],
+    ];
+
+    /** Columnas de importes comunes a las vistas de rentabilidad (lista blanca de orden). */
+    private const ORDEN_RENTABILIDAD = [
+        'cantidad_vendida' => '',
+        'total_venta'      => '',
+        'costo'            => '',
+        'utilidad'         => '',
+        'margen'           => '',
+        'markup'           => '',
+        'pct_utilidad'     => '',
     ];
 
     /** Agrupación que corresponde a cada método (para ordenar el neto Facturas − NC). */
@@ -1219,6 +1257,226 @@ class ReporteVentasRepository extends BaseRepository
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ── Rentabilidad (utilidad bruta) ─────────────────────────────────────────
+
+    /** Movimiento de kardex que deja cada tipo de documento: [referencia_tipo, tipo_movimiento]. */
+    private const KARDEX_DOCUMENTO = [
+        'FACTURA'      => ['factura_venta', 'salida'],
+        'RECIBO'       => ['recibo_venta', 'salida'],
+        'NOTA_CREDITO' => ['nota_credito', 'entrada'],
+    ];
+
+    /**
+     * Filas planas mes × producto de UNA fuente (facturas, recibos o notas de crédito) con
+     * lo vendido sin impuestos y su costo. Base de getRentabilidad().
+     *
+     * Costo de cada producto en cada documento:
+     *  - el `costo_total` de los movimientos del kardex que dejó ese documento para ese
+     *    producto (salida de la factura/recibo; reingreso de la NC). Es el mismo costo que
+     *    toma el asiento de Costo de Ventas (AsientoBuilderService). El kardex no guarda la
+     *    línea, solo producto + documento: por eso las líneas se juntan primero por
+     *    documento y producto (un producto en dos líneas no duplica el costo). Los
+     *    componentes de un kit se cargan al producto vendido (ver la consulta).
+     *  - si el documento no movió inventario para ese producto (servicios, empresa cuya
+     *    facturación no afecta al inventario, concepto libre), se ESTIMA con el costo de la
+     *    ficha (`productos.costo_producto`) × cantidad, y se informa aparte en
+     *    `costo_estimado`.
+     * `venta_sin_costo` suma lo vendido cuyo costo quedó en 0 (sin costo en el kardex ni en
+     * la ficha): su utilidad sale igual a la venta, y la pantalla lo advierte.
+     */
+    private function getRentabilidadPlano(int|array $idEmpresa, array $filtros): array
+    {
+        $tipo = (string) ($filtros['tipo_documento'] ?? 'FACTURA');
+        if (!isset(self::KARDEX_DOCUMENTO[$tipo])) {
+            return [];
+        }
+        $f = $this->fuente($filtros);
+        [$where, $params] = $this->buildWhereYParams($idEmpresa, $filtros, 'v', 'd');
+        [$refTipo, $refMov] = self::KARDEX_DOCUMENTO[$tipo];
+        $params[':rk_tipo'] = $refTipo;
+        $params[':rk_mov']  = $refMov;
+
+        // lin: una fila por documento + producto (lid la identifica). kx: costo del kardex por
+        // documento + producto. Lo que el kardex descargó de un producto que NO es línea del
+        // documento son componentes de un kit (InventarioService: "Salida componente de …"):
+        // su costo va al producto padre vendido en ese documento (productos_componentes) o,
+        // si no se identifica, se reparte entre las líneas del documento según su venta. Así
+        // el costo de cada documento suma exactamente lo que descargó su kardex.
+        $sql = "
+            WITH lin AS (
+                SELECT ROW_NUMBER() OVER () AS lid,
+                       v.id AS id_doc,
+                       v.id_empresa,
+                       d.id_producto,
+                       TO_CHAR(v.fecha_emision, 'YYYY-MM') AS mes,
+                       COALESCE(p.nombre, d.descripcion) AS producto_nombre,
+                       MAX(d.codigo_principal) AS codigo_linea,
+                       SUM(d.cantidad) AS cantidad,
+                       SUM(d.precio_total_sin_impuesto) AS venta
+                FROM {$f['det']} d
+                JOIN {$f['cab']} v ON v.id = d.{$f['fk_det']}
+                LEFT JOIN productos p ON p.id = d.id_producto
+                WHERE {$where}
+                GROUP BY v.id, v.id_empresa, d.id_producto, TO_CHAR(v.fecha_emision, 'YYYY-MM'), COALESCE(p.nombre, d.descripcion)
+            ),
+            kx AS (
+                SELECT k.id_empresa, k.referencia_id, k.id_producto, SUM(k.costo_total) AS costo
+                FROM inventario_kardex k
+                WHERE k.referencia_tipo = :rk_tipo
+                  AND k.tipo_movimiento = :rk_mov
+                  AND k.eliminado = false
+                  AND k.id_empresa IN ({$this->inEmp})
+                  AND k.referencia_id IN (SELECT DISTINCT id_doc FROM lin)
+                GROUP BY k.id_empresa, k.referencia_id, k.id_producto
+            ),
+            kc AS (
+                SELECT kx.id_empresa, kx.referencia_id, kx.costo,
+                       (SELECT MIN(pc.id_producto_padre)
+                        FROM productos_componentes pc
+                        JOIN lin lp ON lp.id_doc = kx.referencia_id AND lp.id_empresa = kx.id_empresa
+                                   AND lp.id_producto = pc.id_producto_padre
+                        WHERE pc.id_producto_hijo = kx.id_producto AND pc.eliminado = false) AS id_padre
+                FROM kx
+                WHERE NOT EXISTS (SELECT 1 FROM lin lm
+                                  WHERE lm.id_doc = kx.referencia_id AND lm.id_empresa = kx.id_empresa
+                                    AND lm.id_producto = kx.id_producto)
+            ),
+            tv AS (
+                SELECT id_doc, id_empresa, SUM(venta) AS venta, COUNT(*) AS n FROM lin GROUP BY id_doc, id_empresa
+            ),
+            extra AS (
+                SELECT l.lid,
+                       SUM(CASE WHEN kc.id_padre IS NOT NULL THEN kc.costo
+                                WHEN tv.venta <> 0 THEN kc.costo * l.venta / tv.venta
+                                ELSE kc.costo / tv.n END) AS costo
+                FROM kc
+                JOIN lin l ON l.id_doc = kc.referencia_id AND l.id_empresa = kc.id_empresa
+                          AND (kc.id_padre IS NULL OR l.id_producto = kc.id_padre)
+                JOIN tv ON tv.id_doc = l.id_doc AND tv.id_empresa = l.id_empresa
+                GROUP BY l.lid
+            ),
+            lc AS (
+                SELECT l.mes, l.id_producto, l.producto_nombre, l.codigo_linea, l.cantidad, l.venta,
+                       (kx.referencia_id IS NOT NULL OR ex.lid IS NOT NULL) AS con_kardex,
+                       CASE WHEN kx.referencia_id IS NOT NULL OR ex.lid IS NOT NULL
+                            THEN COALESCE(kx.costo, 0) + COALESCE(ex.costo, 0)
+                            ELSE l.cantidad * COALESCE(pf.costo_producto, 0) END AS costo
+                FROM lin l
+                LEFT JOIN kx ON kx.id_empresa = l.id_empresa AND kx.referencia_id = l.id_doc AND kx.id_producto = l.id_producto
+                LEFT JOIN extra ex ON ex.lid = l.lid
+                LEFT JOIN productos pf ON pf.id = l.id_producto
+            )
+            SELECT lc.mes,
+                   lc.id_producto,
+                   COALESCE(NULLIF(TRIM(p.codigo), ''), MAX(lc.codigo_linea), '') AS producto_codigo,
+                   lc.producto_nombre,
+                   COALESCE(TRIM(cat.nombre), '') AS categoria_nombre,
+                   COALESCE(TRIM(mar.nombre), '') AS marca_nombre,
+                   SUM(lc.cantidad) AS cantidad,
+                   SUM(lc.venta)    AS venta,
+                   SUM(lc.costo)    AS costo,
+                   SUM(CASE WHEN lc.con_kardex THEN 0 ELSE lc.costo END) AS costo_estimado,
+                   SUM(CASE WHEN COALESCE(lc.costo, 0) <= 0 AND lc.venta > 0 THEN lc.venta ELSE 0 END) AS venta_sin_costo
+            FROM lc
+            LEFT JOIN productos p    ON p.id = lc.id_producto
+            LEFT JOIN categorias cat ON cat.id = p.id_categoria
+            LEFT JOIN marcas mar     ON mar.id = p.id_marca
+            GROUP BY lc.mes, lc.id_producto, p.codigo, lc.producto_nombre, cat.nombre, mar.nombre
+        ";
+
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Rentabilidad de lo vendido (venta sin impuestos − costo), agrupada por $vista:
+     * RENT_PRODUCTO, RENT_CATEGORIA, RENT_MARCA o RENT_MES. Respeta todos los filtros del
+     * reporte (fechas, cliente, vendedor, cajero, producto, marca, categoría, alcance §6…).
+     *
+     * En el neto (Facturas − NC / Todos) las notas de crédito restan venta, unidades y
+     * costo (el costo de lo devuelto vuelve al inventario). `venta_sin_costo` solo cuenta
+     * lo vendido, no lo devuelto.
+     *
+     * Categoría y marca se agrupan por NOMBRE (sin distinguir mayúsculas ni espacios): en
+     * consolidado cada establecimiento tiene las suyas y las homónimas van juntas.
+     *
+     * Campos de cada fila: cantidad_vendida, total_venta, costo, utilidad, margen (% sobre
+     * la venta), markup (% sobre el costo; null sin costo), pct_utilidad (participación
+     * en la utilidad del reporte), costo_estimado, venta_sin_costo, productos (distintos),
+     * precio_promedio y costo_promedio (por unidad).
+     */
+    public function getRentabilidad(int|array $idEmpresa, array $filtros, string $vista): array
+    {
+        $tipo    = (string) ($filtros['tipo_documento'] ?? 'FACTURA');
+        $fuentes = $this->esNeto($filtros)
+            ? array_merge(array_map(static fn ($t) => [$t, 1], $this->fuentesSuma($filtros)), [['NOTA_CREDITO', -1]])
+            : [[$tipo, 1]];
+
+        $grupos = [];
+        foreach ($fuentes as [$fuente, $signo]) {
+            foreach ($this->getRentabilidadPlano($idEmpresa, array_merge($filtros, ['tipo_documento' => $fuente])) as $r) {
+                $prodKey = !empty($r['id_producto']) ? 'p' . (int) $r['id_producto'] : 'd' . mb_strtolower(trim((string) $r['producto_nombre']));
+                $cat     = trim((string) $r['categoria_nombre']);
+                $mar     = trim((string) $r['marca_nombre']);
+                $k = match ($vista) {
+                    'RENT_CATEGORIA' => mb_strtolower($cat),
+                    'RENT_MARCA'     => mb_strtolower($mar),
+                    'RENT_MES'       => (string) $r['mes'],
+                    default          => $prodKey,
+                };
+                if (!isset($grupos[$k])) {
+                    $grupos[$k] = [
+                        'id_producto'      => $vista === 'RENT_PRODUCTO' ? ($r['id_producto'] !== null ? (int) $r['id_producto'] : null) : null,
+                        'producto_codigo'  => (string) $r['producto_codigo'],
+                        'producto_nombre'  => (string) $r['producto_nombre'],
+                        'categoria_nombre' => $cat,
+                        'marca_nombre'     => $mar,
+                        'mes'              => (string) $r['mes'],
+                        'cantidad_vendida' => 0.0,
+                        'total_venta'      => 0.0,
+                        'costo'            => 0.0,
+                        'costo_estimado'   => 0.0,
+                        'venta_sin_costo'  => 0.0,
+                        '_productos'       => [],
+                    ];
+                }
+                $g = &$grupos[$k];
+                $g['cantidad_vendida'] += $signo * (float) $r['cantidad'];
+                $g['total_venta']      += $signo * (float) $r['venta'];
+                $g['costo']            += $signo * (float) $r['costo'];
+                $g['costo_estimado']   += $signo * (float) $r['costo_estimado'];
+                if ($signo > 0) {
+                    $g['venta_sin_costo'] += (float) $r['venta_sin_costo'];
+                }
+                $g['_productos'][$prodKey] = true;
+                unset($g);
+            }
+        }
+
+        $totUtilidad = 0.0;
+        foreach ($grupos as &$g) {
+            foreach (['total_venta', 'costo', 'costo_estimado', 'venta_sin_costo'] as $c) {
+                $g[$c] = round($g[$c], 2);
+            }
+            $g['productos']       = count($g['_productos']);
+            unset($g['_productos']);
+            $g['utilidad']        = round($g['total_venta'] - $g['costo'], 2);
+            $g['margen']          = abs($g['total_venta']) > 0.004 ? round($g['utilidad'] / $g['total_venta'] * 100, 2) : 0.0;
+            $g['markup']          = abs($g['costo']) > 0.004 ? round($g['utilidad'] / $g['costo'] * 100, 2) : null;
+            $g['precio_promedio'] = abs($g['cantidad_vendida']) > 0.000001 ? round($g['total_venta'] / $g['cantidad_vendida'], 4) : 0.0;
+            $g['costo_promedio']  = abs($g['cantidad_vendida']) > 0.000001 ? round($g['costo'] / $g['cantidad_vendida'], 4) : 0.0;
+            $totUtilidad += $g['utilidad'];
+        }
+        unset($g);
+        foreach ($grupos as &$g) {
+            $g['pct_utilidad'] = abs($totUtilidad) > 0.004 ? round($g['utilidad'] / $totUtilidad * 100, 2) : 0.0;
+        }
+        unset($g);
+
+        return $this->ordenarFilas(array_values($grupos), $filtros, $vista);
     }
 
     // ── Unidades vendidas por producto y mes ──────────────────────────────────

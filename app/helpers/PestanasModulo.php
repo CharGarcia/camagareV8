@@ -39,6 +39,16 @@ final class PestanasModulo
                 'auditoria'      => ['icono' => 'bi-shield-check',     'titulo' => 'Auditoría'],
             ],
         ],
+        // Reporte de Ventas: las vistas de «Rentabilidad» de «Agrupar por» muestran el costo y
+        // la utilidad; el administrador puede ocultárselas a un usuario de nivel 1 (p. ej. a
+        // un vendedor). Ver ReporteVentasController::puedeVerRentabilidad().
+        'modulos/reporte_ventas' => [
+            'titulo'   => 'Reporte de Ventas',
+            'icono'    => 'bi-file-earmark-bar-graph',
+            'pestanas' => [
+                'rentabilidad' => ['icono' => 'bi-graph-up-arrow', 'titulo' => 'Rentabilidad (costo y utilidad)'],
+            ],
+        ],
         // Pestañas del modal (General siempre se ve). Ver App\Traits\DimensionReporteTrait.
         'modulos/proyectos' => [
             'titulo'   => 'Proyectos',

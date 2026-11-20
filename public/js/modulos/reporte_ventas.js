@@ -207,8 +207,8 @@ window.RV_onAgruparChange = function() {
     const mesEl = document.getElementById('rv-mes');
     RV_sincronizarBotonesVista();
 
-    if (agruparPor === 'MES' || agruparPor === 'PRODUCTO_MES') {
-        mesEl.disabled = (agruparPor === 'MES');
+    if (agruparPor === 'MES' || agruparPor === 'PRODUCTO_MES' || agruparPor === 'RENT_MES') {
+        mesEl.disabled = (agruparPor === 'MES' || agruparPor === 'RENT_MES');
         if (mesEl.value !== 'TODOS') {
             mesEl.value = 'TODOS';
             window.RV_cambiarMesAnio(); // recalcula el rango de fechas (no consulta)
@@ -311,6 +311,28 @@ window.RV_generarReporte = function () {
                 document.getElementById('stat-base-iva').textContent = parseFloat(res.stats.total_base_iva).toFixed(2);
                 document.getElementById('stat-iva').textContent = parseFloat(res.stats.total_iva).toFixed(2);
                 document.getElementById('stat-total').textContent = parseFloat(res.stats.gran_total).toFixed(2);
+            }
+            // Tarjeta «Utilidad bruta»: solo en las vistas de rentabilidad.
+            const cajaRent = document.getElementById('rv-stat-rentabilidad');
+            if (cajaRent) {
+                const t = res.rentabilidad;
+                cajaRent.classList.toggle('d-none', !t);
+                if (t) {
+                    const fmt = v => (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    const util = parseFloat(t.utilidad) || 0;
+                    const elU = document.getElementById('stat-utilidad');
+                    elU.textContent = (util < 0 ? '-$' : '$') + fmt(Math.abs(util));
+                    elU.className = util < 0 ? 'text-danger' : 'text-success';
+                    document.getElementById('stat-margen').textContent = fmt(t.margen) + '%';
+                    document.getElementById('stat-costo').textContent = fmt(t.costo);
+                    document.getElementById('stat-venta-neta').textContent = fmt(t.total_venta);
+                    const avisos = [];
+                    if (Math.abs(parseFloat(t.costo_estimado) || 0) > 0.004) avisos.push('El costo incluye $' + fmt(t.costo_estimado) + ' estimado con el costo de la ficha del producto (ventas que no movieron inventario).');
+                    if ((parseFloat(t.venta_sin_costo) || 0) > 0.004) avisos.push('Ventas por $' + fmt(t.venta_sin_costo) + ' no tienen costo registrado: su utilidad sale igual a la venta.');
+                    const elA = document.getElementById('stat-rent-aviso');
+                    elA.classList.toggle('d-none', avisos.length === 0);
+                    elA.title = avisos.join(' ');
+                }
             }
             if (res.estados) {
                 // El conteo principal y la nota del Gran Total siguen al selector "Borradores"
@@ -426,6 +448,20 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         const cats = window.rv_last_categorias || [];
         labels = cats.map(c => c[1]);
         dataTotales = cats.map(c => rawData.reduce((acc, r) => acc + (parseFloat((r.categorias || {})[c[0]]) || 0), 0));
+    } else if (agrupacion && agrupacion.startsWith('RENT_')) {
+        // Rentabilidad: utilidad de cada fila (por mes, en orden de tiempo y como línea).
+        let datos = [...rawData];
+        if (agrupacion === 'RENT_MES') {
+            datos.sort((a, b) => (a.mes > b.mes ? 1 : -1));
+            labels = datos.map(r => RV_formatearMes(r.mes));
+            defaultType = 'line';
+        } else {
+            datos = datos.slice(0, 30);
+            labels = datos.map(r => agrupacion === 'RENT_CATEGORIA' ? (r.categoria_nombre || 'Sin categoría')
+                                 : agrupacion === 'RENT_MARCA' ? (r.marca_nombre || 'Sin marca')
+                                 : r.producto_nombre);
+        }
+        dataTotales = datos.map(r => parseFloat(r.utilidad) || 0);
     } else if (agrupacion === 'CLIENTE') {
         labels = rawData.map(r => r.cliente_nombre);
         dataTotales = rawData.map(r => parseFloat(r.total));
@@ -477,7 +513,9 @@ function RV_dibujarGrafico(rawData, agrupacion) {
         data: {
             labels: labels,
             datasets: [{
-                label: esUnidades ? 'Unidades vendidas' : (agrupacion === 'PRODUCTO' ? 'Total Venta sin IVA ($)' : 'Gran Total ($)'),
+                label: esUnidades ? 'Unidades vendidas'
+                     : (agrupacion && agrupacion.startsWith('RENT_')) ? 'Utilidad bruta ($)'
+                     : (agrupacion === 'PRODUCTO' ? 'Total Venta sin IVA ($)' : 'Gran Total ($)'),
                 data: dataTotales,
                 backgroundColor: backgroundColor,
                 borderColor: borderColor,
@@ -511,6 +549,24 @@ function RV_dibujarGrafico(rawData, agrupacion) {
    la ignora y usa su orden por defecto. `def` es ese orden por defecto, y solo sirve para
    pintar la flecha en la columna correcta mientras el usuario no elija otra.
 ════════════════════════════════════════════════════ */
+// Columnas de importes de las vistas de rentabilidad (el precio y costo promedio por
+// unidad solo en la vista por producto).
+function RV_colsRentabilidad(conPromedios) {
+    return [
+        ['cantidad_vendida',  'Cantidad',         'text-end'],
+        ...(conPromedios ? [
+            ['precio_promedio', 'Precio prom.',   'text-end'],
+            ['costo_promedio',  'Costo prom.',    'text-end'],
+        ] : []),
+        ['total_venta',       'Venta sin IVA',    'text-end'],
+        ['costo',             'Costo',            'text-end'],
+        ['utilidad',          'Utilidad',         'text-end'],
+        ['margen',            'Margen %',         'text-end'],
+        ['markup',            'Markup %',         'text-end'],
+        ['pct_utilidad',      '% Utilidad',       'text-end pe-4'],
+    ];
+}
+
 const RV_COLUMNAS = {
     CLIENTE: {
         def: ['total', 'DESC'],
@@ -603,6 +659,42 @@ const RV_COLUMNAS = {
             ['cliente_nombre',    'Cliente',          'ps-4'],
             ['total_unidades',    'Total Unidades',   'text-end'],
             ['total_venta',       'Total Venta sin IVA', 'text-end pe-4'],
+        ]
+    },
+    // Rentabilidad (venta sin impuestos − costo): mismas claves que el catálogo
+    // ColumnasReporte (las apagadas por defecto llegan en RV_OCULTAS y no se dibujan).
+    RENT_PRODUCTO: {
+        def: ['utilidad', 'DESC'],
+        cols: [
+            ['producto_codigo',   'Código',           'ps-4'],
+            ['producto_nombre',   'Producto',         ''],
+            ['categoria_nombre',  'Categoría',        ''],
+            ['marca_nombre',      'Marca',            ''],
+            ...RV_colsRentabilidad(true),
+        ]
+    },
+    RENT_CATEGORIA: {
+        def: ['utilidad', 'DESC'],
+        cols: [
+            ['categoria_nombre',  'Categoría',        'ps-4'],
+            ['productos',         'Productos',        'text-center'],
+            ...RV_colsRentabilidad(false),
+        ]
+    },
+    RENT_MARCA: {
+        def: ['utilidad', 'DESC'],
+        cols: [
+            ['marca_nombre',      'Marca',            'ps-4'],
+            ['productos',         'Productos',        'text-center'],
+            ...RV_colsRentabilidad(false),
+        ]
+    },
+    RENT_MES: {
+        def: ['mes', 'ASC'],
+        cols: [
+            ['mes',               'Mes',              'ps-4'],
+            ['productos',         'Productos',        'text-center'],
+            ...RV_colsRentabilidad(false),
         ]
     },
     NINGUNO: {

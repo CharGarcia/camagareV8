@@ -95,6 +95,30 @@ final class ColumnasReporte
         'total'     => ['titulo' => 'Gran Total'],
     ];
 
+    /**
+     * Importes de las vistas de rentabilidad del Reporte de Ventas, en orden. El costo
+     * estimado con la ficha y la venta sin costo solo existen en el Excel: en pantalla son
+     * el ícono de aviso junto al costo y, en el PDF, la nota bajo los indicadores.
+     */
+    private const VENTAS_RENT_CANTIDAD = [
+        'cantidad_vendida' => ['titulo' => 'Cantidad'],
+    ];
+    /** Solo en la vista por producto (en una categoría, marca o mes se mezclan unidades distintas). */
+    private const VENTAS_RENT_PROMEDIOS = [
+        'precio_promedio'  => ['titulo' => 'Precio prom.', 'nombre' => 'Precio promedio por unidad', 'pantalla' => false, 'pdf' => false],
+        'costo_promedio'   => ['titulo' => 'Costo prom.', 'nombre' => 'Costo promedio por unidad', 'pantalla' => false, 'pdf' => false],
+    ];
+    private const VENTAS_RENT_IMPORTES = [
+        'total_venta'     => ['titulo' => 'Venta sin IVA', 'nombre' => 'Venta sin impuestos'],
+        'costo'            => ['titulo' => 'Costo', 'nombre' => 'Costo de lo vendido'],
+        'utilidad'         => ['titulo' => 'Utilidad', 'nombre' => 'Utilidad bruta'],
+        'margen'           => ['titulo' => 'Margen %', 'nombre' => 'Margen % (utilidad sobre la venta)'],
+        'markup'           => ['titulo' => 'Markup %', 'nombre' => 'Markup % (utilidad sobre el costo)'],
+        'pct_utilidad'     => ['titulo' => '% Utilidad', 'nombre' => '% de la utilidad total'],
+        'costo_estimado'   => ['titulo' => 'Costo estimado (ficha)', 'nombre' => 'Parte del costo estimada con la ficha del producto', 'no' => ['pantalla', 'pdf']],
+        'venta_sin_costo'  => ['titulo' => 'Venta sin costo', 'nombre' => 'Venta sin costo registrado', 'no' => ['pantalla', 'pdf']],
+    ];
+
     private const COMPRAS_COMPROBANTES = [
         'comprobantes' => ['titulo' => 'Nro Comp.', 'excel' => 'Nro Comprobantes', 'alinear' => 'centro', 'ancho' => 9, 'suma' => 'cantidad_comprobantes'],
     ];
@@ -279,6 +303,39 @@ final class ColumnasReporte
                         'total_unidades' => ['titulo' => 'Total Unidades'],
                         'total_venta'    => ['titulo' => 'Total Venta sin IVA'],
                     ],
+                ],
+                // Rentabilidad (venta sin impuestos − costo de lo vendido). Ver
+                // ReporteVentasRepository::getRentabilidad(). Categoría/marca en la vista por
+                // producto, y precio/costo promedio, apagados por defecto en pantalla y PDF.
+                'RENT_PRODUCTO' => [
+                    'titulo' => 'Rentabilidad por producto', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'producto_codigo'  => ['titulo' => 'Código'],
+                        'producto_nombre'  => ['titulo' => 'Producto', 'fija' => true],
+                        'categoria_nombre' => ['titulo' => 'Categoría', 'pantalla' => false, 'pdf' => false],
+                        'marca_nombre'     => ['titulo' => 'Marca', 'pantalla' => false, 'pdf' => false],
+                    ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_PROMEDIOS + self::VENTAS_RENT_IMPORTES,
+                ],
+                'RENT_CATEGORIA' => [
+                    'titulo' => 'Rentabilidad por categoría', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'categoria_nombre' => ['titulo' => 'Categoría', 'fija' => true],
+                        'productos'        => ['titulo' => 'Productos', 'nombre' => 'Productos distintos vendidos'],
+                    ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_IMPORTES,
+                ],
+                'RENT_MARCA' => [
+                    'titulo' => 'Rentabilidad por marca', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'marca_nombre' => ['titulo' => 'Marca', 'fija' => true],
+                        'productos'    => ['titulo' => 'Productos', 'nombre' => 'Productos distintos vendidos'],
+                    ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_IMPORTES,
+                ],
+                'RENT_MES' => [
+                    'titulo' => 'Rentabilidad por mes', 'auto' => 'P', 'excel_propio' => true,
+                    'columnas' => [
+                        'mes'       => ['titulo' => 'Mes', 'fija' => true],
+                        'productos' => ['titulo' => 'Productos', 'nombre' => 'Productos distintos vendidos'],
+                    ] + self::VENTAS_RENT_CANTIDAD + self::VENTAS_RENT_IMPORTES,
                 ],
             ],
         ],
