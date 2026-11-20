@@ -1751,6 +1751,30 @@ class FacturaVentaService
         return $builder->generarAsientoSugerido($idEmpresa, 'ventas_factura', $invoiceData);
     }
 
+    /**
+     * «¿De dónde sale este valor?» de la pestaña Asiento contable: el asiento que el sistema
+     * arma para la factura, con las líneas de la factura que forman cada valor. Solo lectura
+     * (no guarda ni regenera nada). null si la factura no es de la empresa, o —sin acceso
+     * total— si no la creó el usuario (§6, registros propios).
+     *
+     * @return array<int,array>|null líneas: id_cuenta_contable, cuenta_codigo, cuenta_nombre,
+     *                               debe, haber, referencia_detalle, desglose[]
+     */
+    public function desgloseAsiento(int $idVenta, int $idEmpresa, ?int $idUsuarioFiltro = null): ?array
+    {
+        $venta = $this->repository->getPorId($idVenta);
+        if (!$venta || (int) $venta['id_empresa'] !== $idEmpresa) {
+            return null;
+        }
+        if ($idUsuarioFiltro !== null && (int) ($venta['created_by'] ?? 0) !== $idUsuarioFiltro) {
+            return null;
+        }
+        $builder = new \App\Services\modulos\AsientoBuilderService();
+        return AsientoBuilderService::lineasDesglosePublicas(
+            $builder->desgloseVentaFactura($idEmpresa, $idVenta, (int) ($venta['id_cliente'] ?? 0))
+        );
+    }
+
     public function procesarAsientoContablePorSincronizacion(int $idVenta): void
     {
         $cabecera = $this->repository->getPorId($idVenta);

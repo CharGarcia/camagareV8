@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, categoria del producto, marca del producto, ver marca, ver categoria, informacion del producto, ficha del producto, codigo de barras, ubicacion del producto, donde esta el producto, icono i, pasar el mouse
-version: 1.33
+etiquetas: recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, categoria del producto, marca del producto, ver marca, ver categoria, informacion del producto, ficha del producto, codigo de barras, ubicacion del producto, donde esta el producto, icono i, pasar el mouse, de donde sale el valor del asiento, desglose del asiento, a que corresponde cada valor, que lineas forman la cuenta
+version: 1.35
 orden: 35
 estado: activo
 ---
@@ -98,6 +98,8 @@ tablet) se abre una tarjeta con:
 - **Categoría** y **marca** del producto.
 - **Código**, **código auxiliar** y **código de barras**.
 - **Unidad base** del producto.
+- **Precio base** del catálogo (el precio actual del producto, sin IVA; puede ser distinto
+  del precio puesto en la línea).
 - **Ubicación** en bodega (la que se registró en el módulo Productos).
 - **Saldo en la bodega**, cuando el recibo afecta al inventario.
 - Si es **bien** o **servicio**.
@@ -204,6 +206,20 @@ guardado.
 Si la operación requiere comprobante válido para el cliente, hay que emitir
 **factura**. El recibo no sustituye a un comprobante electrónico ante el SRI.
 
+## ¿De dónde sale cada valor del asiento?
+
+En la pestaña **Asiento contable** cada línea es una cuenta con la suma de todo lo que
+el recibo lleva a esa cuenta. El ícono **ⓘ** al final de la línea abre una ventana con
+las **líneas del recibo** que forman ese valor (cantidad y valor de cada una) y el
+total. Lo que no corresponde a ninguna línea (centavos de redondeo, un movimiento de
+inventario de un producto que no está en el detalle) aparece como *Diferencia con el
+total del documento*.
+
+Se calcula con la configuración contable actual: si el asiento se editó a mano o las
+cuentas cambiaron después de generarlo, la ventana avisa que la suma no coincide. Mismo
+funcionamiento que en Facturas de Venta (ver *¿De dónde sale cada valor del asiento?*
+en ese artículo).
+
 ## Errores frecuentes
 
 - **El cliente pide su factura y solo tiene un recibo**: emita la factura; el
@@ -279,6 +295,8 @@ propio texto, se respeta.
 
 ## Historial de cambios
 
+- **1.35** — En la pestaña **Asiento contable**, el ícono **ⓘ** de cada línea muestra **de qué líneas del recibo sale ese valor**. Ver *¿De dónde sale cada valor del asiento?*.
+- **1.34** — La ficha del producto (ícono ⓘ de cada línea) muestra también el **precio base** del catálogo. Ver *Ficha del producto en cada línea (ícono ⓘ)*.
 - **1.33** — Nuevo **ícono ⓘ** en cada línea de producto: al pasar el puntero (o tocarlo en celular) muestra categoría, marca, códigos, unidad base, ubicación y saldo en bodega. Reemplaza al ícono de ubicación, que mostraba solo la ubicación. Ver *Ficha del producto en cada línea (ícono ⓘ)*.
 - **1.32** — Nueva pestaña **Información** en la ventana de el recibo (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.31** — Pestaña **Pagos**: registrar un cobro pide **confirmar monto y forma de cobro**, y después de cada cobro el **Monto queda vacío** en lugar de traer el saldo restante. Las **observaciones** del cobro usan el mismo formato que Ingresos (*Cobro recibo de venta 4; Cobrado con …*); antes decían *Cobro de recibo 001-…*.

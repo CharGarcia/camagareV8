@@ -473,6 +473,39 @@ class ReciboVentaController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Pestaña Asiento contable → ícono ⓘ de cada línea: qué líneas del recibo forman cada valor
+     * del asiento. Solo lectura; mismo permiso que la pestaña (acceso a Asientos Contables).
+     */
+    public function getDesgloseAsientoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if (!\App\Helpers\AsientoPestana::puedeVer()) {
+            echo json_encode(['ok' => false, 'error' => 'No tiene acceso a Asientos Contables.']);
+            exit;
+        }
+        $idRecibo = (int) ($_GET['id'] ?? 0);
+        if ($idRecibo <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Recibo no indicado.']);
+            exit;
+        }
+        $idEmpresa       = (int) $_SESSION['id_empresa'];
+        $perm            = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        try {
+            $lineas = $this->service->desgloseAsiento($idRecibo, $idEmpresa, $idUsuarioFiltro);
+            echo json_encode($lineas === null
+                ? ['ok' => false, 'error' => 'Recibo no encontrado.']
+                : ['ok' => true, 'data' => $lineas]);
+        } catch (\Throwable $e) {
+            echo json_encode(\App\Helpers\AsientoVistaPrevia::respuestaError($e, static::class, __FUNCTION__));
+        }
+        exit;
+    }
+
     public function exportarPdfAjax(): void
     {
         $this->requireLeer();

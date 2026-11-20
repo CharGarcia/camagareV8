@@ -5,8 +5,8 @@ categoria: Compras
 ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
-etiquetas: compras, compra, eliminar nota de credito de compra, nota de credito anulada, eliminar compra, eliminar factura electronica, se vuelve a descargar, no volver a descargar, claves a no registrar, documentos para no descargar, factura anulada en el sri, emitida por error, mover a otro establecimiento, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado
-version: 2.52
+etiquetas: compras, compra, eliminar nota de credito de compra, nota de credito anulada, eliminar compra, eliminar factura electronica, se vuelve a descargar, no volver a descargar, claves a no registrar, documentos para no descargar, factura anulada en el sri, emitida por error, mover a otro establecimiento, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado, de donde sale el valor del asiento, desglose del asiento, a que corresponde cada valor, que lineas forman la cuenta, detalle de la cuenta por pagar
+version: 2.53
 orden: 20
 estado: activo
 ---
@@ -819,6 +819,24 @@ En la pestaña **Pagos** de la compra se registran pagos totales o parciales
   $500.00 (cheque #45)*, y se actualizan al cambiar el monto, la forma de pago o la
   referencia. Si escribe su propio texto, se respeta.
 
+## ¿De dónde sale cada valor del asiento?
+
+En la pestaña **Asiento contable** cada línea es una cuenta con la suma de todo lo que
+la compra lleva a esa cuenta (por ejemplo, *Proveedores 84,10* junta todas las líneas
+del comprobante). El ícono **ⓘ** al final de la línea abre una ventana con las **líneas
+de la compra** que forman ese valor y el total:
+
+- **Cuenta por pagar**: subtotal + IVA + ICE de cada línea.
+- **Gasto** o **Inventario**: el subtotal de cada línea (las de productos inventariables
+  van a Inventario; el resto, a Gasto).
+- **IVA en compras**: el IVA de cada línea, por tarifa.
+
+Lo que no corresponde a una línea (otros rubros de terceros del comprobante, propina,
+centavos de redondeo) aparece aparte. Se calcula con la configuración contable actual:
+si el asiento se editó o registró a mano, o las cuentas cambiaron después de generarlo,
+la ventana avisa que la suma no coincide. En una compra cuyo comprobante no cuadra (asiento
+registrado a mano) no hay desglose automático.
+
 ## Errores frecuentes
 
 - **"… el máximo permitido es 3.650 días (10 años)"**: el plazo escrito es demasiado
@@ -925,6 +943,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.53** — En la pestaña **Asiento contable**, el ícono **ⓘ** de cada línea muestra **de qué líneas de la compra sale ese valor** (cuenta por pagar, gasto, inventario, IVA). Ver *¿De dónde sale cada valor del asiento?*.
 - **2.52** — La pestaña de Descargas SRI donde quedan los comprobantes eliminados (antes *Documentos para no descargar*) ahora se llama **Claves a no registrar**; los avisos al eliminar usan el nombre nuevo.
 - **2.51** — **Facturas de reembolso recibidas**: el sustento tributario ya no se fuerza ni se bloquea en *08*. Ese código es del intermediario que pide el reembolso; la factura recibida lleva el sustento normal de la compra (normalmente 01) y el ATS la reporta como comprobante tipo 41. Las que quedaron con 08 se corrigen eligiendo el sustento en la compra.
 - **2.50** — Pestaña **ATS**, *Pago al exterior*: nuevo campo **Concepto de Renta si no hay retención** (códigos 500 a 525) para las compras al exterior sin retención, que el anexo reporta al 0 % en lugar del 332 que el SRI rechaza. Con convenio de doble tributación **SI**, *Sujeto a retención según norma legal* ya no se pide y sale como "NA". Requiere `database/2026-11-16_pago_exterior_concepto_renta.sql` para guardar el concepto.

@@ -493,6 +493,217 @@ class AsientoBuilderService
     }
 
     /**
+     * Modo «desglose» (solo lectura): mientras está encendido, cada línea que arma
+     * armarDistribucionVentasFactura() lleva además `desglose` = las líneas de la factura que
+     * forman ese valor (descripción + valor). Lo usa la ventana «¿De dónde sale este valor?» de
+     * la pestaña Asiento contable. Las consultas extra solo corren en este modo: la generación
+     * normal del asiento no cambia en nada.
+     */
+    private bool $conDesglose = false;
+
+    /**
+     * Asiento que el sistema arma para la factura, con el desglose por línea de cada valor.
+     * Nunca guarda nada (va como vista previa: tampoco toca el seguimiento de costeo).
+     * El llamador debe haber validado que la factura es de la empresa.
+     */
+    public function desgloseVentaFactura(int $idEmpresa, int $idVenta, int $idCliente): array
+    {
+        return $this->desgloseDocumento($idEmpresa, 'ventas_factura', [
+            'id_venta' => $idVenta, 'id_empresa' => $idEmpresa, 'id_cliente' => $idCliente,
+        ]);
+    }
+
+    /** Igual que desgloseVentaFactura() para un Recibo de Venta. */
+    public function desgloseReciboVenta(int $idEmpresa, int $idRecibo, int $idCliente): array
+    {
+        return $this->desgloseDocumento($idEmpresa, 'recibos_venta', [
+            'id_recibo' => $idRecibo, 'id_empresa' => $idEmpresa, 'id_cliente' => $idCliente,
+        ]);
+    }
+
+    /**
+     * Igual que desgloseVentaFactura() para una Compra. $data son los mismos datos con los que
+     * ComprasService arma el asiento (ver ComprasService::desgloseAsiento()).
+     */
+    public function desgloseCompra(int $idEmpresa, array $data): array
+    {
+        return $this->desgloseDocumento($idEmpresa, 'adquisiciones_compras', $data + ['id_empresa' => $idEmpresa]);
+    }
+
+    /** Formato de salida del desglose para el endpoint de la pestaña (solo lo que la vista usa). */
+    public static function lineasDesglosePublicas(array $lineas): array
+    {
+        return array_map(static fn(array $l) => [
+            'id_cuenta_contable' => (int) ($l['id_cuenta_contable'] ?? 0),
+            'cuenta_codigo'      => (string) ($l['cuenta_codigo'] ?? ''),
+            'cuenta_nombre'      => (string) ($l['cuenta_nombre'] ?? ''),
+            'debe'               => round((float) ($l['debe'] ?? 0), 2),
+            'haber'              => round((float) ($l['haber'] ?? 0), 2),
+            'referencia_detalle' => (string) ($l['referencia_detalle'] ?? ''),
+            'desglose'           => $l['desglose'] ?? [],
+        ], $lineas);
+    }
+
+    private function desgloseDocumento(int $idEmpresa, string $tipoAsiento, array $data): array
+    {
+        $this->conDesglose = true;
+        try {
+            $lineas = $this->generarAsientoSugerido($idEmpresa, $tipoAsiento, $data + ['__vista_previa__' => true]);
+        } finally {
+            $this->conDesglose = false;
+        }
+        // Lo que las líneas de la factura no explican (centavos de redondeo, movimientos de Kardex
+        // de productos que no están en las líneas, devengado de suscripciones…) va como un ítem
+        // aparte, para que el desglose siempre sume el valor de la línea del asiento.
+        foreach ($lineas as &$l) {
+            if (empty($l['desglose'])) continue;
+            $valor = round((float) ($l['debe'] ?? 0) + (float) ($l['haber'] ?? 0), 2);
+            $dif   = round($valor - array_sum(array_column($l['desglose'], 'valor')), 2);
+            if (abs($dif) >= 0.01) {
+                $l['desglose'][] = [
+                    'descripcion' => 'Diferencia con el total del documento (no corresponde a una línea)',
+                    'cantidad'    => null,
+                    'valor'       => $dif,
+                ];
+            }
+        }
+        unset($l);
+        return $lineas;
+    }
+
+    /**
+     * Desglose por línea de factura de un valor del asiento: una fila por línea de
+     * `ventas_detalle` (o por producto cuando $colapsarPorProducto, para el costo del Kardex,
+     * igual que repartirVentasCascada()). $valorExpr / $joinsExtra son los mismos fragmentos
+     * literales del código que usa el reparto — nunca entrada de usuario.
+     *
+     * @return array<int,array{descripcion:string,cantidad:?float,valor:float}>
+     */
+    /**
+     * Modo desglose de los repartos en cascada (producto → categoría → marca → tipo de
+     * producción → cuenta base): las mismas líneas que suma el reparto, sin agrupar, cada una
+     * con la cuenta que resolvió. $fromClause / $joinsCascada / $valorExpr son los fragmentos
+     * literales del propio reparto (alias `d` del detalle, `p` producto y ap_p/ap_c/ap_m/ap_tp);
+     * $params, los mismos parámetros. Devuelve [id_cuenta => [ {descripcion, cantidad, valor} ]].
+     */
+    private function desgloseCascadaPorCuenta(\PDO $db, string $fromClause, string $joinsCascada, array $params, string $valorExpr, bool $colapsarPorProducto, int $idCuentaBase): array
+    {
+        if (!$this->conDesglose) return [];
+        $cuentaExpr = 'COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)';
+        $sql = $colapsarPorProducto
+            ? "SELECT {$cuentaExpr} AS dim_cuenta,
+                      COALESCE(MIN(p.nombre), 'Producto #' || d.id_producto) AS descripcion, NULL::numeric AS cantidad,
+                      ROUND(SUM({$valorExpr})::numeric, 2) AS valor
+               FROM {$fromClause}
+               {$joinsCascada}
+               GROUP BY {$cuentaExpr}, d.id_producto
+               ORDER BY 2"
+            : "SELECT {$cuentaExpr} AS dim_cuenta,
+                      d.descripcion, d.cantidad, ROUND(({$valorExpr})::numeric, 2) AS valor
+               FROM {$fromClause}
+               {$joinsCascada}
+               ORDER BY d.id";
+        $st = $db->prepare($sql);
+        $st->execute($params);
+        $out = [];
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $v = round((float) $row['valor'], 2);
+            if ($v == 0.0) continue;
+            $cta = !empty($row['dim_cuenta']) ? (int) $row['dim_cuenta'] : $idCuentaBase;
+            $out[$cta][] = [
+                'descripcion' => (string) $row['descripcion'],
+                'cantidad'    => $row['cantidad'] !== null ? (float) $row['cantidad'] : null,
+                'valor'       => $v,
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Modo desglose del IVA por tarifa: el IVA de cada línea con su tarifa y la cuenta que resolvió
+     * la cascada. $fromIva es el FROM … WHERE literal de la consulta del IVA (alias `i` impuesto,
+     * `d` detalle y ap_cli/ap_p/ap_c/ap_m/ap_gen). Clave "tarifa|cuenta" (cuenta 0 = sin cuenta
+     * específica, cae en la cuenta IVA general).
+     */
+    private function desgloseIvaPorTarifa(\PDO $db, string $fromIva, array $params): array
+    {
+        if (!$this->conDesglose) return [];
+        $st = $db->prepare(
+            "SELECT i.codigo_porcentaje, d.descripcion, d.cantidad, i.valor,
+                    COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable
+             {$fromIva}
+             ORDER BY d.id"
+        );
+        $st->execute($params);
+        $out = [];
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $v = round((float) $row['valor'], 2);
+            if ($v == 0.0) continue;
+            $out[$row['codigo_porcentaje'] . '|' . (int) $row['id_cuenta_contable']][] = [
+                'descripcion' => (string) $row['descripcion'],
+                'cantidad'    => $row['cantidad'] !== null ? (float) $row['cantidad'] : null,
+                'valor'       => $v,
+            ];
+        }
+        return $out;
+    }
+
+    /** IVA de las tarifas sin cuenta específica (claves "tarifa|0" de desgloseIvaPorTarifa()). */
+    private static function desgloseIvaGeneral(array $desgloseIva): array
+    {
+        $out = [];
+        foreach ($desgloseIva as $clave => $items) {
+            if (str_ends_with((string) $clave, '|0')) { $out = array_merge($out, $items); }
+        }
+        return $out;
+    }
+
+    /** Agrega `desglose` a una línea del asiento solo en modo desglose (la función no corre si no). */
+    private function conDesgloseLinea(array $linea, callable $desglose): array
+    {
+        if ($this->conDesglose) {
+            $linea['desglose'] = $desglose();
+        }
+        return $linea;
+    }
+
+    private function desgloseLineasVenta(\PDO $db, int $idVenta, string $valorExpr, string $joinsExtra = '', bool $colapsarPorProducto = false, string $tablaDetalle = 'ventas_detalle', string $colCabecera = 'id_venta'): array
+    {
+        if (!$this->conDesglose || $idVenta <= 0) return [];
+        // $tablaDetalle / $colCabecera: literales del código (ventas_detalle/id_venta,
+        // recibos_venta_detalle/id_recibo, compras_detalle/id_compra), nunca entrada de usuario.
+        if ($colapsarPorProducto) {
+            $sql = "SELECT COALESCE(MIN(p.nombre), 'Producto #' || d.id_producto) AS descripcion, NULL::numeric AS cantidad,
+                           ROUND(SUM({$valorExpr})::numeric, 2) AS valor
+                    FROM (SELECT DISTINCT id_producto, {$colCabecera} FROM {$tablaDetalle} WHERE {$colCabecera} = :id_doc) d
+                    LEFT JOIN productos p ON p.id = d.id_producto
+                    {$joinsExtra}
+                    GROUP BY d.id_producto
+                    ORDER BY 1";
+        } else {
+            $sql = "SELECT d.descripcion, d.cantidad, ROUND(({$valorExpr})::numeric, 2) AS valor
+                    FROM {$tablaDetalle} d
+                    LEFT JOIN productos p ON p.id = d.id_producto
+                    {$joinsExtra}
+                    WHERE d.{$colCabecera} = :id_doc
+                    ORDER BY d.id";
+        }
+        $st = $db->prepare($sql);
+        $st->execute([':id_doc' => $idVenta]);
+        $out = [];
+        while ($row = $st->fetch(\PDO::FETCH_ASSOC)) {
+            $v = round((float) $row['valor'], 2);
+            if ($v == 0.0) continue;
+            $out[] = [
+                'descripcion' => (string) $row['descripcion'],
+                'cantidad'    => $row['cantidad'] !== null ? (float) $row['cantidad'] : null,
+                'valor'       => $v,
+            ];
+        }
+        return $out;
+    }
+
+    /**
      * Genera la estructura y distribución sugerida del asiento contable para un documento específico,
      * adaptándose al método de contabilización preferido de la empresa (General, Cliente, Producto, etc.).
      *
@@ -1225,13 +1436,7 @@ class AsientoBuilderService
         // productos.tipo_produccion '01'/'02' en el CASE de ap_tp) es la dimensión MENOS específica
         // de las cuatro (solo 2 valores posibles) — por eso va al final del COALESCE, justo antes de
         // caer a la cuenta base (Cliente/General).
-        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
-                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
-                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos,
-                       string_agg(DISTINCT p.id::text, ',') AS ids_productos
-                FROM {$fromClause}
-                LEFT JOIN productos p ON p.id = d.id_producto
+        $joinsCascada = "LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_p
                        ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
@@ -1247,16 +1452,27 @@ class AsientoBuilderService
                       AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
                       AND ap_tp.id_asiento_tipo = :id_tipo4 AND ap_tp.id_empresa = :emp4 AND ap_tp.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
-                " . ($colapsarPorProducto ? "" : "WHERE d.id_venta = :id_doc") . "
+                " . ($colapsarPorProducto ? "" : "WHERE d.id_venta = :id_doc");
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
+                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos,
+                       string_agg(DISTINCT p.id::text, ',') AS ids_productos
+                FROM {$fromClause}
+                {$joinsCascada}
                 GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta), pc.codigo, pc.nombre";
-        $st = $db->prepare($sql);
-        $st->execute([
+        $paramsCascada = [
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
             ':id_tipo4' => $idAsientoTipo, ':emp4' => $idEmpresa,
             ':id_doc'   => $idVenta,
-        ]);
+        ];
+        $st = $db->prepare($sql);
+        $st->execute($paramsCascada);
+
+        // Modo desglose: las mismas líneas, sin agrupar, con la cuenta que resolvió cada una.
+        $desglosePorCuenta = $this->desgloseCascadaPorCuenta($db, $fromClause, $joinsCascada, $paramsCascada, $valorExpr, $colapsarPorProducto, $idCuentaBase);
 
         $mapa      = [];
         $total     = 0.0;
@@ -1293,7 +1509,7 @@ class AsientoBuilderService
 
         if (empty($mapa) && $sinCuenta <= 0) {
             return $idCuentaBase > 0
-                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0]
+                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0, 'desglose_por_cuenta' => $desglosePorCuenta]
                 : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
@@ -1305,6 +1521,15 @@ class AsientoBuilderService
                 $keys = array_keys($mapa);
                 $ult  = end($keys);
                 $mapa[$ult]['monto'] = round($mapa[$ult]['monto'] + $dif, 2);
+                if ($this->conDesglose) {
+                    // P. ej. un movimiento de Kardex de un producto que no está en las líneas
+                    // (componente de un kit) o centavos de redondeo: se muestra aparte.
+                    $desglosePorCuenta[$ult][] = [
+                        'descripcion' => 'Diferencia con el total del documento (no corresponde a una línea)',
+                        'cantidad'    => null,
+                        'valor'       => $dif,
+                    ];
+                }
             } else {
                 $sinCuenta = round($sinCuenta + $dif, 2);
             }
@@ -1312,7 +1537,8 @@ class AsientoBuilderService
 
         return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
                 'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta))))),
-                'ids_sin_cuenta'       => array_values(array_unique(array_map('intval', $idsSinCuenta)))];
+                'ids_sin_cuenta'       => array_values(array_unique(array_map('intval', $idsSinCuenta))),
+                'desglose_por_cuenta'  => $desglosePorCuenta];
     }
 
     /**
@@ -1342,6 +1568,9 @@ class AsientoBuilderService
                 'haber'              => $lado === 'debe' ? 0.0 : round($pte['monto'], 2),
                 'referencia_detalle' => $refBase . ' · por línea',
             ];
+            if ($this->conDesglose) {
+                $linea['desglose'] = $res['desglose_por_cuenta'][(int) $pte['id_cuenta']] ?? [];
+            }
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
@@ -1387,13 +1616,7 @@ class AsientoBuilderService
             ? "(SELECT DISTINCT id_producto, id_recibo FROM recibos_venta_detalle WHERE id_recibo = :id_doc) d"
             : "recibos_venta_detalle d";
 
-        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
-                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
-                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos,
-                       string_agg(DISTINCT p.id::text, ',') AS ids_productos
-                FROM {$fromClause}
-                LEFT JOIN productos p ON p.id = d.id_producto
+        $joinsCascada = "LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_p
                        ON ap_p.id_referencia = d.id_producto AND ap_p.tipo_referencia = 'producto'
@@ -1409,16 +1632,26 @@ class AsientoBuilderService
                       AND ap_tp.id_referencia = (CASE WHEN p.tipo_produccion = '02' THEN 2 WHEN p.tipo_produccion = '01' THEN 1 END)
                       AND ap_tp.id_asiento_tipo = :id_tipo4 AND ap_tp.id_empresa = :emp4 AND ap_tp.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta)
-                " . ($colapsarPorProducto ? "" : "WHERE d.id_recibo = :id_doc") . "
+                " . ($colapsarPorProducto ? "" : "WHERE d.id_recibo = :id_doc");
+        $sql = "SELECT COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta) AS dim_cuenta,
+                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(p.nombre, '(línea sin producto)'), ', ') AS productos,
+                       string_agg(DISTINCT p.id::text, ',') AS ids_productos
+                FROM {$fromClause}
+                {$joinsCascada}
                 GROUP BY COALESCE(ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_tp.id_cuenta), pc.codigo, pc.nombre";
-        $st = $db->prepare($sql);
-        $st->execute([
+        $paramsCascada = [
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
             ':id_tipo4' => $idAsientoTipo, ':emp4' => $idEmpresa,
             ':id_doc'   => $idRecibo,
-        ]);
+        ];
+        $st = $db->prepare($sql);
+        $st->execute($paramsCascada);
+        // Modo desglose (ver repartirVentasCascada()).
+        $desglosePorCuenta = $this->desgloseCascadaPorCuenta($db, $fromClause, $joinsCascada, $paramsCascada, $valorExpr, $colapsarPorProducto, $idCuentaBase);
 
         $mapa      = [];
         $total     = 0.0;
@@ -1453,7 +1686,7 @@ class AsientoBuilderService
 
         if (empty($mapa) && $sinCuenta <= 0) {
             return $idCuentaBase > 0
-                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0]
+                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0, 'desglose_por_cuenta' => $desglosePorCuenta]
                 : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
@@ -1470,7 +1703,8 @@ class AsientoBuilderService
 
         return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
                 'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta))))),
-                'ids_sin_cuenta'       => array_values(array_unique(array_map('intval', $idsSinCuenta)))];
+                'ids_sin_cuenta'       => array_values(array_unique(array_map('intval', $idsSinCuenta))),
+                'desglose_por_cuenta'  => $desglosePorCuenta];
     }
 
     /**
@@ -1499,6 +1733,9 @@ class AsientoBuilderService
                 'haber'              => $lado === 'debe' ? 0.0 : round($pte['monto'], 2),
                 'referencia_detalle' => $refBase . ' · por línea',
             ];
+            if ($this->conDesglose) {
+                $linea['desglose'] = $res['desglose_por_cuenta'][(int) $pte['id_cuenta']] ?? [];
+            }
             if ($esLineaCosto) { $costoLineas[] = $linea; } else { $detalles[] = $linea; }
         }
         if ($res['sin_cuenta'] >= 0.01) {
@@ -1717,11 +1954,7 @@ class AsientoBuilderService
             $filtroInv = "AND (d.id_producto IS NULL OR COALESCE(p.inventariable, false) <> true OR COALESCE(p.tipo_produccion, '') = '02')";
         }
 
-        $sql = "SELECT COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
-                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
-                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
-                       string_agg(DISTINCT COALESCE(NULLIF(TRIM(d.descripcion), ''), p.nombre, '(sin descripción)'), ', ') AS productos
-                FROM {$tablaDetalle} d
+        $fromJoins = "FROM {$tablaDetalle} d
                 LEFT JOIN productos p ON p.id = d.id_producto
                 {$joinsExtra}
                 LEFT JOIN asientos_programados ap_i
@@ -1735,15 +1968,49 @@ class AsientoBuilderService
                       AND ap_m.id_asiento_tipo = :id_tipo3 AND ap_m.id_empresa = :emp3 AND ap_m.eliminado = false
                 LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta)
                 WHERE d.{$colCabecera} = :id_doc
-                  {$filtroInv}
+                  {$filtroInv}";
+        $sql = "SELECT COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+                       pc.codigo AS dim_codigo, pc.nombre AS dim_nombre,
+                       ROUND(SUM({$valorExpr})::numeric, 2) AS monto,
+                       string_agg(DISTINCT COALESCE(NULLIF(TRIM(d.descripcion), ''), p.nombre, '(sin descripción)'), ', ') AS productos
+                {$fromJoins}
                 GROUP BY COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta), pc.codigo, pc.nombre";
-        $st = $db->prepare($sql);
-        $st->execute([
+        $paramsItem = [
             ':id_tipo1' => $idAsientoTipo, ':emp1' => $idEmpresa,
             ':id_tipo2' => $idAsientoTipo, ':emp2' => $idEmpresa,
             ':id_tipo3' => $idAsientoTipo, ':emp3' => $idEmpresa,
             ':id_doc'   => $idCompra,
-        ]);
+        ];
+        $st = $db->prepare($sql);
+        $st->execute($paramsItem);
+
+        // Modo desglose: cada línea del documento con la cuenta que resolvió (sin cuenta → base).
+        $desglosePorCuenta = [];
+        if ($this->conDesglose) {
+            $stDes = $db->prepare(
+                "SELECT COALESCE(ap_i.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta) AS dim_cuenta,
+                        COALESCE(NULLIF(TRIM(d.descripcion), ''), p.nombre, '(sin descripción)') AS descripcion,
+                        d.cantidad, ROUND(({$valorExpr})::numeric, 2) AS valor
+                 {$fromJoins}
+                 ORDER BY d.id"
+            );
+            $stDes->execute($paramsItem);
+            while ($row = $stDes->fetch(\PDO::FETCH_ASSOC)) {
+                $v = round((float) $row['valor'], 2);
+                if ($v == 0.0) continue;
+                $cta = !empty($row['dim_cuenta']) ? (int) $row['dim_cuenta'] : $idCuentaBase;
+                $desglosePorCuenta[$cta][] = [
+                    'descripcion' => (string) $row['descripcion'],
+                    'cantidad'    => $row['cantidad'] !== null ? (float) $row['cantidad'] : null,
+                    'valor'       => $v,
+                ];
+            }
+        }
+        $conDes = function (array $partes) use ($desglosePorCuenta): array {
+            if (!$this->conDesglose) return $partes;
+            foreach ($partes as &$pt) { $pt['desglose'] = $desglosePorCuenta[(int) $pt['id_cuenta']] ?? []; }
+            return $partes;
+        };
 
         $mapa      = [];
         $total     = 0.0;
@@ -1778,7 +2045,7 @@ class AsientoBuilderService
 
         if (empty($mapa) && $sinCuenta <= 0) {
             return $idCuentaBase > 0
-                ? ['partes' => [$baseLinea], 'sin_cuenta' => 0.0]
+                ? ['partes' => $conDes([$baseLinea]), 'sin_cuenta' => 0.0]
                 : ['partes' => [], 'sin_cuenta' => round($montoTotal, 2)];
         }
 
@@ -1794,7 +2061,7 @@ class AsientoBuilderService
             }
         }
 
-        return ['partes' => array_values($mapa), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
+        return ['partes' => $conDes(array_values($mapa)), 'sin_cuenta' => round(max(0.0, $sinCuenta), 2),
                 'productos_sin_cuenta' => implode(', ', array_unique(array_map('trim', explode(',', implode(',', $productosSinCuenta))))),
                 'ids_sin_cuenta'       => array_values(array_unique(array_map('intval', $idsSinCuenta)))];
     }
@@ -2073,6 +2340,7 @@ class AsientoBuilderService
         $totalIvaTotal   = 0.0; // IVA total del documento
         $totalIvaMapeado = 0.0; // IVA ya asignado a cuentas específicas
         $ivaTarifasSinCuenta = []; // tarifas usadas por la factura sin cuenta configurada
+        $desgloseIva = [];      // modo desglose: IVA de cada línea por "tarifa|cuenta"
 
         if ($idVenta > 0) {
             // 3a. Total IVA del documento (todas las tasas)
@@ -2090,12 +2358,7 @@ class AsientoBuilderService
             // si hay un override de IVA configurado para esa tarifa en algún nivel, se usa esa cuenta;
             // si no hay ninguno, COALESCE cae en ap_gen (la regla general), idéntico al comportamiento previo.
             $idCliente = (int) ($data['id_cliente'] ?? 0);
-            $sqlIva = "SELECT i.codigo_porcentaje,
-                              SUM(i.valor)    AS total_valor,
-                              COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable,
-                              pc.codigo       AS cuenta_codigo,
-                              pc.nombre       AS cuenta_nombre
-                       FROM ventas_detalle_impuestos i
+            $fromIva = "FROM ventas_detalle_impuestos i
                        JOIN ventas_detalle d ON i.id_venta_detalle = d.id
                        LEFT JOIN productos p ON p.id = d.id_producto
                        LEFT JOIN asientos_programados ap_cli
@@ -2120,16 +2383,45 @@ class AsientoBuilderService
                              AND ap_gen.id_empresa      = :id_empresa
                              AND ap_gen.eliminado       = false
                        LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
-                       WHERE d.id_venta = :id_venta AND i.codigo_impuesto = '2'
+                       WHERE d.id_venta = :id_venta AND i.codigo_impuesto = '2'";
+            $sqlIva = "SELECT i.codigo_porcentaje,
+                              SUM(i.valor)    AS total_valor,
+                              COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable,
+                              pc.codigo       AS cuenta_codigo,
+                              pc.nombre       AS cuenta_nombre
+                       {$fromIva}
                        GROUP BY i.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+            $paramsIva = [':id_empresa' => $idEmpresa, ':id_venta' => $idVenta, ':id_cliente' => $idCliente];
             $stIva = $db->prepare($sqlIva);
-            $stIva->execute([':id_empresa' => $idEmpresa, ':id_venta' => $idVenta, ':id_cliente' => $idCliente]);
+            $stIva->execute($paramsIva);
+
+            // Modo desglose: el IVA de cada línea, con su tarifa y la cuenta que resolvió.
+            // Clave "tarifa|cuenta" (cuenta 0 = sin cuenta específica → va a la cuenta IVA general).
+            $desgloseIva = [];
+            if ($this->conDesglose) {
+                $stDes = $db->prepare(
+                    "SELECT i.codigo_porcentaje, d.descripcion, d.cantidad, i.valor,
+                            COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable
+                     {$fromIva}
+                     ORDER BY d.id"
+                );
+                $stDes->execute($paramsIva);
+                while ($row = $stDes->fetch(\PDO::FETCH_ASSOC)) {
+                    $v = round((float) $row['valor'], 2);
+                    if ($v == 0.0) continue;
+                    $desgloseIva[$row['codigo_porcentaje'] . '|' . (int) $row['id_cuenta_contable']][] = [
+                        'descripcion' => (string) $row['descripcion'],
+                        'cantidad'    => $row['cantidad'] !== null ? (float) $row['cantidad'] : null,
+                        'valor'       => $v,
+                    ];
+                }
+            }
 
             while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
                 $valorIva = round((float)$row['total_valor'], 2);
                 if ($valorIva <= 0 || empty($row['id_cuenta_contable'])) continue;
 
-                $detalles[] = [
+                $lineaIva = [
                     'id_cuenta_contable' => (int)$row['id_cuenta_contable'],
                     'cuenta_codigo'      => $row['cuenta_codigo'],
                     'cuenta_nombre'      => $row['cuenta_nombre'],
@@ -2137,6 +2429,10 @@ class AsientoBuilderService
                     'haber'              => $valorIva,
                     'referencia_detalle' => 'IVA Ventas',
                 ];
+                if ($this->conDesglose) {
+                    $lineaIva['desglose'] = $desgloseIva[$row['codigo_porcentaje'] . '|' . (int) $row['id_cuenta_contable']] ?? [];
+                }
+                $detalles[] = $lineaIva;
                 $totalIvaMapeado += $valorIva;
             }
             $totalIvaMapeado = round($totalIvaMapeado, 2);
@@ -2284,11 +2580,11 @@ class AsientoBuilderService
             if (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
                 if (!empty($r['id_cuenta']) && $descuento > 0) {
                     $lado = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($descuento, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($descuento, 2),
                         'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
-                    ];
+                    ], fn() => $this->desgloseLineasVenta($db, $idVenta, 'd.descuento'));
                 }
                 continue;
             }
@@ -2334,22 +2630,25 @@ class AsientoBuilderService
                     );
                     if ($propina > 0) {
                         if (!empty($r['id_cuenta'])) {
-                            $detalles[] = [
+                            $detalles[] = $this->conDesgloseLinea([
                                 'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                                 'debe' => $lado === 'debe' ? round($propina, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($propina, 2),
                                 'referencia_detalle' => $refBase . ' · propina',
-                            ];
+                            ], fn() => [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]]);
                         } else {
                             $reglasSinCuenta[] = $refBase . ' (para la propina; configure la cuenta en Cliente o en la General)';
                         }
                     }
                 } elseif (!empty($r['id_cuenta']) && $importeTotal > 0) {
                     // Total en cero (p. ej. descuento del 100 %): sin línea 0,00/0,00 de Cuenta por Cobrar.
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($importeTotal, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($importeTotal, 2),
                         'referencia_detalle' => $refBase, 'es_total_documento' => true,
-                    ];
+                    ], fn() => array_merge(
+                        $this->desgloseLineasVenta($db, $idVenta, '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea),
+                        $propina > 0 ? [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]] : []
+                    ));
                 }
                 continue;
             }
@@ -2369,11 +2668,13 @@ class AsientoBuilderService
                         $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
                 } elseif (!empty($r['id_cuenta']) && $valorIngreso > 0) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($valorIngreso, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIngreso, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => $tieneReglaDescuento
+                        ? $this->desgloseLineasVenta($db, $idVenta, '(d.precio_total_sin_impuesto + d.descuento)')
+                        : $this->desgloseLineasVenta($db, $idVenta, $devengoSusc['expr'], $devengoSusc['join']));
                 }
                 continue;
             }
@@ -2389,11 +2690,11 @@ class AsientoBuilderService
                         $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
                 } elseif (!empty($r['id_cuenta'])) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($totalIce, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($totalIce, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => $this->desgloseLineasVenta($db, $idVenta, 'COALESCE(imp_ice.total_ice, 0)', $joinIcePorLinea));
                 }
                 continue;
             }
@@ -2402,11 +2703,11 @@ class AsientoBuilderService
             // usuario — no tiene dato por línea en la BD).
             if (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
                 if (!empty($r['id_cuenta']) && $propina > 0) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($propina, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($propina, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]]);
                 }
                 continue;
             }
@@ -2424,11 +2725,11 @@ class AsientoBuilderService
                         $refBase, true, $detalles, $costoLineas, $reglasSinCuenta
                     );
                 } elseif (!empty($r['id_cuenta'])) {
-                    $costoLineas[] = [
+                    $costoLineas[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($costoRealInventario, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($costoRealInventario, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => $this->desgloseLineasVenta($db, $idVenta, 'COALESCE(kc.costo_total, 0)', $joinCostoPorLinea, true));
                 }
                 continue;
             }
@@ -2438,11 +2739,18 @@ class AsientoBuilderService
             if (str_contains($codigo, 'IVA') || str_contains($concepto, 'iva')) {
                 $valorIvaGen = $ivaParaCuentaGeneral > 0 ? $ivaParaCuentaGeneral : 0.0;
                 if ($valorIvaGen > 0 && !empty($r['id_cuenta'])) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($valorIvaGen, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIvaGen, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], function () use ($desgloseIva) {
+                        // IVA de las tarifas sin cuenta específica (clave "tarifa|0").
+                        $out = [];
+                        foreach ($desgloseIva ?? [] as $clave => $items) {
+                            if (str_ends_with((string) $clave, '|0')) { $out = array_merge($out, $items); }
+                        }
+                        return $out;
+                    });
                 }
                 continue;
             }
@@ -2598,6 +2906,7 @@ class AsientoBuilderService
         $totalIvaTotal   = 0.0; // IVA total del documento
         $totalIvaMapeado = 0.0; // IVA ya asignado a cuentas específicas
         $ivaTarifasSinCuenta = []; // tarifas usadas por el recibo sin cuenta configurada
+        $desgloseIva = [];      // modo desglose: IVA de cada línea por "tarifa|cuenta"
 
         if ($idRecibo > 0) {
             // 3a. Total IVA del documento (todas las tasas)
@@ -2615,12 +2924,7 @@ class AsientoBuilderService
             // con catálogo PROPIO e independiente: tipo_referencia='iva_recibos_venta' y
             // direccion_iva='recibo' (no 'iva_ventas_factura'/'venta' — esos son de Facturas).
             $idCliente = (int) ($data['id_cliente'] ?? 0);
-            $sqlIva = "SELECT i.codigo_porcentaje,
-                              SUM(i.valor)    AS total_valor,
-                              COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable,
-                              pc.codigo       AS cuenta_codigo,
-                              pc.nombre       AS cuenta_nombre
-                       FROM recibos_venta_detalle_impuestos i
+            $fromIva = "FROM recibos_venta_detalle_impuestos i
                        JOIN recibos_venta_detalle d ON i.id_recibo_detalle = d.id
                        LEFT JOIN productos p ON p.id = d.id_producto
                        LEFT JOIN asientos_programados ap_cli
@@ -2645,23 +2949,31 @@ class AsientoBuilderService
                              AND ap_gen.id_empresa      = :id_empresa
                              AND ap_gen.eliminado       = false
                        LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
-                       WHERE d.id_recibo = :id_recibo AND i.codigo_impuesto = '2'
+                       WHERE d.id_recibo = :id_recibo AND i.codigo_impuesto = '2'";
+            $sqlIva = "SELECT i.codigo_porcentaje,
+                              SUM(i.valor)    AS total_valor,
+                              COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta_contable,
+                              pc.codigo       AS cuenta_codigo,
+                              pc.nombre       AS cuenta_nombre
+                       {$fromIva}
                        GROUP BY i.codigo_porcentaje, COALESCE(ap_cli.id_cuenta, ap_p.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre";
+            $paramsIva = [':id_empresa' => $idEmpresa, ':id_recibo' => $idRecibo, ':id_cliente' => $idCliente];
             $stIva = $db->prepare($sqlIva);
-            $stIva->execute([':id_empresa' => $idEmpresa, ':id_recibo' => $idRecibo, ':id_cliente' => $idCliente]);
+            $stIva->execute($paramsIva);
+            $desgloseIva = $this->desgloseIvaPorTarifa($db, $fromIva, $paramsIva);
 
             while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
                 $valorIva = round((float)$row['total_valor'], 2);
                 if ($valorIva <= 0 || empty($row['id_cuenta_contable'])) continue;
 
-                $detalles[] = [
+                $detalles[] = $this->conDesgloseLinea([
                     'id_cuenta_contable' => (int)$row['id_cuenta_contable'],
                     'cuenta_codigo'      => $row['cuenta_codigo'],
                     'cuenta_nombre'      => $row['cuenta_nombre'],
                     'debe'               => 0.0,
                     'haber'              => $valorIva,
                     'referencia_detalle' => 'IVA Recibo de Venta',
-                ];
+                ], fn() => $desgloseIva[$row['codigo_porcentaje'] . '|' . (int) $row['id_cuenta_contable']] ?? []);
                 $totalIvaMapeado += $valorIva;
             }
             $totalIvaMapeado = round($totalIvaMapeado, 2);
@@ -2764,11 +3076,11 @@ class AsientoBuilderService
             if (str_contains($codigo, 'DESC') || str_contains($concepto, 'descuento')) {
                 if (!empty($r['id_cuenta']) && $descuento > 0) {
                     $ladoDesc = (($r['debe_haber'] ?? 'debe') === 'debe') ? 'debe' : 'haber';
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $ladoDesc === 'debe' ? round($descuento, 2) : 0.0, 'haber' => $ladoDesc === 'debe' ? 0.0 : round($descuento, 2),
                         'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? '',
-                    ];
+                    ], fn() => $this->desgloseLineasVenta($db, $idRecibo, 'd.descuento', '', false, 'recibos_venta_detalle', 'id_recibo'));
                 }
                 continue;
             }
@@ -2805,22 +3117,25 @@ class AsientoBuilderService
                     );
                     if ($propina > 0) {
                         if (!empty($r['id_cuenta'])) {
-                            $detalles[] = [
+                            $detalles[] = $this->conDesgloseLinea([
                                 'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                                 'debe' => $lado === 'debe' ? round($propina, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($propina, 2),
                                 'referencia_detalle' => $refBase . ' · propina',
-                            ];
+                            ], fn() => [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]]);
                         } else {
                             $reglasSinCuenta[] = $refBase . ' (para la propina; configure la cuenta en Cliente o en la General)';
                         }
                     }
                 } elseif (!empty($r['id_cuenta']) && $importeTotal > 0) {
                     // Total en cero (p. ej. descuento del 100 %): sin línea 0,00/0,00 de Cuenta por Cobrar.
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($importeTotal, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($importeTotal, 2),
                         'referencia_detalle' => $refBase, 'es_total_documento' => true,
-                    ];
+                    ], fn() => array_merge(
+                        $this->desgloseLineasVenta($db, $idRecibo, '(d.precio_total_sin_impuesto + COALESCE(imp_cxc.total_impuestos, 0))', $joinImpuestosPorLinea, false, 'recibos_venta_detalle', 'id_recibo'),
+                        $propina > 0 ? [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]] : []
+                    ));
                 }
                 continue;
             }
@@ -2838,11 +3153,13 @@ class AsientoBuilderService
                         $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
                 } elseif (!empty($r['id_cuenta']) && $valorIngreso > 0) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($valorIngreso, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIngreso, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => $tieneReglaDescuento
+                        ? $this->desgloseLineasVenta($db, $idRecibo, '(d.precio_total_sin_impuesto + d.descuento)', '', false, 'recibos_venta_detalle', 'id_recibo')
+                        : $this->desgloseLineasVenta($db, $idRecibo, $devengoSusc['expr'], $devengoSusc['join'], false, 'recibos_venta_detalle', 'id_recibo'));
                 }
                 continue;
             }
@@ -2856,11 +3173,11 @@ class AsientoBuilderService
                         $refBase, false, $detalles, $costoLineas, $reglasSinCuenta
                     );
                 } elseif (!empty($r['id_cuenta'])) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($totalIce, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($totalIce, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => $this->desgloseLineasVenta($db, $idRecibo, 'COALESCE(imp_ice.total_ice, 0)', $joinIcePorLinea, false, 'recibos_venta_detalle', 'id_recibo'));
                 }
                 continue;
             }
@@ -2868,11 +3185,11 @@ class AsientoBuilderService
             // Propina: SIEMPRE Cliente/General, nunca por categoría.
             if (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
                 if (!empty($r['id_cuenta']) && $propina > 0) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($propina, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($propina, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]]);
                 }
                 continue;
             }
@@ -2888,11 +3205,11 @@ class AsientoBuilderService
                         $refBase, true, $detalles, $costoLineas, $reglasSinCuenta
                     );
                 } elseif (!empty($r['id_cuenta'])) {
-                    $costoLineas[] = [
+                    $costoLineas[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($costoRealInventario, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($costoRealInventario, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => $this->desgloseLineasVenta($db, $idRecibo, 'COALESCE(kc.costo_total, 0)', $joinCostoPorLinea, true, 'recibos_venta_detalle', 'id_recibo'));
                 }
                 continue;
             }
@@ -2901,11 +3218,11 @@ class AsientoBuilderService
             if (str_contains($codigo, 'IVA') || str_contains($concepto, 'iva')) {
                 $valorIvaGen = $ivaParaCuentaGeneral > 0 ? $ivaParaCuentaGeneral : 0.0;
                 if ($valorIvaGen > 0 && !empty($r['id_cuenta'])) {
-                    $detalles[] = [
+                    $detalles[] = $this->conDesgloseLinea([
                         'id_cuenta_contable' => (int)$r['id_cuenta'], 'cuenta_codigo' => $r['cuenta_codigo'], 'cuenta_nombre' => $r['cuenta_nombre'],
                         'debe' => $lado === 'debe' ? round($valorIvaGen, 2) : 0.0, 'haber' => $lado === 'debe' ? 0.0 : round($valorIvaGen, 2),
                         'referencia_detalle' => $refBase,
-                    ];
+                    ], fn() => self::desgloseIvaGeneral($desgloseIva));
                 }
                 continue;
             }
@@ -3121,14 +3438,7 @@ class AsientoBuilderService
         $ivaRows = [];
         if ($idCompra > 0) {
             $idProveedor = (int) ($data['id_proveedor'] ?? 0);
-            $sqlIva = "SELECT i.codigo_porcentaje,
-                              SUM(i.valor)  AS total_valor,
-                              COUNT(*) FILTER (WHERE i.valor <> 0) AS num_lineas,
-                              COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
-                              pc.codigo     AS cuenta_codigo,
-                              pc.nombre     AS cuenta_nombre,
-                              t.tarifa      AS tarifa_nombre
-                       FROM compras_detalle_impuestos i
+            $fromIvaC = "FROM compras_detalle_impuestos i
                        JOIN compras_detalle d ON i.id_compra_detalle = d.id
                        LEFT JOIN productos p ON p.id = d.id_producto
                        LEFT JOIN tarifa_iva t ON CAST(t.codigo AS INTEGER) = CAST(i.codigo_porcentaje AS INTEGER)
@@ -3154,10 +3464,42 @@ class AsientoBuilderService
                              AND ap_gen.id_empresa      = :emp
                              AND ap_gen.eliminado       = false
                        LEFT JOIN plan_cuentas pc ON pc.id = COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta)
-                       WHERE d.id_compra = :id AND i.codigo_impuesto = '2'
+                       WHERE d.id_compra = :id AND i.codigo_impuesto = '2'";
+            $sqlIva = "SELECT i.codigo_porcentaje,
+                              SUM(i.valor)  AS total_valor,
+                              COUNT(*) FILTER (WHERE i.valor <> 0) AS num_lineas,
+                              COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta,
+                              pc.codigo     AS cuenta_codigo,
+                              pc.nombre     AS cuenta_nombre,
+                              t.tarifa      AS tarifa_nombre
+                       {$fromIvaC}
                        GROUP BY i.codigo_porcentaje, COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta), pc.codigo, pc.nombre, t.tarifa";
+            $paramsIvaC = [':emp' => $idEmpresa, ':id' => $idCompra, ':id_proveedor' => $idProveedor];
             $stIva = $db->prepare($sqlIva);
-            $stIva->execute([':emp' => $idEmpresa, ':id' => $idCompra, ':id_proveedor' => $idProveedor]);
+            $stIva->execute($paramsIvaC);
+
+            // Modo desglose: IVA de cada línea por "tarifa|cuenta".
+            $desgloseIvaC = [];
+            if ($this->conDesglose) {
+                $stDes = $db->prepare(
+                    "SELECT i.codigo_porcentaje, COALESCE(NULLIF(TRIM(d.descripcion), ''), p.nombre, '(sin descripción)') AS descripcion,
+                            d.cantidad, i.valor,
+                            COALESCE(ap_prov.id_cuenta, ap_item.id_cuenta, ap_c.id_cuenta, ap_m.id_cuenta, ap_gen.id_cuenta) AS id_cuenta
+                     {$fromIvaC}
+                     ORDER BY d.id"
+                );
+                $stDes->execute($paramsIvaC);
+                while ($row = $stDes->fetch(\PDO::FETCH_ASSOC)) {
+                    $v = round((float) $row['valor'], 2);
+                    if ($v == 0.0) continue;
+                    $desgloseIvaC[$row['codigo_porcentaje'] . '|' . (int) $row['id_cuenta']][] = [
+                        'descripcion' => (string) $row['descripcion'],
+                        'cantidad'    => $row['cantidad'] !== null ? (float) $row['cantidad'] : null,
+                        'valor'       => $v,
+                    ];
+                }
+            }
+
             while ($row = $stIva->fetch(\PDO::FETCH_ASSOC)) {
                 $ivaRows[] = [
                     'id_cuenta'         => $row['id_cuenta'],
@@ -3167,6 +3509,7 @@ class AsientoBuilderService
                     'codigo_porcentaje' => $row['codigo_porcentaje'],
                     'tarifa_nombre'     => $row['tarifa_nombre'],
                     'num_lineas'        => (int) ($row['num_lineas'] ?? 0),
+                    'desglose'          => $desgloseIvaC[$row['codigo_porcentaje'] . '|' . (int) $row['id_cuenta']] ?? [],
                 ];
             }
         }
@@ -3186,7 +3529,31 @@ class AsientoBuilderService
             );
         }
 
-        return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, $propina, $ivaRows, $reversa, $gastoLineas, $porPagarLineas, $inventarioLineas, $sinCuentaExtra, $ice);
+        // Modo desglose de las líneas que van enteras a una sola cuenta (sin reparto por línea).
+        // Lo que no sale de las líneas (otros rubros de terceros, propina, redondeo) lo agrega
+        // desgloseDocumento() como «Diferencia con el total del documento».
+        $desgloseBase = [];
+        if ($this->conDesglose && $idCompra > 0) {
+            $esInvSql = "(d.id_producto IS NOT NULL AND COALESCE(p.inventariable, false) = true AND COALESCE(p.tipo_produccion, '') <> '02')";
+            $joinImpC = "LEFT JOIN LATERAL (
+                    SELECT SUM(CASE WHEN i.codigo_impuesto IN ('2','3') THEN i.valor ELSE 0 END) AS total_impuestos,
+                           SUM(CASE WHEN i.codigo_impuesto = '3' THEN i.valor ELSE 0 END) AS total_ice
+                    FROM compras_detalle_impuestos i WHERE i.id_compra_detalle = d.id
+                ) imp ON true";
+            $desgloseBase = [
+                'porpagar'   => $this->desgloseLineasVenta($db, $idCompra, '(d.precio_total_sin_impuesto + COALESCE(imp.total_impuestos, 0))', $joinImpC, false, 'compras_detalle', 'id_compra'),
+                'inventario' => $this->desgloseLineasVenta($db, $idCompra, "CASE WHEN {$esInvSql} THEN d.precio_total_sin_impuesto ELSE 0 END", '', false, 'compras_detalle', 'id_compra'),
+                'gasto'      => $this->desgloseLineasVenta($db, $idCompra, "CASE WHEN {$esInvSql} THEN 0 ELSE d.precio_total_sin_impuesto END", '', false, 'compras_detalle', 'id_compra'),
+                'ice'        => $this->desgloseLineasVenta($db, $idCompra, 'COALESCE(imp.total_ice, 0)', $joinImpC, false, 'compras_detalle', 'id_compra'),
+            ];
+            if ($otrosRubros != 0.0) {
+                $itemOtros = ['descripcion' => 'Otros rubros de terceros (del comprobante)', 'cantidad' => null, 'valor' => $otrosRubros];
+                $desgloseBase['gasto'][]    = $itemOtros;
+                $desgloseBase['porpagar'][] = $itemOtros;
+            }
+        }
+
+        return $this->ensamblarAdquisicion($reglas, $importeTotal, $subInventario, $subGasto, $propina, $ivaRows, $reversa, $gastoLineas, $porPagarLineas, $inventarioLineas, $sinCuentaExtra, $ice, $desgloseBase);
     }
 
     /**
@@ -3265,7 +3632,7 @@ class AsientoBuilderService
      *
      * @param array $ivaRows [['id_cuenta','cuenta_codigo','cuenta_nombre','valor'], ...]
      */
-    private function ensamblarAdquisicion(array $reglas, float $importeTotal, float $subInventario, float $subGasto, float $propina, array $ivaRows, bool $reversa, ?array $gastoLineas = null, ?array $porPagarLineas = null, ?array $inventarioLineas = null, array $sinCuentaExtra = [], float $ice = 0.0): array
+    private function ensamblarAdquisicion(array $reglas, float $importeTotal, float $subInventario, float $subGasto, float $propina, array $ivaRows, bool $reversa, ?array $gastoLineas = null, ?array $porPagarLineas = null, ?array $inventarioLineas = null, array $sinCuentaExtra = [], float $ice = 0.0, array $desgloseBase = []): array
     {
         $detalles = [];
         // Reglas/tarifas activas sin cuenta configurada: se saltan, pero se recuerdan para poder
@@ -3273,11 +3640,12 @@ class AsientoBuilderService
         // en silencio y solo se veía "Debe: $0" o un mensaje genérico).
         $reglasSinCuenta = $sinCuentaExtra;
 
-        // helper local: agrega una línea respetando la dirección (normal/reversa)
-        $push = function (array $r, float $valor, string $ladoNatural, string $refDefault) use (&$detalles, $reversa) {
+        // helper local: agrega una línea respetando la dirección (normal/reversa). $desglose: modo
+        // desglose (líneas del documento que forman el valor); fuera de ese modo no se usa.
+        $push = function (array $r, float $valor, string $ladoNatural, string $refDefault, ?array $desglose = null) use (&$detalles, $reversa) {
             if ($valor <= 0) return;
             $lado = $reversa ? ($ladoNatural === 'debe' ? 'haber' : 'debe') : $ladoNatural;
-            $detalles[] = [
+            $linea = [
                 'id_cuenta_contable' => (int)$r['id_cuenta'],
                 'cuenta_codigo'      => $r['cuenta_codigo'] ?? '',
                 'cuenta_nombre'      => $r['cuenta_nombre'] ?? '',
@@ -3285,6 +3653,10 @@ class AsientoBuilderService
                 'haber'              => $lado === 'debe' ? 0.0 : round($valor, 2),
                 'referencia_detalle' => $r['asiento_tipo_referencia'] ?? $r['concepto'] ?? $r['referencia'] ?? $refDefault,
             ];
+            if ($this->conDesglose && $desglose !== null) {
+                $linea['desglose'] = $desglose;
+            }
+            $detalles[] = $linea;
         };
 
         // IVA en compras (lado natural Debe; se invierte en notas de crédito)
@@ -3299,7 +3671,8 @@ class AsientoBuilderService
                 ['id_cuenta' => (int)$iva['id_cuenta'], 'cuenta_codigo' => $iva['cuenta_codigo'] ?? '', 'cuenta_nombre' => $iva['cuenta_nombre'] ?? ''],
                 $valorIva,
                 'debe',
-                'IVA en compras'
+                'IVA en compras',
+                $iva['desglose'] ?? null
             );
         }
 
@@ -3345,12 +3718,12 @@ class AsientoBuilderService
                         if ($m <= 0) continue;
                         $push(
                             ['id_cuenta' => (int)$gl['id_cuenta'], 'cuenta_codigo' => $gl['cuenta_codigo'] ?? '', 'cuenta_nombre' => $gl['cuenta_nombre'] ?? '', 'asiento_tipo_referencia' => ($refConcepto ?: 'Por Pagar')],
-                            $m, $ladoNatural, ($refConcepto ?: 'Por Pagar')
+                            $m, $ladoNatural, ($refConcepto ?: 'Por Pagar'), $gl['desglose'] ?? null
                         );
                     }
                     continue;
                 }
-                $push($r, $importeTotal, $ladoNatural, $refConcepto);
+                $push($r, $importeTotal, $ladoNatural, $refConcepto, $desgloseBase['porpagar'] ?? null);
             } elseif ($esInventario) {
                 if ($inventarioLineas !== null) {
                     foreach ($inventarioLineas as $gl) {
@@ -3358,12 +3731,12 @@ class AsientoBuilderService
                         if ($m <= 0) continue;
                         $push(
                             ['id_cuenta' => (int)$gl['id_cuenta'], 'cuenta_codigo' => $gl['cuenta_codigo'] ?? '', 'cuenta_nombre' => $gl['cuenta_nombre'] ?? '', 'asiento_tipo_referencia' => ($refConcepto ?: 'Inventario')],
-                            $m, $ladoNatural, ($refConcepto ?: 'Inventario')
+                            $m, $ladoNatural, ($refConcepto ?: 'Inventario'), $gl['desglose'] ?? null
                         );
                     }
                     continue;
                 }
-                $push($r, $subInventario, $ladoNatural, $refConcepto);
+                $push($r, $subInventario, $ladoNatural, $refConcepto, $desgloseBase['inventario'] ?? null);
             } elseif ($esSubtotal) {
                 if ($gastoLineas !== null) {
                     // Reparto por dimensión: una línea por cuenta en vez de un solo Subtotal.
@@ -3372,17 +3745,17 @@ class AsientoBuilderService
                         if ($m <= 0) continue;
                         $push(
                             ['id_cuenta' => (int)$gl['id_cuenta'], 'cuenta_codigo' => $gl['cuenta_codigo'] ?? '', 'cuenta_nombre' => $gl['cuenta_nombre'] ?? '', 'asiento_tipo_referencia' => ($refConcepto ?: 'Gasto')],
-                            $m, $ladoNatural, ($refConcepto ?: 'Gasto')
+                            $m, $ladoNatural, ($refConcepto ?: 'Gasto'), $gl['desglose'] ?? null
                         );
                     }
                     continue;
                 }
-                $push($r, $subGasto, $ladoNatural, $refConcepto);
+                $push($r, $subGasto, $ladoNatural, $refConcepto, $desgloseBase['gasto'] ?? null);
             } elseif (str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina')) {
-                $push($r, $propina, $ladoNatural, $refConcepto);
+                $push($r, $propina, $ladoNatural, $refConcepto, [['descripcion' => 'Propina', 'cantidad' => null, 'valor' => round($propina, 2)]]);
             } elseif ($esIce) {
                 // ICE pagado en la compra: costo/gasto al Debe (se invierte en notas de crédito).
-                $push($r, $ice, $ladoNatural, ($refConcepto ?: 'ICE'));
+                $push($r, $ice, $ladoNatural, ($refConcepto ?: 'ICE'), $desgloseBase['ice'] ?? null);
             }
             // DESCUENTO: el subtotal ya viene neto por línea; se omite en v1.
         }

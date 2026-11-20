@@ -4736,7 +4736,8 @@ $totalPages = $totalPagesOriginal;
                 marca: p.nombre_marca,
                 unidad: p.nombre_medida,
                 ubicacion: p.ubicacion,
-                tipo_produccion: p.tipo_produccion
+                tipo_produccion: p.tipo_produccion,
+                precio_base: p.precio_base != null ? parseFloat(p.precio_base).toFixed(fvDecPrecio()) : ''
             });
 
             // Datos de ICE
@@ -6434,7 +6435,9 @@ $totalPages = $totalPagesOriginal;
                     marca: d.producto_marca,
                     unidad: d.producto_unidad_base,
                     ubicacion: d.producto_ubicacion,
-                    tipo_produccion: d.tipo_produccion
+                    tipo_produccion: d.tipo_produccion,
+                    // Precio del catálogo HOY (no el de la línea guardada).
+                    precio_base: d.producto_precio_base != null ? parseFloat(d.producto_precio_base).toFixed(fvDecPrecio()) : ''
                 } : null);
 
                 // Control de visibilidad de Lotes, Caducidad y NUP según configuración y tipo de producto.
@@ -7806,6 +7809,8 @@ $totalPages = $totalPagesOriginal;
                 prefijo: 'fv',
                 moduloOrigen: 'factura_venta',
                 previewUrl: `${B_URL}/${RUTA_MODULO}/getAsientoSugeridoAjax`,
+                // Ícono ⓘ por línea: qué líneas de la factura forman cada valor.
+                desgloseUrl: `${B_URL}/${RUTA_MODULO}/getDesgloseAsientoAjax`,
                 cuentasUrl: `${B_URL}/modulos/plan-cuentas/searchAjaxCuentas`,
                 asientosUrl: `${B_URL}/modulos/asientos-contables`,
                 // La vista previa de la factura se calcula con los importes que hay en pantalla,

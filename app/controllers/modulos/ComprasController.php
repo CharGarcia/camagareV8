@@ -998,6 +998,42 @@ class ComprasController extends BaseModuloController
      * (mismo formato del RIDE de Facturas de Venta). Solo aplica a compras con
      * XML almacenado; las compras físicas/manuales no tienen XML.
      */
+    /**
+     * Pestaña Asiento contable → ícono ⓘ de cada línea: qué líneas de la compra forman cada valor
+     * del asiento. Solo lectura; mismo permiso que la pestaña (acceso a Asientos Contables).
+     */
+    public function getDesgloseAsientoAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        if (!\App\Helpers\AsientoPestana::puedeVer()) {
+            echo json_encode(['ok' => false, 'error' => 'No tiene acceso a Asientos Contables.']);
+            exit;
+        }
+        $idCompra = (int) ($_GET['id'] ?? 0);
+        if ($idCompra <= 0) {
+            echo json_encode(['ok' => false, 'error' => 'Compra no indicada.']);
+            exit;
+        }
+        $idEmpresa       = (int) $_SESSION['id_empresa'];
+        $perm            = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+        try {
+            $lineas = $this->service->desgloseAsiento($idCompra, $idEmpresa, $idUsuarioFiltro);
+            echo json_encode($lineas === null
+                ? ['ok' => false, 'error' => 'Compra no encontrada.']
+                : ['ok' => true, 'data' => $lineas]);
+        } catch (\App\Services\modulos\AsientoDescuadreDocumentoException $e) {
+            // El comprobante no cuadra consigo mismo: no hay asiento automático que desglosar.
+            echo json_encode(['ok' => false, 'error' => 'El asiento de esta compra no sale automático (el comprobante no cuadra): no hay desglose que mostrar.']);
+        } catch (\Throwable $e) {
+            echo json_encode(\App\Helpers\AsientoVistaPrevia::respuestaError($e, static::class, __FUNCTION__));
+        }
+        exit;
+    }
+
     public function exportarPdfAjax(): void
     {
         $this->requireLeer();

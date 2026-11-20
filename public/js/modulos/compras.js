@@ -278,6 +278,8 @@ function mcAsientoTab() {
             prefijo: 'mc',
             moduloOrigen: 'compra',
             previewUrl: `${window.CMG_urlBase}/getAsientoSugeridoAjax`,
+            // Ícono ⓘ por línea: qué líneas de la compra forman cada valor.
+            desgloseUrl: `${window.CMG_urlBase}/getDesgloseAsientoAjax`,
             // Comprobante electrónico cuyo total no cuadra: la pestaña deja registrar el asiento
             // a mano (ver ComprasService::evaluarAsientoManual).
             manualUrl: `${window.CMG_urlBase}/registrarAsientoManualAjax`,

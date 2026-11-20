@@ -1123,6 +1123,29 @@ class ComprasService
         $this->repository->updateAsientoContable($idCompra, $idAsientoGenerado);
     }
 
+    /**
+     * «¿De dónde sale este valor?» de la pestaña Asiento contable (ver
+     * FacturaVentaService::desgloseAsiento()): el asiento que el sistema arma para la compra,
+     * con las líneas del comprobante que forman cada valor. Solo lectura. null si la compra no
+     * es de la empresa o —sin acceso total— no la creó el usuario (§6).
+     */
+    public function desgloseAsiento(int $idCompra, int $idEmpresa, ?int $idUsuarioFiltro = null): ?array
+    {
+        $compra = $this->repository->getPorId($idCompra, $idEmpresa);
+        if (!$compra || (int) ($compra['id_empresa'] ?? $idEmpresa) !== $idEmpresa) {
+            return null;
+        }
+        if ($idUsuarioFiltro !== null && (int) ($compra['created_by'] ?? 0) !== $idUsuarioFiltro) {
+            return null;
+        }
+        return AsientoBuilderService::lineasDesglosePublicas(
+            (new AsientoBuilderService())->desgloseCompra($idEmpresa, [
+                'id_compra'    => $idCompra,
+                'id_proveedor' => (int) ($compra['id_proveedor'] ?? 0),
+            ])
+        );
+    }
+
     /** Cabecera del asiento de una compra: la misma para el automático y el registrado a mano. */
     private function cabeceraAsiento(int $idCompra, array $data, string $numDoc, int $idAsiento): array
     {

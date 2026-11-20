@@ -6,7 +6,9 @@
  *       <span class="span-info-producto d-none" ...><i class="bi bi-info-circle-fill"></i></span>
  *   - Al poner/quitar el producto en la fila:
  *       CMG_pintarInfoProducto(row, { nombre, codigo, codigo_auxiliar, codigo_barras,
- *                                     categoria, marca, unidad, ubicacion, tipo_produccion })
+ *                                     categoria, marca, unidad, ubicacion, tipo_produccion,
+ *                                     precio_base })   // precio_base: texto ya formateado
+ *                                                      // con los decimales de la empresa
  *       CMG_pintarInfoProducto(row, null)   // ítem libre o selección borrada
  *
  * La ficha se guarda en la fila (data-info-producto) y UNA sola tarjeta flotante global
@@ -84,6 +86,7 @@
                 ${linea('bi-upc-scan', 'Cód. auxiliar', info.codigo_auxiliar)}
                 ${linea('bi-upc-scan', 'Cód. barras', info.codigo_barras)}
                 ${linea('bi-rulers', 'Unidad base', info.unidad)}
+                ${linea('bi-currency-dollar', 'Precio base', info.precio_base ? '$' + info.precio_base : '')}
                 ${linea('bi-geo-alt', 'Ubicación', info.ubicacion)}
                 ${linea('bi-boxes', 'Saldo bodega', saldo)}
             </div>`;

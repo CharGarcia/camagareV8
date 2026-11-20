@@ -1054,6 +1054,25 @@ class ReciboVentaService
         return $builder->generarAsientoSugerido($idEmpresa, 'recibos_venta', $invoiceData);
     }
 
+    /**
+     * «¿De dónde sale este valor?» de la pestaña Asiento contable (ver
+     * FacturaVentaService::desgloseAsiento()). Solo lectura. null si el recibo no es de la
+     * empresa o —sin acceso total— no lo creó el usuario (§6).
+     */
+    public function desgloseAsiento(int $idRecibo, int $idEmpresa, ?int $idUsuarioFiltro = null): ?array
+    {
+        $recibo = $this->repository->getPorId($idRecibo);
+        if (!$recibo || (int) $recibo['id_empresa'] !== $idEmpresa) {
+            return null;
+        }
+        if ($idUsuarioFiltro !== null && (int) ($recibo['created_by'] ?? 0) !== $idUsuarioFiltro) {
+            return null;
+        }
+        return AsientoBuilderService::lineasDesglosePublicas(
+            (new AsientoBuilderService())->desgloseReciboVenta($idEmpresa, $idRecibo, (int) ($recibo['id_cliente'] ?? 0))
+        );
+    }
+
     public function procesarAsientoContablePorSincronizacion(int $idRecibo): void
     {
         $cabecera = $this->repository->getPorId($idRecibo);

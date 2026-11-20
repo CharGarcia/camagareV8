@@ -455,7 +455,7 @@ class ReciboVentaRepository extends BaseRepository
                        p.id_tipo_medida, p.id_medida as id_medida_base,
                        p.tipo_produccion, p.inventariable, p.ubicacion as producto_ubicacion,
                        -- Ficha del producto (ícono ⓘ de la fila): datos en vivo del catálogo.
-                       p.codigo_barras as producto_codigo_barras,
+                       p.codigo_barras as producto_codigo_barras, p.precio_base as producto_precio_base,
                        cat.nombre as producto_categoria, mar.nombre as producto_marca,
                        umb.nombre as producto_unidad_base
                 FROM recibos_venta_detalle d

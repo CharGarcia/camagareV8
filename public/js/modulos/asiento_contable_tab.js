@@ -261,6 +261,95 @@
             cab.classList.add('d-flex');
         }
 
+        // ── Desglose de una línea («¿De dónde sale este valor?») ─────────────────
+        // El servidor arma el asiento que corresponde al documento con las líneas que forman cada
+        // valor; aquí se buscan las de la misma cuenta y el mismo lado (Debe/Haber) que la fila.
+        let desgloseCache = null;   // { id, promesa } — se pide una vez por documento abierto
+
+        function pedirDesglose() {
+            if (!desgloseCache || desgloseCache.id !== idDocumento) {
+                const id = idDocumento;
+                desgloseCache = {
+                    id,
+                    promesa: fetch(`${cfg.desgloseUrl}?id=${encodeURIComponent(id)}`)
+                        .then(r => r.json())
+                        .catch(() => ({ ok: false, error: 'No se pudo consultar el desglose. Verifique su conexión.' })),
+                };
+            }
+            return desgloseCache.promesa.then(json => {
+                if (!json.ok) desgloseCache = null;   // un error no se queda guardado
+                return json;
+            });
+        }
+
+        async function abrirDesglose(tr) {
+            if (!cfg.desgloseUrl || !idDocumento || typeof Swal === 'undefined') return;
+            const idCuenta = parseInt(tr.querySelector('.input-id-cuenta-contable')?.value || '0', 10);
+            const debe  = parseFloat(tr.querySelector('.input-debe')?.value || 0) || 0;
+            const haber = parseFloat(tr.querySelector('.input-haber')?.value || 0) || 0;
+            const lado  = debe > 0 ? 'debe' : 'haber';
+            const valorLinea = lado === 'debe' ? debe : haber;
+            const cuentaTxt = tr.querySelector('.input-cuenta-nombre')?.value || '';
+            const fmt = (n) => (Number(n) || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const fmtCant = (n) => (n === null || n === undefined) ? '' : (Number(n) || 0).toLocaleString('es-EC', { maximumFractionDigits: 6 });
+
+            Swal.fire({ title: 'Consultando…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const json = await pedirDesglose();
+            if (!json.ok) {
+                Swal.fire('Desglose no disponible', escHtml(json.error || 'No se pudo armar el desglose.'), 'info');
+                return;
+            }
+
+            const lineas = (json.data || []).filter(l =>
+                parseInt(l.id_cuenta_contable, 10) === idCuenta && (lado === 'debe' ? l.debe > 0 : l.haber > 0));
+            // Una cuenta puede recibir valores de varios conceptos (p. ej. ventas e ICE): se agrupan
+            // por concepto para que se vea de qué parte del documento viene cada uno.
+            const variosConceptos = new Set(lineas.map(l => l.referencia_detalle)).size > 1;
+            let filas = '', total = 0, sinDetalle = [];
+            lineas.forEach(l => {
+                const items = Array.isArray(l.desglose) ? l.desglose : [];
+                if (!items.length) { sinDetalle.push(l); return; }
+                if (variosConceptos) {
+                    filas += `<tr class="table-light"><td colspan="3" class="small fw-bold text-muted">${escHtml(l.referencia_detalle || 'Concepto')}</td></tr>`;
+                }
+                items.forEach(it => {
+                    total += Number(it.valor) || 0;
+                    filas += `<tr>
+                        <td class="text-start">${escHtml(it.descripcion)}</td>
+                        <td class="text-end text-muted">${fmtCant(it.cantidad)}</td>
+                        <td class="text-end">${fmt(it.valor)}</td></tr>`;
+                });
+            });
+            sinDetalle.forEach(l => {
+                const v = lado === 'debe' ? l.debe : l.haber;
+                total += Number(v) || 0;
+                filas += `<tr><td class="text-start fst-italic">${escHtml(l.referencia_detalle || 'Valor del documento')}</td><td></td><td class="text-end">${fmt(v)}</td></tr>`;
+            });
+            total = typeof window.CMG_r2 === 'function' ? window.CMG_r2(total) : Number(total.toFixed(2));
+
+            let html;
+            if (!filas) {
+                html = `<p class="mb-0 small text-muted">Este valor no sale de las líneas del documento con la configuración contable actual: puede ser una línea agregada o cambiada a mano en el asiento, o una cuenta que se cambió en Configuración contable después de generarlo.</p>`;
+            } else {
+                const difiere = Math.abs(total - valorLinea) >= 0.01;
+                html = `
+                    <div class="table-responsive" style="max-height:55vh;">
+                      <table class="table table-sm table-hover mb-2" style="font-size:.8rem;">
+                        <thead class="table-light"><tr><th class="text-start">Línea del documento</th><th class="text-end">Cant.</th><th class="text-end">Valor</th></tr></thead>
+                        <tbody>${filas}</tbody>
+                        <tfoot><tr class="fw-bold"><td class="text-start">Total</td><td></td><td class="text-end">${fmt(total)}</td></tr></tfoot>
+                      </table>
+                    </div>
+                    ${difiere ? `<div class="alert alert-warning py-1 px-2 small mb-0 text-start"><i class="bi bi-exclamation-triangle me-1"></i>La suma (${fmt(total)}) no coincide con el valor de esta línea (${fmt(valorLinea)}): el asiento se editó a mano, lleva un ajuste por redondeo o la configuración contable cambió después de generarlo.</div>` : ''}`;
+            }
+            Swal.fire({
+                title: `<span style="font-size:1rem;">${escHtml(cuentaTxt)}</span>`,
+                html: `<div class="small text-muted mb-2">${lado === 'debe' ? 'Debe' : 'Haber'}: <strong>${fmt(valorLinea)}</strong></div>${html}`,
+                width: 640,
+                confirmButtonText: 'Cerrar',
+            });
+        }
+
         // ── Líneas ────────────────────────────────────────────────────────────────
 
         function agregarLinea(idCuenta = '', codigo = '', nombre = '', debe = 0, haber = 0, referencia = '', extra = null) {
@@ -289,10 +378,12 @@
                 <td class="align-middle p-0 asiento-col-centro"><select class="form-select form-select-sm border-0 bg-transparent input-centro-costo" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.centros, ex.id_centro_costo, ex.nombre_centro_costo)}</select></td>
                 <td class="align-middle p-0 asiento-col-proyecto"><select class="form-select form-select-sm border-0 bg-transparent input-proyecto" ${dis} style="${estiloSel}">${opcionesSelect(opcionesDim.proyectos, ex.id_proyecto, ex.nombre_proyecto)}</select></td>
                 <td class="align-middle p-0"><input type="text" class="form-control border-0 bg-transparent input-referencia text-muted fst-italic" ${ro} placeholder="${editable ? 'Referencia' : ''}" value="${escHtml(referencia)}" title="${escHtml(referencia)}" style="padding:0 4px;height:20px;font-size:0.78rem;min-width:320px;"></td>
-                <td class="text-center p-0 align-middle" style="width:40px;">
+                <td class="text-center p-0 align-middle text-nowrap" style="width:40px;">
+                    ${cfg.desgloseUrl && idDocumento > 0 ? '<button type="button" class="btn btn-link btn-sm text-info p-0 shadow-none border-0 btn-desglose-asiento-linea me-1" title="¿De dónde sale este valor?"><i class="bi bi-info-circle"></i></button>' : ''}
                     ${editable ? '<button type="button" class="btn btn-link btn-sm text-danger p-0 shadow-none border-0 btn-del-asiento-linea" title="Eliminar línea"><i class="bi bi-trash3 fs-6"></i></button>' : ''}
                 </td>`;
             tbody.appendChild(tr);
+            tr.querySelector('.btn-desglose-asiento-linea')?.addEventListener('click', () => abrirDesglose(tr));
 
             const inpCuenta = tr.querySelector('.input-cuenta-nombre');
             const hiddenCuenta = tr.querySelector('.input-id-cuenta-contable');
@@ -491,6 +582,7 @@
             if (!tbody) return;
             idDocumento = parseInt(id) || 0;
             cabecera = null;
+            desgloseCache = null;   // el asiento pudo regenerarse: el desglose se vuelve a pedir
             pintarNumero();
             cuadreDoc = null;
             editable = false;
