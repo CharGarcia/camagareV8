@@ -252,7 +252,10 @@ window.RV_generarReporte = function () {
     const form = document.getElementById('form-filtros-reporte');
     const formData = new FormData(form);
     const params = new URLSearchParams(formData).toString();
-    
+    // Filtros con que se generó la tabla: el detalle de una fila de rentabilidad los repite
+    // tal cual, aunque después se toquen los filtros sin pulsar Buscar.
+    window.rv_last_params = params;
+
     const agruparPor = document.getElementById('rv_agrupar_por').value;
 
     // Actualizar cabeceras de la tabla según la agrupación elegida. En "Unidades por
@@ -304,6 +307,7 @@ window.RV_generarReporte = function () {
                 RV_dibujarCabecera('CLIENTE_CATEGORIA', window.rv_last_categorias);
             }
             tbody.innerHTML = res.rows;
+            window.rv_tabla_agrupacion = res.agrupacion;   // agrupación de las filas en pantalla
 
             // Actualizar tarjetas estadísticas
             if (res.stats) {
@@ -880,5 +884,157 @@ document.addEventListener('click', function (e) {
         numero:      tr.dataset.docNumero || '',
         sujetoLabel: 'Cliente',
         sujeto:      tr.dataset.docSujeto || ''
+    });
+});
+
+/* ════════════════════════════════════════════════════
+   RENTABILIDAD: DETALLE DE UNA FILA
+   Clic en una fila de cualquier vista de rentabilidad → ventana con los documentos y
+   productos que la forman (ReporteVentasController::detalleRentabilidadAjax), peor
+   utilidad primero, con el origen del costo y la posible causa. Usa los mismos filtros
+   con que se generó la tabla (rv_last_params), así el detalle suma lo de la fila.
+════════════════════════════════════════════════════ */
+const RV_CAUSAS = {
+    precio_bajo_costo: ['Precio bajo el costo', 'danger',    'Se vendió a un precio unitario menor que su costo unitario.'],
+    descuento_alto:    ['Descuento alto',       'danger',    'Sin el descuento la línea cubría el costo; con el descuento quedó por debajo.'],
+    costo_atipico:     ['Costo fuera de lo normal', 'warning', 'El costo unitario de esta salida supera en más de 30 % el costo promedio del producto en este detalle. Revise las entradas del producto en el Kardex (Reporte de Inventarios → Movimientos): suele ser una compra o un ajuste cargado con un costo equivocado.'],
+    nc_sin_reingreso:  ['NC sin reingreso',     'warning',   'La nota de crédito restó la venta pero no reingresó el producto al inventario: su costo es estimado con la ficha o 0.'],
+    kit:               ['Kit',                  'info',      'El costo incluye los componentes del kit que descargó el documento.'],
+    sin_costo:         ['Sin costo',            'secondary', 'La venta no tiene costo: la salida del kardex se registró con costo 0 o, si no movió inventario, la ficha del producto no tiene costo. La utilidad sale igual a la venta.'],
+    costo_estimado:    ['Costo estimado',       'secondary', 'El documento no movió inventario: el costo se estimó con el costo de la ficha del producto.'],
+};
+const RV_ORIGENES = {
+    kardex:     'Kardex',
+    kardex_kit: 'Kardex + kit',
+    kit:        'Componentes del kit',
+    ficha:      'Estimado (ficha)',
+    sin_costo:  'Sin costo',
+};
+
+function RV_esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+}
+function RV_num(v, dec = 2) {
+    return (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+}
+function RV_fechaDmy(f) {
+    const m = String(f || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${m[3]}-${m[2]}-${m[1]}` : (f || '');
+}
+
+document.addEventListener('click', function (e) {
+    const tr = e.target.closest('#rv_tbody tr[data-rent-titulo]');
+    if (!tr || e.target.closest('button, a, input, select, label')) return;
+    const vista = window.rv_tabla_agrupacion || '';
+    if (!vista.startsWith('RENT_') || !window.rv_last_params) return;
+    RV_abrirDetalleRentabilidad(vista, tr.dataset.rentId || '0', tr.dataset.rentValor || '', tr.dataset.rentTitulo || '');
+});
+
+function RV_abrirDetalleRentabilidad(vista, id, valor, titulo) {
+    const modalEl = document.getElementById('rv-modal-rent-detalle');
+    if (!modalEl) return;
+    document.getElementById('rv-rent-det-nombre').textContent = titulo || 'Detalle de la rentabilidad';
+    document.getElementById('rv-rent-det-resumen').innerHTML = '';
+    document.getElementById('rv-rent-det-causas').classList.add('d-none');
+    document.getElementById('rv-rent-det-pie').textContent = '';
+    const tbody = document.getElementById('rv-rent-det-tbody');
+    tbody.innerHTML = '<tr><td colspan="14" class="text-center py-4"><div class="spinner-border spinner-border-sm text-primary"></div> <span class="text-muted ms-2">Cargando documentos…</span></td></tr>';
+    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+
+    const body = window.rv_last_params + '&rent_vista=' + encodeURIComponent(vista)
+               + '&rent_id=' + encodeURIComponent(id) + '&rent_valor=' + encodeURIComponent(valor);
+    fetch(BASE_URL + '/' + RUTA_MODULO + '/detalleRentabilidadAjax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: body
+    })
+    .then(r => r.json())
+    .then(res => {
+        if (!res.ok) throw new Error(res.error || 'No se pudo cargar el detalle.');
+        RV_pintarDetalleRentabilidad(res);
+    })
+    .catch(err => {
+        tbody.innerHTML = `<tr><td colspan="14" class="text-center py-4 text-danger">${RV_esc(err.message)}</td></tr>`;
+    });
+}
+
+function RV_pintarDetalleRentabilidad(res) {
+    const t = res.totales || {};
+    const util = parseFloat(t.utilidad) || 0;
+    const kpi = (lbl, val, cls = '') => `<div><div class="text-muted" style="font-size:.65rem;">${lbl}</div><div class="fw-bold ${cls}">${val}</div></div>`;
+    document.getElementById('rv-rent-det-resumen').innerHTML =
+        kpi('VENTA SIN IVA', '$' + RV_num(t.venta))
+        + kpi('COSTO', '$' + RV_num(t.costo))
+        + kpi('UTILIDAD', (util < 0 ? '-$' : '$') + RV_num(Math.abs(util)), util < 0 ? 'text-danger' : 'text-success')
+        + kpi('MARGEN', RV_num(t.margen) + '%');
+
+    const filas = res.filas || [];
+    // Resumen de causas: cuántas líneas tiene cada una.
+    const resumen = {};
+    filas.forEach(f => (f.causas || []).forEach(c => { resumen[c] = (resumen[c] || 0) + 1; }));
+    const cajaCausas = document.getElementById('rv-rent-det-causas');
+    const claves = Object.keys(RV_CAUSAS).filter(c => resumen[c]);
+    if (claves.length) {
+        cajaCausas.innerHTML = '<span class="text-muted me-2">Posibles causas:</span>' + claves.map(c => {
+            const [lbl, color, tip] = RV_CAUSAS[c];
+            return `<span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 me-1 fw-normal" title="${RV_esc(tip)}">`
+                 + `${lbl}: ${resumen[c]} línea${resumen[c] !== 1 ? 's' : ''}</span>`;
+        }).join('');
+        cajaCausas.classList.remove('d-none');
+    }
+
+    const tbody = document.getElementById('rv-rent-det-tbody');
+    window.rv_det_filas = filas;
+    if (!filas.length) {
+        tbody.innerHTML = '<tr><td colspan="14" class="text-center py-4 text-muted">No hay documentos para esta fila con los filtros aplicados.</td></tr>';
+        document.getElementById('rv-rent-det-pie').textContent = '';
+        return;
+    }
+    tbody.innerHTML = filas.map((f, i) => {
+        const u = parseFloat(f.utilidad) || 0;
+        const causas = (f.causas || []).map(c => {
+            const [lbl, color, tip] = RV_CAUSAS[c] || [c, 'secondary', ''];
+            return `<span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25 fw-normal me-1" title="${RV_esc(tip)}">${lbl}</span>`;
+        }).join('');
+        const tipCosto = (f.costo_promedio !== null && f.costo_promedio !== undefined)
+            ? 'Costo promedio del producto en este detalle: ' + RV_num(f.costo_promedio, 4) : '';
+        const nc = f.es_nc ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25 fw-normal me-1">NC</span>' : '';
+        const est = f.establecimiento ? `<span class="text-muted me-1">${RV_esc(f.establecimiento)}</span>` : '';
+        const decCant = Math.abs((parseFloat(f.cantidad) || 0) % 1) > 0.00001 ? 2 : 0;
+        return `<tr class="${u < 0 ? 'rv-det-neg' : ''}">`
+            + `<td class="ps-3">${RV_fechaDmy(f.fecha)}</td>`
+            + `<td>${nc}${est}<a href="#" class="rv-det-doc fw-semibold" data-i="${i}" title="Ver el documento">${RV_esc(f.numero)}</a></td>`
+            + `<td class="rv-det-texto" title="${RV_esc(f.cliente_nombre + ' ' + f.cliente_ruc)}">${RV_esc(f.cliente_nombre)}</td>`
+            + `<td class="rv-det-texto" title="${RV_esc(f.producto_codigo + ' ' + f.producto_nombre)}">${RV_esc(f.producto_nombre)}</td>`
+            + `<td class="text-end">${RV_num(f.cantidad, decCant)}</td>`
+            + `<td class="text-end">${RV_num(f.precio_unitario)}</td>`
+            + `<td class="text-end">${RV_num(f.descuento)}</td>`
+            + `<td class="text-end">${RV_num(f.venta)}</td>`
+            + `<td class="text-end" title="${RV_esc(tipCosto)}">${RV_num(f.costo_unitario)}</td>`
+            + `<td class="text-end">${RV_num(f.costo)}</td>`
+            + `<td>${RV_esc(RV_ORIGENES[f.origen] || f.origen)}</td>`
+            + `<td class="text-end fw-bold ${u < 0 ? 'text-danger' : 'text-success'}">${RV_num(u)}</td>`
+            + `<td class="text-end ${u < 0 ? 'text-danger' : ''}">${RV_num(f.margen)}%</td>`
+            + `<td class="pe-3">${causas}</td>`
+            + '</tr>';
+    }).join('');
+
+    const n = filas.length, tot = res.total_filas || n;
+    document.getElementById('rv-rent-det-pie').textContent = res.recortado
+        ? `Se muestran las ${n} líneas con menor utilidad de ${tot}. Acote los filtros para ver el resto.`
+        : `${n} línea${n !== 1 ? 's' : ''} (documento + producto). Peor utilidad primero.`;
+}
+
+// Clic en el número de documento → panel lateral del documento (el mismo del detallado).
+document.addEventListener('click', function (e) {
+    const a = e.target.closest('#rv-rent-det-tbody a.rv-det-doc');
+    if (!a) return;
+    e.preventDefault();
+    const f = (window.rv_det_filas || [])[parseInt(a.dataset.i, 10)];
+    if (!f || typeof window.CMG_abrirPreviewDoc !== 'function') return;
+    window.CMG_abrirPreviewDoc(f.id_doc, f.doc_tipo, {
+        numero:      f.numero || '',
+        sujetoLabel: 'Cliente',
+        sujeto:      f.cliente_nombre || ''
     });
 });

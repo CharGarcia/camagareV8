@@ -411,6 +411,61 @@
     </div>
 </div>
 
+<?php if (!empty($verRentabilidad)): ?>
+<?php // Detalle de una fila de rentabilidad (clic en la fila): documentos que la forman, peor
+      // utilidad primero, con el origen del costo y la posible causa. data-bs-focus="false":
+      // desde aquí se abre el panel del documento (offcanvas, por encima) y debe poder usarse. ?>
+<div class="modal fade" id="rv-modal-rent-detalle" tabindex="-1" aria-labelledby="rv-rent-det-titulo" aria-hidden="true" data-bs-focus="false">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header py-2 px-3 bg-light">
+                <h6 class="modal-title fw-bold mb-0" id="rv-rent-det-titulo">
+                    <i class="bi bi-search me-2 text-primary"></i><span id="rv-rent-det-nombre">Detalle de la rentabilidad</span>
+                </h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="d-flex flex-wrap gap-3 align-items-center px-3 py-2 border-bottom small" id="rv-rent-det-resumen"></div>
+                <div class="px-3 py-2 border-bottom small d-none" id="rv-rent-det-causas"></div>
+                <div class="rv-rent-det-cont">
+                    <table class="table table-sm table-hover mb-0 align-middle" id="rv-rent-det-tabla" style="font-size:.78rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-3">Fecha</th>
+                                <th>Documento</th>
+                                <th>Cliente</th>
+                                <th>Producto</th>
+                                <th class="text-end">Cant.</th>
+                                <th class="text-end" title="Precio unitario neto (venta sin IVA ÷ cantidad, ya con el descuento)">P. unit.</th>
+                                <th class="text-end">Desc.</th>
+                                <th class="text-end">Venta</th>
+                                <th class="text-end" title="Costo unitario de esta venta (costo ÷ cantidad)">C. unit.</th>
+                                <th class="text-end">Costo</th>
+                                <th>Origen del costo</th>
+                                <th class="text-end">Utilidad</th>
+                                <th class="text-end">Margen</th>
+                                <th class="pe-3">Posible causa</th>
+                            </tr>
+                        </thead>
+                        <tbody id="rv-rent-det-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2 px-3 small text-muted justify-content-between">
+                <span id="rv-rent-det-pie"></span>
+                <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+    #rv-rent-det-tabla td, #rv-rent-det-tabla th { white-space: nowrap; }
+    #rv-rent-det-tabla td.rv-det-texto { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+    #rv-rent-det-tabla tr.rv-det-neg > td { background-color: rgba(220, 53, 69, .06); }
+    #rv-rent-det-tabla thead th { position: sticky; top: 0; z-index: 1; }
+</style>
+<?php endif; ?>
+
 <?php // Panel lateral con el detalle del documento (clic sobre una fila del detallado)
 require_once MVC_APP . '/views/partials/offcanvas_doc_preview.php'; ?>
 

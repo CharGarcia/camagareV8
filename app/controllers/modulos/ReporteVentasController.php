@@ -564,6 +564,99 @@ class ReporteVentasController extends BaseModuloController
         return $celdas;
     }
 
+    /**
+     * Clave de una fila de rentabilidad para el panel de detalle: [id, valor de texto]. Es la
+     * misma con que ReporteVentasRepository::getRentabilidad() juntó la fila: id de producto
+     * o de cliente; nombre en minúsculas de categoría, marca, vendedor o concepto libre; mes.
+     */
+    private static function claveFilaRentabilidad(array $r, string $agrupar): array
+    {
+        $txt = static fn (string $c): string => mb_strtolower(trim((string) ($r[$c] ?? '')));
+        return match ($agrupar) {
+            'RENT_PRODUCTO'  => [(int) ($r['id_producto'] ?? 0), empty($r['id_producto']) ? $txt('producto_nombre') : ''],
+            'RENT_CATEGORIA' => [0, $txt('categoria_nombre')],
+            'RENT_MARCA'     => [0, $txt('marca_nombre')],
+            'RENT_MES'       => [0, (string) ($r['mes'] ?? '')],
+            'RENT_CLIENTE'   => [(int) ($r['id_cliente'] ?? 0), ''],
+            'RENT_VENDEDOR'  => [0, $txt('vendedor_nombre')],
+            default          => [0, ''],
+        };
+    }
+
+    /** Texto legible de la fila, para el título del panel de detalle. */
+    private static function tituloFilaRentabilidad(array $r, string $agrupar): string
+    {
+        return match ($agrupar) {
+            'RENT_PRODUCTO'  => trim(((string) ($r['producto_codigo'] ?? '') !== '' ? $r['producto_codigo'] . ' - ' : '') . ($r['producto_nombre'] ?? '')),
+            'RENT_CATEGORIA' => 'Categoría: ' . self::etiquetaRentabilidad($r, 'categoria_nombre'),
+            'RENT_MARCA'     => 'Marca: ' . self::etiquetaRentabilidad($r, 'marca_nombre'),
+            'RENT_MES'       => self::formatearMes((string) ($r['mes'] ?? '')),
+            'RENT_CLIENTE'   => trim((string) ($r['cliente_nombre'] ?? '') . ((string) ($r['cliente_ruc'] ?? '') !== '' ? ' (' . $r['cliente_ruc'] . ')' : '')),
+            'RENT_VENDEDOR'  => 'Vendedor: ' . self::etiquetaRentabilidad($r, 'vendedor_nombre'),
+            default          => '',
+        };
+    }
+
+    /**
+     * Panel de detalle de una fila de rentabilidad: los documentos y productos que la
+     * forman, peor utilidad primero, con el origen del costo y la posible causa. Mismos
+     * candados que el reporte (permiso de ver, pestaña «Rentabilidad», alcance del usuario
+     * §6, empresa) y los mismos filtros de pantalla, así que el detalle suma lo de la fila.
+     */
+    public function detalleRentabilidadAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        try {
+            $vista = strtoupper(trim((string) ($_REQUEST['rent_vista'] ?? '')));
+            if (!self::esRentabilidad($vista) || !isset(self::AGRUPACION_LBL[$vista]) || !$this->puedeVerRentabilidad()) {
+                http_response_code(403);
+                echo json_encode(['ok' => false, 'error' => 'No tiene permiso para ver la rentabilidad.']);
+                exit;
+            }
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $filtros   = $this->getFiltrosDesdeRequest();
+            $filtros['agrupar_por'] = $vista;
+            [$idsEmpresa] = $this->resolverAlcance($idEmpresa, $filtros);
+
+            $id    = (int) ($_REQUEST['rent_id'] ?? 0);
+            $valor = mb_strtolower(trim((string) ($_REQUEST['rent_valor'] ?? '')));
+            if ($vista === 'RENT_MES' && !preg_match('/^\d{4}-\d{2}$/', $valor)) {
+                throw new \InvalidArgumentException('Mes no válido.');
+            }
+            $ids = [];
+            if ($vista === 'RENT_PRODUCTO' && $id > 0) {
+                $ids = [$id];
+            } elseif ($vista === 'RENT_CLIENTE') {
+                // El mismo cliente con cédula y RUC (y en consolidado, de otros establecimientos).
+                $ids = $id > 0
+                    ? (new \App\repositories\modulos\CuentasPorCobrarRepository())->expandirClientesPorIdentificacion([$id], $idsEmpresa)
+                    : [0];
+            }
+
+            $res   = $this->repository->getDetalleRentabilidad($idsEmpresa, $filtros, ['vista' => $vista, 'valor' => $valor, 'ids' => $ids]);
+            $filas = $res['filas'];
+            $venta = round(array_sum(array_column($filas, 'venta')), 2);
+            $costo = round(array_sum(array_column($filas, 'costo')), 2);
+            echo json_encode([
+                'ok'          => true,
+                'filas'       => $filas,
+                'total_filas' => $res['total_filas'],
+                'recortado'   => $res['total_filas'] > count($filas),
+                'totales'     => [
+                    'venta'    => $venta,
+                    'costo'    => $costo,
+                    'utilidad' => round($venta - $costo, 2),
+                    'margen'   => abs($venta) > 0.004 ? round(($venta - $costo) / $venta * 100, 2) : 0.0,
+                ],
+            ], JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     /** Fila de totales de las vistas de rentabilidad (pantalla). */
     private function renderFilaTotalesRentabilidadHtml(array $rows, string $agrupar, array $ocultas = []): string
     {
@@ -826,7 +919,15 @@ class ReporteVentasController extends BaseModuloController
         // Solo el modo detallado corresponde a un documento real: se marca la fila
         // para poder abrir el panel lateral con su detalle (ver offcanvas_doc_preview).
         if (self::esRentabilidad($agruparPor)) {
-            return '<tr class="align-middle">' . self::unirCeldas($this->celdasRentabilidad($r, $agruparPor), $ocultas) . '</tr>';
+            // Clic en la fila → panel con los documentos que la forman (detalleRentabilidadAjax).
+            // data-rent-* lleva la misma clave con que el repositorio juntó la fila.
+            [$id, $valor] = self::claveFilaRentabilidad($r, $agruparPor);
+            $etq   = self::tituloFilaRentabilidad($r, $agruparPor);
+            $attrs = ' style="cursor:pointer;" title="Clic para ver los documentos de esta fila"'
+                   . ' data-rent-id="' . (int) $id . '"'
+                   . ' data-rent-valor="' . htmlspecialchars($valor, ENT_QUOTES) . '"'
+                   . ' data-rent-titulo="' . htmlspecialchars($etq, ENT_QUOTES) . '"';
+            return '<tr class="align-middle"' . $attrs . '>' . self::unirCeldas($this->celdasRentabilidad($r, $agruparPor), $ocultas) . '</tr>';
         }
 
         $attrs = '';
