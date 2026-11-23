@@ -658,6 +658,8 @@
         document.getElementById('cw_hist_q').value = '';
         document.getElementById('cw_hist_item').value = '';
         histEstado = null;
+        // Descarta una carga del historial de la orden anterior que siga en curso.
+        histSeq++; if (histAbort) { histAbort.abort(); histAbort = null; }
         document.getElementById('cw_hist_resumen').innerHTML = '';
         document.getElementById('cw_hist_body').innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Busque un vehículo o un cliente.</td></tr>';
         cwRenderDocumentos([]);
@@ -1022,7 +1024,6 @@
         const p = (window.CW_PUNTOS || []).find(x => String(x.id) === String(idPunto));
         return (p && p.calculo_iva) || EMPRESA_CONFIG.calculo_iva || 'linea_linea';
     }
-    function cwDebounce(fn, wait) { let t; return function (...a) { clearTimeout(t); t = setTimeout(() => fn.apply(this, a), wait); }; }
 
 
     // Crea una fila vacía de la grilla y cablea su búsqueda de producto.
@@ -1098,17 +1099,44 @@
             dropdownGlobal.classList.remove('d-none');
         };
 
-        const buscarProducto = async (q, sourceInput) => {
+        // Lector de código de barras: escribe el código en milisegundos y manda Enter
+        // enseguida. Antes, ese Enter llegaba durante la espera de 400 ms (o con la
+        // búsqueda aún viajando por una conexión lenta), no encontraba resultados y
+        // saltaba a la descripción: la fila quedaba con el código pero sin producto.
+        // Ahora cada búsqueda lleva un número (se descarta la respuesta que ya no
+        // corresponde a lo escrito) y el Enter espera la búsqueda del texto actual.
+        let busqSeq = 0;            // número de la última búsqueda lanzada en esta fila
+        let busqPendiente = null;   // { q, promesa } de la búsqueda en curso
+        let busqMostrada = '';      // texto cuyos resultados están pintados en la lista
+        let busqMostradaFuente = null;
+
+        const buscarProducto = (q, sourceInput) => {
             q = (q || '').trim();
-            if (q.length < 2) { dropdownGlobal.classList.add('d-none'); return; }
+            if (q.length < 2) { busqSeq++; busqPendiente = null; busqMostrada = ''; dropdownGlobal.classList.add('d-none'); return Promise.resolve(null); }
+            if (busqPendiente && busqPendiente.q === q && busqPendiente.fuente === sourceInput) return busqPendiente.promesa;
+            const miSeq = ++busqSeq;
+            const promesa = buscarProductoAhora(q, sourceInput, miSeq);
+            busqPendiente = { q, fuente: sourceInput, promesa };
+            promesa.finally(() => { if (busqPendiente && busqPendiente.promesa === promesa) busqPendiente = null; });
+            return promesa;
+        };
+
+        const buscarProductoAhora = async (q, sourceInput, miSeq) => {
             cwPosicionarDropdownProductos(sourceInput);
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
+            dropdownGlobal._cwFuente = null;
+            busqMostrada = '';
             try {
                 // Stock según la bodega de la cabecera (aplica a toda la orden).
                 const idBod = document.getElementById('cw_id_bodega').value || 0;
                 const idOrd = document.getElementById('cw_id').value || 0;
                 const resp = await fetch(`${RUTA}/getProductosAjax?q=${encodeURIComponent(q)}&id_bodega=${idBod}&id_orden=${idOrd}`);
                 const json = await resp.json();
+                // Llegó tarde: el usuario ya escribió/escaneó otra cosa. No pisar la lista.
+                if (miSeq !== busqSeq) return null;
+                busqMostrada = q;
+                busqMostradaFuente = sourceInput;
+                dropdownGlobal._cwFuente = sourceInput; // la lista es compartida entre filas
                 dropdownGlobal.innerHTML = '';
                 if (json.data && json.data.length > 0) {
                     json.data.forEach(p => {
@@ -1148,36 +1176,83 @@
                 // Entre la búsqueda y la respuesta el teclado pudo abrirse o el modal
                 // pudo scrollear: se vuelve a anclar al input con el alto ya definitivo.
                 if (!dropdownGlobal.classList.contains('d-none')) cwPosicionarDropdownProductos(sourceInput);
-            } catch (err) { console.error('Error productos', err); }
+                return json.data || [];
+            } catch (err) {
+                console.error('Error productos', err);
+                if (miSeq === busqSeq) dropdownGlobal.innerHTML = '<div class="list-group-item small text-danger">No se pudo buscar (conexión). Presione Enter para reintentar.</div>';
+                return null;
+            }
         };
 
-        inputDesc.addEventListener('input', cwDebounce((e) => buscarProducto(e.target.value, inputDesc), 400));
+        // Debounce cancelable: el Enter lo cancela y busca de inmediato.
+        const debounceBusqueda = (inp) => {
+            let t = null;
+            const fn = () => { clearTimeout(t); t = setTimeout(() => { t = null; buscarProducto(inp.value, inp); }, 400); };
+            fn.cancelar = () => { const habia = t !== null; clearTimeout(t); t = null; return habia; };
+            return fn;
+        };
+
+        // Enter: toma el producto de la lista, esperando antes la búsqueda del texto
+        // actual si aún no llegó. Con un código exacto (código o código de barras)
+        // elige ese producto aunque no sea el primero de la lista.
+        const enterEnBuscador = async (inp, debounced, alNoHaber) => {
+            debounced.cancelar();
+            const q = (inp.value || '').trim();
+            const listaVigente = busqMostrada === q && busqMostradaFuente === inp
+                              && dropdownGlobal._cwFuente === inp
+                              && !dropdownGlobal.classList.contains('d-none');
+            let data = null;
+            if (!listaVigente && q.length >= 2) {
+                inp.dataset.enterPendiente = '1';
+                data = await buscarProducto(q, inp);
+                delete inp.dataset.enterPendiente;
+                // Mientras esperaba, el usuario cambió el texto o salió de la fila.
+                if ((inp.value || '').trim() !== q || !tr.isConnected) return;
+                if (data === null) return; // error de red: el mensaje ya quedó en la lista
+            }
+            const botones = [...dropdownGlobal.querySelectorAll('button')];
+            if (data === null) {
+                // La lista ya mostraba lo escrito: el primero, como siempre.
+                if (listaVigente && botones.length) botones[0].onmousedown(new MouseEvent('mousedown'));
+                else if (alNoHaber) alNoHaber();
+                return;
+            }
+            // El Enter llegó antes que la lista (lector / internet lento): solo se
+            // elige sola una coincidencia exacta; si no, la lista queda para elegir.
+            const qn = q.toLowerCase();
+            const idx = data.findIndex(p => [p.codigo, p.codigo_barras, p.codigo_auxiliar]
+                .some(c => String(c || '').toLowerCase() === qn));
+            if (idx >= 0 && botones[idx]) { botones[idx].onmousedown(new MouseEvent('mousedown')); return; }
+            if (!data.length && alNoHaber) alNoHaber();
+        };
+
+        const debDesc = debounceBusqueda(inputDesc);
+        inputDesc.addEventListener('input', debDesc);
         inputDesc.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault(); // la descripción es una sola línea (como factura)
-                const firstBtn = dropdownGlobal.querySelector('button');
-                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) firstBtn.onmousedown(new MouseEvent('mousedown'));
+                enterEnBuscador(inputDesc, debDesc, null);
             }
         });
 
         // Código (igual que factura): busca en el catálogo; Enter toma el primero.
         const inputCodigo = tr.querySelector('.input-codigo');
-        inputCodigo.addEventListener('input', cwDebounce((e) => buscarProducto(e.target.value, inputCodigo), 400));
+        const debCod = debounceBusqueda(inputCodigo);
+        inputCodigo.addEventListener('input', debCod);
         inputCodigo.addEventListener('keydown', (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre && tr.querySelector('.input-id-producto').value) {
                 e.preventDefault();
                 inputCodigo.value = ''; inputDesc.value = '';
                 tr.querySelector('.input-id-producto').value = '';
+                busqSeq++; busqMostrada = '';
                 dropdownGlobal.classList.add('d-none');
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const firstBtn = dropdownGlobal.querySelector('button');
-                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) firstBtn.onmousedown(new MouseEvent('mousedown'));
-                else inputDesc.focus();
+                enterEnBuscador(inputCodigo, debCod, () => inputDesc.focus());
             }
         });
-        inputCodigo.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
+        inputCodigo.addEventListener('blur', () => setTimeout(() => { if (!inputCodigo.dataset.enterPendiente) dropdownGlobal.classList.add('d-none'); }, 200));
 
         // Celular/tablet (iPad): el detalle está en la parte baja del modal y el
         // teclado en pantalla lo tapa al tocar el campo. Se sube el campo a la vista
@@ -2136,14 +2211,33 @@
         };
     }
 
+    // Cada carga lleva un número: si el usuario cambia de orden, de modo o sigue escribiendo,
+    // la respuesta anterior se descarta (antes podía pintar el historial de otra orden o
+    // dejar la tabla en "Buscando..."). Con internet lento la petición tiene un tiempo
+    // máximo; al vencer se avisa y se ofrece Reintentar en lugar de quedarse cargando.
+    let histSeq = 0, histAbort = null, histUltimoFiltro = null;
+    const HIST_TIMEOUT_MS = 30000;
+    window.cwHistorialReintentar = function () { if (histUltimoFiltro) cwCargarHistorial(histUltimoFiltro); };
+
     async function cwCargarHistorial(filtro) {
         const modo = document.getElementById('cw_hist_modo').value;
         const tbody = document.getElementById('cw_hist_body');
+        const miSeq = ++histSeq;
+        histUltimoFiltro = filtro;
+        if (histAbort) histAbort.abort();
+        const ctrl = new AbortController();
+        histAbort = ctrl;
+        let vencido = false;
+        const timer = setTimeout(() => { vencido = true; ctrl.abort(); }, HIST_TIMEOUT_MS);
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span>Buscando...</td></tr>';
         try {
             const params = new URLSearchParams({ modo, ...filtro });
-            const res = await fetch(`${RUTA}/historialAjax?${params.toString()}`);
-            const data = await res.json();
+            const res = await fetch(`${RUTA}/historialAjax?${params.toString()}`, { signal: ctrl.signal });
+            const texto = await res.text();
+            if (miSeq !== histSeq) return; // llegó tarde: ya se pidió otro historial
+            let data;
+            try { data = JSON.parse(texto); }
+            catch (_) { throw new Error(res.ok ? 'Respuesta inválida del servidor.' : `El servidor respondió con error ${res.status}.`); }
             if (!data.ok) throw new Error(data.error || 'No se pudo cargar el historial.');
             let rows = data.data || [];
 
@@ -2172,8 +2266,17 @@
             histEstado = { rows, modo, proxima: data.proxima_cita };
             cwHistPintar();
         } catch (e) {
+            // Abortada porque se pidió otro historial: la nueva carga ya maneja la tabla.
+            if (miSeq !== histSeq || (e.name === 'AbortError' && !vencido)) return;
             histEstado = null;
-            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+            const msg = vencido
+                ? 'El historial tardó demasiado en responder (conexión lenta).'
+                : (e instanceof TypeError ? 'No se pudo conectar con el servidor.' : e.message);
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">${esc(msg)}
+                <button type="button" class="btn btn-sm btn-outline-primary ms-2" onclick="cwHistorialReintentar()"><i class="bi bi-arrow-clockwise me-1"></i>Reintentar</button></td></tr>`;
+        } finally {
+            clearTimeout(timer);
+            if (histAbort === ctrl) histAbort = null;
         }
     }
 

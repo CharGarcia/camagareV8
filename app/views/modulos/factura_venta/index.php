@@ -5030,16 +5030,33 @@ $totalPages = $totalPagesOriginal;
             });
         };
 
-        const buscarProducto = async (q, sourceInput) => {
-            // ... (keep search logic similar but adjust for no inputCod)
-            q = q.trim();
-            if (q.length < 2) {
-                dropdownGlobal.classList.add('d-none');
-                return;
-            }
+        // Lector de código de barras: escribe el código en milisegundos y manda Enter
+        // enseguida, antes de que termine la espera de 400 ms o llegue la respuesta
+        // (internet lento). Cada búsqueda lleva un número para descartar respuestas
+        // atrasadas, y el Enter espera la búsqueda del texto actual (enterEnBuscador).
+        let busqSeq = 0;
+        let busqPendiente = null;
+        let busqMostrada = '';
 
+        const buscarProducto = (q, sourceInput) => {
+            q = (q || '').trim();
+            if (q.length < 2) {
+                busqSeq++; busqPendiente = null; busqMostrada = '';
+                dropdownGlobal.classList.add('d-none');
+                return Promise.resolve(null);
+            }
+            if (busqPendiente && busqPendiente.q === q && busqPendiente.fuente === sourceInput) return busqPendiente.promesa;
+            const promesa = buscarProductoAhora(q, sourceInput, ++busqSeq);
+            busqPendiente = { q, fuente: sourceInput, promesa };
+            promesa.finally(() => { if (busqPendiente && busqPendiente.promesa === promesa) busqPendiente = null; });
+            return promesa;
+        };
+
+        const buscarProductoAhora = async (q, sourceInput, miSeq) => {
             fvPosicionarDropdownProductos(sourceInput);
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
+            dropdownGlobal._cmgFuente = null; // la lista es compartida entre filas
+            busqMostrada = '';
 
             // Saldo en el buscador: solo se pide cuando la facturación afecta al inventario
             // y hay bodega en la cabecera. El backend devuelve stock_bodega solo para los
@@ -5056,16 +5073,21 @@ $totalPages = $totalPagesOriginal;
             try {
                 const resp = await fetch(urlBusqueda);
                 const json = await resp.json();
+                // Llegó tarde: ya se escribió/escaneó otra cosa. No pisar la lista.
+                if (miSeq !== busqSeq) return null;
+                busqMostrada = q;
+                dropdownGlobal._cmgFuente = sourceInput;
                 dropdownGlobal.innerHTML = '';
 
                 if (json.data && json.data.length > 0) {
                     if (json.data.length === 1) {
                         const p = json.data[0];
                         if (p.codigo === q || p.codigo_barras === q || p.codigo_auxiliar === q) {
+                            busqMostrada = '';
                             seleccionarProductoEnFila(p, tr);
                             dropdownGlobal.classList.add('d-none');
                             if (fvProductoSinSaldo(p)) fvMostrarSimilares(p, tr);
-                            return;
+                            return { data: json.data, auto: true };
                         }
                     }
 
@@ -5120,9 +5142,47 @@ $totalPages = $totalPagesOriginal;
                 // Entre la búsqueda y la respuesta el teclado pudo abrirse o el modal
                 // pudo scrollear: se vuelve a anclar al input con el alto ya definitivo.
                 if (!dropdownGlobal.classList.contains('d-none')) fvPosicionarDropdownProductos(sourceInput);
+                return { data: json.data || [], auto: false };
             } catch (err) {
                 console.error('Error productos', err);
+                if (miSeq === busqSeq) dropdownGlobal.innerHTML = '<div class="list-group-item small text-danger">No se pudo buscar (conexión). Presione Enter para reintentar.</div>';
+                return null;
             }
+        };
+
+        // Espera de 400 ms que el Enter puede cancelar para buscar de inmediato.
+        const debounceBusqueda = (inp) => {
+            let t = null;
+            const fn = () => { clearTimeout(t); t = setTimeout(() => { t = null; buscarProducto(inp.value, inp); }, 400); };
+            fn.cancelar = () => { clearTimeout(t); t = null; };
+            return fn;
+        };
+
+        // Enter en Código o Descripción. Si la lista ya muestra lo escrito, toma el
+        // primero (como siempre). Si no (lector de barras / internet lento), espera
+        // la búsqueda y elige el producto cuyo código, código de barras o auxiliar
+        // coincide exactamente; si no hay coincidencia exacta deja la lista abierta.
+        const enterEnBuscador = async (inp, deb, alNoHaber) => {
+            deb.cancelar();
+            const q = (inp.value || '').trim();
+            const vigente = busqMostrada === q && dropdownGlobal._cmgFuente === inp
+                         && !dropdownGlobal.classList.contains('d-none');
+            if (vigente || q.length < 2) {
+                const b = vigente ? dropdownGlobal.querySelector('button') : null;
+                if (b && b.onmousedown) b.onmousedown(new MouseEvent('mousedown'));
+                else if (alNoHaber) alNoHaber();
+                return;
+            }
+            inp.dataset.enterPendiente = '1';
+            const r = await buscarProducto(q, inp);
+            delete inp.dataset.enterPendiente;
+            if (!r || r.auto || (inp.value || '').trim() !== q || !tr.isConnected) return;
+            const qn = q.toLowerCase();
+            const idx = r.data.findIndex(p => [p.codigo, p.codigo_barras, p.codigo_auxiliar]
+                .some(c => String(c || '').toLowerCase() === qn));
+            const botones = [...dropdownGlobal.querySelectorAll('button')];
+            if (idx >= 0 && botones[idx] && botones[idx].onmousedown) { botones[idx].onmousedown(new MouseEvent('mousedown')); return; }
+            if (!r.data.length && alNoHaber) alNoHaber();
         };
 
         // Celular/tablet: el detalle está en la parte baja del modal y el teclado en
@@ -5139,7 +5199,8 @@ $totalPages = $totalPagesOriginal;
             }, 300);
         }));
 
-        inputDesc.addEventListener('input', debounce((e) => buscarProducto(e.target.value, inputDesc), 400));
+        const debDesc = debounceBusqueda(inputDesc);
+        inputDesc.addEventListener('input', debDesc);
 
         inputDesc.addEventListener('keydown', (e) => {
             // En modo estricto la descripción es un buscador de catálogo: Delete/Retroceso
@@ -5149,23 +5210,19 @@ $totalPages = $totalPagesOriginal;
             if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre) {
                 e.target.value = '';
                 inputCodigoVisible.value = '';
+                busqSeq++; busqMostrada = '';
                 dropdownGlobal.classList.add('d-none');
                 tr.querySelector('.input-id-producto').value = '';
                 fvPintarInfoProducto(tr, null);
             }
             if (e.key === 'Enter') {
-                const firstBtn = dropdownGlobal.querySelector('button');
-                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) {
-                    e.preventDefault();
-                    if (firstBtn.onmousedown) firstBtn.onmousedown(new MouseEvent('mousedown'));
-                } else {
-                    // Es un textarea: evitar salto de línea (la descripción va en una sola
-                    // línea al SRI). El texto igual se ve envuelto en 2 filas.
-                    e.preventDefault();
-                }
+                // Es un textarea: evitar salto de línea (la descripción va en una sola
+                // línea al SRI). El texto igual se ve envuelto en 2 filas.
+                e.preventDefault();
+                enterEnBuscador(inputDesc, debDesc, null);
             }
         });
-        inputDesc.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
+        inputDesc.addEventListener('blur', () => setTimeout(() => { if (!inputDesc.dataset.enterPendiente) dropdownGlobal.classList.add('d-none'); }, 200));
 
         inputDesc.addEventListener('blur', () => {
             if (!EMPRESA_CONFIG.facturacion_libre) return;
@@ -5181,27 +5238,24 @@ $totalPages = $totalPagesOriginal;
         // coincidencia única y llama a seleccionarProductoEnFila(), autocompletando
         // la descripción y demás datos del producto — aplica también en modo libre,
         // que es justo el caso pedido: no crear un ítem libre si el código ya existe.
-        inputCodigoVisible.addEventListener('input', debounce((e) => buscarProducto(e.target.value, inputCodigoVisible), 400));
+        const debCod = debounceBusqueda(inputCodigoVisible);
+        inputCodigoVisible.addEventListener('input', debCod);
 
         inputCodigoVisible.addEventListener('keydown', (e) => {
             if ((e.key === 'Delete' || e.key === 'Backspace') && !EMPRESA_CONFIG.facturacion_libre) {
                 e.target.value = '';
                 inputDesc.value = '';
+                busqSeq++; busqMostrada = '';
                 dropdownGlobal.classList.add('d-none');
                 tr.querySelector('.input-id-producto').value = '';
                 fvPintarInfoProducto(tr, null);
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                const firstBtn = dropdownGlobal.querySelector('button');
-                if (firstBtn && !dropdownGlobal.classList.contains('d-none')) {
-                    if (firstBtn.onmousedown) firstBtn.onmousedown(new MouseEvent('mousedown'));
-                } else {
-                    inputDesc.focus();
-                }
+                enterEnBuscador(inputCodigoVisible, debCod, () => inputDesc.focus());
             }
         });
-        inputCodigoVisible.addEventListener('blur', () => setTimeout(() => dropdownGlobal.classList.add('d-none'), 200));
+        inputCodigoVisible.addEventListener('blur', () => setTimeout(() => { if (!inputCodigoVisible.dataset.enterPendiente) dropdownGlobal.classList.add('d-none'); }, 200));
     }
 
     // Etiqueta visible de una fecha de caducidad (§9: formato d-m-Y). El value del

@@ -349,8 +349,12 @@ class CarWashController extends BaseModuloController
             }
             $perm = $this->getPermisos();
             $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            // Solo lectura: se suelta el candado de la sesión para que esta consulta no haga
+            // fila detrás de las demás peticiones que dispara el modal al abrir (ni las frene).
+            if (session_status() === PHP_SESSION_ACTIVE) session_write_close();
 
-            $hist = $this->service->getHistorial((int) $_SESSION['id_empresa'], $modo, $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
+            $hist = $this->service->getHistorial($idEmpresa, $modo, $q, $idVehiculo, $idCliente, $idUsuarioFiltro);
             $rows = $hist['ordenes'];
             foreach ($rows as &$r) {
                 $r['fecha'] = !empty($r['fecha_ingreso']) ? date('d-m-Y H:i:s', strtotime($r['fecha_ingreso'])) : '';
