@@ -128,6 +128,11 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                                 <button type="button" class="btn btn-sm btn-outline-info px-2" onclick="llamarPedido()" title="Cargar desde Pedido">
                                     <i class="bi bi-cart"></i>
                                 </button>
+                                <?php if (\App\Helpers\Permisos::puedeCrear('modulos/clientes')): ?>
+                                <button type="button" class="btn btn-sm btn-outline-primary px-2" onclick="crearClienteRapidoCons()" title="Registrar nuevo cliente">
+                                    <i class="bi bi-person-add"></i>
+                                </button>
+                                <?php endif; ?>
                                 <?php if (\App\Helpers\Permisos::puedeCrear('modulos/vendedores')): ?>
                                 <button type="button" class="btn btn-sm btn-outline-secondary px-2" onclick="crearVendedorRapido()" title="Nuevo Vendedor">
                                     <i class="bi bi-person-plus"></i>
@@ -1531,7 +1536,8 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
         consBuscadorClienteTimeout = setTimeout(async () => {
             try {
-                const url = '<?= defined("BASE_URL") ? BASE_URL : "" ?>/modulos/factura-venta/getClientesAjax?q=' + encodeURIComponent(q);
+                // Endpoint propio (permiso de Consignaciones), no el de Factura de Venta.
+                const url = `${RUTA_MODULO_CONSIGNACION}/getClientesAjax?q=${encodeURIComponent(q)}`;
                 
                 const resp = await fetch(url);
                 const data = await resp.json();
@@ -3091,6 +3097,35 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
 
     // Abre el modal compartido de vendedores (incluido en index.php). Antes era un aviso de
     // relleno («Abre modal de vendedor») que no hacía nada.
+    function crearClienteRapidoCons() {
+        if (typeof window.abrirModalClienteCrear === 'function') window.abrirModalClienteCrear();
+        else Swal.fire('Información', 'El registro rápido de clientes no está disponible.', 'info');
+    }
+
+    // Cliente creado desde «Registrar nuevo cliente» (clientes_modal.js emite 'clienteGuardado'):
+    // queda seleccionado en la consignación. Solo altas, con el modal abierto y el buscador
+    // habilitado. Se vuelve a pedir por el buscador propio para traer los mismos campos
+    // (vendedor, dirección) y se coloca con la misma función que la búsqueda manual.
+    document.addEventListener('clienteGuardado', async (e) => {
+        const res = e.detail || {};
+        if (!res.ok || res.nuevo !== true || !res.data || !res.data.id) return;
+        if (!document.getElementById('modalConsignacion')?.classList.contains('show')) return;
+        const input = document.getElementById('cons_cliente_busqueda');
+        if (!input || input.disabled || input.readOnly) return;
+
+        const termino = String(res.data.identificacion || res.data.nombre || '').trim();
+        if (!termino) return;
+        try {
+            const resp = await fetch(`${RUTA_MODULO_CONSIGNACION}/getClientesAjax?q=${encodeURIComponent(termino)}`);
+            const json = await resp.json();
+            const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
+            if (c) seleccionarClienteCons(c);
+            else Swal.fire('Información', 'El cliente se creó, pero no aparece en el buscador (¿está inactivo?). Búsquelo manualmente.', 'info');
+        } catch (err) {
+            console.error('Error al recuperar el cliente recién creado:', err);
+        }
+    });
+
     function crearVendedorRapido() {
         if (typeof window.abrirModalVendedorCrear === 'function') window.abrirModalVendedorCrear();
         else Swal.fire('Información', 'El registro rápido de vendedores no está disponible.', 'info');

@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
 etiquetas: crear forma de pago, crear forma de cobro, nueva forma de pago, crear concepto, nueva opcion de ingreso, nueva opcion de egreso, crear empleado, crear cliente, nuevo cliente, crear proveedor, nuevo proveedor, crear producto, nuevo producto, registrar cliente desde la factura, registrar proveedor desde la compra, crear al vuelo, no se selecciona el cliente, no aparece el cliente nuevo, no se agrega el producto, la ficha no se cierra, boton persona con mas, boton caja, no esta disponible
-version: 1.4
+version: 1.5
 orden: 40
 estado: activo
 ---
@@ -50,7 +50,7 @@ Si abre la ficha desde su propio listado (Clientes o Proveedores), la ficha
 
 | Registro | Documentos |
 |---|---|
-| Cliente | Factura de venta, recibo, notas de crédito y débito, retención de venta, proforma, pedido, guía de remisión, ingreso, suscripción, cotización de publicidad, facturación de consignaciones, órdenes de lavado, taller y servicio externo, alumnos |
+| Cliente | Factura de venta, recibo, notas de crédito y débito, retención de venta, proforma, pedido, guía de remisión, ingreso, suscripción, cotización de publicidad, consignación de venta, facturación de consignaciones, órdenes de lavado, taller y servicio externo, alumnos |
 | Proveedor | Compra, egreso, orden de compra, liquidación de compra, retención de compra, importación |
 | Producto | Factura de venta, recibo, compra, proforma, suscripción, importación, órdenes de lavado, taller y servicio externo, fórmula de producción |
 | Empleado | Egreso |
@@ -89,6 +89,7 @@ Si abre la ficha desde su propio listado (Clientes o Proveedores), la ficha
 
 ## Historial de cambios
 
+- **1.5** — Se suma el cliente desde la consignación de venta.
 - **1.4** — Se suma el producto desde la fórmula de producción (producto que se fabrica, insumo u otra salida).
 - **1.3** — Se suma la bodega, creada desde Configuración de Producción.
 - **1.2** — Se suman vendedor, responsable de traslado, transportista, vehículo, campus/nivel, departamento/checklist de taller y categoría/marca del producto.

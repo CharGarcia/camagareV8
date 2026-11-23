@@ -1098,6 +1098,33 @@ class ConsignacionesVentasController extends BaseModuloController
         }
     }
 
+    /**
+     * Buscador de clientes del modal de la consignación.
+     *
+     * Antes el modal usaba /modulos/factura-venta/getClientesAjax, que exige permiso de
+     * VER Facturas de Venta: un usuario de nivel 1 con permiso solo en Consignaciones no
+     * podía buscar (ni, por tanto, elegir) clientes. Ahora el permiso es el de este módulo.
+     * Mismos campos que el buscador de Factura de Venta (id_vendedor, nombre_vendedor,
+     * direccion…), que es lo que usa seleccionarClienteCons().
+     */
+    public function getClientesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim($_GET['q'] ?? '');
+        // Una petición por tecla: suelta el candado de la sesión.
+        session_write_close();
+
+        $repo = new \App\repositories\modulos\ClienteRepository();
+        // soloActivos = true: no ofrecer clientes inactivos.
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 10, 'nombre', 'ASC', null, true);
+
+        echo json_encode(['ok' => true, 'data' => $result['rows'] ?? []]);
+        exit;
+    }
+
     public function getProductosAjax(): void
     {
         $this->requireLeer();

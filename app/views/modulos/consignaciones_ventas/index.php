@@ -248,7 +248,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 if (\App\Helpers\Permisos::puedeCrear('modulos/vendedores')) {
     include_once dirname(__DIR__) . '/vendedores/modal_vendedor.php';
 }
+// Modal compartido de clientes para «Registrar nuevo cliente»: el cliente creado queda
+// seleccionado en la consignación (evento 'clienteGuardado'). Fuera del modal de la consignación.
+$puedeCrearClienteCons = \App\Helpers\Permisos::puedeCrear('modulos/clientes');
+if ($puedeCrearClienteCons) {
+    include_once dirname(__DIR__) . '/clientes/modal_cliente.php';
+}
 ?>
+<?php if ($puedeCrearClienteCons): ?>
+<script src="<?= rtrim(BASE_URL, '/') ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>" defer></script>
+<?php endif; ?>
 
 <!-- ESTILOS Y SCRIPTS PROPIOS DEL MODULO -->
 <style>
