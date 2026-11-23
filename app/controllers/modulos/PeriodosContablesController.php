@@ -39,11 +39,13 @@ class PeriodosContablesController extends BaseModuloController
 
         $buscar   = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_inicial');
-        $ordenDir = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        // Orden múltiple (Shift+clic): la vista lo manda como `orden=col:DIR,col:DIR`.
+        $orden    = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_inicial', 'DESC');
+        $ordenCol = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_inicial');
+        $ordenDir = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage = $this->porPagina();
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
 
@@ -70,6 +72,11 @@ class PeriodosContablesController extends BaseModuloController
             'buscar'     => $buscar,
             'ordenCol'   => $ordenCol,
             'ordenDir'   => $ordenDir,
+            'ordenJson'  => \App\Helpers\OrdenListado::aJson($orden),
+            'ordenParam' => \App\Helpers\OrdenListado::aCadena($orden),
+            'opcionesFiltro' => [
+                'usuarios' => $this->service->getUsuariosQueRegistraron($idEmpresa),
+            ],
             'vistaConfig'=> $prefsVista
         ]);
     }
@@ -83,11 +90,12 @@ class PeriodosContablesController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
         $page      = max(1, (int) ($_GET['page'] ?? $_POST['page'] ?? 1));
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? $prefsVista['__ordenCol__'] ?? 'fecha_inicial');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? $prefsVista['__ordenDir__'] ?? 'desc'));
+        $orden     = \App\Helpers\OrdenListado::leer($prefsVista, 'fecha_inicial', 'DESC');
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_inicial');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
         $perPage = $this->porPagina();
 
-        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        $result = $this->service->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
         $rows = $result['rows'];
         $total = $result['total'];
         $totalPages = $perPage > 0 ? (int) ceil($total / $perPage) : 1;
@@ -136,8 +144,8 @@ class PeriodosContablesController extends BaseModuloController
             'pagination' => $paginationHtml,
             'info'      => "$from-$to/$total",
             'total'     => $total,
-            'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir",
-            'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . "&sort=$ordenCol&dir=$ordenDir"
+            'pdf_url'   => BASE_URL . '/' . self::RUTA_MODULO . '/export-pdf?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden)),
+            'excel_url' => BASE_URL . '/' . self::RUTA_MODULO . '/export-excel?b=' . urlencode($buscar) . '&orden=' . urlencode(\App\Helpers\OrdenListado::aCadena($orden))
         ]);
         exit;
     }
@@ -181,10 +189,17 @@ class PeriodosContablesController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_inicial');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'desc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'fecha_inicial',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_inicial');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $orden);
         $rows = $data['rows'];
 
         try {
@@ -251,10 +266,17 @@ class PeriodosContablesController extends BaseModuloController
         $this->requireLeer();
         $idEmpresa = (int) $_SESSION['id_empresa'];
         $buscar    = trim($_GET['b'] ?? $_POST['b'] ?? '');
-        $ordenCol  = trim($_GET['sort'] ?? $_POST['sort'] ?? 'fecha_inicial');
-        $ordenDir  = strtoupper(trim($_GET['dir'] ?? $_POST['dir'] ?? 'desc'));
+        // El enlace de exportar lleva el orden de pantalla en `orden=`; si se abre sin
+        // parámetros, se respeta la preferencia guardada del usuario.
+        $orden     = \App\Helpers\OrdenListado::leer(
+            \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO),
+            'fecha_inicial',
+            'DESC'
+        );
+        $ordenCol  = \App\Helpers\OrdenListado::primeraCol($orden, 'fecha_inicial');
+        $ordenDir  = \App\Helpers\OrdenListado::primeraDir($orden);
 
-        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir);
+        $data = $this->service->getListado($idEmpresa, $buscar, 1, 0, $ordenCol, $ordenDir, $orden);
         $rows = $data['rows'];
 
         try {

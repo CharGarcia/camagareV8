@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/periodos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: periodos contables, reabrir periodo, motivo de reapertura, periodos superpuestos, periodos cruzados, no deja eliminar periodo, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual, asientos pendientes, no generar asientos, años anteriores, empresa migrada, dejar de contabilizar
-version: 1.4
+etiquetas: periodos contables, buscar periodo, filtrar periodos, filtro por año, ordenar por varias columnas, reabrir periodo, motivo de reapertura, periodos superpuestos, periodos cruzados, no deja eliminar periodo, cerrar mes, periodo cerrado, abrir periodo, bloqueo de fechas, cierre mensual, asientos pendientes, no generar asientos, años anteriores, empresa migrada, dejar de contabilizar
+version: 1.5
 orden: 30
 estado: activo
 ---
@@ -56,6 +56,22 @@ La fecha inicial no puede ser posterior a la final, y **un período no puede cru
 con otro**: si dos períodos se superponen, uno abierto y otro cerrado, no se sabría si
 esas fechas están bloqueadas. El sistema indica con qué período choca.
 
+## Buscar, filtrar y ordenar
+
+El listado usa el mismo buscador que Proveedores:
+
+- **Texto libre**: busca en el nombre y en las fechas tal como se ven (por ejemplo
+  `2025` o `31-12-2024`).
+- **Embudo de filtros**: abre una ventana para filtrar por nombre, año, estado
+  (*Abierto* / *Cerrado*), rango de fecha inicial o final, fecha de registro y usuario
+  que registró. Los filtros activos se muestran como etiquetas junto al buscador.
+- **Ordenar**: clic en un encabezado ordena por esa columna; con **Shift + clic** se
+  encadenan hasta tres columnas (por ejemplo, estado y luego nombre). El PDF y el Excel
+  salen con el mismo filtro y orden de la pantalla.
+
+Los avisos (guardado, errores y la confirmación para eliminar) aparecen como ventanas
+emergentes.
+
 ## Reabrir
 
 Si hay que corregir algo de un periodo ya cerrado, se reabre, se corrige y se
@@ -104,6 +120,9 @@ el cierre, los períodos vuelven a como estaban.
 
 ## Historial de cambios
 
+- **1.5** — Listado con el diseño de Proveedores: buscador con filtros (año, estado,
+  fechas, registro, usuario), orden por varias columnas (Shift + clic) y avisos en
+  ventanas emergentes.
 - **1.4** — Los documentos con fecha en un período cerrado ya no se cuentan como asientos
   pendientes ni se les genera asiento, en todos los módulos.
 - **1.3** — Los períodos no pueden cruzarse. Reabrir un período cerrado exige acceso total

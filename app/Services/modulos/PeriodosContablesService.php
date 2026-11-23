@@ -25,9 +25,14 @@ class PeriodosContablesService
         $this->logService = $logService;
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, array $orden = []): array
     {
-        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir);
+        return $this->repository->getListado($idEmpresa, $buscar, $page, $perPage, $ordenCol, $ordenDir, $orden);
+    }
+
+    public function getUsuariosQueRegistraron(int $idEmpresa): array
+    {
+        return $this->repository->getUsuariosQueRegistraron($idEmpresa);
     }
 
     public function crear(array $data): int

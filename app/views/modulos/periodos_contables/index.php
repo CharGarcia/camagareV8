@@ -1,4 +1,17 @@
 <?php
+
+/** @var string $titulo */
+/** @var array $perm */
+/** @var string $rutaModulo */
+/** @var array $rows */
+/** @var int $total */
+/** @var int $page */
+/** @var int $totalPages */
+/** @var int $perPage */
+/** @var string $buscar */
+/** @var string $ordenCol */
+/** @var string $ordenDir */
+
 $base = BASE_URL;
 $urlBasePeriodos = rtrim($base, '/') . '/' . ltrim($rutaModulo, '/');
 
@@ -6,9 +19,9 @@ $rows       = $rows       ?? [];
 $total      = $total      ?? 0;
 $page       = $page       ?? 1;
 $totalPages = $totalPages ?? 1;
-$perPage    = $perPage    ?? 20;
+$perPage    = $perPage    ?? 25;
 $ordenCol   = $ordenCol   ?? 'fecha_inicial';
-$ordenDir   = $ordenDir   ?? 'desc';
+$ordenDir   = $ordenDir   ?? 'DESC';
 $buscar     = $buscar     ?? '';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
@@ -51,39 +64,70 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
         <!-- Buscador y Exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <form method="POST" action="<?= $urlBasePeriodos ?>" class="d-flex align-items-center m-0" onsubmit="return false;">
-                <input type="hidden" name="page" value="1">
-                <input type="hidden" name="sort" value="<?= htmlspecialchars($ordenCol) ?>">
-                <input type="hidden" name="dir" value="<?= htmlspecialchars($ordenDir) ?>">
-                <div class="input-group input-group-sm" style="width: 300px;">
-                    <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                    <input type="text" name="b" id="buscarPeriodo" class="form-control border-start-0 ps-0 shadow-none border" placeholder="Buscar periodo..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                    <?php if ($buscar !== ''): ?>
-                        <a href="<?= $urlBasePeriodos ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                    <?php endif; ?>
-                </div>
-                <button type="submit" class="d-none">Buscar</button>
-            </form>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal): texto libre sobre el nombre y las fechas del
+            // listado + botón embudo con todos los filtros + chips de los activos. Las claves
+            // (key) deben existir en los mapas de PeriodosContablesRepository::getListado().
+            $opcFiltro = $opcionesFiltro ?? [];
+            $opcionesUsuario = array_map(fn($u) => ['v' => (string) $u['id'], 'l' => (string) $u['nombre']], $opcFiltro['usuarios'] ?? []);
+            $tP = 'Período';
+            $filtrosPeriodos = [
+                // ── Período ──
+                ['tab' => $tP, 'key' => 'nombre', 'label' => 'Nombre',  'icon' => 'bi-tag',      'type' => 'text',         'grupo' => 'Período', 'col' => 4],
+                ['tab' => $tP, 'key' => 'anio',   'label' => 'Año',     'icon' => 'bi-calendar', 'type' => 'number_range', 'grupo' => 'Período', 'col' => 4],
+                ['tab' => $tP, 'key' => 'estado', 'label' => 'Estado',  'icon' => 'bi-flag',     'type' => 'select',       'grupo' => 'Período', 'col' => 4, 'options' => [
+                    ['v' => 'abierto', 'l' => 'Abierto'],
+                    ['v' => 'cerrado', 'l' => 'Cerrado'],
+                ]],
+                // ── Fechas ──
+                ['tab' => $tP, 'key' => 'fecha_inicial', 'label' => 'Fecha inicial', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Fechas', 'col' => 6, 'atajos' => true],
+                ['tab' => $tP, 'key' => 'fecha_final',   'label' => 'Fecha final',   'icon' => 'bi-calendar-check', 'type' => 'date_range', 'grupo' => 'Fechas', 'col' => 6, 'atajos' => true],
+                // ── Registro ──
+                ['tab' => $tP, 'key' => 'registro', 'label' => 'Fecha de registro',    'icon' => 'bi-calendar-plus', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 6, 'atajos' => true],
+                ['tab' => $tP, 'key' => 'usuario',  'label' => 'Usuario que registró', 'icon' => 'bi-person-gear',   'type' => 'select',     'grupo' => 'Registro', 'col' => 6, 'options' => $opcionesUsuario],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorPER"></div>
+            <input type="hidden" id="buscarPeriodo" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorPER',
+                        hiddenInputId: 'buscarPeriodo',
+                        placeholder: 'Buscar en todas las columnas...',
+                        titulo: 'Filtros de períodos contables',
+                        inputWidth: 420,
+                        extraId: 'fmExtraPER',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosPeriodos, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#tbodyPeriodos',   // se atenúa mientras se busca
+                        onApply: () => window.fetchSearch && window.fetchSearch(1),
+                    }).init();
+                });
+            </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraPER" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
-                    'nombre' => 'Nombre',
+                    'nombre'        => 'Nombre',
                     'fecha_inicial' => 'Fecha Inicial',
-                    'fecha_final' => 'Fecha Final',
-                    'status' => 'Estado'
+                    'fecha_final'   => 'Fecha Final',
+                    'status'        => 'Estado'
                 ];
                 ?>
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
-                <a id="btnExportPdf" href="<?= $urlBasePeriodos ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportPdf" href="<?= $urlBasePeriodos ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
-                <a id="btnExportExcel" href="<?= $urlBasePeriodos ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                <a id="btnExportExcel" href="<?= $urlBasePeriodos ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>"
                     class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -113,26 +157,16 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             <table class="table table-hover table-sm mb-0">
                 <thead class="table-light">
                     <tr>
-                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">
-                            Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
-                        </th>
-                        <th class="sortable-header" role="button" data-sort="fecha_inicial" data-col="fecha_inicial">
-                            Fecha Inicial <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
-                        </th>
-                        <th class="sortable-header" role="button" data-sort="fecha_final" data-col="fecha_final">
-                            Fecha Final <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
-                        </th>
-                        <th class="text-center pe-3 sortable-header" role="button" data-sort="status" data-col="status" style="width: 120px">
-                            Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i>
-                        </th>
+                        <th class="ps-3 sortable-header" role="button" data-sort="nombre" data-col="nombre">Nombre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="fecha_inicial" data-col="fecha_inicial">Fecha Inicial <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="fecha_final" data-col="fecha_final">Fecha Final <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="text-center pe-3 sortable-header" role="button" data-sort="status" data-col="status" style="width: 120px">Estado <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                     </tr>
                 </thead>
                 <tbody id="tbodyPeriodos">
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="4" class="text-center py-5 text-muted">
-                                <i class="bi bi-calendar-x fs-3 d-block mb-2"></i> No se encontraron periodos contables.
-                            </td>
+                            <td colspan="4" class="text-center py-5 text-muted"><i class="bi bi-calendar-x fs-3 d-block mb-2"></i>No se encontraron periodos contables.</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r): ?>
@@ -159,43 +193,46 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <!-- Modal Periodo -->
 <div class="modal fade" id="modalPeriodo" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
     <div class="modal-dialog modal-md modal-dialog-centered">
-        <div class="modal-content">
+        <div class="modal-content shadow-lg border-0">
             <form id="formPeriodo" novalidate>
-                <div class="modal-header">
+                <div class="modal-header bg-light py-3">
                     <h5 class="modal-title fw-bold">
-                        <i class="bi bi-calendar-range me-2 text-primary"></i> <span id="tituloModal">Nuevo Periodo</span>
+                        <i class="bi bi-calendar-range text-primary me-2"></i>
+                        <span id="tituloModal">Nuevo Periodo Contable</span>
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
                 </div>
-                <div class="modal-body pb-0">
-                    <div id="modalAlert" class="alert d-none mb-3 py-2 small shadow-sm border-0"></div>
+                <div class="modal-body p-0">
                     <input type="hidden" name="id" id="periodo_id">
 
-                    <ul class="nav nav-tabs mb-3" id="modalPeriodoTabs" role="tablist">
-                        <li class="nav-item" role="presentation">
-                            <button class="nav-link active fw-medium" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#pane-general" type="button" role="tab">
-                                <i class="bi bi-card-text me-1"></i> General
-                            </button>
-                        </li>
-                    </ul>
+                    <!-- Pestañas -->
+                    <div class="d-flex align-items-center bg-light px-3 pt-2">
+                        <ul class="nav nav-tabs border-bottom-0 flex-grow-1 flex-nowrap" id="modalPeriodoTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="tab-general-btn" data-bs-toggle="tab" data-bs-target="#pane-general" type="button" role="tab">
+                                    <i class="bi bi-card-text me-1"></i> General
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
 
-                    <div class="tab-content pb-3">
+                    <div class="tab-content p-3 border-top">
                         <div class="tab-pane fade show active" id="pane-general" role="tabpanel">
                             <div class="row g-3">
                                 <div class="col-md-12">
-                                    <label class="form-label small fw-bold">Nombre del Periodo *</label>
+                                    <label for="periodo_nombre" class="form-label small fw-bold">Nombre del Periodo *</label>
                                     <input type="text" name="nombre" id="periodo_nombre" class="form-control form-control-sm" required maxlength="100" autocomplete="off" placeholder="Ej: Ejercicio 2026">
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Fecha Inicial *</label>
+                                    <label for="periodo_fecha_inicial" class="form-label small fw-bold">Fecha Inicial *</label>
                                     <input type="date" name="fecha_inicial" id="periodo_fecha_inicial" class="form-control form-control-sm" required>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold">Fecha Final *</label>
+                                    <label for="periodo_fecha_final" class="form-label small fw-bold">Fecha Final *</label>
                                     <input type="date" name="fecha_final" id="periodo_fecha_final" class="form-control form-control-sm" required>
                                 </div>
                                 <div class="col-md-6">
-                                    <label class="form-label small fw-bold d-flex align-items-center">Estado</label>
+                                    <label for="periodo_status" class="form-label small fw-bold">Estado</label>
                                     <select name="status" id="periodo_status" class="form-select form-select-sm">
                                         <option value="1">Abierto</option>
                                         <option value="0">Cerrado</option>
@@ -211,21 +248,22 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 </div>
                             </div>
                         </div>
-
                     </div>
                 </div>
-                <div class="modal-footer justify-content-between bg-light">
+                <div class="modal-footer justify-content-between bg-light border-top p-2">
                     <div>
                         <?php if ($perm['eliminar']): ?>
                             <button type="button" id="btnEliminar" class="btn btn-outline-danger btn-sm px-3 d-none" onclick="eliminarPeriodo()">
-                                <i class="bi bi-trash"></i> Eliminar
+                                <i class="bi bi-trash3 me-1"></i> Eliminar
                             </button>
                         <?php endif; ?>
                     </div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <div>
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">
+                            <i class="fa-solid fa-xmark me-1"></i>Cerrar
+                        </button>
                         <button type="submit" class="btn btn-primary btn-sm px-4" id="btnGuardar">
-                            <i class="bi bi-check-lg"></i> Guardar
+                            <i class="bi bi-check2-circle me-1"></i> Guardar
                         </button>
                     </div>
                 </div>
@@ -241,18 +279,85 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         const urlBase = '<?= $urlBasePeriodos ?>';
         const form = document.getElementById('formPeriodo');
         const inputBuscar = document.getElementById('buscarPeriodo');
+        const HTML_GUARDAR = '<i class="bi bi-check2-circle me-1"></i> Guardar';
+        const HTML_ELIMINAR = '<i class="bi bi-trash3 me-1"></i> Eliminar';
+        window.currentSort = '<?= htmlspecialchars($ordenCol, ENT_QUOTES) ?>';
+        window.currentDir = '<?= htmlspecialchars($ordenDir, ENT_QUOTES) ?>';
+        // Orden múltiple (Shift+clic): lista completa de criterios, en el formato que lee
+        // OrdenListado en PHP. currentSort/currentDir quedan como el principal.
+        window.currentSorts = <?= $ordenJson ?? '[]' ?>;
+        window.currentPage = <?= (int) $page ?>;
+        let sorter = null;
         let modalInst = null;
-        let page = <?= $page ?>;
-        let totalPages = <?= $totalPages ?>;
-        let buscarTimer = null;
-        let ordenCol = '<?= $ordenCol ?>';
-        let ordenDir = '<?= $ordenDir ?>';
+        let guardando = false;
 
         function getModal() {
-            if (!modalInst) modalInst = new bootstrap.Modal(document.getElementById('modalPeriodo'));
+            if (!modalInst) modalInst = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalPeriodo'));
             return modalInst;
         }
 
+        // ── Mensajes (SweetAlert) ──
+        function avisoOk(texto) {
+            if (window.Swal) {
+                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: texto, timer: 2200, showConfirmButton: false });
+            }
+        }
+
+        function avisoError(texto, titulo = 'Atención') {
+            if (window.Swal) Swal.fire({ icon: 'error', title: titulo, text: texto || 'Ocurrió un error.' });
+            else alert(texto);
+        }
+
+        // ── Listado ──
+        let timerId;
+
+        function debounce(func, delay = 350) {
+            return (...args) => {
+                clearTimeout(timerId);
+                timerId = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        window.cambiarPaginaAjax = (n) => window.fetchSearch(n);
+
+        window.fetchSearch = async (page = 1) => {
+            const term = inputBuscar ? inputBuscar.value.trim() : '';
+            const orden = window.CMG_ordenParam(window.currentSorts || []);
+            const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(term)}&page=${page}&orden=${encodeURIComponent(orden)}`;
+            // Mismo indicador que el buscador (FiltrosModal): la tabla se atenúa mientras carga.
+            const tbody = document.getElementById('tbodyPeriodos');
+            if (tbody) tbody.classList.add('fm-cargando-target');
+            try {
+                const resp = await fetch(uri);
+                const data = await resp.json();
+                if (data.ok) {
+                    window.currentPage = page;
+                    tbody.innerHTML = data.rows;
+                    document.getElementById('paginationContainer').innerHTML = data.pagination;
+                    document.getElementById('paginationInfo').textContent = data.info;
+                    document.getElementById('btnExportPdf').href = data.pdf_url;
+                    document.getElementById('btnExportExcel').href = data.excel_url;
+                    if (sorter) sorter.refreshIcons();
+                }
+            } catch (e) {
+                console.error('Error cargando periodos:', e);
+            } finally {
+                if (tbody) tbody.classList.remove('fm-cargando-target');
+            }
+        };
+
+        // multi: clic normal ordena por una columna; Shift+clic encadena hasta 3.
+        // reload:false porque fetchSearch repinta todo lo que depende del orden.
+        sorter = window.CMG_initSort('periodos_contables', (col, dir, sorts) => {
+            window.currentSort = col;
+            window.currentDir = dir;
+            window.currentSorts = sorts;
+            fetchSearch(1);
+        }, { sorts: window.currentSorts, multi: true, container: '.periodos-scroll', reload: false });
+
+        if (inputBuscar) inputBuscar.addEventListener('input', debounce(() => fetchSearch(1), 400));
+
+        // ── Modal ──
         // Estado con que se abrió el período: un período cerrado no mueve sus fechas ni se
         // elimina, y para reabrirlo hay que dar el motivo (el servidor valida lo mismo).
         let estabaCerrado = false;
@@ -270,103 +375,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
         }
         selStatus.addEventListener('change', actualizarControlesCierre);
 
-        window.cambiarPaginaAjax = function(p) {
-            if (p < 1 || p > totalPages) return;
-            page = p;
-            cargarListado();
-        };
-
-        window.limpiarBuscar = function() {
-            if (inputBuscar) inputBuscar.value = '';
-            page = 1;
-            cargarListado();
-        };
-
-        if (inputBuscar) {
-            inputBuscar.addEventListener('input', () => {
-                clearTimeout(buscarTimer);
-                buscarTimer = setTimeout(() => {
-                    page = 1;
-                    cargarListado();
-                }, 500);
-            });
-        }
-
-        document.querySelectorAll('.sortable-header').forEach(th => {
-            th.addEventListener('click', () => {
-                const newSort = th.dataset.sort;
-                if (!newSort) return;
-                if (ordenCol === newSort) {
-                    ordenDir = (ordenDir.toLowerCase() === 'asc') ? 'DESC' : 'ASC';
-                } else {
-                    ordenCol = newSort;
-                    ordenDir = 'ASC';
-                }
-
-                if (typeof window.guardarOrdenacionVista === 'function') {
-                    window.guardarOrdenacionVista('periodos_contables', ordenCol, ordenDir);
-                }
-
-                page = 1;
-                cargarListado();
-            });
-        });
-
-        async function cargarListado() {
-            const b = inputBuscar ? inputBuscar.value.trim() : '';
-            const url = `${urlBase}/searchAjax?page=${page}&b=${encodeURIComponent(b)}&sort=${ordenCol}&dir=${ordenDir}`;
-
-            try {
-                const resp = await fetch(url);
-                const json = await resp.json();
-
-                if (json.ok) {
-                    document.getElementById('tbodyPeriodos').innerHTML = json.rows;
-                    document.getElementById('paginationInfo').textContent = json.info;
-                    document.getElementById('paginationContainer').innerHTML = json.pagination;
-
-                    if (json.pdf_url) document.getElementById('btnExportPdf').href = json.pdf_url;
-                    if (json.excel_url) document.getElementById('btnExportExcel').href = json.excel_url;
-
-                    if (json.total !== undefined) {
-                        const perPage = 20;
-                        totalPages = Math.ceil(json.total / perPage) || 1;
-                    }
-
-                    // Actualizar iconos de ordenamiento
-                    document.querySelectorAll('.sortable-header').forEach(th => {
-                        const icon = th.querySelector('i');
-                        if (!icon) return;
-                        const field = th.dataset.sort;
-                        if (field === ordenCol) {
-                            icon.className = (ordenDir.toLowerCase() === 'asc') ?
-                                'bi bi-sort-alpha-down text-primary ms-1' :
-                                'bi bi-sort-alpha-up text-primary ms-1';
-                        } else {
-                            icon.className = 'bi bi-arrow-down-up small text-muted ms-1';
-                        }
-                    });
-                }
-            } catch (e) {
-                console.error('Error cargando periodos:', e);
-            }
+        function prepararModal(titulo) {
+            document.getElementById('tituloModal').textContent = titulo;
+            actualizarControlesCierre();
+            bootstrap.Tab.getOrCreateInstance(document.getElementById('tab-general-btn')).show();
+            const btn = document.getElementById('btnGuardar');
+            btn.disabled = false;
+            btn.innerHTML = HTML_GUARDAR;
+            getModal().show();
         }
 
         window.abrirModalPeriodoCrear = function() {
             form.reset();
             document.getElementById('periodo_id').value = '';
-            document.getElementById('tituloModal').textContent = 'Nuevo Periodo Contable';
             estabaCerrado = false;
-            actualizarControlesCierre();
-
-            if (typeof bootstrap !== 'undefined') {
-                bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
-            }
-
-            const mo = document.getElementById('modalAlert');
-            if (mo) mo.classList.add('d-none');
-
-            getModal().show();
+            prepararModal('Nuevo Periodo Contable');
         };
 
         window.abrirModalPeriodoEditar = function(row) {
@@ -374,103 +397,107 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
             form.reset();
             document.getElementById('periodo_id').value = data.id;
             document.getElementById('periodo_nombre').value = data.nombre || '';
+            if (data.fecha_inicial) document.getElementById('periodo_fecha_inicial').value = data.fecha_inicial.split(' ')[0];
+            if (data.fecha_final) document.getElementById('periodo_fecha_final').value = data.fecha_final.split(' ')[0];
 
-            // Format dates to YYYY-MM-DD for input[type="date"]
-            if (data.fecha_inicial) {
-                document.getElementById('periodo_fecha_inicial').value = data.fecha_inicial.split(' ')[0];
-            }
-            if (data.fecha_final) {
-                document.getElementById('periodo_fecha_final').value = data.fecha_final.split(' ')[0];
-            }
-
-            const isInactive = data.status === false || data.status === 'false' || data.status === 0 || data.status === '0' || data.status === 'f';
-            document.getElementById('periodo_status').value = isInactive ? '0' : '1';
-
-            document.getElementById('tituloModal').textContent = 'Editar Periodo Contable';
-            estabaCerrado = isInactive;
-            actualizarControlesCierre();
-
-            if (typeof bootstrap !== 'undefined') {
-                bootstrap.Tab.getInstance(document.getElementById('tab-general-btn'))?.show() || new bootstrap.Tab(document.getElementById('tab-general-btn')).show();
-            }
-
-            const mo = document.getElementById('modalAlert');
-            if (mo) mo.classList.add('d-none');
-
-            getModal().show();
+            const cerrado = data.status === false || data.status === 'false' || data.status === 0 || data.status === '0' || data.status === 'f';
+            selStatus.value = cerrado ? '0' : '1';
+            estabaCerrado = cerrado;
+            prepararModal('Editar Periodo Contable');
         };
+
+        function validarFormulario() {
+            const nombre = document.getElementById('periodo_nombre').value.trim();
+            const fi = document.getElementById('periodo_fecha_inicial').value;
+            const ff = document.getElementById('periodo_fecha_final').value;
+            if (!nombre) return 'Ingrese el nombre del período.';
+            if (!fi || !ff) return 'Ingrese la fecha inicial y la fecha final.';
+            if (fi > ff) return 'La fecha inicial no puede ser posterior a la fecha final.';
+            const motivo = document.getElementById('periodo_motivo_reapertura');
+            if (motivo.required && !motivo.value.trim()) return 'Indique el motivo de la reapertura.';
+            return '';
+        }
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
+            if (guardando) return;
+
+            const error = validarFormulario();
+            if (error) {
+                avisoError(error);
+                return;
+            }
+
+            guardando = true;
             const id = document.getElementById('periodo_id').value;
-            const action = id ? '/update' : '/store';
-            const fd = new FormData(form);
             const btn = document.getElementById('btnGuardar');
-            const alertEl = document.getElementById('modalAlert');
-
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...';
-            if (alertEl) alertEl.classList.add('d-none');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Guardando...';
 
+            let cerrarModal = false;
             try {
-                const resp = await fetch(urlBase + action, {
-                    method: 'POST',
-                    body: fd
-                });
+                const resp = await fetch(urlBase + (id ? '/update' : '/store'), { method: 'POST', body: new FormData(form) });
                 const json = await resp.json();
-
-                if (alertEl) {
-                    alertEl.textContent = json.msg || json.error || 'Error desconocido';
-                    alertEl.className = 'alert mb-3 py-2 small shadow-sm border-0 ' + (json.ok ? 'alert-success' : 'alert-danger');
-                    alertEl.classList.remove('d-none');
-                }
-
                 if (json.ok) {
-                    setTimeout(() => {
-                        btn.disabled = false;
-                        btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
-                        getModal().hide();
-                        cargarListado();
-                    }, 800);
+                    // Tras crear, el botón no se reactiva: el modal se cierra y un nuevo
+                    // período se abre con «Nuevo» (un guardado = un registro).
+                    cerrarModal = true;
+                    getModal().hide();
+                    fetchSearch(window.currentPage || 1);
+                    avisoOk(json.msg || 'Guardado correctamente');
                 } else {
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
+                    avisoError(json.msg || json.error || 'Error al guardar');
                 }
             } catch (err) {
-                if (alertEl) {
-                    alertEl.textContent = 'Error de red al conectar con el servidor';
-                    alertEl.className = 'alert alert-danger mb-3 py-2 small shadow-sm border-0';
-                    alertEl.classList.remove('d-none');
+                avisoError('No se pudo comunicar con el servidor', 'Error de red');
+            } finally {
+                guardando = false;
+                if (!cerrarModal) {
+                    btn.disabled = false;
+                    btn.innerHTML = HTML_GUARDAR;
                 }
-                btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-check-lg"></i> Guardar';
             }
         });
 
         window.eliminarPeriodo = async function() {
             const id = document.getElementById('periodo_id').value;
-            if (!id || !confirm('¿Está seguro de eliminar este periodo contable?')) return;
+            if (!id) return;
 
-            const fd = new FormData();
-            fd.append('id_eliminar', id);
+            const nombre = document.getElementById('periodo_nombre').value.trim();
+            const result = await Swal.fire({
+                title: '¿Está seguro?',
+                text: `Se realizará una eliminación lógica del período${nombre ? ' «' + nombre + '»' : ''}.`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                cancelButtonColor: '#6c757d',
+                confirmButtonText: 'Sí, eliminar',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!result.isConfirmed) return;
+
+            const btnDlt = document.getElementById('btnEliminar');
+            btnDlt.disabled = true;
+            btnDlt.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Eliminando...';
 
             try {
-                const resp = await fetch(urlBase + '/delete', {
-                    method: 'POST',
-                    body: fd
-                });
+                const fd = new FormData();
+                fd.append('id_eliminar', id);
+                const resp = await fetch(urlBase + '/delete', { method: 'POST', body: fd });
                 const json = await resp.json();
                 if (json.ok) {
                     getModal().hide();
-                    cargarListado();
+                    fetchSearch(window.currentPage || 1);
+                    Swal.fire({ icon: 'success', title: 'Eliminado', text: json.msg || 'Periodo contable eliminado correctamente.', timer: 1500, showConfirmButton: false });
                 } else {
-                    alert(json.error);
+                    avisoError(json.msg || json.error || 'No se pudo eliminar el período.');
                 }
             } catch (e) {
-                alert('Error al eliminar');
+                avisoError('No se pudo comunicar con el servidor', 'Error de red');
+            } finally {
+                btnDlt.disabled = false;
+                btnDlt.innerHTML = HTML_ELIMINAR;
             }
         };
-
-
     })();
 </script>

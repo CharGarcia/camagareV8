@@ -64,23 +64,67 @@ class PeriodosContablesRepository
         }
     }
 
-    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
+    /**
+     * Whitelist del ORDER BY (clave data-sort => expresión SQL): lo único que puede llegar
+     * al SQL sale de aquí (OrdenListado, orden por una o varias columnas).
+     */
+    public const MAPA_ORDEN = [
+        'nombre'        => 'nombre',
+        'fecha_inicial' => 'fecha_inicial',
+        'fecha_final'   => 'fecha_final',
+        'status'        => 'status',
+        'created_at'    => 'created_at',
+    ];
+
+    /**
+     * Listado del módulo. Buscador estándar (FiltrosBusqueda): el texto libre busca en el
+     * nombre y en las fechas tal como se ven (dd-mm-aaaa); los filtros clave:valor vienen
+     * del modal de filtros (FiltrosModal) de la vista.
+     *
+     * @param array $orden Criterios de OrdenListado. Vacío = $ordenCol / $ordenDir.
+     */
+    public function getListado(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir, array $orden = []): array
     {
         $offset = ($page - 1) * $perPage;
-        
-        $validCols = ['nombre', 'fecha_inicial', 'fecha_final', 'status', 'created_at'];
-        if (!in_array($ordenCol, $validCols, true)) {
-            $ordenCol = 'fecha_inicial';
+
+        if ($orden === []) {
+            $orden = [['col' => $ordenCol, 'dir' => $ordenDir]];
         }
-        $ordenDir = strtoupper($ordenDir) === 'DESC' ? 'DESC' : 'ASC';
+        $orderBy = \App\Helpers\OrdenListado::clausula($orden, self::MAPA_ORDEN, 'fecha_inicial', 'id DESC');
 
         $where = "id_empresa = :id_empresa AND eliminado = false";
         $params = [':id_empresa' => $idEmpresa];
 
-        if ($buscar !== '') {
-            $where .= " AND (nombre ILIKE :b)";
-            $params[':b'] = "%$buscar%";
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'nombre',
+                "to_char(fecha_inicial, 'DD-MM-YYYY')",
+                "to_char(fecha_final, 'DD-MM-YYYY')",
+            ], $parsed['texto_libre'], $params, 'per_b');
+            if ($cond !== '') {
+                $where .= ' AND ' . $cond;
+            }
         }
+
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'nombre' => 'nombre',
+            ],
+            'exacto' => [
+                // status: 1 = abierto, 0 = cerrado.
+                'estado'  => "CASE WHEN status = 0 THEN 'cerrado' ELSE 'abierto' END",
+                'usuario' => 'created_by',
+            ],
+            'fecha' => [
+                'fecha_inicial' => 'fecha_inicial',
+                'fecha_final'   => 'fecha_final',
+                'registro'      => 'created_at',
+            ],
+            'numerico' => [
+                'anio' => 'EXTRACT(YEAR FROM fecha_inicial)',
+            ],
+        ]);
 
         $sqlCount = "SELECT COUNT(*) FROM periodos_contables WHERE $where";
         $stmtCount = $this->db->prepare($sqlCount);
@@ -91,7 +135,7 @@ class PeriodosContablesRepository
             SELECT id, nombre, fecha_inicial, fecha_final, status, created_at, updated_at
             FROM periodos_contables
             WHERE $where
-            ORDER BY $ordenCol $ordenDir, id DESC
+            $orderBy
         ";
 
         if ($perPage > 0) {
@@ -115,6 +159,20 @@ class PeriodosContablesRepository
             'rows'  => $rows,
             'total' => $total
         ];
+    }
+
+    /** Usuarios que registraron períodos en la empresa (opciones del filtro «Usuario que registró»). */
+    public function getUsuariosQueRegistraron(int $idEmpresa): array
+    {
+        $st = $this->db->prepare(
+            "SELECT DISTINCT u.id, u.nombre
+               FROM periodos_contables p
+               JOIN usuarios u ON u.id = p.created_by
+              WHERE p.id_empresa = :id_empresa AND p.eliminado = false
+              ORDER BY u.nombre"
+        );
+        $st->execute([':id_empresa' => $idEmpresa]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
     }
 
     public function create(array $data): int
