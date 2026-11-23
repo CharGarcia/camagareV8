@@ -74,6 +74,12 @@ class AlumnoService
         $this->repository->beginTransaction();
         try {
             $this->repository->update($id, $idEmpresa, $data);
+            // Historial de clientes: un mes se puede facturar a uno y otro mes a otro.
+            $clienteAntes = (int) ($antes['id_cliente'] ?? 0) ?: null;
+            $clienteNuevo = (int) ($data['id_cliente'] ?? 0) ?: null;
+            if ($clienteAntes !== $clienteNuevo) {
+                $this->repository->registrarCambioCliente($id, $idEmpresa, $clienteAntes, $clienteNuevo, $idUsuario);
+            }
             $this->guardarInfoAdicional($id, $idEmpresa, $data);
             $data['servicios'] = $this->prepararServicios($data['servicios'] ?? [], $idEmpresa, $idUsuario, $data['config_facturacion']);
 

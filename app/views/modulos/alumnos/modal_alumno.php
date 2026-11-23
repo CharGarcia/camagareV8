@@ -424,11 +424,34 @@ $pestanasConfigAlu = [
                             #tbodyFacturasAlumno tr.alu-trx-fact { cursor: pointer; }
                             #tbodyFacturasAlumno tr.alu-trx-det > td { background: var(--bs-light); }
                             #tbodyFacturasAlumno tr.alu-trx-coincide > td { background: rgba(255, 193, 7, .25) !important; }
+                            #tbodyClientesAlumno tr { cursor: pointer; }
+                            #tbodyClientesAlumno tr.table-active > td { background: rgba(13, 110, 253, .08); }
                         </style>
                         <div class="tab-pane fade" id="tab-facturas" role="tabpanel">
+                            <?php // Historial de clientes: a quién se le ha facturado el alumno (lo llena alumnos_modal.js). ?>
+                            <div id="aluTrxClientes" class="border rounded mb-2 d-none">
+                                <div class="px-2 py-1 border-bottom bg-light small fw-semibold"><i class="bi bi-clock-history me-1"></i>Clientes a los que se ha facturado <span class="text-muted fw-normal">(clic para ver solo sus facturas)</span></div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm alu-grid mb-0 text-nowrap" style="font-size:.78rem;">
+                                        <thead>
+                                            <tr>
+                                                <th>Cliente</th>
+                                                <th>Cliente del alumno</th>
+                                                <th class="text-end">Facturas</th>
+                                                <th class="text-end">Total facturado</th>
+                                                <th>Primera / última factura</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tbodyClientesAlumno"></tbody>
+                                    </table>
+                                </div>
+                            </div>
                             <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
                                 <select id="aluTrxAnio" class="form-select form-select-sm" style="width:110px;" title="Año de emisión">
                                     <option value="<?= date('Y') ?>"><?= date('Y') ?></option>
+                                </select>
+                                <select id="aluTrxCliente" class="form-select form-select-sm d-none" style="width:240px;" title="Cliente de la factura">
+                                    <option value="">Todos los clientes</option>
                                 </select>
                                 <div class="input-group input-group-sm" style="width:340px; max-width:100%;">
                                     <span class="input-group-text bg-white"><i class="bi bi-search"></i></span>

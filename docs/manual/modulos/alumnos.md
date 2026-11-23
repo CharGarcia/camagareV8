@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/alumnos
 tipo: modulo
 visibilidad: todos
-etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, buscar factura, facturas del año, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente, enviar factura por correo, correo factura, reenviar factura, enviar marcados, email
-version: 1.12
+etiquetas: alumnos, estudiantes, matrícula, matricula, colegio, escuela, centro infantil, campus, sede, nivel, curso, representante, representantes, padres, autorizado, autorizados, retirar, retiro, quién retira, facturación, facturar, generar factura, facturar pensión, facturar mensualidad, facturas del alumno, por facturar, transacciones, pdf de la factura, descargar factura, imprimir factura, facturas migradas, facturas anteriores, buscar factura, facturas del año, horario, pensión, pension, imprimir, impresora, filtrar alumnos, filtro por campus, filtro por nivel, alumnos por curso, alumnos por sede, buscar alumno, portal de representantes, qr, codigo qr, padres de familia, actualizar datos, registrar alumno, inscripcion, codigo de verificacion, enlace para padres, cargar facturación, carga masiva, importar excel, plantilla excel, precios por alumno, servicios por alumno, pensiones masivas, generar facturas, facturación masiva, facturar a todos, facturar todos los alumnos, facturas del mes, pensiones del mes, emitir pensiones, historial de cargas, deshacer carga, revertir carga, eliminar carga, filtrar por servicio, alumnos sin factura, alumnos facturados, filtro por estado, retirados, matrícula vigente, enviar factura por correo, correo factura, reenviar factura, enviar marcados, email, historial de clientes, cambiar cliente, cambio de representante, a quién se facturó, cliente anterior, facturas por cliente
+version: 1.13
 orden: 0
 estado: activo
 ---
@@ -379,15 +379,43 @@ se ve además el origen y si está anulada.
 - Qué facturas salen:
   - las generadas desde el alumno (botón Generar factura o la generación de
     todos los alumnos), y
-  - las facturas del **representante** que no se generaron desde el alumno
-    —las **migradas del sistema anterior** y las emitidas a mano en
-    **Facturas de Venta**— cuando nombran al alumno (apellidos y nombres) en
-    su información adicional, o cuando el representante tiene un solo alumno
-    y la factura no nombra a otro. Llevan el ícono de ficha junto al número;
-    su mes es el de la fecha de emisión.
+  - las facturas de **los clientes que ha tenido el alumno** (el actual y los
+    anteriores) que no se generaron desde el alumno —las **migradas del
+    sistema anterior** y las emitidas a mano en **Facturas de Venta**— cuando
+    nombran al alumno (apellidos y nombres) en su información adicional, o
+    cuando ese cliente solo ha tenido a este alumno, la factura no nombra a
+    otro y se emitió mientras era el cliente del alumno. Llevan el ícono de
+    ficha junto al número; su mes es el de la fecha de emisión.
+- **Cliente**: si el alumno se ha facturado a más de un cliente, aparece un
+  selector para ver solo las facturas de uno de ellos.
 - Al pie, la cantidad de facturas vigentes y la suma de su total, según el
-  año y la búsqueda elegidos. Las facturas **anuladas** se ven tachadas y no
-  suman.
+  año, el cliente y la búsqueda elegidos. Las facturas **anuladas** se ven
+  tachadas y no suman.
+
+### Historial de clientes (a quién se le ha facturado)
+
+El alumno se factura siempre a **un solo cliente** (el de la pestaña
+Facturación), pero ese cliente puede cambiar: por ejemplo, un mes se factura
+al papá y desde el mes siguiente a la mamá o a la empresa de uno de ellos.
+Al cambiar el cliente y guardar el alumno, el sistema **guarda el cambio**, y
+la pestaña **Transacciones** muestra arriba el recuadro **Clientes a los que
+se ha facturado**:
+
+- **Cliente** con su identificación.
+- **Cliente del alumno**: desde y hasta qué fecha fue su cliente; el actual
+  lleva la marca **Actual**. Si un cliente lo fue en dos épocas distintas, se
+  ven las dos. Un guion indica un cliente que aparece en las facturas del
+  alumno pero del que no se registró el período (cambios hechos antes de
+  existir el historial y sin rastro en la auditoría).
+- **Facturas** y **Total facturado** a ese cliente (las anuladas se cuentan
+  aparte y no suman), y la fecha de la **primera y la última factura**.
+- Un **clic** sobre un cliente muestra solo sus facturas (de todos los años);
+  otro clic vuelve a mostrar todas.
+
+Cambiar el cliente **no mueve ni cambia** las facturas ya emitidas: cada una
+sigue a nombre del cliente al que se emitió, sigue apareciendo en la pestaña
+y, por correo, se envía a ese cliente. Las nuevas facturas se generan al
+cliente actual.
 
 ### Enviar facturas por correo
 
@@ -588,6 +616,14 @@ pestaña Transacciones aparece solo si el usuario puede **ver** Facturas de Vent
 
 ## Historial de cambios
 
+- **1.13** — **Historial de clientes**: al cambiar el cliente al que se factura
+  el alumno, el cambio queda registrado y la pestaña **Transacciones** muestra
+  el recuadro **Clientes a los que se ha facturado** (períodos, facturas,
+  total, primera y última factura) con un selector para filtrar por cliente.
+  Las facturas migradas o hechas en Facturas de Venta de los **clientes
+  anteriores** ya no desaparecen de la pestaña al cambiar de cliente. Los
+  cambios hechos antes se recuperan de la auditoría con el script
+  `20261123_alumnos_clientes_historial.sql`.
 - **1.12** — La pestaña **Transacciones** agrega la columna **Cliente**, después
   de Factura, con el nombre del cliente al que se emitió cada factura, y se
   quita el texto de ayuda que aparecía debajo de la tabla. Nuevo envío por

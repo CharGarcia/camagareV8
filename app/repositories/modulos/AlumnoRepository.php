@@ -546,47 +546,95 @@ class AlumnoRepository extends BaseRepository
     }
 
     /**
-     * Facturas del representante (cliente del alumno) que NO se generaron desde
-     * el alumno pero son suyas: las migradas del sistema anterior y las emitidas
-     * a mano en Facturas de Venta. El sistema anterior solo dejaba el vínculo en
-     * la información adicional («NIÑO»/«NIÑA»: nombre), así que cuenta como del
-     * alumno la factura que:
+     * Facturas de los clientes del alumno que NO se generaron desde el alumno
+     * pero son suyas: las migradas del sistema anterior y las emitidas a mano en
+     * Facturas de Venta. Se buscan en TODOS los clientes que tuvo el alumno (el
+     * actual, los del historial y los de sus facturas generadas), no solo en el
+     * actual: al cambiar de cliente no se pierde lo facturado al anterior.
+     *
+     * El sistema anterior solo dejaba el vínculo en la información adicional
+     * («NIÑO»/«NIÑA»: nombre), así que cuenta como del alumno la factura que:
      *  - nombra al alumno en su información adicional (apellidos y nombres, en
      *    cualquier orden, sin distinguir tildes ni mayúsculas), o
-     *  - es de un representante con un solo alumno y no nombra a otro alumno
-     *    (fila Niño/Niña/Alumno con otro nombre: es de un hermano no migrado).
+     *  - es de un cliente que solo ha tenido a este alumno (ahora o antes), no
+     *    nombra a otro alumno (fila Niño/Niña/Alumno con otro nombre: es de un
+     *    hermano no migrado) y se emitió mientras ese cliente era el del alumno
+     *    (hasta la fecha en que se lo cambió; sin límite hacia atrás, para no
+     *    perder las migradas, anteriores al alta del alumno).
      * Mismas columnas que getFacturasAlumno(); periodo = mes de emisión.
      */
     public function getFacturasRelacionadas(int $idAlumno, int $idEmpresa): array
     {
         $norm = fn(string $col) => "regexp_replace(translate(upper(trim(COALESCE({$col}, ''))), 'ÁÉÍÓÚÜÑ', 'AEIOUUN'), '\\s+', ' ', 'g')";
-        $nombraAlumno = "strpos({$norm('va.valor')}, {$norm('a.apellidos')}) > 0
-                         AND strpos({$norm('va.valor')}, {$norm('a.nombres')}) > 0";
+        $nombraAlumno = "strpos({$norm('va.valor')}, {$norm('al.apellidos')}) > 0
+                         AND strpos({$norm('va.valor')}, {$norm('al.nombres')}) > 0";
         $conceptoAlumno = "{$norm('va.nombre')} IN ('NINO', 'NINA', 'NINO/A', 'ALUMNO', 'ALUMNA', 'ALUMNO/A', 'ESTUDIANTE')";
 
-        $sql = "SELECT NULL AS id, v.id AS id_factura, v.id_cliente,
+        $params = [':a1' => $idAlumno, ':e1' => $idEmpresa, ':a3' => $idAlumno, ':e3' => $idEmpresa,
+                   ':e4' => $idEmpresa, ':e6' => $idEmpresa];
+        $hist = $this->existeHistorialClientes();
+        // Períodos del alumno con cada cliente: los del historial y, siempre, el actual.
+        $perHistorial = '';
+        $vinculadosHistorial = '';
+        if ($hist) {
+            $perHistorial = "SELECT h.id_cliente, h.hasta FROM alumnos_clientes_historial h
+                              WHERE h.id_alumno = :a2 AND h.id_empresa = :e2 AND h.eliminado = false
+                             UNION ALL";
+            $vinculadosHistorial = "UNION
+                SELECT h2.id_cliente, h2.id_alumno
+                FROM alumnos_clientes_historial h2
+                JOIN alumnos a3 ON a3.id = h2.id_alumno AND a3.id_empresa = h2.id_empresa AND a3.eliminado = false
+                WHERE h2.id_empresa = :e5 AND h2.eliminado = false
+                  AND h2.id_cliente IN (SELECT id_cliente FROM per)";
+            $params += [':a2' => $idAlumno, ':e2' => $idEmpresa, ':e5' => $idEmpresa];
+        }
+
+        $sql = "WITH al AS (
+                    SELECT id, id_cliente, nombres, apellidos FROM alumnos
+                    WHERE id = :a1 AND id_empresa = :e1 AND eliminado = false
+                ),
+                per AS (
+                    {$perHistorial}
+                    SELECT al.id_cliente, NULL::timestamp AS hasta FROM al WHERE al.id_cliente IS NOT NULL
+                ),
+                clis AS (
+                    SELECT id_cliente FROM per
+                    UNION
+                    SELECT af.id_cliente FROM alumnos_facturas af
+                    WHERE af.id_alumno = :a3 AND af.id_empresa = :e3 AND af.eliminado = false
+                ),
+                vinculados AS (
+                    SELECT a2.id_cliente, a2.id AS id_alumno FROM alumnos a2
+                    WHERE a2.id_empresa = :e4 AND a2.eliminado = false
+                      AND a2.id_cliente IN (SELECT id_cliente FROM per)
+                    {$vinculadosHistorial}
+                ),
+                unicos AS (
+                    SELECT id_cliente FROM vinculados GROUP BY id_cliente HAVING count(DISTINCT id_alumno) = 1
+                )
+                SELECT NULL AS id, v.id AS id_factura, v.id_cliente,
                        date_trunc('month', v.fecha_emision)::date AS periodo,
                        v.importe_total AS importe, NULL AS items, v.created_at,
                        c.nombre AS cliente_nombre, c.email AS cliente_email,
-                       true AS es_representante,
+                       (v.id_cliente = al.id_cliente) AS es_representante,
                        v.establecimiento, v.punto_emision, v.secuencial, v.fecha_emision,
                        v.estado AS estado_factura, v.importe_total, v.estado_correo
-                FROM alumnos a
-                JOIN ventas_cabecera v ON v.id_cliente = a.id_cliente AND v.id_empresa = a.id_empresa
-                                      AND v.eliminado = false
+                FROM al
+                JOIN ventas_cabecera v ON v.id_empresa = :e6 AND v.eliminado = false
+                                      AND v.id_cliente IN (SELECT id_cliente FROM clis)
                 LEFT JOIN clientes c ON c.id = v.id_cliente AND c.id_empresa = v.id_empresa
-                WHERE a.id = :a AND a.id_empresa = :e AND a.eliminado = false
-                  AND NOT EXISTS (SELECT 1 FROM alumnos_facturas af
+                WHERE NOT EXISTS (SELECT 1 FROM alumnos_facturas af
                                   WHERE af.id_factura = v.id AND af.id_empresa = v.id_empresa
                                     AND af.eliminado = false)
                   AND (
-                        (trim(COALESCE(a.apellidos, '')) <> '' AND trim(COALESCE(a.nombres, '')) <> ''
+                        (trim(COALESCE(al.apellidos, '')) <> '' AND trim(COALESCE(al.nombres, '')) <> ''
                          AND EXISTS (SELECT 1 FROM ventas_adicional va
                                      WHERE va.id_venta = v.id AND {$nombraAlumno}))
                      OR (
-                        (SELECT count(*) FROM alumnos a2
-                          WHERE a2.id_cliente = a.id_cliente AND a2.id_empresa = a.id_empresa
-                            AND a2.eliminado = false) = 1
+                        v.id_cliente IN (SELECT id_cliente FROM unicos)
+                        AND EXISTS (SELECT 1 FROM per p
+                                    WHERE p.id_cliente = v.id_cliente
+                                      AND (p.hasta IS NULL OR v.fecha_emision <= p.hasta::date))
                         AND NOT EXISTS (SELECT 1 FROM ventas_adicional va
                                         WHERE va.id_venta = v.id AND {$conceptoAlumno}
                                           AND NOT ({$nombraAlumno}))
@@ -594,8 +642,95 @@ class AlumnoRepository extends BaseRepository
                   )
                 ORDER BY v.fecha_emision DESC, v.id DESC";
         $st = $this->db->prepare($sql);
+        $st->execute($params);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // ------------------------------------------------------------------
+    // Historial de clientes del alumno (a quién se le ha facturado).
+    // ------------------------------------------------------------------
+
+    private ?bool $hayHistorialClientes = null;
+
+    /**
+     * alumnos_clientes_historial llega con
+     * database/migrations/20261123_alumnos_clientes_historial.sql. Sin la tabla
+     * no se registra el cambio y la pestaña Transacciones usa solo el cliente
+     * actual y los de las facturas generadas.
+     */
+    public function existeHistorialClientes(): bool
+    {
+        if ($this->hayHistorialClientes === null) {
+            $st = $this->db->query("SELECT to_regclass('public.alumnos_clientes_historial') IS NOT NULL");
+            $this->hayHistorialClientes = (bool) $st->fetchColumn();
+        }
+        return $this->hayHistorialClientes;
+    }
+
+    /**
+     * Períodos del alumno con cada cliente (desde/hasta; hasta NULL = actual),
+     * con nombre e identificación del cliente. No incluye al cliente actual si
+     * nunca se cambió (no tiene fila): eso lo completa el Service.
+     */
+    public function getHistorialClientes(int $idAlumno, int $idEmpresa): array
+    {
+        if (!$this->existeHistorialClientes()) {
+            return [];
+        }
+        $st = $this->db->prepare(
+            "SELECT h.id_cliente, h.desde, h.hasta, c.nombre AS cliente_nombre,
+                    c.identificacion AS cliente_identificacion
+             FROM alumnos_clientes_historial h
+             LEFT JOIN clientes c ON c.id = h.id_cliente AND c.id_empresa = h.id_empresa
+             WHERE h.id_alumno = :a AND h.id_empresa = :e AND h.eliminado = false
+             ORDER BY h.hasta DESC NULLS FIRST, h.id DESC"
+        );
         $st->execute([':a' => $idAlumno, ':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Nombre e identificación de un cliente de la empresa (para el historial). */
+    public function getClienteBasico(int $idCliente, int $idEmpresa): ?array
+    {
+        $st = $this->db->prepare("SELECT id, nombre, identificacion FROM clientes WHERE id = :c AND id_empresa = :e");
+        $st->execute([':c' => $idCliente, ':e' => $idEmpresa]);
+        $r = $st->fetch(PDO::FETCH_ASSOC);
+        return $r ?: null;
+    }
+
+    /**
+     * Cambio de cliente del alumno: cierra el período abierto (hasta = ahora) y
+     * abre el del nuevo cliente. Si el anterior no tenía fila (nunca se había
+     * cambiado), se le crea su período desde el alta del alumno. Va dentro de la
+     * transacción del guardado del alumno.
+     */
+    public function registrarCambioCliente(int $idAlumno, int $idEmpresa, ?int $anterior, ?int $nuevo, int $idUsuario): void
+    {
+        if (!$this->existeHistorialClientes() || $anterior === $nuevo) {
+            return;
+        }
+        $st = $this->db->prepare(
+            "UPDATE alumnos_clientes_historial
+                SET hasta = CURRENT_TIMESTAMP, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+              WHERE id_alumno = :a AND id_empresa = :e AND hasta IS NULL AND eliminado = false"
+        );
+        $st->execute([':u' => $idUsuario, ':a' => $idAlumno, ':e' => $idEmpresa]);
+
+        if ($st->rowCount() === 0 && $anterior) {
+            $st = $this->db->prepare(
+                "INSERT INTO alumnos_clientes_historial (id_empresa, id_alumno, id_cliente, desde, hasta, created_by, updated_by)
+                 SELECT a.id_empresa, a.id, :c, a.created_at, CURRENT_TIMESTAMP, :u1, :u2
+                 FROM alumnos a WHERE a.id = :a AND a.id_empresa = :e"
+            );
+            $st->execute([':c' => $anterior, ':u1' => $idUsuario, ':u2' => $idUsuario, ':a' => $idAlumno, ':e' => $idEmpresa]);
+        }
+        if ($nuevo) {
+            $st = $this->db->prepare(
+                "INSERT INTO alumnos_clientes_historial (id_empresa, id_alumno, id_cliente, desde, hasta, created_by, updated_by)
+                 VALUES (:e, :a, :c, CURRENT_TIMESTAMP, NULL, :u1, :u2)"
+            );
+            $st->execute([':e' => $idEmpresa, ':a' => $idAlumno, ':c' => $nuevo, ':u1' => $idUsuario, ':u2' => $idUsuario]);
+        }
     }
 
     /**

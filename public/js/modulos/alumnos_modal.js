@@ -1147,12 +1147,15 @@
         const hayFiltro = palabras.length > 0;
         const tiene = txt => palabras.every(p => txt.includes(p));
         const anio = document.getElementById('aluTrxAnio')?.value || '';
+        const cliente = document.getElementById('aluTrxCliente')?.value || '';
+        document.querySelectorAll('#tbodyClientesAlumno tr[data-cliente]')
+            .forEach(r => r.classList.toggle('table-active', cliente !== '' && r.dataset.cliente === cliente));
         document.getElementById('aluTrxLimpiar')?.classList.toggle('d-none', !hayFiltro);
         let total = 0, visibles = 0, docs = 0, suma = 0;
         tbody.querySelectorAll('tr.alu-trx-fact').forEach(tr => {
             const det0 = tbody.querySelector(`tr[data-det="${tr.dataset.id}"]`);
-            // Fuera del año elegido: ni se cuenta ni se ve.
-            if (anio !== '' && tr.dataset.anio !== anio) {
+            // Fuera del año o del cliente elegido: ni se cuenta ni se ve.
+            if ((anio !== '' && tr.dataset.anio !== anio) || (cliente !== '' && tr.dataset.cliente !== cliente)) {
                 tr.classList.add('d-none');
                 aluTrxDesmarcar(tr);
                 if (det0) { det0.classList.add('d-none'); aluTrxChevron(tr, false); }
@@ -1186,7 +1189,9 @@
         const hayFacturas = !!tbody.querySelector('tr.alu-trx-fact');
         tbody.querySelector('tr.alu-trx-sin-resultados')?.remove();
         if (hayFacturas && !visibles) {
-            const txt = total ? 'Ninguna factura coincide con la búsqueda.' : `No hay facturas en ${anio}. Elija otro año o «Todos».`;
+            const txt = total ? 'Ninguna factura coincide con la búsqueda.'
+                : (cliente !== '' ? `Este cliente no tiene facturas${anio !== '' ? ' en ' + anio : ''}. Elija otro año o «Todos».`
+                                  : `No hay facturas en ${anio}. Elija otro año o «Todos».`);
             tbody.insertAdjacentHTML('beforeend', `<tr class="alu-trx-sin-resultados"><td colspan="${aluTrxCols()}" class="text-center text-muted py-3 small">${escHtml(txt)}</td></tr>`);
         }
         const cn = document.getElementById('aluTrxConteo');
@@ -1366,6 +1371,47 @@
         aluTrxActualizarMarcados();
     });
     document.getElementById('aluTrxAnio')?.addEventListener('change', filtrarTransaccionesAlumno);
+    document.getElementById('aluTrxCliente')?.addEventListener('change', filtrarTransaccionesAlumno);
+
+    // Historial de clientes: a quién se le ha facturado el alumno (un mes a uno,
+    // otro mes a otro). Clic en un cliente = ver solo sus facturas (y otra vez, todas).
+    function aluTrxPintarClientes(clientes, conservar) {
+        const caja = document.getElementById('aluTrxClientes');
+        const tb = document.getElementById('tbodyClientesAlumno');
+        const sel = document.getElementById('aluTrxCliente');
+        const lista = Array.isArray(clientes) ? clientes : [];
+        const previo = conservar && sel ? sel.value : '';
+        if (sel) {
+            sel.innerHTML = '<option value="">Todos los clientes</option>'
+                + lista.map(c => `<option value="${c.id_cliente}">${escHtml(c.cliente || '—')}</option>`).join('');
+            sel.value = lista.some(c => String(c.id_cliente) === previo) ? previo : '';
+            sel.classList.toggle('d-none', lista.length < 2);
+        }
+        if (!caja || !tb) return;
+        caja.classList.toggle('d-none', lista.length === 0);
+        tb.innerHTML = lista.map(c => {
+            const periodos = (c.periodos || []).map(p => {
+                if (!p.hasta) return `Desde ${escHtml(p.desde || 'el alta')} <span class="badge bg-success bg-opacity-10 text-success border border-success">Actual</span>`;
+                return `${escHtml(p.desde || '¿?')} al ${escHtml(p.hasta)}`;
+            }).join('<br>') || '<span class="text-muted" title="Cliente de facturas del alumno, sin registro del período en que fue su cliente">—</span>';
+            const fechas = c.primera ? (c.primera === c.ultima ? escHtml(c.primera) : `${escHtml(c.primera)} / ${escHtml(c.ultima)}`) : '<span class="text-muted">Sin facturas</span>';
+            return `<tr data-cliente="${c.id_cliente}" title="Clic para ver solo las facturas de este cliente">
+                    <td class="text-truncate" style="max-width:260px;">${escHtml(c.cliente || '—')}${c.identificacion ? `<div class="text-muted" style="font-size:.7rem;">${escHtml(c.identificacion)}</div>` : ''}</td>
+                    <td>${periodos}</td>
+                    <td class="text-end">${c.facturas}${c.anuladas ? ` <span class="text-muted" title="Anuladas">(+${c.anuladas} anul.)</span>` : ''}</td>
+                    <td class="text-end fw-semibold">${fmt(c.total)}</td>
+                    <td>${fechas}</td>
+                </tr>`;
+        }).join('');
+        tb.querySelectorAll('tr[data-cliente]').forEach(tr => tr.addEventListener('click', () => {
+            if (!sel) return;
+            sel.value = sel.value === tr.dataset.cliente ? '' : tr.dataset.cliente;
+            // El historial cuenta todos los años: al filtrar por cliente se muestran todos.
+            const anio = document.getElementById('aluTrxAnio');
+            if (sel.value !== '' && anio) anio.value = '';
+            filtrarTransaccionesAlumno();
+        }));
+    }
     // Años con facturas (más el actual, que es el de por defecto) + «Todos».
     function aluTrxLlenarAnios(facturas, conservar) {
         const sel = document.getElementById('aluTrxAnio');
@@ -1407,11 +1453,13 @@
             aluTrxFacturas.clear();
             aluTrxActualizarMarcados();
         };
+        if (!mismoAlumno || !idAlumnoActual) aluTrxPintarClientes([], false);
         if (!idAlumnoActual) { mensaje('Guarde el alumno para ver sus transacciones.'); return; }
         mensaje('Cargando…');
         try {
             const json = await fetchJson(`${urlBase}/facturasAjax?id=${idAlumnoActual}`);
             if (!json.ok) { mensaje(json.error || 'Error', 'text-danger'); return; }
+            aluTrxPintarClientes(json.clientes, mismoAlumno);
             if (!json.data.length) { mensaje('Aún no hay facturas de este alumno.'); return; }
 
             // Año de emisión (d-m-Y); sin fecha, el del mes facturado (m-Y).
@@ -1451,7 +1499,7 @@
                         <td class="text-end fw-semibold">${fmt(l.subtotal + l.iva)}</td>
                     </tr>`).join('');
                 return `<tr class="alu-trx-fact ${cls}" data-id="${f.id_factura}" title="${escAttr(titulo)}"
-                            data-anio="${escAttr(f.anio)}" data-total="${f.total}" data-anulada="${anulada ? 1 : 0}"
+                            data-anio="${escAttr(f.anio)}" data-cliente="${f.id_cliente}" data-total="${f.total}" data-anulada="${anulada ? 1 : 0}"
                             data-txt="${escAttr(aluNorm([f.numero, f.periodo, f.fecha, f.cliente].join(' ')))}">
                         ${chk}
                         <td class="text-center"><i class="bi bi-chevron-right small alu-trx-chev"></i></td>

@@ -535,7 +535,23 @@ class AlumnosController extends BaseModuloController
                     'iva'         => (float) $l['iva'],
                 ], $r['lineas'] ?? []),
             ], $rows);
-            echo json_encode(['ok' => true, 'data' => $data]);
+            $fmtFecha = fn($v, string $f) => $v ? date($f, strtotime((string) $v)) : '';
+            $clientes = array_map(fn($c) => [
+                'id_cliente'     => $c['id_cliente'],
+                'cliente'        => $c['cliente'],
+                'identificacion' => $c['identificacion'],
+                'actual'         => $c['actual'],
+                'periodos'       => array_map(fn($p) => [
+                    'desde' => $fmtFecha($p['desde'], 'd-m-Y'),
+                    'hasta' => $fmtFecha($p['hasta'], 'd-m-Y'),
+                ], $c['periodos']),
+                'facturas'       => $c['facturas'],
+                'anuladas'       => $c['anuladas'],
+                'total'          => $c['total'],
+                'primera'        => $fmtFecha($c['primera'], 'd-m-Y'),
+                'ultima'         => $fmtFecha($c['ultima'], 'd-m-Y'),
+            ], $this->facturacionService()->getHistorialClientes($id, (int) $_SESSION['id_empresa'], $rows));
+            echo json_encode(['ok' => true, 'data' => $data, 'clientes' => $clientes]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

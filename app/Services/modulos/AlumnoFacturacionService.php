@@ -481,4 +481,76 @@ class AlumnoFacturacionService
         unset($f);
         return $facturas;
     }
+
+    /**
+     * Historial de clientes del alumno (a quién se le ha facturado): un registro
+     * por cliente con sus períodos como cliente del alumno y lo que se le
+     * facturó (facturas vigentes, total, primera y última emisión). Junta el
+     * historial de cambios, el cliente actual y los clientes de las facturas
+     * (p. ej. facturas generadas antes de existir el historial).
+     *
+     * @param array $facturas lo que devuelve getFacturas()
+     */
+    public function getHistorialClientes(int $idAlumno, int $idEmpresa, array $facturas): array
+    {
+        $alumno = $this->repository->findById($idAlumno, $idEmpresa);
+        if (!$alumno) {
+            return [];
+        }
+        $idActual = (int) ($alumno['id_cliente'] ?? 0);
+        $out = [];
+        $nuevo = fn(int $id, ?string $nombre, ?string $ident) => [
+            'id_cliente' => $id, 'cliente' => (string) $nombre, 'identificacion' => (string) $ident,
+            'actual' => $id === $idActual, 'periodos' => [],
+            'facturas' => 0, 'anuladas' => 0, 'total' => 0.0, 'primera' => null, 'ultima' => null,
+        ];
+
+        foreach ($this->repository->getHistorialClientes($idAlumno, $idEmpresa) as $h) {
+            $id = (int) $h['id_cliente'];
+            $out[$id] ??= $nuevo($id, $h['cliente_nombre'], $h['cliente_identificacion']);
+            $out[$id]['periodos'][] = ['desde' => $h['desde'], 'hasta' => $h['hasta']];
+        }
+        // El actual siempre está; sin fila (nunca se cambió): desde el alta del alumno.
+        if ($idActual > 0 && (!isset($out[$idActual]) || !array_filter($out[$idActual]['periodos'], fn($p) => $p['hasta'] === null))) {
+            if (!isset($out[$idActual])) {
+                $cli = $this->repository->getClienteBasico($idActual, $idEmpresa);
+                $out[$idActual] = $nuevo($idActual, $cli['nombre'] ?? '', $cli['identificacion'] ?? '');
+            }
+            $out[$idActual]['periodos'][] = ['desde' => isset($out[$idActual]['periodos'][0]) ? null : ($alumno['created_at'] ?? null), 'hasta' => null];
+        }
+
+        foreach ($facturas as $f) {
+            $id = (int) ($f['id_cliente'] ?? 0);
+            if ($id <= 0) {
+                continue;
+            }
+            $out[$id] ??= $nuevo($id, $f['cliente_nombre'] ?? '', '');
+            if ($out[$id]['cliente'] === '') {
+                $out[$id]['cliente'] = (string) ($f['cliente_nombre'] ?? '');
+            }
+            if (($f['estado_factura'] ?? '') === 'anulado') {
+                $out[$id]['anuladas']++;
+                continue;
+            }
+            $out[$id]['facturas']++;
+            $out[$id]['total'] = round($out[$id]['total'] + (float) $f['importe_total'], 2);
+            $fecha = $f['fecha_emision'] ?? null;
+            if ($fecha) {
+                if ($out[$id]['primera'] === null || $fecha < $out[$id]['primera']) $out[$id]['primera'] = $fecha;
+                if ($out[$id]['ultima'] === null || $fecha > $out[$id]['ultima']) $out[$id]['ultima'] = $fecha;
+            }
+        }
+
+        // Actual primero; luego por la última factura / fin del período, más reciente arriba.
+        $clave = function (array $c): string {
+            $fin = '';
+            foreach ($c['periodos'] as $p) {
+                $fin = max($fin, (string) ($p['hasta'] ?? '9999'));
+            }
+            return max($fin, (string) ($c['ultima'] ?? ''));
+        };
+        $lista = array_values($out);
+        usort($lista, fn($a, $b) => [$b['actual'], $clave($b)] <=> [$a['actual'], $clave($a)]);
+        return $lista;
+    }
 }
