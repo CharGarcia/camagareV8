@@ -728,7 +728,7 @@
                 return;
             }
 
-            const resp = await fetch(`${BASE_URL}/modulos/factura_venta/getClientesAjax?q=${encodeURIComponent(term)}`);
+            const resp = await fetch(`${BASE_URL}/modulos/notas_credito/getClientesAjax?q=${encodeURIComponent(term)}`);
             const data = await resp.json();
             if (data.ok && data.data.length > 0) {
                 dropdownCliente.innerHTML = data.data.map(c => `
@@ -1313,7 +1313,7 @@
             timer = setTimeout(async () => {
                 const dd = obtenerDd();
                 try {
-                    const res = await (await fetch(`${BASE_URL}/modulos/factura_venta/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
+                    const res = await (await fetch(`${BASE_URL}/modulos/notas_credito/getProductosAjax?q=${encodeURIComponent(q)}`)).json();
                     if (!res.ok || !res.data || !res.data.length) {
                         dd.innerHTML = '<div class="list-group-item text-muted small py-2 px-3">Sin resultados — puede dejar la descripción manual.</div>';
                     } else {
@@ -2210,7 +2210,7 @@
         const termino = String(res.data.identificacion || res.data.nombre || '').trim();
         if (!termino) return;
         try {
-            const resp = await fetch(`${BASE_URL}/modulos/factura_venta/getClientesAjax?q=${encodeURIComponent(termino)}`);
+            const resp = await fetch(`${BASE_URL}/modulos/notas_credito/getClientesAjax?q=${encodeURIComponent(termino)}`);
             const json = await resp.json();
             const c = (json.data || []).find(x => String(x.id) === String(res.data.id));
             if (c) window.NC_seleccionarCliente(c);

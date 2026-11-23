@@ -1267,6 +1267,51 @@ class NotasCreditoController extends BaseModuloController
     }
 
     /** Libera el candado de la sesión PHP (lectura de $_SESSION sigue disponible). */
+    /**
+     * Buscador de clientes del modal de la nota de crédito.
+     *
+     * Antes la nota usaba /modulos/factura_venta/getClientesAjax, que exige permiso de VER
+     * Facturas de Venta: un usuario de nivel 1 con permiso solo en Notas de Crédito no podía
+     * buscar ni elegir clientes. Mismos campos que el de Factura de Venta.
+     */
+    public function getClientesAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        // Una petición por tecla: suelta el candado de la sesión.
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->liberarSesion();
+
+        $buscar = trim($_GET['q'] ?? '');
+        $repo   = new \App\repositories\modulos\ClienteRepository();
+        // soloActivos = true: no ofrecer clientes inactivos.
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 10, 'nombre', 'ASC', null, true);
+
+        echo json_encode(['ok' => true, 'data' => $result['rows'] ?? []]);
+        exit;
+    }
+
+    /**
+     * Buscador de productos del detalle de la nota de crédito (mismo motivo que
+     * getClientesAjax: antes dependía del permiso de Facturas de Venta). La nota solo usa
+     * id, código, nombre, precio_base y tarifa de IVA, así que no arma precios de lista,
+     * variantes ni stock por bodega.
+     */
+    public function getProductosAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $this->liberarSesion();
+
+        $buscar = trim($_GET['q'] ?? '');
+        $repo   = new \App\repositories\modulos\ProductoRepository();
+        $result = $repo->getListado($idEmpresa, $buscar, 1, 15, 'nombre', 'ASC', null, 'venta', true);
+
+        echo json_encode(['ok' => true, 'data' => $result['rows'] ?? []]);
+        exit;
+    }
+
     private function liberarSesion(): void
     {
         if (session_status() === PHP_SESSION_ACTIVE) {
