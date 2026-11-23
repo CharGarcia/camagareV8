@@ -317,12 +317,19 @@
         if (!d) return;
         let motivo = '';
         if (window.Swal) {
+            // El modal de Bootstrap retiene el foco (focus trap) y no deja escribir
+            // en el input del SweetAlert que se abre encima: se suspende mientras dure.
+            const trampa = modal()._focustrap;
+            trampa?.deactivate();
             const r = await Swal.fire({
                 title: `¿Revertir el cierre de ${d.anio}?`,
                 html: 'Se <b>anularán</b> los asientos de cierre y apertura y se reabrirá el año en Períodos Contables. El registro queda en el historial.',
                 icon: 'warning', input: 'text', inputPlaceholder: 'Motivo de la reversión',
-                showCancelButton: true, confirmButtonText: 'Revertir', cancelButtonText: 'Cancelar', focusCancel: true,
+                showCancelButton: true, confirmButtonText: 'Revertir', cancelButtonText: 'Cancelar',
                 inputValidator: (v) => (!v || v.trim().length < 5) ? 'Indique el motivo (al menos 5 caracteres)' : undefined,
+                didOpen: () => Swal.getInput()?.focus(),
+            }).finally(() => {
+                if ($('modalCierre')?.classList.contains('show')) trampa?.activate();
             });
             if (!r.isConfirmed) return;
             motivo = r.value;
