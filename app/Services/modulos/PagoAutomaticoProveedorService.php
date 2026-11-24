@@ -151,19 +151,32 @@ class PagoAutomaticoProveedorService
         string $fechaEmisionDoc,
         string $observaciones
     ): array {
-        // Punto de emisión y establecimiento activos
-        $stPto = $this->db->prepare("
-            SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
-            FROM empresa_punto_emision pe
-            JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
-            WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
-            ORDER BY es.codigo ASC, pe.codigo_punto ASC LIMIT 1
-        ");
-        $stPto->execute([$idEmpresa]);
-        $pto = $stPto->fetch(PDO::FETCH_ASSOC);
+        // Claves opcionales de $config, solo del pago con la forma elegida en el modal de
+        // Compras (generarConFormaElegida): 'id_punto_emision' (serie del egreso),
+        // 'fecha_egreso' (fecha del egreso; por defecto la de emisión del documento),
+        // 'fecha_cobro' (cheque) y 'referencia'. Los flujos automáticos no las envían.
+        if (!empty($config['id_punto_emision'])) {
+            $pto = (new \App\repositories\SecuencialRepository())->getPuntoEmisionSerie((int) $config['id_punto_emision'], $idEmpresa);
+        } else {
+            // Punto de emisión y establecimiento activos
+            $stPto = $this->db->prepare("
+                SELECT pe.id AS id_punto, pe.codigo_punto AS punto, es.id AS id_estab, es.codigo AS estab
+                FROM empresa_punto_emision pe
+                JOIN empresa_establecimiento es ON pe.id_establecimiento = es.id
+                WHERE es.id_empresa = ? AND pe.eliminado = FALSE AND es.eliminado = FALSE
+                ORDER BY es.codigo ASC, pe.codigo_punto ASC LIMIT 1
+            ");
+            $stPto->execute([$idEmpresa]);
+            $pto = $stPto->fetch(PDO::FETCH_ASSOC);
+        }
         if (!$pto) {
             throw new \Exception('No se localizó punto de emisión activo.');
         }
+
+        // Fecha del documento de compra (va en el detalle) y fecha del egreso (secuencial,
+        // cabecera y pago): coinciden salvo que el llamador fije 'fecha_egreso'.
+        $fechaDocumento  = $fechaEmisionDoc;
+        $fechaEmisionDoc = !empty($config['fecha_egreso']) ? (string) $config['fecha_egreso'] : $fechaEmisionDoc;
 
         $idPunto  = (int) $pto['id_punto'];
         $idEstab  = (int) $pto['id_estab'];
@@ -207,11 +220,13 @@ class PagoAutomaticoProveedorService
             if ($numeroCheque === '') {
                 throw new \Exception('No hay un número de cheque previo correlativo para la forma de pago; regístrelo manualmente.');
             }
-            $fechaCobro = $this->calcularFechaCobroCredito(
-                $fechaEmisionDoc,
-                (int) ($config['plazo'] ?? 0),
-                (string) ($config['unidad_tiempo'] ?? 'DIAS')
-            );
+            $fechaCobro = !empty($config['fecha_cobro'])
+                ? (string) $config['fecha_cobro']
+                : $this->calcularFechaCobroCredito(
+                    $fechaEmisionDoc,
+                    (int) ($config['plazo'] ?? 0),
+                    (string) ($config['unidad_tiempo'] ?? 'DIAS')
+                );
         }
 
         $dataEgreso = [
@@ -236,7 +251,7 @@ class PagoAutomaticoProveedorService
                     'tipo_documento'          => 'COMPRA',
                     'id_referencia_documento' => $idCompra,
                     'numero_documento'        => $numDocCompleto,
-                    'fecha_documento'         => $fechaEmisionDoc,
+                    'fecha_documento'         => $fechaDocumento,
                     'descripcion'             => $nombreComprobante . ' #' . $numDocCompleto,
                     'monto_documento'         => $montoTotalDocumento,
                     'saldo_anterior'          => $montoAPagar,
@@ -254,6 +269,10 @@ class PagoAutomaticoProveedorService
                 ],
             ],
         ];
+
+        if (!empty($config['referencia'])) {
+            $dataEgreso['pagos'][0]['referencia'] = (string) $config['referencia'];
+        }
 
         $idEgreso = $egresoService->registrar($dataEgreso);
 
@@ -290,8 +309,12 @@ class PagoAutomaticoProveedorService
      * deuda (ver TiposComprobanteCompra::ESTADOS_COMPRA_SIN_DEUDA).
      *
      * @param int|null $idCompra Solo esa compra (pago al aprobarla).
+     * @param array{con_abonos?:bool, excluir_id?:int, id_usuario_filtro?:int|null} $opciones
+     *        con_abonos: incluye también las compras con pagos parciales (el saldo ya los
+     *        descuenta); excluir_id: deja fuera esa compra; id_usuario_filtro: solo las
+     *        compras creadas por ese usuario (registros propios, CLAUDE.md §6).
      */
-    public function getComprasPendientes(int $idProveedor, int $idEmpresa, string $fechaHasta, ?int $idCompra = null): array
+    public function getComprasPendientes(int $idProveedor, int $idEmpresa, string $fechaHasta, ?int $idCompra = null, array $opciones = []): array
     {
         $params = [
             ':id_proveedor'     => $idProveedor,
@@ -303,6 +326,16 @@ class PagoAutomaticoProveedorService
             $filtroCompra = ' AND c.id = :id_compra';
             $params[':id_compra'] = $idCompra;
         }
+        if (!empty($opciones['excluir_id'])) {
+            $filtroCompra .= ' AND c.id <> :excluir_id';
+            $params[':excluir_id'] = (int) $opciones['excluir_id'];
+        }
+        if (!empty($opciones['id_usuario_filtro'])) {
+            $filtroCompra .= ' AND c.created_by = :id_usuario_filtro';
+            $params[':id_usuario_filtro'] = (int) $opciones['id_usuario_filtro'];
+        }
+        // Por defecto solo las compras sin ningún pago; con_abonos admite las abonadas.
+        $filtroSinPago = empty($opciones['con_abonos']) ? 'AND pg.id_doc IS NULL' : '';
 
         // Solo el ambiente activo de la empresa, igual que el resto de módulos
         $stA = $this->db->prepare("SELECT CAST(tipo_ambiente AS VARCHAR) FROM empresas WHERE id = :id_empresa LIMIT 1");
@@ -322,7 +355,8 @@ class PagoAutomaticoProveedorService
         $compraPagable = \App\Helpers\TiposComprobanteCompra::sqlCompraPagable('c.estado');
         $sql = "
             WITH pagado AS (
-                SELECT ed.id_referencia_documento AS id_doc
+                SELECT ed.id_referencia_documento AS id_doc,
+                       SUM(ed.monto_pagado)       AS abonado
                 FROM egresos_detalle ed
                 INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                 WHERE ed.tipo_documento = 'COMPRA'
@@ -367,7 +401,8 @@ class PagoAutomaticoProveedorService
                      + COALESCE(c.total_terceros, 0)
                      - COALESCE(rt.total_retenido, 0)
                      - COALESCE(nn.total_nc, 0)
-                     + COALESCE(nn.total_nd, 0)         AS saldo
+                     + COALESCE(nn.total_nd, 0)
+                     - COALESCE(pg.abonado, 0)          AS saldo
             FROM compras_cabecera c
             LEFT JOIN pagado pg ON pg.id_doc = c.id
             LEFT JOIN nc_nd  nn ON nn.documento_modificado = {$numDocExpr}
@@ -377,7 +412,7 @@ class PagoAutomaticoProveedorService
               AND c.eliminado        = false
               AND {$esCargo} AND {$compraPagable}
               AND c.fecha_emision   <= :fecha_hasta
-              AND pg.id_doc IS NULL
+              {$filtroSinPago}
               {$filtroAmb}
               {$filtroCompra}
             ORDER BY c.fecha_emision ASC, c.id ASC
@@ -554,6 +589,123 @@ class PagoAutomaticoProveedorService
             'fallidos'  => $fallidos,
             'omitidas'  => count($prev['excluidas']),
             'total'     => round($total, 2),
+        ];
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // RESTO DE COMPRAS DEL PROVEEDOR, CON LA FORMA DE PAGO ELEGIDA EN COMPRAS
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Compras del proveedor que todavía tienen saldo por pagar (incluye las abonadas en
+     * parte), sin la compra de origen. Es lo que el modal de Compras ofrece pagar después
+     * de registrar un egreso. No usa la configuración de la pestaña Pagos del proveedor.
+     *
+     * @return array<int, array> filas de getComprasPendientes() con 'monto_a_pagar'.
+     */
+    public function comprasConSaldo(int $idProveedor, int $idEmpresa, ?int $excluirIdCompra = null, ?int $idUsuarioFiltro = null): array
+    {
+        $filas = $this->getComprasPendientes($idProveedor, $idEmpresa, date('Y-m-d'), null, [
+            'con_abonos'        => true,
+            'excluir_id'        => $excluirIdCompra,
+            'id_usuario_filtro' => $idUsuarioFiltro,
+        ]);
+
+        $conSaldo = [];
+        foreach ($filas as $c) {
+            $saldo = round((float) $c['saldo'], 2);
+            if ($saldo > 0) {
+                $c['monto_a_pagar'] = $saldo;
+                $conSaldo[] = $c;
+            }
+        }
+        return $conSaldo;
+    }
+
+    /**
+     * Paga el saldo de cada compra pendiente del proveedor con la forma de pago que el
+     * usuario acaba de usar en el modal de Compras: un egreso por compra. Cada egreso va
+     * en su propia transacción (un documento que falle no impide los demás) y
+     * EgresoService revalida el saldo real bajo candado antes de escribir.
+     *
+     * @param array{id_forma_pago:int, id_egreso_concepto:int, id_punto_emision:int,
+     *              fecha_egreso:string, tipo_operacion:?string, fecha_cobro:?string,
+     *              referencia:?string} $pago
+     * @return array{generados:int, total:float, egresos:array, fallidos:array}
+     */
+    public function generarConFormaElegida(
+        array $pago,
+        int $idProveedor,
+        int $idEmpresa,
+        int $idUsuario,
+        ?int $excluirIdCompra = null,
+        ?int $idUsuarioFiltro = null
+    ): array {
+        if (empty($pago['id_forma_pago']))      throw new \Exception('Debe seleccionar una forma de pago.');
+        if (empty($pago['id_egreso_concepto'])) throw new \Exception('Debe seleccionar un concepto de egreso.');
+        if (empty($pago['id_punto_emision']))   throw new \Exception('Debe seleccionar un punto de emisión.');
+
+        $stFp = $this->db->prepare("
+            SELECT 1 FROM empresa_formas_pago
+            WHERE id = ? AND id_empresa = ? AND activo = TRUE AND eliminado = FALSE
+            LIMIT 1
+        ");
+        $stFp->execute([(int) $pago['id_forma_pago'], $idEmpresa]);
+        if (!$stFp->fetchColumn()) {
+            throw new \Exception('La forma de pago seleccionada está inactiva o fue eliminada.');
+        }
+
+        $fecha = (string) ($pago['fecha_egreso'] ?? '');
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            $fecha = date('Y-m-d');
+        }
+
+        $config = [
+            'id_forma_pago'      => (int) $pago['id_forma_pago'],
+            'tipo_operacion'     => !empty($pago['tipo_operacion']) ? (string) $pago['tipo_operacion'] : null,
+            'id_egreso_concepto' => (int) $pago['id_egreso_concepto'],
+            'id_punto_emision'   => (int) $pago['id_punto_emision'],
+            'fecha_egreso'       => $fecha,
+            'fecha_cobro'        => !empty($pago['fecha_cobro']) ? (string) $pago['fecha_cobro'] : $fecha,
+            // El número de cheque se asigna correlativo por egreso; la referencia solo
+            // aplica al resto de operaciones (una transferencia que cubre varias facturas).
+            'referencia'         => (($pago['tipo_operacion'] ?? null) !== 'CHEQUE' && !empty($pago['referencia'])) ? (string) $pago['referencia'] : null,
+        ];
+
+        $generados = 0;
+        $total     = 0.0;
+        $egresos   = [];
+        $fallidos  = [];
+
+        foreach ($this->comprasConSaldo($idProveedor, $idEmpresa, $excluirIdCompra, $idUsuarioFiltro) as $c) {
+            $numDoc = (string) $c['numero_documento'];
+            try {
+                $secuencialCorto = ltrim((string) substr($numDoc, (int) strrpos($numDoc, '-') + 1), '0') ?: '0';
+                $res = $this->generarParaCompra(
+                    $config,
+                    (int) $c['id'],
+                    $idProveedor,
+                    $idEmpresa,
+                    $idUsuario,
+                    (float) $c['monto_documento'],
+                    (float) $c['monto_a_pagar'],
+                    $numDoc,
+                    (string) $c['fecha_emision'],
+                    'Pago factura de compra ' . $secuencialCorto
+                );
+                $generados++;
+                $total += (float) $c['monto_a_pagar'];
+                $egresos[] = ['numero_documento' => $numDoc, 'numero_egreso' => $res['numero_egreso'], 'monto' => (float) $c['monto_a_pagar']];
+            } catch (\Throwable $e) {
+                $fallidos[] = ['numero_documento' => $numDoc, 'error' => $e->getMessage()];
+            }
+        }
+
+        return [
+            'generados' => $generados,
+            'total'     => round($total, 2),
+            'egresos'   => $egresos,
+            'fallidos'  => $fallidos,
         ];
     }
 

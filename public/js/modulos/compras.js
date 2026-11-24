@@ -4699,6 +4699,107 @@ function _cmgObsAutoCompra() {
     return _cmgObsAutoCompraInst;
 }
 
+/**
+ * Tras registrar un pago: si el proveedor de la compra tiene más compras con saldo,
+ * pregunta si se pagan con la misma forma de pago (un egreso por compra). `pago` es el
+ * mismo payload del egreso recién registrado. Un fallo aquí nunca afecta al pago ya hecho.
+ */
+async function _cmgOfrecerPagosPendientesProveedor(pago, nombreForma, msgPago) {
+    const target = document.getElementById('modalCompra') || 'body';
+    const fmt = v => '$' + (parseFloat(v) || 0).toFixed(2);
+
+    let pend;
+    try {
+        const r = await fetch(`${window.CMG_urlBase}/getPendientesProveedorAjax?id_compra=${pago.id_compra}`);
+        pend = await r.json();
+    } catch (err) {
+        console.error('Error al consultar compras pendientes del proveedor:', err);
+        return;
+    }
+    if (!pend || !pend.ok || !(pend.cantidad > 0)) return;
+
+    const filas = (pend.detalle || []).map(d =>
+        `<tr><td class="text-start">${_esc(d.numero_documento)}</td><td>${_esc(d.fecha_emision)}</td><td class="text-end">${fmt(d.monto)}</td></tr>`
+    ).join('');
+    const resto = pend.cantidad - (pend.detalle || []).length;
+    const esCheque = pago.tipo_operacion_bancaria === 'CHEQUE';
+    const nota = esCheque
+        ? 'Cada egreso llevará el siguiente número de cheque y la misma fecha de cobro.'
+        : (pago.numero_operacion ? `Todos los egresos llevarán la referencia ${_esc(pago.numero_operacion)}.` : '');
+
+    const conf = await Swal.fire({
+        icon: 'question',
+        title: 'Hay más compras pendientes de pago',
+        html: (msgPago ? `<div class="small text-success mb-2"><i class="bi bi-check-circle me-1"></i>${_esc(msgPago)}</div>` : '')
+            + `Este proveedor tiene <strong>${pend.cantidad}</strong> compra(s) más pendiente(s) de pago por <strong>${fmt(pend.total)}</strong>.`
+            + `<br>¿Desea generar los pagos con esta misma forma de pago`
+            + (nombreForma ? ` (<strong>${_esc(nombreForma)}</strong>)` : '') + '?'
+            + `<div class="mt-2" style="max-height:220px;overflow:auto;"><table class="table table-sm small mb-0">`
+            + `<thead><tr><th class="text-start">Documento</th><th>Emisión</th><th class="text-end">Saldo</th></tr></thead><tbody>${filas}</tbody></table></div>`
+            + (resto > 0 ? `<div class="small text-muted">… y ${resto} más.</div>` : '')
+            + `<div class="small text-muted mt-2">Se genera un egreso por cada compra, por su saldo completo, con fecha ${_esc((pago.fecha_emision || '').split('-').reverse().join('-'))}. ${nota}</div>`,
+        showCancelButton: true,
+        confirmButtonText: '<i class="bi bi-cash-stack me-1"></i> Sí, generar pagos',
+        cancelButtonText: 'No, solo este',
+        confirmButtonColor: '#198754',
+        focusCancel: true,
+        target,
+    });
+    if (!conf.isConfirmed) return;
+
+    Swal.fire({
+        title: 'Generando pagos…',
+        html: 'No cierre esta ventana.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showConfirmButton: false,
+        target,
+        didOpen: () => Swal.showLoading(),
+    });
+
+    try {
+        const r = await fetch(`${window.CMG_urlBase}/pagarPendientesProveedorAjax`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id_compra: pago.id_compra,
+                id_punto_emision: pago.id_punto_emision,
+                fecha_emision: pago.fecha_emision,
+                id_egreso_concepto: pago.id_egreso_concepto,
+                id_forma_pago: pago.id_forma_pago,
+                tipo_operacion_bancaria: pago.tipo_operacion_bancaria,
+                numero_operacion: pago.numero_operacion,
+                fecha_cobro: pago.fecha_cobro,
+            }),
+        });
+        const res = await r.json();
+        if (!res.ok) {
+            Swal.fire({ icon: 'error', title: 'Error', text: res.error || 'No se pudieron generar los pagos.', target });
+            return;
+        }
+
+        const fallidos = res.fallidos || [];
+        const listaFallidos = fallidos.length
+            ? `<div class="text-start small mt-2"><strong>No se pudieron pagar ${fallidos.length}:</strong><ul class="mb-0 ps-3">`
+                + fallidos.slice(0, 10).map(f => `<li>${_esc(f.numero_documento)}: ${_esc(f.error)}</li>`).join('')
+                + '</ul></div>'
+            : '';
+        Swal.fire({
+            icon: fallidos.length ? (res.generados > 0 ? 'warning' : 'error') : 'success',
+            title: res.generados > 0 ? 'Pagos generados' : 'No se generaron pagos',
+            html: `Se generaron <strong>${res.generados}</strong> egreso(s) por <strong>${fmt(res.total)}</strong>.` + listaFallidos,
+            target,
+        });
+
+        if (typeof window.CMG_fetchSearch === 'function') {
+            window.CMG_fetchSearch(window.CMG_currentPage || 1);
+        }
+    } catch (err) {
+        console.error('Error al generar pagos pendientes del proveedor:', err);
+        Swal.fire({ icon: 'error', title: 'Error de conexión', text: 'No se recibió respuesta. Revise en Egresos qué pagos se generaron antes de reintentar.', target });
+    }
+}
+
 window.CMG_registrarPagoEgreso = async function(e) {
     if (e) e.preventDefault();
     if (_cmgPagandoCompra) return;
@@ -4822,6 +4923,11 @@ window.CMG_registrarPagoEgreso = async function(e) {
             if (typeof window.CMG_fetchSearch === 'function') {
                 window.CMG_fetchSearch(window.CMG_currentPage || 1);
             }
+
+            // Si el proveedor tiene más compras con saldo, ofrecer pagarlas con la misma
+            // forma de pago. Sigue dentro de la bandera "en curso": el botón no se reactiva
+            // hasta que el usuario responde y terminan de generarse los egresos.
+            await _cmgOfrecerPagosPendientesProveedor(payload, nombreForma, res.msg || '');
         } else {
             Swal.fire('Error', res.error || 'No se pudo generar el pago.', 'error');
         }

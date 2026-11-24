@@ -1430,6 +1430,106 @@ class ComprasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Compras del mismo proveedor que siguen con saldo por pagar (sin contar la compra
+     * abierta). Lo consulta la pestaña Pagos después de registrar un egreso, para ofrecer
+     * pagarlas con la misma forma de pago. No genera nada.
+     */
+    public function getPendientesProveedorAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idCompra  = (int) ($_GET['id_compra'] ?? 0);
+
+        try {
+            $compra = $idCompra > 0 ? $this->repository->getPorId($idCompra, $idEmpresa) : null;
+            if (!$compra || empty($compra['id_proveedor'])) {
+                echo json_encode(['ok' => true, 'cantidad' => 0, 'total' => 0, 'detalle' => []]);
+                exit;
+            }
+
+            $perm = $this->getPermisos();
+            $idUsuarioFiltro = empty($perm['todo']) ? (int) $_SESSION['id_usuario'] : null;
+
+            $svc        = new \App\Services\modulos\PagoAutomaticoProveedorService();
+            $pendientes = $svc->comprasConSaldo((int) $compra['id_proveedor'], $idEmpresa, $idCompra, $idUsuarioFiltro);
+
+            $total = 0.0;
+            foreach ($pendientes as $c) {
+                $total += (float) $c['monto_a_pagar'];
+            }
+
+            echo json_encode([
+                'ok'       => true,
+                'cantidad' => count($pendientes),
+                'total'    => round($total, 2),
+                'detalle'  => array_map(fn($c) => [
+                    'numero_documento' => $c['numero_documento'],
+                    'fecha_emision'    => date('d-m-Y', strtotime((string) $c['fecha_emision'])),
+                    'monto'            => (float) $c['monto_a_pagar'],
+                ], array_slice($pendientes, 0, 15)),
+            ]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Paga el saldo de las demás compras pendientes del proveedor con la misma forma de
+     * pago del egreso recién registrado en la pestaña Pagos: un egreso por compra.
+     */
+    public function pagarPendientesProveedorAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $idUsuario = (int) $_SESSION['id_usuario'];
+        $perm      = $this->getPermisos();
+        $idUsuarioFiltro = empty($perm['todo']) ? $idUsuario : null;
+
+        try {
+            $post     = json_decode(file_get_contents('php://input'), true) ?: $_POST;
+            $idCompra = (int) ($post['id_compra'] ?? 0);
+
+            $compra = $idCompra > 0 ? $this->repository->getPorId($idCompra, $idEmpresa) : null;
+            if (!$compra || empty($compra['id_proveedor'])) {
+                throw new \Exception('Compra no encontrada.');
+            }
+
+            // Puede generar varios egresos con su asiento: no retener la sesión mientras tanto.
+            $this->liberarSesion();
+
+            $svc = new \App\Services\modulos\PagoAutomaticoProveedorService();
+            $res = $svc->generarConFormaElegida(
+                [
+                    'id_forma_pago'      => (int) ($post['id_forma_pago'] ?? 0),
+                    'id_egreso_concepto' => (int) ($post['id_egreso_concepto'] ?? 0),
+                    'id_punto_emision'   => (int) ($post['id_punto_emision'] ?? 0),
+                    'fecha_egreso'       => (string) ($post['fecha_emision'] ?? ''),
+                    'tipo_operacion'     => !empty($post['tipo_operacion_bancaria']) ? trim((string) $post['tipo_operacion_bancaria']) : null,
+                    'fecha_cobro'        => !empty($post['fecha_cobro']) ? (string) $post['fecha_cobro'] : null,
+                    'referencia'         => !empty($post['numero_operacion']) ? trim((string) $post['numero_operacion']) : null,
+                ],
+                (int) $compra['id_proveedor'],
+                $idEmpresa,
+                $idUsuario,
+                $idCompra,
+                $idUsuarioFiltro
+            );
+
+            echo json_encode(['ok' => true] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // GUARDAR AJAX
     // ─────────────────────────────────────────────────────────────────────────
