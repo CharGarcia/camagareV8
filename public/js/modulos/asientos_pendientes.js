@@ -186,7 +186,7 @@
             const a = asignables[i];
             if (!esDeConcepto(a) || vistaDe(a) !== vista) return;
             const k = claveFila(a);
-            if (!filas.has(k)) filas.set(k, { nombre: a.nombre, docs: 0, celdas: new Map(), items: [], itemsTotal: 0 });
+            if (!filas.has(k)) filas.set(k, { nombre: a.nombre, idx: i, docs: 0, celdas: new Map(), items: [], itemsTotal: 0 });
             const f = filas.get(k);
             f.docs = Math.max(f.docs, parseInt(a.documentos, 10) || 0);
             if (Array.isArray(a.items) && a.items.length) {
@@ -232,30 +232,58 @@
     }
 
     /**
-     * Celda «Compró»: lo que se le compró al proveedor en los documentos pendientes (los ítems más
-     * repetidos primero), para que el usuario sepa qué cuenta asignarle. Completo al pasar el mouse.
+     * Celda del nombre. Si al registro se le compraron ítems (proveedores de Adquisiciones), el nombre
+     * se puede pulsar y abre una ventanita con lo comprado (ver htmlVentanaCompras()); así el usuario
+     * sabe qué cuenta asignarle sin que la tabla lleve una columna más.
      */
-    function celdaItems(f) {
-        if (!f.items.length) return `<td class="px-1 text-muted"></td>`;
-        const mas = f.itemsTotal > f.items.length ? ` y ${f.itemsTotal - f.items.length} más` : '';
-        const texto = f.items.join(', ') + mas;
-        return `<td class="px-1 text-muted text-truncate" style="max-width:240px;font-size:.74rem;" title="${escapeHtml('Compró: ' + texto)}">${escapeHtml(texto)}</td>`;
+    function celdaNombre(f) {
+        if (!f.items.length) {
+            return `<td class="px-1 text-truncate" style="max-width:260px;" title="${escapeHtml(f.nombre)}">${escapeHtml(f.nombre)}</td>`;
+        }
+        return `<td class="px-1" style="max-width:260px;"><button type="button" class="btn btn-link btn-sm p-0 text-start text-truncate d-block w-100"
+            style="font-size:.78rem;max-width:260px;" data-asig-compras="${f.idx}" title="Ver qué se le compró">`
+            + `<i class="bi bi-bag me-1"></i>${escapeHtml(f.nombre)}</button></td>`;
+    }
+
+    /**
+     * Lo comprado a un registro en los documentos pendientes: une los ítems de todas sus filas
+     * (una por cuenta que le falta), sin repetir.
+     */
+    function datosCompras(asignables, idx) {
+        const base = asignables[idx];
+        const k = claveFila(base);
+        let items = [], total = 0, docs = 0;
+        asignables.forEach(a => {
+            if (!esDeConcepto(a) || claveFila(a) !== k) return;
+            if (Array.isArray(a.items)) items = [...new Set([...items, ...a.items])];
+            total = Math.max(total, a.items_total || 0);
+            docs = Math.max(docs, parseInt(a.documentos, 10) || 0);
+        });
+        return { nombre: base.nombre, items: items.slice(0, 10), total: Math.max(total, Math.min(items.length, 10)), docs };
+    }
+
+    /** Ventanita «tipo aviso» con lo comprado al proveedor. */
+    function htmlVentanaCompras(d) {
+        const mas = d.total > d.items.length ? `<div class="text-muted mt-1">y ${d.total - d.items.length} ítem(s) más.</div>` : '';
+        return `<div class="d-flex align-items-start gap-2 mb-1">
+                <div class="fw-semibold flex-grow-1"><i class="bi bi-bag me-1 text-primary"></i>${escapeHtml(d.nombre)}</div>
+                <button type="button" class="btn-close" style="font-size:.6rem;" data-asig-compras-cerrar aria-label="Cerrar"></button>
+            </div>
+            <div class="text-muted mb-1">Lo que se le compró en ${d.docs} documento(s) pendiente(s) de contabilizar:</div>
+            <ul class="mb-0 ps-3">${d.items.map(i => `<li>${escapeHtml(i)}</li>`).join('')}</ul>${mas}`;
     }
 
     /** Contenido (tabla) de una pestaña de conceptos en la vista elegida: un registro por fila. */
     function htmlTablaConceptos(p, asignables, omitidos, vista) {
         const ths = p.conceptos.map(c => `<th class="px-1 text-truncate" style="max-width:190px;" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</th>`).join('');
         const lista = filasDeVista(p, asignables, vista);
-        const conItems = lista.some(f => f.items.length);
         const filasHtml = lista.slice(0, MAX_FILAS_TABLA).map(f => {
             const celdas = p.conceptos.map(c => {
                 const i = f.celdas.get(c.id);
                 if (i === undefined) return `<td class="px-1 text-muted text-center">—</td>`;
                 return celdaCuenta(i, 'entidad', c.tipo_cuenta, asignables[i].resuelto);
             }).join('');
-            return `<tr><td class="px-1 text-truncate" style="max-width:260px;" title="${escapeHtml(f.nombre)}">${escapeHtml(f.nombre)}</td>`
-                + (conItems ? celdaItems(f) : '')
-                + `<td class="px-1 text-end text-muted">${f.docs}</td>${celdas}</tr>`;
+            return `<tr>${celdaNombre(f)}<td class="px-1 text-end text-muted">${f.docs}</td>${celdas}</tr>`;
         }).join('');
         // Lo que no se dibuja: registros sobre el tope + los que el servidor solo contó.
         const resto = Math.max(0, lista.length - MAX_FILAS_TABLA) + omitidosDeVista(p, omitidos, vista);
@@ -263,7 +291,7 @@
             ? `<div class="text-muted mt-1" style="font-size:.72rem;">Y ${resto} más: configúrelos en Configuración Contable, o vuelva a generar después de asignar estos para ver los siguientes.</div>`
             : '';
         return `<div style="overflow-x:auto;"><table class="table table-sm table-bordered mb-0 align-middle" style="font-size:.78rem;">
-            <thead class="table-light"><tr><th class="px-1">Nombre</th>${conItems ? '<th class="px-1" title="Lo que se le compró en los documentos pendientes de contabilizar">Compró</th>' : ''}<th class="px-1 text-end" style="width:48px;">Doc.</th>${ths}</tr></thead>
+            <thead class="table-light"><tr><th class="px-1">Nombre</th><th class="px-1 text-end" style="width:48px;">Doc.</th>${ths}</tr></thead>
             <tbody>${filasHtml}</tbody></table></div>${pie}`;
     }
 
@@ -386,6 +414,36 @@
         document.body.appendChild(lista);
 
         function cerrarLista() { lista.style.display = 'none'; lista.innerHTML = ''; marcada = -1; }
+
+        // Ventanita «qué se le compró» al pulsar el nombre de un proveedor.
+        const ventana = document.createElement('div');
+        ventana.className = 'card shadow border-primary border-opacity-25 small text-start';
+        ventana.style.cssText = 'position:fixed;z-index:2100;display:none;width:340px;max-height:300px;overflow:auto;padding:.6rem .75rem;font-size:.78rem;';
+        document.body.appendChild(ventana);
+        let ventanaDe = null;
+        function cerrarVentana() { ventana.style.display = 'none'; ventana.innerHTML = ''; ventanaDe = null; }
+        function abrirVentana(boton) {
+            if (ventanaDe === boton) { cerrarVentana(); return; } // segundo clic: cierra
+            ventana.innerHTML = htmlVentanaCompras(datosCompras(asignables, parseInt(boton.getAttribute('data-asig-compras'), 10)));
+            ventana.style.display = 'block';
+            const r = boton.getBoundingClientRect();
+            const alto = ventana.offsetHeight;
+            const abajo = r.bottom + 4 + alto <= window.innerHeight;
+            ventana.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 348))}px`;
+            ventana.style.top = `${abajo ? r.bottom + 4 : Math.max(8, r.top - alto - 4)}px`;
+            ventanaDe = boton;
+        }
+        ventana.addEventListener('click', (e) => { if (e.target.closest('[data-asig-compras-cerrar]')) cerrarVentana(); });
+        const fueraDeVentana = (e) => {
+            if (ventana.style.display === 'none') return;
+            if (ventana.contains(e.target) || e.target.closest('[data-asig-compras]')) return;
+            cerrarVentana();
+        };
+        document.addEventListener('mousedown', fueraDeVentana, true);
+        const escVentana = (e) => {
+            if (e.key === 'Escape' && ventana.style.display !== 'none') { e.stopPropagation(); e.preventDefault(); cerrarVentana(); }
+        };
+        document.addEventListener('keydown', escVentana, true);
         function ubicarLista(input) {
             const r = input.getBoundingClientRect();
             lista.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 340))}px`;
@@ -519,6 +577,7 @@
             opts.vistaPorPestana = opts.vistaPorPestana || {};
             opts.vistaPorPestana[sel.getAttribute('data-asig-vista')] = sel.value;
             cerrarLista();
+            cerrarVentana();
             repintar();
         });
         sec.addEventListener('click', (e) => {
@@ -529,14 +588,23 @@
                 sec.querySelectorAll('[data-asig-tab]').forEach(b => b.classList.toggle('active', b === tab));
                 sec.querySelectorAll('[data-asig-panel]').forEach(pn => pn.classList.toggle('d-none', pn.getAttribute('data-asig-panel') !== t));
                 cerrarLista();
+                cerrarVentana();
                 return;
             }
-            if (e.target.closest('[data-asig-regenerar]')) { cerrarLista(); alRegenerar(); }
+            const compras = e.target.closest('[data-asig-compras]');
+            if (compras) { cerrarLista(); abrirVentana(compras); return; }
+            if (e.target.closest('[data-asig-regenerar]')) { cerrarLista(); cerrarVentana(); alRegenerar(); }
         });
         // La lista flotante no sigue al input si la ventana se desplaza: se cierra.
-        contenedor.querySelector('.swal2-html-container')?.addEventListener('scroll', cerrarLista, true);
+        contenedor.querySelector('.swal2-html-container')?.addEventListener('scroll', () => { cerrarLista(); cerrarVentana(); }, true);
 
-        return () => { clearTimeout(temporizador); lista.remove(); };
+        return () => {
+            clearTimeout(temporizador);
+            lista.remove();
+            ventana.remove();
+            document.removeEventListener('mousedown', fueraDeVentana, true);
+            document.removeEventListener('keydown', escVentana, true);
+        };
     }
 
     /**

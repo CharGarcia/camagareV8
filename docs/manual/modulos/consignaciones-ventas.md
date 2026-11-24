@@ -299,8 +299,11 @@ las de períodos cerrados).
 En la pestaña General del comprobante, junto al botón **PDF**, hay un botón
 **Excel** que descarga el detalle de la consignación en una hoja de cálculo,
 con **las mismas columnas que el PDF** para ese cliente (ver *Columnas del
-detalle por cliente*). La columna **Acon** va en blanco para anotar a mano el
-acondicionamiento; la caducidad sale en formato dd-mm-aaaa. Al final lleva, como el PDF, los espacios de firma
+detalle por cliente*), **salvo la Caducidad**, que el Excel no lleva aunque
+esté marcada. La columna **Acon** va en blanco para anotar a mano el
+acondicionamiento. En el encabezado, la línea **Saldo al** indica la fecha y
+hora en que se descargó el Excel: lo retornado y lo facturado son los
+registrados hasta ese momento. Al final lleva, como el PDF, los espacios de firma
 **Emitido por** (el usuario que registró la consignación), **Responsable de
 traslado** y **Recibí conforme** (sin nombre, lo escribe quien recibe) y,
 debajo, **Verificación de acondicionamiento por** (se firma a mano).
@@ -325,8 +328,8 @@ Las columnas del PDF y del Excel se eligen en **Configuración de Empresa →
 pestaña Consignaciones**: unas columnas por defecto para todos los clientes y,
 para los clientes que se agreguen a la lista, sus propias columnas. Sin
 configurar, salen todas menos **Caducidad**. Así, por ejemplo, la fecha de
-caducidad se puede mostrar solo a los clientes que la piden. Descripción y
-Cantidad salen siempre. El estado de la consignación del Reporte de Inventarios
+caducidad se puede mostrar en el PDF solo a los clientes que la piden (en el
+Excel no sale nunca). Descripción y Cantidad salen siempre. El estado de la consignación del Reporte de Inventarios
 usa las mismas columnas (con el Saldo en lugar de Acon).
 
 Debajo del listado de productos, en este orden:
@@ -354,12 +357,9 @@ mano sin dejar un hueco grande en el comprobante. Si el contenido llega muy
 abajo, las firmas pasan a una página nueva en vez de montarse sobre la tabla.
 
 Cuando la consignación tiene **muchos productos**, el listado continúa en las
-páginas siguientes y **cada página repite la fila de encabezados** (Código,
-Descripción, Bodega, Lote, NUP, Cantidad, Ret, Fact, Acon.).
+páginas siguientes y **cada página repite la fila de encabezados**.
 *Ret* es lo retornado y *Fact* lo facturado; la columna Descripción ocupa todo
-el ancho que dejan libre las demás. La **fecha de caducidad no se imprime** en
-el comprobante aunque la línea la tenga registrada: ese espacio lo aprovecha la
-Descripción. La caducidad sigue visible en el modal del documento. Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
+el ancho que dejan libre las demás. Ninguna fila se parte entre dos hojas, y el TOTAL ÍTEMS, las
 observaciones y las firmas se mantienen completos: si no caben en lo que resta
 de página, pasan enteros a la siguiente.
 
@@ -655,7 +655,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
-- **1.56** — Las **columnas del detalle** del PDF y del Excel se personalizan en *Configuración de Empresa → Consignaciones*: columnas por defecto para la empresa y columnas propias por cliente. **Caducidad** ya no sale para todos: por defecto está apagada y se activa para los clientes que se elijan.
+- **1.56** — Las **columnas del detalle** del PDF y del Excel se personalizan en *Configuración de Empresa → Consignaciones*: columnas por defecto para la empresa y columnas propias por cliente. **Caducidad** ya no sale para todos: por defecto está apagada y se activa en el PDF para los clientes que se elijan. El **Excel ya no lleva la columna Caducidad** y muestra en el encabezado **Saldo al** con la fecha y hora en que se descargó.
 - **1.55** — El **PDF** incluye la columna **Caducidad** después de NUP (solo si alguna línea la tiene). Para que todo quepa en la hoja, *Bodega* pasa a llamarse **Bod.** y *Cantidad* **Cant.**; un nombre de bodega largo pasa a varias líneas en vez de cortarse.
 - **1.54** — El **Excel** del comprobante incluye la columna **Caducidad** (después de NUP) con la fecha de vencimiento de cada línea; la columna **Cambio** se reemplaza por **Acon** (en blanco, para anotar el acondicionamiento a mano), y al final los espacios de firma **Emitido por**, **Responsable de traslado**, **Recibí conforme** y **Verificación de acondicionamiento por**, como en el PDF.
 - **1.53** — El **buscador de clientes** del modal ya no depende del permiso de *Facturas de Venta*: basta con poder ver Consignaciones (antes un usuario de nivel 1 sin acceso a Facturas no podía buscar ni elegir clientes). Nuevo botón **Registrar nuevo cliente** en la barra de acciones (solo con permiso de crear en Clientes): el cliente creado queda seleccionado en la consignación.

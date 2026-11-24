@@ -147,7 +147,8 @@ autorización.
 En la pestaña **Consignaciones** se eligen las columnas del detalle de productos
 que salen en el **PDF y el Excel** del comprobante de las Consignaciones de
 Venta: Código, Descripción, Bodega, Lote, NUP, Caducidad, Cantidad, Retorno,
-Facturados y Acon. Descripción y Cantidad salen siempre.
+Facturados y Acon. Descripción y Cantidad salen siempre. La **Caducidad** solo
+se imprime en el PDF: el Excel no la lleva aunque esté marcada.
 
 1. En **Para todos los clientes (por defecto)** marque las columnas que deben
    salir normalmente. Vienen marcadas todas menos **Caducidad**, que es como

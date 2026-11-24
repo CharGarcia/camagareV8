@@ -6,7 +6,7 @@ ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
 etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra, asiento de apertura, cambiar cuenta de la apertura, editar apertura del ejercicio, asignar cuenta desde el aviso, configurar cuenta de gasto, cuenta de costo del proveedor, falta subtotal factura de compras, asignar cuenta al proveedor, asignar cuenta al cliente, cuenta por cobrar del cliente, cuenta de ingreso, forma de pago sin cuenta, concepto sin cuenta, cuenta por ítem, muchos pendientes, asignar a todos, pestañas del aviso, ver por categoría, cuenta por categoría, cuenta por marca, cuenta por producto, volver a generar, que compró el proveedor, items comprados, que cuenta asignar
-version: 1.55
+version: 1.56
 orden: 20
 estado: activo
 ---
@@ -464,9 +464,14 @@ Cada pestaña de tipo de asiento muestra una tabla delgada:
 | Columna | Qué tiene |
 |---|---|
 | **Nombre** | Quién necesita la cuenta: un proveedor, un cliente, un ítem, un producto, una categoría o una marca (una fila por registro) |
-| **Compró** | Solo en *Adquisiciones de Compras*, vista por proveedor: qué se le compró en los documentos pendientes (los ítems más repetidos primero; la lista completa al pasar el mouse). Sirve para saber qué cuenta asignarle: si compró diésel y gasolina, combustibles; si compró mercadería, inventario |
 | **Doc.** | Cuántos documentos están detenidos por esa fila |
 | **Una columna por cuenta que falta** | Normalmente solo la del subtotal (gasto o costo en compras, ingreso en ventas). Si en ese tipo de asiento falta otra cuenta (por ejemplo, la cuenta por pagar), aparece otra columna |
+
+En *Adquisiciones de Compras*, vista por proveedor, el nombre del proveedor (con el
+ícono de una bolsa) se puede **pulsar**: abre una ventanita con lo que se le compró
+en los documentos pendientes de contabilizar (los ítems más repetidos primero). Sirve
+para saber qué cuenta asignarle: si compró diésel y gasolina, combustibles; si compró
+mercadería, inventario. Se cierra con la X, con Esc o pulsando fuera.
 
 En cada celda se escribe parte del código o del nombre de la cuenta y se elige de
 la lista (también con las flechas y Enter). **La cuenta se guarda al elegirla**:
@@ -759,6 +764,7 @@ genera el módulo **Cierre del Ejercicio**.
 
 ## Historial de cambios
 
+- **1.56** — En la pestaña *Adquisiciones de Compras* ya no está la columna «Compró»: al pulsar el nombre del proveedor se abre una ventanita con lo que se le compró en los documentos pendientes.
 - **1.55** — En las pestañas del aviso de asientos pendientes ya no está la fila «Todos — en la General»: cada fila es un registro (proveedor, cliente, ítem, producto, categoría o marca) y la cuenta se guarda solo para él; para una cuenta General, Configuración Contable. El contador de cada pestaña cuenta los registros pendientes, no las cuentas. En compras, la columna «Compró» muestra qué se le compró a cada proveedor en los documentos pendientes. Las líneas de la pestaña General ya no llevan el enlace «Configurar».
 - **1.54** — El aviso de asientos pendientes se abre en pestañas: «General» con lo de siempre y una por tipo de asiento (Ventas con Factura, Recibos, Adquisiciones de Compras, Cobros y Pagos, Ingresos y Egresos). Cada una tiene una tabla delgada (nombre, documentos y la cuenta que falta) que guarda la cuenta al elegirla, con la fila «Todos — en la General» y la vista «Ver por» (proveedor, cliente, ítem, producto, categoría o marca), que se abre según cómo contabiliza la empresa. Reemplaza las filas resumen de la versión 1.53.
 - **1.53** — El aviso que queda al terminar de generar asientos pendientes permite **asignar ahí mismo** las cuentas que faltan, sin abrir Configuración Contable, y **volver a generar**: en compras y liquidaciones (en la General, solo para el proveedor o solo para un ítem de compra), en facturas, notas de crédito y recibos de venta (en la General o solo para el cliente), en formas de cobro y pago y en conceptos de ingresos y egresos (también inactivos). Cuando a muchos les falta la misma cuenta, una fila resumen la asigna en la General a todos de una vez. También en Estados Financieros, Balance de Comprobación y Mayores.

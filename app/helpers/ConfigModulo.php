@@ -56,7 +56,7 @@ final class ConfigModulo
                 'columnas_pdf' => [
                     'tipo'        => 'columnas',
                     'etiqueta'    => 'Columnas del detalle de productos (PDF y Excel)',
-                    'ayuda'       => 'Lote y Caducidad, aunque estén marcadas, solo salen si alguna línea de la consignación las tiene.',
+                    'ayuda'       => 'Lote y Caducidad, aunque estén marcadas, solo salen si alguna línea de la consignación las tiene. La Caducidad solo se imprime en el PDF: el Excel no la lleva.',
                     'por_cliente' => true,
                     'columnas'    => [
                         'codigo'      => ['titulo' => 'Código',      'def' => true],

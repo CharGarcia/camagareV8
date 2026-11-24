@@ -563,15 +563,19 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setCellValue('D4', 'Asesor: ' . (string)($cons['vendedor_nombre'] ?? ''));
             $sheet->setCellValue('A5', 'Resp. traslado: ' . (string)($cons['responsable_traslado_nombre'] ?? ''));
             $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($cons['estado'] ?? '')));
+            // Fecha y hora en que se saca el Excel: Retorno y Facturados (y por tanto el
+            // saldo) son los registrados hasta este momento.
+            $sheet->setCellValue('A6', 'Saldo al: ' . date('d-m-Y H:i:s'));
+            $sheet->getStyle('A6')->getFont()->setBold(true);
 
             // Columnas del detalle: las mismas que el PDF para este cliente (personalización
-            // de Configuración de Empresa → Consignaciones). Lote y Caducidad solo salen si
-            // alguna línea los tiene. "Acon" queda en blanco para anotar a mano.
+            // de Configuración de Empresa → Consignaciones), salvo la Caducidad, que el Excel
+            // no lleva (a pedido del usuario: solo el PDF la muestra). Lote solo sale si
+            // alguna línea lo tiene. "Acon" queda en blanco para anotar a mano.
             $visibles = $this->columnasDetalle($idEmpresa, $cons);
-            $hayLote = false; $hayCaducidad = false;
+            $hayLote = false;
             foreach ($detalles as $d) {
-                if (trim((string)($d['lote'] ?? '')) !== '') { $hayLote = true; }
-                if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') { $hayCaducidad = true; }
+                if (trim((string)($d['lote'] ?? '')) !== '') { $hayLote = true; break; }
             }
             $posibles = [
                 'codigo'      => ['Código',      'texto'],
@@ -579,7 +583,6 @@ class ConsignacionesVentasController extends BaseModuloController
                 'bodega'      => ['Bodega',      'texto'],
                 'lote'        => ['Lote',        'texto'],
                 'nup'         => ['NUP',         'texto'],
-                'caducidad'   => ['Caducidad',   'texto'],
                 'cantidad'    => ['Cantidad',    'numero'],
                 'retornado'   => ['Retorno',     'numero'],
                 'facturado'   => ['Facturados',  'numero'],
@@ -589,7 +592,6 @@ class ConsignacionesVentasController extends BaseModuloController
             foreach ($posibles as $clave => $def) {
                 if (!in_array($clave, $visibles, true) && !in_array($clave, ['descripcion', 'cantidad'], true)) continue;
                 if ($clave === 'lote' && !$hayLote) continue;
-                if ($clave === 'caducidad' && !$hayCaducidad) continue;
                 $columnas[$clave] = $def;
             }
 
@@ -618,12 +620,6 @@ class ConsignacionesVentasController extends BaseModuloController
                         case 'bodega':      $txt = (string)($d['bodega_nombre'] ?? ''); break;
                         case 'lote':        $txt = (string)($d['lote'] ?? ''); break;
                         case 'nup':         $txt = (string)($d['nup'] ?? ''); break;
-                        case 'caducidad':
-                            // dd-mm-aaaa; en blanco si la línea no la tiene.
-                            $fc   = trim((string)($d['fecha_caducidad'] ?? ''));
-                            $tsFc = $fc !== '' ? strtotime($fc) : false;
-                            $txt  = $tsFc ? date('d-m-Y', $tsFc) : '';
-                            break;
                         default: $txt = null;
                     }
                     if ($def[1] === 'texto') {

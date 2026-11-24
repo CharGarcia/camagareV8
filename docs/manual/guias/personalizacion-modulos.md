@@ -35,7 +35,8 @@ Hay dos niveles:
 
 En Consignaciones, las columnas posibles son Código, Descripción, Bodega, Lote,
 NUP, Caducidad, Cantidad, Retorno, Facturados y Acon. Descripción y Cantidad
-salen siempre. Por defecto salen todas menos Caducidad. El detalle está en el
+salen siempre. Por defecto salen todas menos Caducidad, que además solo se
+imprime en el PDF (el Excel no la lleva). El detalle está en el
 manual del módulo **Empresa**, sección *Pestaña Consignaciones*.
 
 ## Cómo se usa
