@@ -814,6 +814,7 @@ window.RI_Existencias = {
             fecha_corte: 'ri-ex-fecha-corte',
             numero_lote: 'ri-ex-lote', nup: 'ri-ex-nup',
             fecha_caducidad_desde: 'ri-ex-caducidad-desde', fecha_caducidad_hasta: 'ri-ex-caducidad-hasta',
+            vencimiento: 'ri-ex-vencimiento',
         });
         const texto = (document.getElementById('ri-ex-search-producto')?.value || '').trim();
         if (!params.get('id_producto') && texto !== '') params.set('buscar', texto);
@@ -832,7 +833,8 @@ window.RI_Existencias = {
         if (!sel || sel.value !== 'GENERAL') return;
         const val = id => (document.getElementById(id)?.value || '').trim();
         const lote = val('ri-ex-lote'), nup = val('ri-ex-nup');
-        const cad = val('ri-ex-caducidad-desde') !== '' || val('ri-ex-caducidad-hasta') !== '';
+        // El selector Vencimiento es un filtro de caducidad más (el servidor lo vuelve un rango).
+        const cad = val('ri-ex-caducidad-desde') !== '' || val('ri-ex-caducidad-hasta') !== '' || val('ri-ex-vencimiento') !== '';
         const nuevo = nup !== '' ? 'LOTE_CADUCIDAD' : (lote !== '' ? 'LOTE' : (cad ? 'CADUCIDAD' : ''));
         if (!nuevo) return;
 

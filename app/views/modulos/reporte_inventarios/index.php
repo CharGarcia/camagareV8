@@ -184,6 +184,17 @@ $riSubtitulo = count($riNombres) > 1
 
                         <div class="d-flex flex-wrap align-items-start gap-2">
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Vencimiento</label>
+                                <select id="ri-ex-vencimiento" class="form-select form-select-sm shadow-none border" style="width:150px;"
+                                        title="Se cuenta a la fecha del Saldo al (o a hoy, si no hay fecha de corte)">
+                                    <option value="">Todos</option>
+                                    <option value="CADUCADOS">Caducados</option>
+                                    <option value="POR_VENCER_30">Vencen en 30 días</option>
+                                    <option value="POR_VENCER_90">Vencen en 90 días</option>
+                                    <option value="VIGENTES">Vigentes (no caducados)</option>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Caducidad desde</label>
                                 <input type="date" id="ri-ex-caducidad-desde" class="form-control form-control-sm shadow-none border" style="width:115px;">
                             </div>

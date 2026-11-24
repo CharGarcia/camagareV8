@@ -384,16 +384,65 @@ class ReporteInventariosController extends BaseModuloController
         return $desglose;
     }
 
+    /** Opciones del selector Vencimiento de Existencias (clave => etiqueta). */
+    private const VENCIMIENTOS = [
+        'CADUCADOS'     => 'Caducados',
+        'POR_VENCER_30' => 'Vencen en 30 días',
+        'POR_VENCER_90' => 'Vencen en 90 días',
+        'VIGENTES'      => 'Vigentes (no caducados)',
+    ];
+
+    /**
+     * Convierte el selector Vencimiento en un rango de caducidad y lo cruza con el que el
+     * usuario haya escrito a mano (se queda la intersección). Así todo lo demás —el cambio
+     * automático a "Por caducidad", el seguimiento de negativos, Excel y PDF— funciona igual
+     * que con las fechas escritas. La referencia es la fecha de corte ("Saldo al") o hoy:
+     *  - Caducados: caducidad ANTERIOR a la referencia (el día de la caducidad aún es válido).
+     *  - Vencen en N días: desde la referencia hasta referencia + N.
+     *  - Vigentes: desde la referencia en adelante.
+     * Los lotes sin fecha de caducidad no entran en ninguna opción.
+     *
+     * @return array{0: string, 1: string} [desde, hasta] en Y-m-d ('' = sin límite)
+     */
+    private static function rangoCaducidadConVencimiento(string $desde, string $hasta, string $vencimiento, string $corte): array
+    {
+        if (!isset(self::VENCIMIENTOS[$vencimiento])) {
+            return [$desde, $hasta];
+        }
+        $ref = ($corte !== '' && strtotime($corte) !== false) ? strtotime($corte) : strtotime('today');
+        [$vDesde, $vHasta] = match ($vencimiento) {
+            'CADUCADOS'     => ['', date('Y-m-d', strtotime('-1 day', $ref))],
+            'POR_VENCER_30' => [date('Y-m-d', $ref), date('Y-m-d', strtotime('+30 days', $ref))],
+            'POR_VENCER_90' => [date('Y-m-d', $ref), date('Y-m-d', strtotime('+90 days', $ref))],
+            default         => [date('Y-m-d', $ref), ''],
+        };
+        // Intersección: el desde más tardío y el hasta más temprano (Y-m-d compara como texto).
+        $desdeFinal = max($desde, $vDesde);
+        $hastaFinal = ($hasta === '') ? $vHasta : (($vHasta === '') ? $hasta : min($hasta, $vHasta));
+        return [$desdeFinal, $hastaFinal];
+    }
+
     private function getFiltrosExistencias(): array
     {
+        $vencimiento = (string) ($_REQUEST['vencimiento'] ?? '');
+        if (!isset(self::VENCIMIENTOS[$vencimiento])) {
+            $vencimiento = '';
+        }
+        [$cadDesde, $cadHasta] = self::rangoCaducidadConVencimiento(
+            (string) ($_REQUEST['fecha_caducidad_desde'] ?? ''),
+            (string) ($_REQUEST['fecha_caducidad_hasta'] ?? ''),
+            $vencimiento,
+            (string) ($_REQUEST['fecha_corte'] ?? '')
+        );
         return [
             'desglose'     => self::desgloseSegunFiltrosDeLote(
                 $this->resolverDesglose(),
                 trim((string) ($_REQUEST['numero_lote'] ?? '')),
                 trim((string) ($_REQUEST['nup'] ?? '')),
-                (string) ($_REQUEST['fecha_caducidad_desde'] ?? ''),
-                (string) ($_REQUEST['fecha_caducidad_hasta'] ?? '')
+                $cadDesde,
+                $cadHasta
             ),
+            'vencimiento'  => $vencimiento,
             'agrupar_por'  => $_REQUEST['agrupar_por'] ?? 'NINGUNO',
             'id_bodega'    => $_REQUEST['id_bodega']    ?? '',
             'id_categoria' => $_REQUEST['id_categoria'] ?? '',
@@ -404,8 +453,8 @@ class ReporteInventariosController extends BaseModuloController
             'fecha_corte'  => $_REQUEST['fecha_corte'] ?? '',
             'numero_lote'  => trim($_REQUEST['numero_lote'] ?? ''),
             'nup'          => trim($_REQUEST['nup'] ?? ''),
-            'fecha_caducidad_desde' => $_REQUEST['fecha_caducidad_desde'] ?? '',
-            'fecha_caducidad_hasta' => $_REQUEST['fecha_caducidad_hasta'] ?? '',
+            'fecha_caducidad_desde' => $cadDesde,
+            'fecha_caducidad_hasta' => $cadHasta,
             'orden'        => $_REQUEST['orden'] ?? '',
             'dir'          => $_REQUEST['dir'] ?? 'ASC',
             'buscar'       => trim($_REQUEST['buscar']  ?? ''),
@@ -2203,6 +2252,9 @@ class ReporteInventariosController extends BaseModuloController
             $cadHasta !== ''                     => "Hasta {$cadHasta}",
             default                              => 'Todas',
         };
+        if (($f['vencimiento'] ?? '') !== '') {
+            $lineas['Vencimiento'] = self::VENCIMIENTOS[$f['vencimiento']] ?? $f['vencimiento'];
+        }
         if ($f['buscar'] !== '') {
             $lineas['Búsqueda'] = $f['buscar'];
         }
