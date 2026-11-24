@@ -156,6 +156,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 $columnasTabla = [
                     'anio'             => 'Año',
                     'fecha_cierre'     => 'Fecha cierre',
+                    'inicio_apertura'  => 'Inicio apertura',
+                    'fin_periodo'      => 'Fin nuevo período',
                     'saldos_desde'     => 'Saldos desde',
                     'asiento_cierre'   => 'Asiento cierre',
                     'asiento_apertura' => 'Asiento apertura',
@@ -196,6 +198,8 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <tr>
                         <th class="ps-3 sortable-header" role="button" data-sort="anio" data-col="anio">Año <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="fecha_cierre" data-col="fecha_cierre">Fecha cierre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="inicio_apertura" data-col="inicio_apertura" title="Fecha del asiento de apertura: inicio del nuevo período">Inicio apertura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
+                        <th class="sortable-header" role="button" data-sort="fin_periodo" data-col="fin_periodo" title="Último día del ejercicio que arranca con la apertura">Fin nuevo período <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="saldos_desde" data-col="saldos_desde">Saldos desde <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="asiento_cierre" data-col="asiento_cierre">Asiento cierre <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>
                         <th class="sortable-header" role="button" data-sort="asiento_apertura" data-col="asiento_apertura">Asiento apertura <i class="bi bi-arrow-down-up small text-muted ms-1"></i></th>

@@ -22,6 +22,8 @@ class CierreEjercicioRepository extends BaseRepository
     public const MAPA_ORDEN = [
         'anio'             => 'ce.anio',
         'fecha_cierre'     => 'ce.fecha_cierre',
+        'inicio_apertura'  => 'ce.fecha_apertura',
+        'fin_periodo'      => 'MAKE_DATE(ce.anio + 1, 12, 31)',
         'saldos_desde'     => 'ce.saldos_desde',
         'asiento_cierre'   => 'ac.numero_comprobante',
         'asiento_apertura' => 'aa.numero_comprobante',

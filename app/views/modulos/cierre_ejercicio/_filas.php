@@ -8,7 +8,7 @@
 $n = static fn($v) => number_format((float) $v, 2, ',', '.');
 if (empty($rows)): ?>
     <tr>
-        <td colspan="10" class="text-center py-5 text-muted"><i class="bi bi-journal-x fs-3 d-block mb-2"></i>No se encontraron cierres del ejercicio.</td>
+        <td colspan="12" class="text-center py-5 text-muted"><i class="bi bi-journal-x fs-3 d-block mb-2"></i>No se encontraron cierres del ejercicio.</td>
     </tr>
 <?php else:
     foreach ($rows as $r):
@@ -17,6 +17,8 @@ if (empty($rows)): ?>
     <tr class="cierre-row" role="button" tabindex="0" data-id="<?= (int) $r['id'] ?>" onclick="CE_detalle(<?= (int) $r['id'] ?>)">
         <td class="ps-3 fw-medium" data-col="anio"><?= (int) $r['anio'] ?></td>
         <td data-col="fecha_cierre"><?= htmlspecialchars($r['fmt_fecha_cierre']) ?></td>
+        <td data-col="inicio_apertura"><?= htmlspecialchars($r['fmt_fecha_apertura']) ?></td>
+        <td data-col="fin_periodo"><?= htmlspecialchars($r['fmt_fin_periodo']) ?></td>
         <td data-col="saldos_desde"><?= htmlspecialchars($r['fmt_saldos_desde']) ?></td>
         <td data-col="asiento_cierre"><code class="text-secondary"><?= htmlspecialchars((string) ($r['numero_cierre'] ?? '—')) ?></code></td>
         <td data-col="asiento_apertura"><code class="text-secondary"><?= htmlspecialchars((string) ($r['numero_apertura'] ?? '—')) ?></code></td>

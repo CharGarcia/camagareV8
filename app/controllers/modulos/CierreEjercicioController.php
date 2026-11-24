@@ -209,12 +209,12 @@ class CierreEjercicioController extends BaseModuloController
     {
         $this->requireLeer();
         [$rows, $nombreEmpresa] = $this->filasExportacion();
-        $headers = ['Año', 'Fecha cierre', 'Saldos desde', 'Asiento cierre', 'Asiento apertura', 'Resultado del año',
+        $headers = ['Año', 'Fecha cierre', 'Inicio apertura', 'Fin nuevo período', 'Saldos desde', 'Asiento cierre', 'Asiento apertura', 'Resultado del año',
                     'Resultados anteriores', 'Activos', 'Pasivos', 'Patrimonio', 'Estado', 'Registrado por', 'Registrado el'];
         $data = [];
         foreach ($rows as $r) {
             $data[] = [
-                $r['anio'], $r['fmt_fecha_cierre'], $r['fmt_saldos_desde'], $r['numero_cierre'] ?? '', $r['numero_apertura'] ?? '',
+                $r['anio'], $r['fmt_fecha_cierre'], $r['fmt_fecha_apertura'], $r['fmt_fin_periodo'], $r['fmt_saldos_desde'], $r['numero_cierre'] ?? '', $r['numero_apertura'] ?? '',
                 (float) $r['resultado'], (float) $r['resultado_anterior'], (float) $r['total_activos'],
                 (float) $r['total_pasivos'], (float) $r['total_patrimonio'], $r['estado_texto'],
                 $r['creado_por_nombre'] ?? '', $r['fmt_created_at'],
@@ -249,29 +249,33 @@ class CierreEjercicioController extends BaseModuloController
             <table>
                 <thead>
                     <tr>
-                        <th style="width:7%">Año</th>
-                        <th style="width:11%">Saldos desde</th>
-                        <th style="width:12%">Asiento cierre</th>
-                        <th style="width:12%">Asiento apertura</th>
-                        <th style="width:13%" class="r">Resultado del año</th>
-                        <th style="width:13%" class="r">Activos</th>
-                        <th style="width:13%" class="r">Patrimonio</th>
-                        <th style="width:9%">Estado</th>
-                        <th style="width:10%">Registrado</th>
+                        <th style="width:6%">Año</th>
+                        <th style="width:9%">Inicio apertura</th>
+                        <th style="width:9%">Fin nuevo período</th>
+                        <th style="width:9%">Saldos desde</th>
+                        <th style="width:10%">Asiento cierre</th>
+                        <th style="width:10%">Asiento apertura</th>
+                        <th style="width:11%" class="r">Resultado del año</th>
+                        <th style="width:11%" class="r">Activos</th>
+                        <th style="width:11%" class="r">Patrimonio</th>
+                        <th style="width:7%">Estado</th>
+                        <th style="width:7%">Registrado</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($rows as $r): ?>
                         <tr>
-                            <td style="width:7%"><?= (int) $r['anio'] ?></td>
-                            <td style="width:11%"><?= htmlspecialchars($r['fmt_saldos_desde']) ?></td>
-                            <td style="width:12%"><?= htmlspecialchars((string) ($r['numero_cierre'] ?? '')) ?></td>
-                            <td style="width:12%"><?= htmlspecialchars((string) ($r['numero_apertura'] ?? '')) ?></td>
-                            <td style="width:13%" class="r"><?= $n($r['resultado']) ?></td>
-                            <td style="width:13%" class="r"><?= $n($r['total_activos']) ?></td>
-                            <td style="width:13%" class="r"><?= $n($r['total_patrimonio']) ?></td>
-                            <td style="width:9%"><?= htmlspecialchars($r['estado_texto']) ?></td>
-                            <td style="width:10%"><?= htmlspecialchars(substr($r['fmt_created_at'], 0, 10)) ?></td>
+                            <td style="width:6%"><?= (int) $r['anio'] ?></td>
+                            <td style="width:9%"><?= htmlspecialchars($r['fmt_fecha_apertura']) ?></td>
+                            <td style="width:9%"><?= htmlspecialchars($r['fmt_fin_periodo']) ?></td>
+                            <td style="width:9%"><?= htmlspecialchars($r['fmt_saldos_desde']) ?></td>
+                            <td style="width:10%"><?= htmlspecialchars((string) ($r['numero_cierre'] ?? '')) ?></td>
+                            <td style="width:10%"><?= htmlspecialchars((string) ($r['numero_apertura'] ?? '')) ?></td>
+                            <td style="width:11%" class="r"><?= $n($r['resultado']) ?></td>
+                            <td style="width:11%" class="r"><?= $n($r['total_activos']) ?></td>
+                            <td style="width:11%" class="r"><?= $n($r['total_patrimonio']) ?></td>
+                            <td style="width:7%"><?= htmlspecialchars($r['estado_texto']) ?></td>
+                            <td style="width:7%"><?= htmlspecialchars(substr($r['fmt_created_at'], 0, 10)) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -317,6 +321,8 @@ class CierreEjercicioController extends BaseModuloController
         $fh = static fn($d) => !empty($d) ? date('d-m-Y H:i:s', strtotime((string) $d)) : '';
         $r['fmt_fecha_cierre']   = $f($r['fecha_cierre'] ?? null);
         $r['fmt_fecha_apertura'] = $f($r['fecha_apertura'] ?? null);
+        // Fin del ejercicio que arranca con la apertura: 31-12 del año siguiente al cerrado.
+        $r['fmt_fin_periodo']    = !empty($r['anio']) ? '31-12-' . ((int) $r['anio'] + 1) : '';
         $r['fmt_saldos_desde']   = !empty($r['saldos_desde']) ? $f($r['saldos_desde']) : 'Todo el histórico';
         $r['fmt_created_at']     = $fh($r['created_at'] ?? null);
         $r['fmt_revertido_at']   = $fh($r['revertido_at'] ?? null);

@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/cierre_ejercicio
 tipo: modulo
 visibilidad: todos
-etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable, periodo que cierra, periodo que inicia, ejercicio siguiente, modificar apertura, cambiar cuenta de la apertura, reclasificar saldo inicial, editar asiento de apertura
-version: 1.5
+etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable, periodo que cierra, periodo que inicia, ejercicio siguiente, inicio apertura, fin nuevo periodo, columnas del listado, modificar apertura, cambiar cuenta de la apertura, reclasificar saldo inicial, editar asiento de apertura
+version: 1.6
 orden: 35
 estado: activo
 ---
@@ -88,6 +88,14 @@ superponerse a los que ya existen.
 Para ver un cierre, haga clic en su fila: se abre la misma ventana, en modo consulta,
 con los dos asientos, quién lo
 registró y cuándo.
+
+### Columnas del listado
+
+Año, Fecha cierre (31-12 del año cerrado), **Inicio apertura** (fecha del asiento de
+apertura, 01-01 del año siguiente), **Fin nuevo período** (31-12 del año siguiente), Saldos
+desde, Asiento cierre, Asiento apertura, Resultado del año, Activos, Patrimonio, Estado y
+Registrado. Todas se pueden ordenar, ocultar desde el botón de columnas y salen también en
+el Excel y el PDF.
 
 ## Campos del formulario
 
@@ -206,6 +214,8 @@ traídos de la migración:
 
 ## Historial de cambios
 
+- **1.6** — El listado, el Excel y el PDF tienen las columnas **Inicio apertura** y **Fin nuevo
+  período** (del 01-01 al 31-12 del año que arranca con la apertura).
 - **1.5** — La ventana del cierre muestra el **Período que cierra** y el **Período que inicia**,
   al crear un cierre nuevo y al abrir uno ya registrado.
 - **1.4** — El asiento de apertura se puede editar desde Asientos Contables para cambiar
