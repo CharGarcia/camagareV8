@@ -596,8 +596,15 @@
                             </select>
                           </div>
                           <div class="col-6">
-                            <label class="form-label fw-bold mb-0 text-muted" style="font-size:0.7rem;">Fecha Emisión <span class="text-danger">*</span></label>
-                            <input type="date" class="form-control form-control-sm shadow-none border-secondary-subtle" id="pagoFechaEmision" value="<?= date('Y-m-d') ?>" required>
+                            <div class="d-flex justify-content-between align-items-center">
+                              <label class="form-label fw-bold mb-0 text-muted" style="font-size:0.7rem;" for="pagoFechaEmision">Fecha Emisión <span class="text-danger">*</span></label>
+                              <!-- Fecha del egreso: hoy o la de emisión de la compra. La elección se recuerda por usuario. -->
+                              <div class="btn-group" role="group" aria-label="Fecha del egreso">
+                                <button type="button" class="btn btn-outline-secondary py-0 px-1" style="font-size:0.62rem;line-height:1.3;" id="pagoFechaModoHoy" onclick="CMG_pagoFechaModo('HOY', true)" title="Usar la fecha de hoy">Hoy</button>
+                                <button type="button" class="btn btn-outline-secondary py-0 px-1" style="font-size:0.62rem;line-height:1.3;" id="pagoFechaModoDoc" onclick="CMG_pagoFechaModo('DOCUMENTO', true)" title="Usar la fecha de emisión de la compra">Documento</button>
+                              </div>
+                            </div>
+                            <input type="date" class="form-control form-control-sm shadow-none border-secondary-subtle" id="pagoFechaEmision" value="<?= date('Y-m-d') ?>" onchange="CMG_pagoFechaModo('MANUAL', false)" required>
                           </div>
                           
                           <div class="col-6">

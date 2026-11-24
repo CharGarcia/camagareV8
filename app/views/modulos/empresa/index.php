@@ -1651,7 +1651,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" role="switch" name="editar_descripcion_factura" id="sw_edit_descripcion" <?= (($empresa['editar_descripcion_factura'] ?? false) === 'true' || ($empresa['editar_descripcion_factura'] ?? false) === true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small fw-bold" for="sw_edit_descripcion">¿Se puede editar la descripción de un producto o servicio en la factura?</label>
-                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Después de elegir el producto, permite modificar su descripción solo para esa factura, recibo de venta o proforma. El código y el catálogo de productos no cambian.</div>
+                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Después de elegir el producto, permite modificar su descripción manteniendo el mismo código. En facturas y recibos de venta la descripción nueva queda también en el catálogo de productos; en proformas, solo en la proforma.</div>
                                         </div>
                                         <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" role="switch" name="editar_iva_factura" id="sw_edit_iva" <?= (($empresa['editar_iva_factura'] ?? true) === 'true' || ($empresa['editar_iva_factura'] ?? true) === true) ? 'checked' : '' ?>>

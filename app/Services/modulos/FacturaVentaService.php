@@ -755,6 +755,10 @@ class FacturaVentaService
                     $det['nombre'] = $det['descripcion'];
                 }
 
+                // Ítem libre con el código de un producto existente: si la configuración
+                // permite editar la descripción, se usa ese producto con la descripción escrita.
+                \App\Helpers\DescripcionItemDocumento::enlazarCodigoExistente($det, (int) $data['id_empresa'], $estConfig ?: null, $this->getInventarioService()->getProductoRepository());
+
                 // Obtener info de control si es producto de catÃ¡logo
                 if (!empty($det['id_producto'])) {
                     $infoInv = $this->getInventarioService()->getProductoRepository()->getInfoControlInventario((int)$det['id_producto'], (int)$data['id_empresa']);
@@ -914,6 +918,13 @@ class FacturaVentaService
                 }
             }
 
+            // Descripción editada por el usuario en el modal: el mismo código queda con la
+            // descripción nueva también en el catálogo (si Empresa → Facturación lo permite).
+            \App\Services\modulos\DescripcionProductoDocumentoService::actualizarCatalogo(
+                $data['detalles'] ?? [], $idEmpresa, $idUsuario, $estConfig ?: null,
+                $this->getInventarioService()->getProductoRepository(), $this->logService, 'factura_venta'
+            );
+
             // Reemplazar info adicional
             $this->repository->deleteInfoAdicional($id);
             if (!empty($data['info_adicional']) && is_array($data['info_adicional'])) {
@@ -1065,6 +1076,10 @@ class FacturaVentaService
                 if (empty($det['nombre']) && !empty($det['descripcion'])) {
                     $det['nombre'] = $det['descripcion'];
                 }
+
+                // Ítem libre con el código de un producto existente: si la configuración
+                // permite editar la descripción, se usa ese producto con la descripción escrita.
+                \App\Helpers\DescripcionItemDocumento::enlazarCodigoExistente($det, (int) $data['id_empresa'], $estConfig ?: null, $this->getInventarioService()->getProductoRepository());
 
                 // Obtener info de control si es producto de catÃ¡logo
                 if (!empty($det['id_producto'])) {
@@ -1227,6 +1242,13 @@ class FacturaVentaService
             // crear) para que queden guardados con el documento y viajen igual en el
             // XML y el RIDE sin importar el origen (Factura de Venta o POS). Así también
             // solo los documentos nuevos los llevan; los ya emitidos no se alteran.
+            // Descripción editada por el usuario en el modal: el mismo código queda con la
+            // descripción nueva también en el catálogo (si Empresa → Facturación lo permite).
+            \App\Services\modulos\DescripcionProductoDocumentoService::actualizarCatalogo(
+                $data['detalles'] ?? [], $idEmpresa, $idUsuario, $estConfig ?: null,
+                $this->getInventarioService()->getProductoRepository(), $this->logService, 'factura_venta'
+            );
+
             $infoAdicional = is_array($data['info_adicional'] ?? null) ? $data['info_adicional'] : [];
             $infoAdicional = \App\Helpers\SriProveedorHelper::conRucProveedor($infoAdicional);
             $infoAdicional = $this->conCorreoClienteInfoAdicional($infoAdicional, (int) $data['id_cliente'], $idEmpresa);

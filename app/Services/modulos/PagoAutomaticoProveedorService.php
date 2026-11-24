@@ -641,7 +641,7 @@ class PagoAutomaticoProveedorService
      * EgresoService revalida el saldo real bajo candado antes de escribir.
      *
      * @param array{id_forma_pago:int, id_egreso_concepto:int, id_punto_emision:int,
-     *              fecha_egreso:string, tipo_operacion:?string, fecha_cobro:?string,
+     *              fecha_egreso:string, fecha_por_documento?:bool, tipo_operacion:?string, fecha_cobro:?string,
      *              referencia:?string} $pago
      * @return array{generados:int, total:float, egresos:array, fallidos:array}
      */
@@ -667,9 +667,15 @@ class PagoAutomaticoProveedorService
             throw new \Exception('La forma de pago seleccionada está inactiva o fue eliminada.');
         }
 
+        // Fecha de los egresos: la del formulario, o —con fecha_por_documento— la de emisión
+        // de cada compra (generarParaCompra la usa cuando no recibe 'fecha_egreso').
+        $porDocumento = !empty($pago['fecha_por_documento']);
         $fecha = (string) ($pago['fecha_egreso'] ?? '');
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
             $fecha = date('Y-m-d');
+        }
+        if ($porDocumento) {
+            $fecha = null;
         }
 
         $config = [

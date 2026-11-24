@@ -1511,6 +1511,8 @@ class ComprasController extends BaseModuloController
                     'id_egreso_concepto' => (int) ($post['id_egreso_concepto'] ?? 0),
                     'id_punto_emision'   => (int) ($post['id_punto_emision'] ?? 0),
                     'fecha_egreso'       => (string) ($post['fecha_emision'] ?? ''),
+                    // 'DOCUMENTO': cada egreso lleva la fecha de emisión de su propia compra.
+                    'fecha_por_documento' => ($post['fecha_modo'] ?? '') === 'DOCUMENTO',
                     'tipo_operacion'     => !empty($post['tipo_operacion_bancaria']) ? trim((string) $post['tipo_operacion_bancaria']) : null,
                     'fecha_cobro'        => !empty($post['fecha_cobro']) ? (string) $post['fecha_cobro'] : null,
                     'referencia'         => !empty($post['numero_operacion']) ? trim((string) $post['numero_operacion']) : null,

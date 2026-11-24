@@ -520,6 +520,43 @@ class ProductoRepository extends BaseRepository
      * entre empresas reactive en vez de duplicar). Case-insensitive, mismo criterio
      * que existeCodigo().
      */
+    /**
+     * Id del producto vigente (no eliminado) con ese código principal, o null.
+     * A diferencia de findByCodigo(), no devuelve productos eliminados.
+     */
+    public function getIdVigentePorCodigo(int $idEmpresa, string $codigo): ?int
+    {
+        $sql = "SELECT id FROM {$this->table}
+                WHERE id_empresa = :id_empresa AND lower(codigo) = lower(:codigo) AND eliminado = false
+                ORDER BY id LIMIT 1";
+        $st = $this->db->prepare($sql);
+        $st->execute([':id_empresa' => $idEmpresa, ':codigo' => trim($codigo)]);
+        $id = $st->fetchColumn();
+        return $id ? (int) $id : null;
+    }
+
+    /** Nombre actual de un producto vigente de la empresa, o null si no existe. */
+    public function getNombreVigente(int $id, int $idEmpresa): ?string
+    {
+        $st = $this->db->prepare("SELECT nombre FROM {$this->table}
+                                  WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false");
+        $st->execute([':id' => $id, ':id_empresa' => $idEmpresa]);
+        $nombre = $st->fetchColumn();
+        return $nombre === false ? null : (string) $nombre;
+    }
+
+    /**
+     * Cambia solo el nombre del producto (descripción editada desde un documento;
+     * ver DescripcionProductoDocumentoService). El código y lo demás no se tocan.
+     */
+    public function actualizarNombre(int $id, int $idEmpresa, string $nombre, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE {$this->table}
+                                  SET nombre = :nombre, updated_by = :uid, updated_at = CURRENT_TIMESTAMP
+                                  WHERE id = :id AND id_empresa = :id_empresa AND eliminado = false");
+        $st->execute([':nombre' => $nombre, ':uid' => $idUsuario, ':id' => $id, ':id_empresa' => $idEmpresa]);
+    }
+
     public function findByCodigo(int $idEmpresa, string $codigo): ?array
     {
         $sql = "SELECT * FROM {$this->table}

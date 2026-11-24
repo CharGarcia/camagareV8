@@ -808,6 +808,10 @@ En la pestaña **Pagos** de la compra se registran pagos totales o parciales
 
 - La primera vez que abre la pestaña, el **Monto** trae el saldo pendiente.
   Puede cambiarlo para registrar un abono.
+- La **Fecha Emisión** es la fecha con la que se genera el egreso. Los botones
+  **Hoy** y **Documento**, sobre el campo, la ponen en la fecha de hoy o en la
+  fecha de emisión de la compra; también puede escribir otra. El sistema
+  **recuerda su elección** y la próxima vez el campo ya viene así.
 - Al pulsar **Registrar Pago y Generar Egreso** (o Enter en el formulario) el
   sistema pide **confirmar el monto y la forma de pago**. Si ese pago cubre todo el
   saldo, el aviso lo indica.
@@ -837,6 +841,10 @@ pagadas en parte). No entran las anuladas, las rechazadas ni las **pendientes de
 aprobación**. Un usuario sin *Acceso total* solo ve y paga las compras que él
 registró.
 
+- **Fecha de los egresos**: si pagó con **Hoy** o con una fecha escrita, todos
+  llevan esa fecha. Si pagó con **Documento**, cada egreso lleva la fecha de
+  emisión de **su propia compra**; una compra cuya fecha cae en un periodo
+  cerrado no se paga y aparece en la lista de las que fallaron.
 - Con **cheque**, cada egreso lleva el siguiente número de cheque y la fecha de
   cobro indicada en el formulario.
 - Con **transferencia, depósito o débito**, todos los egresos llevan el mismo
@@ -971,7 +979,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
-- **2.54** — Pestaña **Pagos**: después de registrar un pago, si el proveedor tiene más compras con saldo, el sistema ofrece **pagarlas con la misma forma de pago** (un egreso por compra). Ver *Pagar las demás compras del proveedor con la misma forma de pago*.
+- **2.54** — Pestaña **Pagos**: después de registrar un pago, si el proveedor tiene más compras con saldo, el sistema ofrece **pagarlas con la misma forma de pago** (un egreso por compra). Ver *Pagar las demás compras del proveedor con la misma forma de pago*. Además, botones **Hoy / Documento** para elegir la fecha del egreso, recordados por usuario.
 - **2.53** — En la pestaña **Asiento contable**, el ícono **ⓘ** de cada línea muestra **de qué líneas de la compra sale ese valor** (cuenta por pagar, gasto, inventario, IVA). Ver *¿De dónde sale cada valor del asiento?*.
 - **2.52** — La pestaña de Descargas SRI donde quedan los comprobantes eliminados (antes *Documentos para no descargar*) ahora se llama **Claves a no registrar**; los avisos al eliminar usan el nombre nuevo.
 - **2.51** — **Facturas de reembolso recibidas**: el sustento tributario ya no se fuerza ni se bloquea en *08*. Ese código es del intermediario que pide el reembolso; la factura recibida lleva el sustento normal de la compra (normalmente 01) y el ATS la reporta como comprobante tipo 41. Las que quedaron con 08 se corrigen eligiendo el sustento en la compra.

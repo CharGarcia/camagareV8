@@ -4617,17 +4617,46 @@ window.CMG_cargarPagosTab = async function(opts = {}) {
                 else obsInput.value = `Pago factura de compra ${numComp}`;
             }
             
-            const fEmisInput = document.getElementById('pagoFechaEmision');
-            if (fEmisInput) {
-                const d_now = new Date();
-                const hoy = d_now.getFullYear() + '-' + String(d_now.getMonth() + 1).padStart(2, '0') + '-' + String(d_now.getDate()).padStart(2, '0');
-                fEmisInput.value = hoy;
-            }
+            // Fecha del egreso según la preferencia del usuario: hoy o la de la compra.
+            _cmgPagoFechaDoc = (compra.fecha_emision || '').slice(0, 10);
+            const prefFecha = (typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS.pago_fecha_modo === 'DOCUMENTO') ? 'DOCUMENTO' : 'HOY';
+            window.CMG_pagoFechaModo(prefFecha, false);
         }
 
     } catch (e) {
         console.error('Error al renderizar pestaña de pagos:', e);
         tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-danger">Fallo al cargar detalles: ${e.message}</td></tr>`;
+    }
+};
+
+// Fecha del egreso en la pestaña Pagos: 'HOY', 'DOCUMENTO' (fecha de emisión de la
+// compra) o 'MANUAL' (el usuario la escribió). `guardar` recuerda la elección por usuario.
+let _cmgPagoFechaDoc = '';
+let _cmgPagoFechaModoActual = 'HOY';
+window.CMG_pagoFechaModo = function(modo, guardar) {
+    const input = document.getElementById('pagoFechaEmision');
+    if (!input) return;
+
+    if (modo === 'DOCUMENTO' && !_cmgPagoFechaDoc) modo = 'HOY';
+    if (modo === 'HOY') input.value = CMG_fechaLocal();
+    else if (modo === 'DOCUMENTO') input.value = _cmgPagoFechaDoc;
+    _cmgPagoFechaModoActual = modo;
+
+    [['pagoFechaModoHoy', 'HOY'], ['pagoFechaModoDoc', 'DOCUMENTO']].forEach(([id, m]) => {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.classList.toggle('btn-secondary', m === modo);
+        b.classList.toggle('btn-outline-secondary', m !== modo);
+    });
+
+    if (guardar && typeof APP_FAVORITOS !== 'undefined' && APP_FAVORITOS.pago_fecha_modo !== modo) {
+        APP_FAVORITOS.pago_fecha_modo = modo;
+        const fd = new FormData();
+        fd.append('modulo', 'compras');
+        fd.append('campo', 'pago_fecha_modo');
+        fd.append('valor', modo);
+        fetch(typeof APP_FAVORITOS_URL !== 'undefined' ? APP_FAVORITOS_URL : '/Preferencias/guardarAjax', { method: 'POST', body: fd })
+            .catch(err => console.error('No se pudo guardar la preferencia de fecha del pago:', err));
     }
 };
 
@@ -4745,7 +4774,11 @@ async function _cmgOfrecerPagosPendientesProveedor(pago, nombreForma, msgPago, p
             + `<div class="mt-2" style="max-height:220px;overflow:auto;"><table class="table table-sm small mb-0">`
             + `<thead><tr><th class="text-start">Documento</th><th>Emisión</th><th class="text-end">Saldo</th></tr></thead><tbody>${filas}</tbody></table></div>`
             + (resto > 0 ? `<div class="small text-muted">… y ${resto} más.</div>` : '')
-            + `<div class="small text-muted mt-2">Se genera un egreso por cada compra, por su saldo completo, con fecha ${_esc((pago.fecha_emision || '').split('-').reverse().join('-'))}. ${nota}</div>`,
+            + `<div class="small text-muted mt-2">Se genera un egreso por cada compra, por su saldo completo, `
+            + (pago.fecha_modo === 'DOCUMENTO'
+                ? 'con la fecha de emisión de cada compra'
+                : `con fecha ${_esc((pago.fecha_emision || '').split('-').reverse().join('-'))}`)
+            + `. ${nota}</div>`,
         showCancelButton: true,
         confirmButtonText: '<i class="bi bi-cash-stack me-1"></i> Sí, generar pagos',
         cancelButtonText: 'No, solo este',
@@ -4773,6 +4806,7 @@ async function _cmgOfrecerPagosPendientesProveedor(pago, nombreForma, msgPago, p
                 id_compra: pago.id_compra,
                 id_punto_emision: pago.id_punto_emision,
                 fecha_emision: pago.fecha_emision,
+                fecha_modo: pago.fecha_modo,
                 id_egreso_concepto: pago.id_egreso_concepto,
                 id_forma_pago: pago.id_forma_pago,
                 tipo_operacion_bancaria: pago.tipo_operacion_bancaria,
@@ -4894,6 +4928,9 @@ window.CMG_registrarPagoEgreso = async function(e) {
             saldo_actual: saldoActual,
             id_punto_emision: parseInt(document.getElementById('pagoPuntoEmision').value, 10),
             fecha_emision: document.getElementById('pagoFechaEmision').value,
+            // Solo lo usa el aviso de más compras pendientes: con 'DOCUMENTO', cada egreso
+            // del lote lleva la fecha de emisión de su propia compra.
+            fecha_modo: (_cmgPagoFechaModoActual === 'DOCUMENTO' && document.getElementById('pagoFechaEmision').value === _cmgPagoFechaDoc) ? 'DOCUMENTO' : 'FIJA',
             id_egreso_concepto: parseInt(document.getElementById('pagoConcepto').value, 10),
             id_forma_pago: parseInt(document.getElementById('pagoFormaPago').value, 10),
             tipo_operacion_bancaria: esBanco ? (document.getElementById('pagoTipoOp')?.value || null) : null,

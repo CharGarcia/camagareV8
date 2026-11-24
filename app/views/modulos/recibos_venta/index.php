@@ -1571,6 +1571,10 @@ $totalPages = $totalPagesOriginal;
                 es_libre: esLibre ? '1' : '0',
                 codigo_principal: (esLibre && codTecleadoFila === '') ? '__LIBRE__' : codTecleadoFila,
                 descripcion: desc,
+                // Solo si el usuario editó la descripción de un producto del catálogo en esta
+                // sesión (y Empresa → Facturación lo permite): el servidor actualiza el catálogo.
+                descripcion_editada: (EMPRESA_CONFIG.editar_descripcion_factura && idProd && tr.dataset.descEditada === '1'
+                    && desc !== (tr.dataset.nombreCatalogo || '')) ? '1' : '0',
                 info_adicional: tr.querySelector('.input-adicional').value,
                 id_producto_variante: tr.querySelector('.input-id-variante').value || '',
                 id_unidad_medida: tr.querySelector('.input-medida').value || '',
@@ -3588,6 +3592,16 @@ $totalPages = $totalPagesOriginal;
             row.dataset.nombreCatalogo = p.nombre || '';
             row.dataset.descElegida = p.nombre || '';
             delete row.dataset.descTocada;
+            delete row.dataset.descEditada;
+            if (row._descLibrePrevia) {
+                row.dataset.descEditada = '1';
+                row.querySelector('.input-descripcion').value = row._descLibrePrevia;
+                row.dataset.descElegida = row._descLibrePrevia;
+            }
+            row._descLibrePrevia = '';
+            // Ya es un producto del catálogo, no un ítem libre.
+            const inpLibreSel = row.querySelector('.input-es-libre');
+            if (inpLibreSel) inpLibreSel.value = '0';
             row.querySelector('.input-precio').value = parseFloat(p.precio_base).toFixed(rvDecPrecio());
             row.querySelector('.input-id-producto').value = p.id;
             row.dataset.idProducto = p.id;
@@ -3857,6 +3871,15 @@ $totalPages = $totalPagesOriginal;
         };
 
         const buscarProductoAhora = async (q, sourceInput, miSeq) => {
+            // «¿Se puede editar la descripción…?» encendido: si la fila es un concepto
+            // escrito a mano (ítem libre, sin producto) y ahora se busca por la columna
+            // Código, esa descripción se conserva al elegir el producto: queda el código
+            // existente con la descripción nueva, solo en este documento.
+            tr._descLibrePrevia = (EMPRESA_CONFIG.editar_descripcion_factura
+                && sourceInput === tr.querySelector('.input-codigo')
+                && tr.querySelector('.input-es-libre')?.value === '1'
+                && !tr.querySelector('.input-id-producto').value)
+                ? (tr.querySelector('.input-descripcion').value || '').replace(/\s+/g, ' ').trim() : '';
             rvPosicionarDropdownProductos(sourceInput);
             dropdownGlobal.innerHTML = '<div class="list-group-item small text-muted">Buscando...</div>';
             dropdownGlobal._cmgFuente = null; // la lista es compartida entre filas
@@ -3976,8 +3999,8 @@ $totalPages = $totalPagesOriginal;
 
         // Empresa → Facturación «¿Se puede editar la descripción…?»: con un producto
         // ya elegido en la fila, la descripción deja de ser buscador y pasa a ser
-        // texto editable solo para este recibo (el catálogo y el código no cambian;
-        // el detalle guarda su propia copia). Para cambiar de producto se usa la
+        // texto editable (el código no cambia). Al guardar, la descripción nueva queda en
+        // el recibo y también en el catálogo de Productos (descripcion_editada). Para cambiar de producto se usa la
         // columna Código o se elimina la fila. Mismo criterio que Factura de Venta.
         const descEditable = () => !!EMPRESA_CONFIG.editar_descripcion_factura
                                 && !!tr.querySelector('.input-id-producto').value;
@@ -3985,6 +4008,9 @@ $totalPages = $totalPagesOriginal;
         const debDesc = debounceBusqueda(inputDesc);
         inputDesc.addEventListener('input', () => {
             if (descEditable()) {
+                // El usuario cambió la descripción: al guardar, el mismo código queda
+                // con esta descripción también en el catálogo de Productos.
+                tr.dataset.descEditada = '1';
                 debDesc.cancelar();
                 busqSeq++; busqMostrada = '';
                 dropdownGlobal.classList.add('d-none');
@@ -4366,6 +4392,11 @@ $totalPages = $totalPagesOriginal;
      * Configura una fila como ítem libre (servicio ad-hoc)
      */
     function seleccionarItemLibre(descripcion, row) {
+        // La fila tenía un producto del catálogo: el código que muestra es de ESE
+        // producto, no uno tecleado para el ítem libre. Se limpia para que el servicio
+        // nuevo reciba un código automático; si se conservara, el guardado se rechaza
+        // con «El código … ya existe en el catálogo de productos».
+        const teniaProducto = !!row.querySelector('.input-id-producto').value;
         row.querySelector('.input-descripcion').value = descripcion;
         row.querySelector('.input-id-producto').value = ''; // Sin ID de producto
         rvPintarInfoProducto(row, null);
@@ -4378,7 +4409,7 @@ $totalPages = $totalPagesOriginal;
         // "codigo_principal"), nunca se escribe en el input visible: mostrarle al
         // usuario el texto "__LIBRE__" en la columna Código es confuso.
         const inputCod = row.querySelector('.input-codigo');
-        const codTecleado = (inputCod.value || '').trim();
+        const codTecleado = teniaProducto ? '' : (inputCod.value || '').trim();
         inputCod.value = (codTecleado !== '' && codTecleado.toUpperCase() !== '__LIBRE__') ? codTecleado : '';
         row.querySelector('.input-es-libre').value = '1';
         row.dataset.tipoProduccion = '02'; // Los ítems libres se tratan como servicios ad-hoc

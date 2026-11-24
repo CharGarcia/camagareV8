@@ -100,7 +100,7 @@ class ReciboVentaService
      * Enriquece cada detalle con la info de control de inventario del producto y
      * normaliza el nombre. Devuelve el arreglo modificado.
      */
-    private function enriquecerDetalles(array &$data): void
+    private function enriquecerDetalles(array &$data, ?array $estConfig = null): void
     {
         if (!empty($data['detalles']) && is_array($data['detalles'])) {
             foreach ($data['detalles'] as &$det) {
@@ -118,6 +118,10 @@ class ReciboVentaService
                 if (empty($det['nombre']) && !empty($det['descripcion'])) {
                     $det['nombre'] = $det['descripcion'];
                 }
+                // Ítem libre con el código de un producto existente: si la configuración
+                // permite editar la descripción, se usa ese producto con la descripción escrita.
+                \App\Helpers\DescripcionItemDocumento::enlazarCodigoExistente($det, (int) $data['id_empresa'], $estConfig, $this->getInventarioService()->getProductoRepository());
+
                 if (!empty($det['id_producto'])) {
                     $infoInv = $this->getInventarioService()->getProductoRepository()->getInfoControlInventario((int)$det['id_producto'], (int)$data['id_empresa']);
                     $det['inventariable']   = $infoInv['inventariable'] ?? false;
@@ -299,7 +303,7 @@ class ReciboVentaService
             $data['tipo_id_cliente'] = '07';
         }
 
-        $this->enriquecerDetalles($data);
+        $this->enriquecerDetalles($data, $estConfig ?: null);
         // IVA recalculado en el servidor con la configuración de facturación de la serie
         // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
         // Un recibo "sin impuestos" no lleva IVA: se deja tal cual.
@@ -326,6 +330,13 @@ class ReciboVentaService
             $idRecibo = $this->repository->insertCabecera($data);
             $this->repository->setCajaSesion($idRecibo, !empty($data['id_caja_sesion']) ? (int) $data['id_caja_sesion'] : null);
             $this->guardarLineas($idRecibo, $data, $idEmpresa, $idUsuario);
+
+            // Descripción editada por el usuario en el modal: el mismo código queda con la
+            // descripción nueva también en el catálogo (si Empresa → Facturación lo permite).
+            \App\Services\modulos\DescripcionProductoDocumentoService::actualizarCatalogo(
+                $data['detalles'] ?? [], $idEmpresa, $idUsuario, $estConfig ?: null,
+                $this->getInventarioService()->getProductoRepository(), $this->logService, 'recibos_venta'
+            );
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'CREAR', 'recibos_venta_cabecera', $idRecibo,
@@ -391,7 +402,7 @@ class ReciboVentaService
             $data['tipo_id_cliente'] = '07';
         }
 
-        $this->enriquecerDetalles($data);
+        $this->enriquecerDetalles($data, $estConfig ?: null);
         // IVA recalculado en el servidor con la configuración de facturación de la serie
         // (al subtotal / línea por línea): no se guarda lo que mande quien llama.
         // Un recibo "sin impuestos" no lleva IVA: se deja tal cual.
@@ -420,6 +431,13 @@ class ReciboVentaService
             $this->repository->deletePagos($id);
             $this->repository->deleteInfoAdicional($id);
             $this->guardarLineas($id, $data, $idEmpresa, $idUsuario);
+
+            // Descripción editada por el usuario en el modal: el mismo código queda con la
+            // descripción nueva también en el catálogo (si Empresa → Facturación lo permite).
+            \App\Services\modulos\DescripcionProductoDocumentoService::actualizarCatalogo(
+                $data['detalles'] ?? [], $idEmpresa, $idUsuario, $estConfig ?: null,
+                $this->getInventarioService()->getProductoRepository(), $this->logService, 'recibos_venta'
+            );
 
             $this->logService->registrar(
                 $idUsuario, $idEmpresa, 'MODIFICAR', 'recibos_venta_cabecera', $id,

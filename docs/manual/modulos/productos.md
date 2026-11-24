@@ -6,7 +6,7 @@ ruta_modulo: modulos/productos
 tipo: modulo
 visibilidad: todos
 etiquetas: productos, iva temporal, iva 8, iva feriado, cambiar iva masivo, turismo, prestador de servicios turisticos, productos equivalentes, equivalencias, equivalente, sustituto, reemplazo, otra marca, generico, compatible, referencias, codigos de proveedores, homologacion, buscar producto, buscador, filtros, filtrar productos, productos bajo el minimo, reponer stock, buscar por variante, buscar por codigo de proveedor, kits, chips, ordenar por dos columnas, ordenar por categoria y descripcion, articulos, servicios, catalogo, precio, costo, iva, ice, stock, codigo de barras, inventariable, varios precios, lista de precios, mayorista, carga masiva, importar productos, precio editable, cambiar precio en la comanda, precio variable, envio a domicilio, delivery, servicio a domicilio, recargo por servicio, excluir propina, restaurante, pestaña informacion, quien creo el producto, quien modifico el producto, historial del producto, costo automatico, recalcular costo, metodo de costeo, fifo, lifo, promedio ponderado
-version: 1.22
+version: 1.23
 orden: 10
 estado: activo
 ---
@@ -356,6 +356,7 @@ del restaurante, plantillas de proforma o de Factura Express).
 
 ## Historial de cambios
 
+- **1.23** — El **nombre** de un producto también puede cambiar desde una **Factura** o un **Recibo de Venta**: si Empresa → Facturación tiene encendido *¿Se puede editar la descripción de un producto o servicio en la factura?* y el usuario modifica la descripción de una línea, el producto conserva su código y toma ese nombre. El cambio queda registrado en la auditoría del sistema.
 - **1.22** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), con el mismo diseño que *Usar en: Compra / Venta*. Al guardar, la ficha ya no se cierra (salvo al crear un producto desde un documento) y muestra el aviso *Guardando / Actualizando producto...* mientras el servidor responde.
 - **1.21** — El bloqueo del **código** y el **tipo** de un producto ya usado considera ahora todos los documentos del sistema (antes solo facturas de venta y movimientos de inventario). Ver *Código y tipo quedan fijos cuando el producto ya se usó*.
 - **1.20** — El **nombre** del producto ya no se puede repetir dentro de la empresa (antes solo se controlaba el código principal). Ver *Código y nombre no se repiten*.
