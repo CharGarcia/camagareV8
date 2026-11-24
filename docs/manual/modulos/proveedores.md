@@ -282,12 +282,13 @@ cargos, pagos, retenciones y notas de crédito, y el saldo por pagar.
 
 La última fila de la tabla, fija al pie, muestra los **totales y el saldo final
 del período**: es el mismo saldo de la tarjeta del resumen. El saldo de cada
-fila es el que había **a esa fecha**, por eso la última fila visible de una
-página intermedia no coincide con el saldo final.
+fila es el que había **a esa fecha**.
 
-Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
-derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
-a **todo el período filtrado**, no solo a la página que está viendo.
+La tabla muestra **todos los movimientos del período** y se recorre con su barra
+de desplazamiento, así la última fila es el saldo final. Solo si el período pasa
+de 500 movimientos se reparte en páginas (flechas arriba a la derecha) y una fila
+avisa que hay más. Los totales del pie y el saldo anterior corresponden siempre a
+**todo el período filtrado**.
 
 ### Ver un egreso con un clic
 
@@ -558,7 +559,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
-- **2.19** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de pagos* activo, el resumen del pie muestra solo el total de pagos. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de pagos*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Un egreso que paga varias facturas sale ahora en una fila por factura (antes una sola), para que la columna **Saldo** coincida fila por fila con el PDF. Nuevo botón **PDF** junto a Excel. *Todos los movimientos / Historial de pagos* pasa a ser el selector **Movimientos**, junto a las fechas.
+- **2.19** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de pagos* activo, el resumen del pie muestra solo el total de pagos. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de pagos*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Un egreso que paga varias facturas sale ahora en una fila por factura (antes una sola), para que la columna **Saldo** coincida fila por fila con el PDF. La tabla ya no se corta de 20 en 20: muestra todo el período (hasta 500 movimientos por página), para que la última fila sea el saldo final. Nuevo botón **PDF** junto a Excel. *Todos los movimientos / Historial de pagos* pasa a ser el selector **Movimientos**, junto a las fechas.
 - **2.18** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos y Clientes; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando proveedor...* mientras el servidor responde.
 - **2.17** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`).
 - **2.16** — La pestaña **Estado de cuenta** del proveedor carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.

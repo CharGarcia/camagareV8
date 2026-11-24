@@ -294,8 +294,13 @@
      * Filas por página del estado de cuenta. Se pagina en el navegador porque el saldo
      * corriendo necesita todos los movimientos del período; Transacciones, en cambio,
      * pagina en el servidor (el tamaño lo fija el controlador).
+     *
+     * Son 500 (antes 20) a propósito: con 20, la última fila visible de la primera página
+     * mostraba el saldo de ESA fecha y se leía como si no cuadrara con el saldo del
+     * resumen. Con 500 casi todo período cabe en una página (la tabla hace scroll) y la
+     * última fila es el saldo final. Si aun así hay más páginas, una fila lo avisa.
      */
-    const POR_PAGINA_EC = 20;
+    const POR_PAGINA_EC = 500;
 
     // ── Transacciones ───────────────────────────────────────────────────────
 
@@ -584,7 +589,10 @@
             const desde = total > 0 ? ((st.page - 1) * POR_PAGINA_EC) + 1 : 0;
             const hasta = total > 0 ? Math.min(st.page * POR_PAGINA_EC, total) : 0;
             const info  = el('info');
-            if (info) info.textContent = `${desde}-${hasta}/${total}`;
+            if (info) {
+                info.textContent = `${desde}-${hasta}/${total}` + (totalPaginas > 1 ? ` · pág. ${st.page} de ${totalPaginas}` : '');
+                info.classList.toggle('text-danger', totalPaginas > 1 && st.page < totalPaginas); // quedan páginas por ver
+            }
             const prev = el('prev');
             const next = el('next');
             if (prev) prev.disabled = st.page <= 1;
@@ -617,6 +625,10 @@
                 ? pagina.map(m => fila(m, !!d.puede_ver_pago)).join('')
                 : filaMensaje(7, '<i class="bi bi-inbox fs-4 d-block mb-1"></i>'
                     + esc(soloPagos ? textos.sinPagos : 'No hay movimientos en el período.'));
+            if (pagina.length && st.page < totalPaginas) {
+                html += filaMensaje(7, '<i class="bi bi-arrow-right-circle me-1"></i>Hay más movimientos en la página siguiente: '
+                    + 'el saldo de la última fila es el de esa fecha, no el saldo final.', 'text-muted fst-italic small');
+            }
             tbody.innerHTML = html;
             pintarPaginacion(movs.length, totalPaginas);
             pintarTotales(d, movs, soloPagos);
