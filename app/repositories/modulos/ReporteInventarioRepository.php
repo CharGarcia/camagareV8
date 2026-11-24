@@ -608,12 +608,15 @@ class ReporteInventarioRepository extends BaseRepository
      *     ENTRADA propia en la bodega (positivo que no sea una devolución). Si no, sus
      *     movimientos se suman al grupo "sin NUP" del lote. Con filtro de NUP no se aplica:
      *     quien busca una unidad quiere ver sus movimientos tal cual.
-     *  2. Caducidad: la migración del sistema anterior puso como caducidad la FECHA DEL
-     *     MOVIMIENTO cuando el vencimiento venía en cero (MigracionMysqlService::
-     *     caducidadODef), así que la entrada y cada salida de un lote quedaron con fechas
-     *     distintas. Regla: si todas las entradas propias del lote (en cualquier bodega, sin
-     *     contar transferencias, que copian la de origen) tienen UNA sola caducidad, todos
-     *     sus movimientos se leen con esa. Si el lote entró con varias, se deja como está.
+     *  2. Caducidad: un mismo lote quedó registrado con varias caducidades — una principal y
+     *     variantes (fin de mes: 06-06-2026 / 28-06 / 30-06; fechas sueltas como 28-06-2020;
+     *     o la FECHA DEL MOVIMIENTO que puso la migración cuando el vencimiento venía en
+     *     cero, MigracionMysqlService::caducidadODef) — y las salidas iban a la principal
+     *     mientras las variantes quedaban en positivo (caso medido: producto MAMU 4808).
+     *     Regla: un lote del fabricante tiene UNA caducidad; se usa aquella con la que entró
+     *     MÁS cantidad en sus entradas propias (cualquier bodega, sin contar transferencias,
+     *     que copian la de origen; empate: la de la primera entrada). Todos los movimientos
+     *     del lote se leen con esa. Un lote sin caducidad en sus entradas queda como está.
      *
      * No modifica el kardex: solo cambia cómo se agrupa al leer. Lo mismo se aplica a lo
      * consignado (exprClaveNormalizada sobre las líneas de consignación) y al seguimiento de
@@ -656,14 +659,21 @@ class ReporteInventarioRepository extends BaseRepository
                 $joins .= $j;
             }
             if ($normCad) {
+                // La caducidad del lote es aquella con la que ENTRÓ más cantidad (empate: la
+                // de la primera entrada). DISTINCT ON se queda con la primera por ese orden.
                 $ctes[] = "cad_lote AS MATERIALIZED (
-                    SELECT x.id_producto, x.numero_lote, MIN(x.fecha_caducidad) AS caducidad
-                    FROM inventario_kardex x
-                    WHERE x.id_empresa = :id_empresa_norm AND x.eliminado = false AND x.cantidad > 0
-                      AND NULLIF(TRIM(x.numero_lote), '') IS NOT NULL AND x.fecha_caducidad IS NOT NULL
-                      AND COALESCE(x.referencia_tipo, '') NOT IN ({$devol}, 'transferencia_inventario'){$condProd}
-                    GROUP BY x.id_producto, x.numero_lote
-                    HAVING COUNT(DISTINCT x.fecha_caducidad) = 1
+                    SELECT DISTINCT ON (c.id_producto, c.numero_lote)
+                           c.id_producto, c.numero_lote, c.fecha_caducidad AS caducidad
+                    FROM (
+                        SELECT x.id_producto, x.numero_lote, x.fecha_caducidad,
+                               SUM(x.cantidad) AS entrada, MIN(x.fecha_movimiento) AS primera
+                        FROM inventario_kardex x
+                        WHERE x.id_empresa = :id_empresa_norm AND x.eliminado = false AND x.cantidad > 0
+                          AND NULLIF(TRIM(x.numero_lote), '') IS NOT NULL AND x.fecha_caducidad IS NOT NULL
+                          AND COALESCE(x.referencia_tipo, '') NOT IN ({$devol}, 'transferencia_inventario'){$condProd}
+                        GROUP BY x.id_producto, x.numero_lote, x.fecha_caducidad
+                    ) c
+                    ORDER BY c.id_producto, c.numero_lote, c.entrada DESC, c.primera ASC
                 )";
                 [$j, $cad] = self::exprCadNormalizada('k0', 'numero_lote', 'fecha_caducidad');
                 $joins .= $j;

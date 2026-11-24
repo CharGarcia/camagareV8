@@ -423,11 +423,13 @@ negativas, aunque no faltara mercadería:
   propia si **entró** con ese NUP (compra, ajuste, transferencia…); si no, sus
   salidas se descuentan de la fila del lote sin NUP. Un retorno o una nota de
   crédito no cuentan como entrada: devuelven una unidad que ya había salido.
-- **Caducidad de la migración.** Cuando el sistema anterior no tenía la fecha
-  de vencimiento, la migración puso la fecha de cada movimiento, así que la
-  entrada y las salidas de un lote quedaron con caducidades distintas. Si todas
-  las entradas del lote tienen **una sola** caducidad, todo el lote se muestra con
-  esa. Si el lote entró con varias caducidades, se muestra tal como se registró.
+- **Un lote, una caducidad.** Muchos lotes quedaron registrados con varias
+  caducidades: la principal y variantes (el fin de ese mes, una fecha suelta o,
+  en lo migrado sin vencimiento, la fecha del propio movimiento). Las salidas
+  iban a una y las entradas a otra, y el lote aparecía partido en negativos y
+  positivos. Como un lote del fabricante tiene una sola caducidad, el reporte
+  muestra todo el lote con la caducidad con la que **entró la mayor cantidad**
+  (si empatan, la de la primera entrada).
 
 Esto solo cambia cómo se agrupa: **el kardex no se modifica** y el stock total
 del producto es el mismo. Lo consignado y el filtro **Vencimiento** usan la
@@ -868,7 +870,7 @@ ahí.
 
 ## Historial de cambios
 
-- **1.55** — **Menos negativos falsos en Lote + caducidad**: las salidas con un NUP que nunca entró se descuentan del lote sin NUP, y los lotes migrados con la fecha del movimiento como caducidad se muestran con la caducidad de su entrada. No modifica el kardex.
+- **1.55** — **Menos negativos falsos en Lote + caducidad**: las salidas con un NUP que nunca entró se descuentan del lote sin NUP, y cada lote se muestra con una sola caducidad (la de la mayor cantidad entrada), aunque se haya registrado con variantes. No modifica el kardex.
 - **1.54** — **Selector Vencimiento en Existencias**: Caducados, Vencen en 30 días, Vencen en 90 días y Vigentes, contados a hoy o a la fecha de Saldo al.
 - **1.53** — **Control del rango de fechas**: Hasta ya no puede ser anterior a Desde (periodo y caducidad, en todas las pestañas, en pantalla y en el servidor). Con el rango invertido, el resumen de cuadre de Movimientos anunciaba diferencias inexistentes.
 - **1.52** — **Cancelar un reporte largo**: la barra de progreso de las cinco pestañas y el aviso «Generando Excel/PDF…» traen un botón **Cancelar** que detiene la consulta también en el servidor. **Filtro Marca en Consignaciones**: muestra solo las líneas de productos de esa marca (el listado, el detalle, el Excel y el PDF).
