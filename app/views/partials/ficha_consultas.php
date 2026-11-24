@@ -80,6 +80,14 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
         box-shadow: 0 1px 0 #dee2e6;
         white-space: nowrap;
     }
+    .ficha-consulta-scroll > table > tfoot td {
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        background: #f8f9fa;
+        box-shadow: 0 -1px 0 #dee2e6;
+        white-space: nowrap;
+    }
     .ficha-consulta-scroll > table > thead th[data-orden] {
         cursor: pointer;
         user-select: none;
@@ -195,6 +203,14 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                 <button type="button" class="btn btn-sm btn-outline-success" data-fc="excel" title="Descargar el estado de cuenta en Excel">
                     <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
                 </button>
+                <!-- PDF: solo si la ficha lo configura (estadoCuenta.pdf); el JS le quita d-none -->
+                <button type="button" class="btn btn-sm btn-outline-danger d-none" data-fc="pdf" title="Estado de cuenta en PDF (imprimir, descargar o ver)">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>PDF
+                </button>
+                <!-- Correo: solo si la ficha lo configura (estadoCuenta.correo); el JS le quita d-none -->
+                <button type="button" class="btn btn-sm btn-outline-info d-none" data-fc="correo" title="Enviar el estado de cuenta por correo">
+                    <i class="bi bi-envelope me-1"></i>Correo
+                </button>
                 <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Movimientos">
                     <button type="button" class="btn btn-outline-secondary active" data-fc-filtro="todos"><i class="bi bi-list-columns-reverse me-1"></i>Todos los movimientos</button>
                     <button type="button" class="btn btn-outline-secondary" data-fc-filtro="pagos"><i class="bi bi-cash-coin me-1"></i><?= $fcEsc($fcTxt['filtro_pagos']) ?></button>
@@ -228,6 +244,8 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                         </tr>
                     </thead>
                     <tbody data-fc="tbody"></tbody>
+                    <!-- Totales y saldo final del período: fijos al pie, en todas las páginas -->
+                    <tfoot data-fc="tfoot"></tfoot>
                 </table>
             </div>
             <div class="small text-muted mt-1 d-none" data-fc="ayuda-pago">

@@ -686,9 +686,14 @@ class ProveedoresController extends BaseModuloController
         $id        = (int) ($_GET['id'] ?? 0);
         $desde     = trim((string) ($_GET['desde'] ?? ''));
         $hasta     = trim((string) ($_GET['hasta'] ?? ''));
+        // Mismo filtro que la pantalla: "solo pagos" deja únicamente los egresos
+        $soloPagos = ($_GET['solo'] ?? '') === 'pagos';
 
         try {
             $ec        = $this->service->getEstadoCuenta($id, $idEmpresa, $desde !== '' ? $desde : null, $hasta !== '' ? $hasta : null);
+            if ($soloPagos) {
+                $ec['movimientos'] = array_values(array_filter($ec['movimientos'], static fn (array $m): bool => ($m['origen'] ?? '') === 'PAGO'));
+            }
             $proveedor = $this->service->getFicha($id, $idEmpresa) ?? [];
             $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa)['nombre'] ?? '';
 
@@ -722,11 +727,14 @@ class ProveedoresController extends BaseModuloController
                     $hasta !== ''                  => 'Hasta el ' . $fecha($hasta),
                     default                        => 'Todos los movimientos',
                 },
-                'Resumen'   => sprintf(
-                    'Saldo anterior %s  |  Cargos %s  |  Pagos %s  |  Retenciones y NC %s  |  Saldo %s',
-                    $dinero($ec['saldo_anterior']), $dinero($ec['total_cargos']), $dinero($ec['total_pagos']),
-                    $dinero($ec['total_otros_abonos']), $dinero($ec['saldo_final'])
-                ),
+                'Movimientos' => $soloPagos ? 'Solo pagos' : 'Todos',
+                'Resumen'   => $soloPagos
+                    ? 'Pagos ' . $dinero($ec['total_pagos'])
+                    : sprintf(
+                        'Saldo anterior %s  |  Cargos %s  |  Pagos %s  |  Retenciones y NC %s  |  Saldo %s',
+                        $dinero($ec['saldo_anterior']), $dinero($ec['total_cargos']), $dinero($ec['total_pagos']),
+                        $dinero($ec['total_otros_abonos']), $dinero($ec['saldo_final'])
+                    ),
                 'Generado'  => date('d-m-Y H:i:s'),
             ];
 

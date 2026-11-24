@@ -557,6 +557,8 @@
             }
             pintarResumen(null);
             pintarPaginacion(0, 1);
+            const tfoot = el('tfoot');
+            if (tfoot) tfoot.innerHTML = '';
         }
 
         function fila(m, puedeAbrir) {
@@ -617,6 +619,25 @@
                     + esc(soloPagos ? textos.sinPagos : 'No hay movimientos en el período.'));
             tbody.innerHTML = html;
             pintarPaginacion(movs.length, totalPaginas);
+            pintarTotales(d, movs, soloPagos);
+        }
+
+        /**
+         * Fila de totales al pie de la tabla, visible en todas las páginas: el saldo de
+         * la última fila que se ve es el de ESA fecha, no el del período; el del período
+         * (el mismo de la tarjeta del resumen) es el de esta fila.
+         */
+        function pintarTotales(d, movs, soloPagos) {
+            const tfoot = el('tfoot');
+            if (!tfoot) return;
+            if (!d || !movs.length) { tfoot.innerHTML = ''; return; }
+            const abonos = soloPagos ? d.total_pagos : (d.total_pagos + d.total_otros_abonos);
+            tfoot.innerHTML = `<tr class="table-light fw-bold">
+                <td class="ps-2" colspan="4">${soloPagos ? 'Total del período' : 'Totales y saldo final del período'}</td>
+                <td class="text-end">${soloPagos ? '' : fmtMoneda(d.total_cargos)}</td>
+                <td class="text-end">${fmtMoneda(abonos)}</td>
+                <td class="text-end pe-2">${soloPagos ? '' : fmtMoneda(d.saldo_final)}</td>
+            </tr>`;
         }
 
         async function cargar() {
@@ -639,6 +660,7 @@
             if (!json.ok) {
                 st.data = null;
                 tbody.innerHTML = filaMensaje(7, esc(json.error || 'No se pudo cargar el estado de cuenta.'), 'text-danger');
+                pintarTotales(null, [], false);
                 pintarResumen(null);
                 return;
             }
@@ -655,6 +677,7 @@
             panel.querySelectorAll('[data-fc-filtro]').forEach(b => b.classList.toggle('active', b.dataset.fcFiltro === 'todos'));
             const tbody = el('tbody');
             if (tbody) tbody.innerHTML = '';
+            pintarTotales(null, [], false);
             pintarResumen(null);
             pintarPaginacion(0, 1);
         }
@@ -802,8 +825,112 @@
                 desde: el('desde')?.value || '',
                 hasta: el('hasta')?.value || '',
             });
+            if (st.filtro === 'pagos') p.set('solo', 'pagos'); // mismo filtro que la tabla
             CMG_descargar(`${cfg.urlBase}/estadoCuentaExcel?${p.toString()}`);
         });
+
+        // PDF: el estado de cuenta del Reporte de Cartera (mismo que se envía por correo) con
+        // el período de las fechas. Pregunta Imprimir / Descargar / Ver (CMG_pdfDocumento).
+        const btnPdf = el('pdf');
+        if (btnPdf && conf.pdf && conf.pdf.url) {
+            btnPdf.classList.remove('d-none');
+            btnPdf.addEventListener('click', () => {
+                const id = idFicha(cfg);
+                if (!id) return;
+                const p = new URLSearchParams({
+                    tipo: conf.pdf.tipo || 'CLIENTE',
+                    fecha_desde: el('desde')?.value || '',
+                    fecha_hasta: el('hasta')?.value || '',
+                });
+                p.append('id_entidad[]', id);
+                CMG_pdfDocumento(`${conf.pdf.url}?${p.toString()}`);
+            });
+        }
+
+        // Correo: envía el estado de cuenta (PDF y/o Excel del Reporte de Cartera) con el
+        // período de las fechas. El destinatario sale del correo de la ficha y se puede cambiar.
+        const btnCorreo = el('correo');
+        if (btnCorreo && conf.correo && conf.correo.url) {
+            btnCorreo.classList.remove('d-none');
+            let enviando = false;
+            btnCorreo.addEventListener('click', async () => {
+                const id = idFicha(cfg);
+                if (!id || enviando || typeof Swal === 'undefined') return;
+                enviando = true;
+                try {
+                    const desde = el('desde')?.value || '';
+                    const hasta = el('hasta')?.value || '';
+                    const periodo = desde && hasta ? `Del ${fmtFecha(desde)} al ${fmtFecha(hasta)}`
+                        : desde ? `Desde el ${fmtFecha(desde)}`
+                        : hasta ? `Hasta el ${fmtFecha(hasta)}`
+                        : 'Todos los movimientos';
+                    const modalEl = document.getElementById(cfg.modalId);
+                    const esCorreo = c => /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(c);
+
+                    const r = await Swal.fire({
+                        title: 'Enviar estado de cuenta',
+                        html: `<div class="small text-muted mb-2">Período: <b>${esc(periodo)}</b></div>
+                               <select id="fc-correo-adjuntar" class="form-select form-select-sm">
+                                   <option value="pdf" selected>Adjuntar solo PDF</option>
+                                   <option value="excel">Adjuntar solo Excel</option>
+                                   <option value="ambos">Adjuntar PDF y Excel</option>
+                               </select>`,
+                        input: 'text',
+                        inputLabel: 'Enviar a (separe varios correos con coma)',
+                        inputValue: (document.getElementById(conf.correo.emailInput)?.value || '').trim(),
+                        inputPlaceholder: 'correo1@ejemplo.com, correo2@ejemplo.com',
+                        showCancelButton: true,
+                        confirmButtonText: '<i class="bi bi-send me-1"></i>Enviar',
+                        cancelButtonText: 'Cancelar',
+                        showLoaderOnConfirm: true,
+                        allowOutsideClick: () => !Swal.isLoading(),
+                        // Dentro del modal de la ficha: si cuelga de <body>, el modal no deja escribir
+                        target: modalEl && modalEl.classList.contains('show') ? modalEl : 'body',
+                        inputValidator: (v) => {
+                            const lista = String(v || '').split(',').map(c => c.trim()).filter(Boolean);
+                            if (!lista.length) return 'Ingrese al menos un correo.';
+                            const malo = lista.find(c => !esCorreo(c));
+                            return malo ? `El correo «${malo}» no es válido.` : undefined;
+                        },
+                        preConfirm: async (correos) => {
+                            const p = new URLSearchParams({
+                                tipo: conf.correo.tipo || 'CLIENTE',
+                                fecha_desde: desde,
+                                fecha_hasta: hasta,
+                                correos: String(correos).split(',').map(c => c.trim()).filter(Boolean).join(','),
+                                adjuntar: document.getElementById('fc-correo-adjuntar')?.value || 'pdf',
+                            });
+                            p.append('id_entidad[]', id);
+                            try {
+                                const resp = await fetch(conf.correo.url, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+                                    body: p.toString(),
+                                });
+                                const json = await resp.json();
+                                if (!json.ok) {
+                                    Swal.showValidationMessage(json.mensaje || json.error || 'No se pudo enviar el correo.');
+                                    return false;
+                                }
+                                return json;
+                            } catch (e) {
+                                Swal.showValidationMessage('No se pudo comunicar con el servidor.');
+                                return false;
+                            }
+                        },
+                    });
+                    if (r.isConfirmed && r.value) {
+                        Swal.fire({
+                            icon: 'success', title: 'Enviado', text: r.value.mensaje || 'Correo enviado.',
+                            timer: 3000, showConfirmButton: false,
+                            target: modalEl && modalEl.classList.contains('show') ? modalEl : 'body',
+                        });
+                    }
+                } finally {
+                    enviando = false;
+                }
+            });
+        }
 
         panel.querySelectorAll('[data-fc-filtro]').forEach(btn => btn.addEventListener('click', () => {
             st.filtro = btn.dataset.fcFiltro;

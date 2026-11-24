@@ -370,7 +370,22 @@ cargos, cobros, retenciones y notas de crédito, y el saldo por cobrar.
   cada fila sigue siendo el que quedó después de ese cobro. El resumen del pie
   también cambia: queda **solo el total de cobros** del período; los cargos, las
   retenciones y notas de crédito y los saldos se ocultan hasta volver a *Todos
-  los movimientos*.
+  los movimientos*. El **Excel** también sale solo con los cobros.
+- **PDF**: genera el estado de cuenta del período en PDF y pregunta si quiere
+  imprimirlo, descargarlo o verlo. Es el mismo documento del *Reporte de
+  Cartera* y trae todos los movimientos del período, aunque esté activo
+  *Historial de cobros*.
+- **Correo**: envía el estado de cuenta por cobrar del cliente con el período de
+  las fechas. Se abre una ventana con el **correo de la ficha ya puesto**, que
+  puede cambiar o completar (varios correos separados por coma), y la opción de
+  adjuntar PDF, Excel o ambos. El adjunto es el mismo estado de cuenta del
+  *Reporte de Cartera* y lleva siempre todos los movimientos del período, aunque
+  esté activo *Historial de cobros*. Cambiar el correo aquí no modifica la ficha.
+
+La última fila de la tabla, fija al pie, muestra los **totales y el saldo final
+del período**: es el mismo saldo de la tarjeta del resumen. El saldo de cada
+fila es el que había **a esa fecha**, por eso la última fila visible de una
+página intermedia no coincide con el saldo final.
 
 Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
 derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
@@ -558,7 +573,7 @@ cambios del cliente y **no se copia** al replicar el cliente a otra empresa.
 
 ## Historial de cambios
 
-- **3.9** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de cobros* activo, el resumen del pie muestra solo el total de cobros. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período.
+- **3.9** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de cobros* activo, el resumen del pie muestra solo el total de cobros. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de cobros*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Nuevo botón **PDF** junto a Excel. Nuevo botón **Correo** para enviar el estado de cuenta, con el correo del cliente editable antes de enviar.
 - **3.8** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando cliente...* mientras el servidor responde.
 - **3.7** — Nuevo campo **Observaciones** en la pestaña *Comercial* de la ficha: nota interna del cliente (quién pidió crearlo, cliente VIP, cómo atenderlo). Sus cambios quedan en el historial del cliente (quién, cuándo, antes y después).
 - **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático). El **Concepto de ingreso predeterminado** ahora se llena solo con el de facturas de venta cada vez que se abre la ficha; antes quedaba vacío desde la segunda ficha abierta.

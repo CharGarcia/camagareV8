@@ -1643,6 +1643,14 @@
                 panel: 'cli-pane-estado-cuenta',
                 boton: 'cli-tab-estado-cuenta-btn',
                 textos: { sinPagos: 'No hay cobros en el período.' },
+                // Botón Correo: reutiliza el envío del Reporte de Cartera (mismo PDF/Excel);
+                // el destinatario se propone con el correo de la ficha y se puede cambiar.
+                pdf: { url: `${baseApp}/modulos/reporte_cartera/exportPdf`, tipo: 'CLIENTE' },
+                correo: {
+                    url: `${baseApp}/modulos/reporte_cartera/enviarCorreoAjax`,
+                    tipo: 'CLIENTE',
+                    emailInput: 'cliente_email',
+                },
                 origenes: {
                     FACTURA: 'Factura', RECIBO: 'Recibo', NOTA_DEBITO: 'Nota de débito',
                     SALDO_INICIAL: 'Saldo inicial', COBRO: 'Cobro', RETENCION: 'Retención',

@@ -273,7 +273,16 @@ cargos, pagos, retenciones y notas de crédito, y el saldo por pagar.
   cada fila sigue siendo el que quedó después de ese pago. El resumen del pie
   también cambia: queda **solo el total de pagos** del período; los cargos, las
   retenciones y notas de crédito y los saldos se ocultan hasta volver a *Todos
-  los movimientos*.
+  los movimientos*. El **Excel** también sale solo con los pagos.
+- **PDF**: genera el estado de cuenta del período en PDF y pregunta si quiere
+  imprimirlo, descargarlo o verlo. Es el mismo documento del *Reporte de
+  Cartera* y trae todos los movimientos del período, aunque esté activo
+  *Historial de pagos*.
+
+La última fila de la tabla, fija al pie, muestra los **totales y el saldo final
+del período**: es el mismo saldo de la tarjeta del resumen. El saldo de cada
+fila es el que había **a esa fecha**, por eso la última fila visible de una
+página intermedia no coincide con el saldo final.
 
 Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
 derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
@@ -547,7 +556,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
-- **2.19** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de pagos* activo, el resumen del pie muestra solo el total de pagos. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período.
+- **2.19** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de pagos* activo, el resumen del pie muestra solo el total de pagos. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de pagos*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Nuevo botón **PDF** junto a Excel.
 - **2.18** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos y Clientes; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando proveedor...* mientras el servidor responde.
 - **2.17** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`).
 - **2.16** — La pestaña **Estado de cuenta** del proveedor carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.

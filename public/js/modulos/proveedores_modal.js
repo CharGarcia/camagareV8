@@ -1553,6 +1553,8 @@
                 panel: 'prov-tab-estado-cuenta',
                 boton: 'prov-tab-estado-cuenta-btn',
                 textos: { sinPagos: 'No hay pagos en el período.' },
+                // Botón PDF: el estado de cuenta del Reporte de Cartera con el período elegido
+                pdf: { url: `${BASE_URL}/modulos/reporte_cartera/exportPdf`, tipo: 'PROVEEDOR' },
                 origenes: {
                     COMPRA: 'Compra', LIQUIDACION: 'Liquidación', IMPORTACION: 'Importación',
                     NOTA_DEBITO: 'Nota de débito', SALDO_INICIAL: 'Saldo inicial',
