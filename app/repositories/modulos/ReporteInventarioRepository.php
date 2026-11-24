@@ -579,6 +579,139 @@ class ReporteInventarioRepository extends BaseRepository
      * @param string   $desglose LOTE | CADUCIDAD | LOTE_CADUCIDAD
      * @param int|null $limite   tope de filas para pantalla; null = sin tope (exportaciones).
      */
+    // ────────────────────────────────────────────────────────────────
+    // CLAVE NORMALIZADA DEL DESGLOSE (NUP y caducidad)
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Movimientos POSITIVOS que no son una entrada propia: devuelven al stock una unidad que
+     * ya había salido (retornos, reversos, ediciones/eliminaciones de consignación, notas de
+     * crédito…). Traen el NUP/caducidad de la salida, no de la compra, así que no pueden
+     * "fundar" un grupo propio en la normalización de abajo.
+     */
+    private const REFERENCIAS_DEVOLUCION = [
+        'RETORNO_CV', 'CAMBIO_ESTADO_RETORNO_CV', 'ELIMINACION_RETORNO_CV',
+        'EDICION_CONSIGNACION_VENTA', 'ELIMINACION_CONSIGNACION_VENTA',
+        'FACTURACION_CV', 'CAMBIO_PRODUCTO_CV', 'nota_credito',
+    ];
+
+    /**
+     * Normalización de la clave lote/NUP/caducidad para los desgloses de Existencias.
+     *
+     * Medido en producción (24-11-2026, diagnósticos en database/diagnosticos/20261124_*):
+     * miles de filas negativas en "Lote + caducidad" cuyo lote completo SÍ cuadraba. Dos
+     * formas de registrar partían un mismo lote en varias filas (una positiva y muchas
+     * negativas), sin que faltara mercadería:
+     *
+     *  1. NUP: el lote ENTRA sin NUP (compra, migración) y cada unidad SALE con su NUP
+     *     (consignación, factura). Regla: un NUP solo es grupo propio si ese NUP tuvo una
+     *     ENTRADA propia en la bodega (positivo que no sea una devolución). Si no, sus
+     *     movimientos se suman al grupo "sin NUP" del lote. Con filtro de NUP no se aplica:
+     *     quien busca una unidad quiere ver sus movimientos tal cual.
+     *  2. Caducidad: la migración del sistema anterior puso como caducidad la FECHA DEL
+     *     MOVIMIENTO cuando el vencimiento venía en cero (MigracionMysqlService::
+     *     caducidadODef), así que la entrada y cada salida de un lote quedaron con fechas
+     *     distintas. Regla: si todas las entradas propias del lote (en cualquier bodega, sin
+     *     contar transferencias, que copian la de origen) tienen UNA sola caducidad, todos
+     *     sus movimientos se leen con esa. Si el lote entró con varias, se deja como está.
+     *
+     * No modifica el kardex: solo cambia cómo se agrupa al leer. Lo mismo se aplica a lo
+     * consignado (exprClaveNormalizada sobre las líneas de consignación) y al seguimiento de
+     * un negativo, para que todo sume igual.
+     *
+     * @return array{0: string, 1: string, 2: array} [CTEs (sin WITH, '' si no hace falta),
+     *         FROM del kardex con alias k, parámetros]. El FROM expone `nup` y
+     *         `fecha_caducidad` ya normalizados y los registrados en `nup_registrado` /
+     *         `caducidad_registrada`.
+     */
+    private function kardexClaveNormalizada(int $idEmpresa, array $filtros, bool $normNup, bool $normCad): array
+    {
+        $params = [];
+        $ctes   = [];
+        $joins  = '';
+        $nup    = 'k0.nup';
+        $cad    = 'k0.fecha_caducidad';
+        if ($normNup || $normCad) {
+            $params[':id_empresa_norm'] = $idEmpresa;
+            $condProd = '';
+            if (!empty($filtros['id_producto'])) {
+                $condProd = ' AND x.id_producto = :id_producto_norm';
+                $params[':id_producto_norm'] = (int) $filtros['id_producto'];
+            }
+            $devol = self::sqlLista(self::REFERENCIAS_DEVOLUCION);
+            if ($normNup) {
+                $condBod = '';
+                if (!empty($filtros['id_bodega'])) {
+                    $condBod = ' AND x.id_bodega = :id_bodega_norm';
+                    $params[':id_bodega_norm'] = (int) $filtros['id_bodega'];
+                }
+                $ctes[] = "nup_origen AS MATERIALIZED (
+                    SELECT DISTINCT x.id_producto, x.id_bodega, x.numero_lote, x.nup
+                    FROM inventario_kardex x
+                    WHERE x.id_empresa = :id_empresa_norm AND x.eliminado = false AND x.cantidad > 0
+                      AND NULLIF(TRIM(x.nup), '') IS NOT NULL
+                      AND COALESCE(x.referencia_tipo, '') NOT IN ({$devol}){$condProd}{$condBod}
+                )";
+                [$j, $nup] = self::exprNupNormalizado('k0', 'numero_lote', 'nup');
+                $joins .= $j;
+            }
+            if ($normCad) {
+                $ctes[] = "cad_lote AS MATERIALIZED (
+                    SELECT x.id_producto, x.numero_lote, MIN(x.fecha_caducidad) AS caducidad
+                    FROM inventario_kardex x
+                    WHERE x.id_empresa = :id_empresa_norm AND x.eliminado = false AND x.cantidad > 0
+                      AND NULLIF(TRIM(x.numero_lote), '') IS NOT NULL AND x.fecha_caducidad IS NOT NULL
+                      AND COALESCE(x.referencia_tipo, '') NOT IN ({$devol}, 'transferencia_inventario'){$condProd}
+                    GROUP BY x.id_producto, x.numero_lote
+                    HAVING COUNT(DISTINCT x.fecha_caducidad) = 1
+                )";
+                [$j, $cad] = self::exprCadNormalizada('k0', 'numero_lote', 'fecha_caducidad');
+                $joins .= $j;
+            }
+        }
+
+        $from = "(SELECT k0.id, k0.id_empresa, k0.id_producto, k0.id_bodega, k0.fecha_movimiento,
+                         k0.tipo_movimiento, k0.referencia_tipo, k0.referencia_id, k0.cantidad,
+                         k0.costo_unitario, k0.costo_total, k0.numero_lote, k0.observaciones,
+                         k0.created_by, k0.tipo_ambiente, k0.eliminado,
+                         {$nup} AS nup, {$cad} AS fecha_caducidad,
+                         k0.nup AS nup_registrado, k0.fecha_caducidad AS caducidad_registrada
+                  FROM inventario_kardex k0{$joins}) k";
+
+        return [implode(",\n", $ctes), $from, $params];
+    }
+
+    /** NUP normalizado de `$alias` (requiere el CTE nup_origen). @return array{0: string, 1: string} [JOIN, expresión] */
+    private static function exprNupNormalizado(string $alias, string $colLote, string $colNup): array
+    {
+        $j = "{$alias}_no";
+        return [
+            " LEFT JOIN nup_origen {$j} ON {$j}.id_producto = {$alias}.id_producto AND {$j}.id_bodega = {$alias}.id_bodega
+                AND {$j}.numero_lote IS NOT DISTINCT FROM {$alias}.{$colLote} AND {$j}.nup = {$alias}.{$colNup}",
+            "CASE WHEN {$j}.nup IS NOT NULL THEN {$alias}.{$colNup} END",
+        ];
+    }
+
+    /** Caducidad normalizada de `$alias` (requiere el CTE cad_lote). @return array{0: string, 1: string} [JOIN, expresión] */
+    private static function exprCadNormalizada(string $alias, string $colLote, string $colCad): array
+    {
+        $j = "{$alias}_cl";
+        return [
+            " LEFT JOIN cad_lote {$j} ON {$j}.id_producto = {$alias}.id_producto AND {$j}.numero_lote = {$alias}.{$colLote}",
+            "COALESCE({$j}.caducidad, {$alias}.{$colCad})",
+        ];
+    }
+
+    /** Qué partes de la clave se normalizan en un desglose (misma regla en el listado y el seguimiento). */
+    private static function normalizacionDesglose(array $filtros, bool $conNup, bool $conCad): array
+    {
+        $hayFiltroCad = !empty($filtros['fecha_caducidad_desde']) || !empty($filtros['fecha_caducidad_hasta']);
+        return [
+            $conNup && empty($filtros['nup']),
+            $conCad || $hayFiltroCad,
+        ];
+    }
+
     /** Filtro "Consignado" (CON / SIN) sobre las filas del desglose por lote/caducidad. */
     private static function condConsignadoDesglose(array $filtros): string
     {
@@ -598,6 +731,23 @@ class ReporteInventarioRepository extends BaseRepository
         list($where, $params) = $this->buildWhereExistenciasKardex($idEmpresa, $filtros);
         $condCorteCv = !empty($filtros['fecha_corte']) ? " AND cv.fecha_emision < CAST(:fecha_corte AS date) + 1" : "";
 
+        // NUP y caducidad se leen normalizados (ver kardexClaveNormalizada): el kardex como
+        // fuente y las líneas de consignación con la misma regla, para que crucen igual.
+        [$normNup, $normCad] = self::normalizacionDesglose($filtros, $conNup, $conCad);
+        [$ctesNorm, $fromKardex, $paramsNorm] = $this->kardexClaveNormalizada($idEmpresa, $filtros, $normNup, $normCad);
+        $params += $paramsNorm;
+        $joinsCvd = '';
+        $cvdNup   = 'cvd.nup';
+        $cvdCad   = 'cvd.fecha_caducidad';
+        if ($normNup) {
+            [$j, $cvdNup] = self::exprNupNormalizado('cvd', 'lote', 'nup');
+            $joinsCvd .= $j;
+        }
+        if ($normCad) {
+            [$j, $cvdCad] = self::exprCadNormalizada('cvd', 'lote', 'fecha_caducidad');
+            $joinsCvd .= $j;
+        }
+
         // Las columnas que no forman parte del grupo viajan en NULL: la fila no puede
         // afirmar un lote/NUP/caducidad concretos cuando está sumando varios.
         $selLote = $conLote ? 'k.numero_lote' : 'NULL::varchar';
@@ -608,22 +758,26 @@ class ReporteInventarioRepository extends BaseRepository
         // fila no distingue caducidad, el consignado tampoco, o los números no cuadrarían.
         $groupExtra = '';
         $selCvGroup = '';
+        $groupCv    = '';
         $joinCv     = '';
         $ordenExtra = [];
         if ($conLote) {
             $groupExtra .= ', k.numero_lote';
             $selCvGroup .= ', cvd.lote';
+            $groupCv    .= ', cvd.lote';
             $joinCv     .= ' AND ca.lote IS NOT DISTINCT FROM k.numero_lote';
             $ordenExtra[] = 'lote ASC NULLS LAST';
         }
         if ($conNup) {
             $groupExtra .= ', k.nup';
-            $selCvGroup .= ', cvd.nup';
+            $selCvGroup .= ", {$cvdNup} AS nup";
+            $groupCv    .= ", {$cvdNup}";
             $joinCv     .= ' AND ca.nup IS NOT DISTINCT FROM k.nup';
         }
         if ($conCad) {
             $groupExtra .= ', k.fecha_caducidad';
-            $selCvGroup .= ', cvd.fecha_caducidad';
+            $selCvGroup .= ", {$cvdCad} AS fecha_caducidad";
+            $groupCv    .= ", {$cvdCad}";
             $joinCv     .= ' AND ca.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad';
             $ordenExtra[] = 'fecha_caducidad ASC NULLS LAST';
         }
@@ -632,17 +786,17 @@ class ReporteInventarioRepository extends BaseRepository
         // El consignado va con las subconsultas por línea y NO con cteConsignadoPorGrupo(): se
         // cruza fila a fila del kardex con IS NOT DISTINCT FROM y, con la forma agrupada, el
         // planificador estimaba mal ese cruce (medido: 4,8 s → 9 s). Ver sqlRetornadoCv().
-        $sql = "WITH consignado_desglose AS (
+        $sql = "WITH " . ($ctesNorm !== '' ? $ctesNorm . ",\n" : '') . "consignado_desglose AS (
                     SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup},
                            SUM(cvd.cantidad
                                - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
                                - COALESCE((" . $this->sqlFacturadoCv() . "), 0)
                                - COALESCE((" . $this->sqlCambiadoCv() . "), 0)) AS consignado
                     FROM consignaciones_ventas_detalles cvd
-                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion
+                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion{$joinsCvd}
                     WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
                       AND cv.eliminado = false AND " . self::COND_CV_NO_ANULADA . "{$condCorteCv}
-                    GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup}
+                    GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$groupCv}
                 )
                 SELECT *, (stock_actual * costo_unitario) AS valor_total,
                        (stock_actual + consignado) AS stock_total
@@ -657,7 +811,7 @@ class ReporteInventarioRepository extends BaseRepository
                            COALESCE(NULLIF((ARRAY_AGG(k.costo_unitario ORDER BY k.fecha_movimiento DESC, k.id DESC))[1], 0),
                                     p.costo_producto, 0) AS costo_unitario,
                            COALESCE(MAX(ca.consignado), 0) AS consignado
-                    FROM inventario_kardex k
+                    FROM {$fromKardex}
                     INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
                     INNER JOIN bodegas b ON b.id = k.id_bodega
                     LEFT JOIN categorias cat ON cat.id = p.id_categoria
@@ -737,6 +891,12 @@ class ReporteInventarioRepository extends BaseRepository
         list($where, $params) = $this->buildWhereExistenciasKardex($idEmpresa, $filtros);
         $params[':tipo_ambiente'] = $this->tipoAmbienteEmpresa($idEmpresa);
 
+        // La misma clave normalizada que la fila que se explica (getExistenciasPorDesglose):
+        // si la fila agrupa por NUP / caducidad, el kardex se lee con la misma regla.
+        [$normNup, $normCad] = self::normalizacionDesglose($filtros, array_key_exists('nup', $clave), array_key_exists('caducidad', $clave));
+        [$ctesNorm, $fromKardex, $paramsNorm] = $this->kardexClaveNormalizada($idEmpresa, $filtros, $normNup, $normCad);
+        $params += $paramsNorm;
+
         foreach ($clave as $nombre => $valor) {
             if (!isset(self::CLAVE_DESGLOSE[$nombre])) {
                 continue;
@@ -748,12 +908,15 @@ class ReporteInventarioRepository extends BaseRepository
 
         // El JOIN con productos y bodegas no es decorativo: buildWhereExistenciasKardex()
         // usa los alias p y b (producto no eliminado e inventariable, bodega no eliminada).
-        $sql = "WITH k AS MATERIALIZED (
+        // Las filas muestran el NUP y la caducidad REGISTRADOS en cada movimiento (no los
+        // normalizados): así se ve qué salida entró con un NUP o una fecha distinta.
+        $sql = "WITH " . ($ctesNorm !== '' ? $ctesNorm . ",\n" : '') . "k AS MATERIALIZED (
                     SELECT k.id, k.fecha_movimiento, k.tipo_movimiento, k.referencia_tipo,
                            k.referencia_id, k.cantidad, k.costo_unitario, k.costo_total,
-                           k.numero_lote, k.nup, k.fecha_caducidad, k.observaciones, k.created_by,
+                           k.numero_lote, k.nup_registrado AS nup, k.caducidad_registrada AS fecha_caducidad,
+                           k.observaciones, k.created_by,
                            (k.tipo_ambiente IS DISTINCT FROM :tipo_ambiente) AS otro_ambiente
-                    FROM inventario_kardex k
+                    FROM {$fromKardex}
                     INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
                     INNER JOIN bodegas b ON b.id = k.id_bodega
                     WHERE {$where}
@@ -795,11 +958,19 @@ class ReporteInventarioRepository extends BaseRepository
             $params[':fecha_corte'] = $fechaCorte;
         }
 
-        $sql = "SELECT k.numero_lote, k.nup, k.fecha_caducidad,
+        // Mismos grupos que "Lote + caducidad" (NUP y caducidad normalizados), para que los
+        // saldos de esta lista se puedan comparar con las filas del reporte.
+        [$ctesNorm, $fromKardex, $paramsNorm] = $this->kardexClaveNormalizada(
+            $idEmpresa, ['id_producto' => $idProducto, 'id_bodega' => $idBodega], true, true
+        );
+        $params += $paramsNorm;
+
+        $sql = "WITH {$ctesNorm}
+                SELECT k.numero_lote, k.nup, k.fecha_caducidad,
                        SUM(k.cantidad) AS saldo, COUNT(*) AS movimientos,
                        MIN(k.fecha_movimiento) AS primer_movimiento,
                        MAX(k.fecha_movimiento) AS ultimo_movimiento
-                FROM inventario_kardex k
+                FROM {$fromKardex}
                 WHERE k.id_empresa = :id_empresa AND k.eliminado = false
                   AND k.id_producto = :id_producto AND k.id_bodega = :id_bodega{$condCorte}
                 GROUP BY k.numero_lote, k.nup, k.fecha_caducidad
