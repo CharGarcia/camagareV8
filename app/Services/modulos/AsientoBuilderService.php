@@ -3610,7 +3610,7 @@ class AsientoBuilderService
                 $inventarioLineas = $res['partes'];
             }
             if ($res !== null && $res['sin_cuenta'] >= 0.01) {
-                $sinCuentaExtra[] = self::LINEA_SIN_CUENTA . '«' . $refConcepto . '» para ' . ($res['productos_sin_cuenta'] !== '' ? $res['productos_sin_cuenta'] : 'algunas líneas');
+                $sinCuentaExtra[] = self::LINEA_SIN_CUENTA . '«' . $refConcepto . '» para ' . (($res['productos_sin_cuenta'] ?? '') !== '' ? $res['productos_sin_cuenta'] : 'algunas líneas');
             }
         }
 

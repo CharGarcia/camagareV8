@@ -45,6 +45,36 @@ class SincronizadorAsientosService
      * pendientes (getPendientes()) para que el aviso cuente solo lo que en realidad falta generar.
      */
     private int $noGenerables = 0;
+    /**
+     * Cuentas que el usuario puede asignar AHÍ MISMO desde el aviso (asientos_pendientes.js):
+     * una fila por proveedor + concepto que le falta («Subtotal factura de compras», …), con cuántos
+     * documentos detiene y si el proveedor ya tiene cuentas propias. Ver registrarAsignables().
+     */
+    private array $asignables = [];
+    /** Conceptos de cada tipo de asiento por nombre (minúsculas) — caché de registrarAsignables(). */
+    private array $conceptosPorTipo = [];
+    /** Filas que se envían por concepto en un paso; el resto solo se cuenta. Ver agregarAsignable(). */
+    private const MAX_ASIGNABLES_POR_CONCEPTO = 100;
+    /** Filas en la lista por clave de concepto (para el tope). */
+    private array $filasPorConcepto = [];
+    /** Lo omitido por el tope: clave de concepto => [filas, documentos, vistas (claves ya contadas)]. */
+    private array $asignablesOmitidos = [];
+
+    /**
+     * Módulos cuyos conceptos faltantes se ofrecen para asignar desde el aviso, en la General o
+     * como cuenta propia del tercero (cascada "la entidad manda"): clave del trabajo =>
+     * tipo de asiento, sección visible, [tipo de tercero, tabla del documento, columna del tercero]
+     * y, en compras, [tabla de detalle, columna de cabecera] para ofrecer la cuenta por ítem.
+     * Las formas de cobro/pago y los conceptos de Ingresos/Egresos se ofrecen en cualquier módulo
+     * (ver registrarAsignablesFormas()).
+     */
+    private const ASIGNABLES = [
+        'compras'              => ['tipo' => 'adquisiciones_compras', 'seccion' => 'Adquisiciones de Compras', 'entidad' => ['proveedor', 'compras_cabecera', 'id_proveedor'],       'detalle' => ['compras_detalle', 'id_compra']],
+        'liquidaciones_compra' => ['tipo' => 'adquisiciones_compras', 'seccion' => 'Adquisiciones de Compras', 'entidad' => ['proveedor', 'liquidaciones_cabecera', 'id_proveedor'], 'detalle' => ['liquidaciones_detalle', 'id_cabecera']],
+        'facturas_venta'       => ['tipo' => 'ventas_factura',        'seccion' => 'Ventas con Factura',       'entidad' => ['cliente', 'ventas_cabecera', 'id_cliente']],
+        'notas_credito'        => ['tipo' => 'ventas_factura',        'seccion' => 'Ventas con Factura',       'entidad' => ['cliente', 'notas_credito_cabecera', 'id_cliente']],
+        'recibos_venta'        => ['tipo' => 'recibos_venta',         'seccion' => 'Recibos de Venta',         'entidad' => ['cliente', 'recibos_venta_cabecera', 'id_cliente']],
+    ];
 
     /**
      * Sección de Configuración Contable de la que sale el asiento de cada módulo (clave del
@@ -384,6 +414,9 @@ class SincronizadorAsientosService
             'pendientes'       => $this->getPendientes(),
             'acciones'         => array_values($this->acciones),
             'puedeConfigurar'  => $this->puedeConfigurar(),
+            'asignables'       => array_values($this->asignables),
+            'asignablesOmitidos' => $this->getAsignablesOmitidos(),
+            'puedeAsignar'     => $this->puedeAsignar(),
             'info'             => $this->info,
         ];
     }
@@ -2145,6 +2178,16 @@ class SincronizadorAsientosService
         return max(0, array_sum($this->resumenPorModulo) - $this->noGenerables);
     }
 
+    /** ¿El usuario puede crear reglas en Configuración Contable? Si no, el aviso no ofrece «Asignar». */
+    private function puedeAsignar(): bool
+    {
+        try {
+            return !empty(\App\Helpers\Permisos::porRuta('modulos/configuracion-contable')['crear']);
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     /** ¿El usuario puede abrir Configuración Contable? Si no, el aviso no le muestra enlaces. */
     private function puedeConfigurar(): bool
     {
@@ -2172,6 +2215,242 @@ class SincronizadorAsientosService
         } finally {
             $this->detalleActual = null;
         }
+        $this->registrarAsignables($clave, $motivo, $ids);
+    }
+
+    /**
+     * Filas «asignar la cuenta aquí mismo» del aviso (asientos_pendientes.js), a partir del motivo de
+     * fallo de un lote. Cuatro clases de fila:
+     *  - 'entidad'  proveedor/cliente del lote × concepto que falta (nombres «…» = asientos_tipo.referencia):
+     *               se guarda en la General o como cuenta propia del tercero.
+     *  - 'item'     línea de compra sin cuenta en el reparto por ítem («concepto» para A, B…): en la
+     *               General o solo para ese ítem (regla 'item_compra').
+     *  - 'forma'    forma de cobro/pago sin cuenta.
+     *  - 'opcion'   concepto de Ingresos/Egresos sin cuenta.
+     * Lo que no se puede identificar sin ambigüedad (IVA por tarifa, cuentas eliminadas, nombres
+     * repetidos o con comas) no se ofrece: sigue por el enlace «Configurar».
+     * Nunca interrumpe la generación: ante cualquier error, simplemente no ofrece filas.
+     */
+    private function registrarAsignables(string $clave, string $motivo, array $ids): void
+    {
+        if (!$ids || $this->idEmpresa <= 0) {
+            return;
+        }
+        try {
+            $repo = new \App\repositories\modulos\AsientoProgramadoRepository();
+            $this->registrarAsignablesFormas($repo, $clave, $motivo, count($ids));
+
+            $cfg = self::ASIGNABLES[$clave] ?? null;
+            if ($cfg === null) {
+                return;
+            }
+            $tipoAsiento = $cfg['tipo'];
+            $conceptos = [];
+            foreach (self::conceptosFaltantes($motivo) as $f) {
+                $r = $this->conceptoPorNombre($repo, $tipoAsiento, $f);
+                if ($r !== null) {
+                    $conceptos[(int) $r['id_asiento_tipo']] = $r;
+                }
+            }
+            if (!$conceptos) {
+                return;
+            }
+
+            [$tipoEntidad, $tablaDoc, $colEntidad] = $cfg['entidad'];
+            foreach ($repo->getEntidadesPorDocumento($tablaDoc, $colEntidad, $tipoEntidad, $tipoAsiento, $ids) as $p) {
+                foreach ($conceptos as $idAt => $r) {
+                    $this->agregarAsignable("e:{$tipoAsiento}:{$tipoEntidad}:{$p['id']}:{$idAt}", $p['documentos'], [
+                        'clase'               => 'entidad',
+                        'entidad'             => $tipoEntidad,
+                        'id_entidad'          => $p['id'],
+                        'nombre'              => $p['nombre'],
+                        'con_cuentas_propias' => $p['con_cuentas_propias'],
+                    ] + $this->datosConcepto($tipoAsiento, $cfg['seccion'], $idAt, $r));
+                }
+            }
+
+            // Cuenta por ítem de compra: solo cuando el motivo viene del reparto por línea.
+            if (!empty($cfg['detalle'])) {
+                [$tablaDet, $colCab] = $cfg['detalle'];
+                foreach (self::itemsSinCuenta($motivo) as $concepto => $nombres) {
+                    $r = $this->conceptoPorNombre($repo, $tipoAsiento, $concepto);
+                    if ($r === null) {
+                        continue;
+                    }
+                    $idAt = (int) $r['id_asiento_tipo'];
+                    foreach ($repo->getItemsCompraEnDocumentos($tablaDet, $colCab, $ids, $nombres) as $item => $docs) {
+                        $this->agregarAsignable('i:' . $tipoAsiento . ':' . $idAt . ':' . md5($item), $docs, [
+                            'clase'            => 'item',
+                            'entidad'          => 'item_compra',
+                            'referencia_texto' => $item,
+                            'nombre'           => $item,
+                        ] + $this->datosConcepto($tipoAsiento, $cfg['seccion'], $idAt, $r));
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            error_log('[SincronizadorAsientos] registrarAsignables: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Filas de formas de cobro/pago y conceptos de Ingresos/Egresos sin cuenta, con el mismo texto
+     * que leen accionFormaSinCuenta() / accionConceptoSinCuenta(). El motivo solo trae el NOMBRE: se
+     * ofrece la fila si en la empresa hay exactamente una forma/concepto con ese nombre y sin cuenta.
+     */
+    private function registrarAsignablesFormas(\App\repositories\modulos\AsientoProgramadoRepository $repo, string $clave, string $motivo, int $documentos): void
+    {
+        // «La forma de cobro «X» (inactiva)…», «La forma de cobro destino "X"…» (Conciliación de Tarjetas).
+        if (preg_match_all('/forma de (cobro|pago)(?: destino)? [«"]([^»"]+)[»"]/iu', $motivo, $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $x) {
+                $flujo = mb_strtolower($x[1], 'UTF-8');
+                $tipoRef = $flujo === 'cobro' ? 'forma_cobro' : 'forma_pago';
+                $encontradas = $repo->getFormasSinCuentaPorNombre($this->idEmpresa, trim($x[2]), $tipoRef);
+                if (count($encontradas) !== 1) {
+                    continue;
+                }
+                $f = $encontradas[0];
+                $this->agregarAsignable("f:{$tipoRef}:{$f['id']}", $documentos, [
+                    'clase'       => 'forma',
+                    'id_forma'    => $f['id'],
+                    'flujo'       => $flujo,
+                    'nombre'      => $f['nombre'],
+                    'inactiva'    => !$f['activo'],
+                    'concepto'    => $flujo === 'cobro' ? 'forma de cobro' : 'forma de pago',
+                    'seccion'     => 'Cobros y Pagos',
+                    'tipo_cuenta' => $f['tipo_cuenta'],
+                ]);
+            }
+        }
+        // «El concepto «X» (inactivo) no tiene cuenta contable asignada…» (Ingresos / Egresos).
+        if (in_array($clave, ['ingresos', 'egresos'], true)
+            && preg_match_all('/concepto [«"]([^»"]+)[»"](?: \(inactivo\))? no tiene cuenta/iu', $motivo, $mm, PREG_SET_ORDER)) {
+            $naturaleza = $clave === 'egresos' ? 'egreso' : 'ingreso';
+            $tipoRef = 'opcion_' . $naturaleza;
+            foreach ($mm as $x) {
+                $encontradas = $repo->getOpcionesSinCuentaPorNombre($this->idEmpresa, trim($x[1]), $tipoRef);
+                if (count($encontradas) !== 1) {
+                    continue;
+                }
+                $o = $encontradas[0];
+                $this->agregarAsignable("o:{$tipoRef}:{$o['id']}", $documentos, [
+                    'clase'       => 'opcion',
+                    'id_opcion'   => $o['id'],
+                    'naturaleza'  => $naturaleza,
+                    'nombre'      => $o['nombre'],
+                    'inactiva'    => !$o['activo'],
+                    'concepto'    => 'concepto de ' . ($naturaleza === 'egreso' ? 'egresos' : 'ingresos'),
+                    'seccion'     => 'Ingresos y Egresos',
+                    'tipo_cuenta' => $o['tipo_cuenta'],
+                ]);
+            }
+        }
+    }
+
+    /** Agrega una fila asignable o, si ya estaba (otro lote del mismo paso), suma sus documentos. */
+    private function agregarAsignable(string $clave, int $documentos, array $datos): void
+    {
+        if (isset($this->asignables[$clave])) {
+            $this->asignables[$clave]['documentos'] += $documentos;
+            return;
+        }
+        // Tope por concepto: sin cuentas General, cada proveedor e ítem de cada compra sería una fila
+        // (3.642 filas, 1,3 MB en un solo paso con 783 compras). La ventana dibuja 25 por grupo y
+        // la fila resumen «Asignar en la General» resuelve el resto, así que lo que pasa del tope
+        // solo se CUENTA (filas y documentos) para que el resumen diga el total real.
+        $concepto = self::claveConceptoAsignable($datos);
+        if ($concepto !== null) {
+            $o = &$this->asignablesOmitidos[$concepto];
+            $o ??= ['clave_concepto' => $concepto, 'filas' => 0, 'documentos' => 0, 'vistas' => []];
+            if (isset($o['vistas'][$clave])) {
+                $o['documentos'] += $documentos; // ya omitida en este paso: solo suma documentos
+                unset($o);
+                return;
+            }
+            $enLista = $this->filasPorConcepto[$concepto] ?? 0;
+            if ($enLista >= self::MAX_ASIGNABLES_POR_CONCEPTO) {
+                $o['vistas'][$clave] = true;
+                $o['filas']++;
+                $o['documentos'] += $documentos;
+                unset($o);
+                return;
+            }
+            unset($o);
+            $this->filasPorConcepto[$concepto] = $enLista + 1;
+        }
+        $this->asignables[$clave] = ['clave' => $clave, 'documentos' => $documentos] + $datos;
+    }
+
+    /**
+     * Clave del concepto de una fila de proveedor/cliente/ítem (null en formas y conceptos de
+     * ingresos/egresos). Mismo formato que claveConcepto() de asientos_pendientes.js.
+     */
+    private static function claveConceptoAsignable(array $d): ?string
+    {
+        if (!in_array($d['clase'] ?? '', ['entidad', 'item'], true)) {
+            return null;
+        }
+        return $d['clase'] . '|' . ($d['entidad'] ?? '') . '|' . ($d['tipo_asiento'] ?? '') . '|' . ($d['id_asiento_tipo'] ?? '');
+    }
+
+    /** Filas omitidas por el tope, por concepto, para la respuesta (sin el control interno 'vistas'). */
+    private function getAsignablesOmitidos(): array
+    {
+        $out = [];
+        foreach ($this->asignablesOmitidos as $o) {
+            if ($o['filas'] > 0) {
+                $out[] = ['clave_concepto' => $o['clave_concepto'], 'filas' => $o['filas'], 'documentos' => $o['documentos']];
+            }
+        }
+        return $out;
+    }
+
+    /** Campos comunes de una fila de concepto (entidad o ítem). */
+    private function datosConcepto(string $tipoAsiento, string $seccion, int $idAsientoTipo, array $r): array
+    {
+        return [
+            'tipo_asiento'    => $tipoAsiento,
+            'seccion'         => $seccion,
+            'id_asiento_tipo' => $idAsientoTipo,
+            'concepto'        => (string) $r['concepto'],
+            'tipo_cuenta'     => (string) ($r['tipo_cuenta'] ?? ''),
+        ];
+    }
+
+    /** Concepto (asientos_tipo) de un tipo de asiento por su nombre, sin distinguir mayúsculas. */
+    private function conceptoPorNombre(\App\repositories\modulos\AsientoProgramadoRepository $repo, string $tipoAsiento, string $nombre): ?array
+    {
+        if (!isset($this->conceptosPorTipo[$tipoAsiento])) {
+            $this->conceptosPorTipo[$tipoAsiento] = [];
+            foreach ($repo->getReglasGeneralesPorConcepto($this->idEmpresa, $tipoAsiento) as $r) {
+                $n = mb_strtolower(trim((string) ($r['concepto'] ?? '')), 'UTF-8');
+                if ($n !== '') {
+                    $this->conceptosPorTipo[$tipoAsiento][$n] = $r;
+                }
+            }
+        }
+        return $this->conceptosPorTipo[$tipoAsiento][mb_strtolower(trim($nombre), 'UTF-8')] ?? null;
+    }
+
+    /**
+     * Líneas sin cuenta del reparto por ítem que nombra el motivo (AsientoBuilderService::
+     * repartirAdquisicionPorLinea / lanzarLineasSinCuenta): «concepto» para A, B, C — separados de
+     * la siguiente falta por «, «» o «; «», y del cierre por «. » o « (no tienen…».
+     *
+     * @return array<string, string[]> concepto => nombres candidatos (se verifican contra la base)
+     */
+    private static function itemsSinCuenta(string $motivo): array
+    {
+        $out = [];
+        if (preg_match_all('/«([^»]+)» para (.+?)(?=\s*[;,]\s*«|\.\s|\.$| \(no tienen|$)/u', $motivo, $mm, PREG_SET_ORDER)) {
+            foreach ($mm as $x) {
+                $nombres = array_filter(array_map('trim', explode(',', $x[2])), fn($n) => $n !== '' && $n !== 'algunas líneas');
+                if ($nombres) {
+                    $out[trim($x[1])] = array_values(array_unique(array_merge($out[trim($x[1])] ?? [], $nombres)));
+                }
+            }
+        }
+        return $out;
     }
 
     /**

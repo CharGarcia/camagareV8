@@ -2261,4 +2261,260 @@ class AsientoProgramadoRepository extends BaseRepository
         $nombre = $st->fetchColumn();
         return $nombre === false ? null : (string) $nombre;
     }
+
+    /**
+     * Proveedor (o cliente) de un lote de documentos, agrupado: cuántos documentos tiene cada uno y
+     * si ya tiene cuentas PROPIAS en ese tipo de asiento. Lo usa el aviso de asientos pendientes
+     * para ofrecer «asignar la cuenta» por proveedor (SincronizadorAsientosService::registrarAsignables()).
+     * $tablaDoc/$colEntidad son literales del código, no entrada del usuario. Falla en silencio ([]).
+     *
+     * @return array<int, array{id:int, nombre:string, documentos:int, con_cuentas_propias:bool}>
+     */
+    public function getEntidadesPorDocumento(string $tablaDoc, string $colEntidad, string $tipoReferencia, string $tipoAsiento, array $ids): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        if (!$ids || !preg_match('/^[a-z_]+$/', $tablaDoc) || !preg_match('/^[a-z_]+$/', $colEntidad)) {
+            return [];
+        }
+        [$tablaEnt, $colNombre] = match ($tipoReferencia) {
+            'proveedor' => ['proveedores', 'razon_social'],
+            'cliente'   => ['clientes', 'nombre'],
+            default     => [null, null],
+        };
+        if ($tablaEnt === null) {
+            return [];
+        }
+        try {
+            $st = $this->db->prepare(
+                "SELECT e.id, e.{$colNombre} AS nombre, COUNT(*) AS documentos,
+                        EXISTS (SELECT 1
+                                  FROM {$this->table} ap
+                                  JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo
+                                 WHERE ap.id_empresa      = e.id_empresa
+                                   AND ap.tipo_referencia = :tipo_ref
+                                   AND ap.id_referencia   = e.id
+                                   AND at.tipo_asiento    = :tipo_asiento
+                                   AND ap.eliminado       = false
+                                   AND ap.id_cuenta IS NOT NULL) AS con_cuentas_propias
+                   FROM {$tablaDoc} d
+                   JOIN {$tablaEnt} e ON e.id = d.{$colEntidad}
+                  WHERE d.id = ANY(string_to_array(:ids, ',')::int[])
+                  GROUP BY e.id, e.{$colNombre}, e.id_empresa
+                  ORDER BY e.{$colNombre}"
+            );
+            $st->execute([
+                ':ids'          => implode(',', $ids),
+                ':tipo_ref'     => $tipoReferencia,
+                ':tipo_asiento' => $tipoAsiento,
+            ]);
+            $out = [];
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $out[] = [
+                    'id'                  => (int) $r['id'],
+                    'nombre'              => trim((string) $r['nombre']),
+                    'documentos'          => (int) $r['documentos'],
+                    'con_cuentas_propias' => $r['con_cuentas_propias'] === true || $r['con_cuentas_propias'] === 't',
+                ];
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Concepto (asientos_tipo) vivo: id, tipo_asiento, referencia y tipo_cuenta; null si no existe. */
+    public function getAsientoTipoVivo(int $idAsientoTipo): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, tipo_asiento, referencia AS concepto, COALESCE(tipo_cuenta, '') AS tipo_cuenta
+               FROM asientos_tipo WHERE id = :id AND eliminado = false LIMIT 1"
+        );
+        $st->execute([':id' => $idAsientoTipo]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** Cuenta de movimiento (nivel 5) viva del plan de la empresa: id, codigo, nombre; null si no lo es. */
+    public function getCuentaMovimientoEmpresa(int $idEmpresa, int $idCuenta): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT id, codigo, nombre FROM plan_cuentas
+              WHERE id = :id AND id_empresa = :e AND eliminado = false AND nivel = '5' LIMIT 1"
+        );
+        $st->execute([':id' => $idCuenta, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** Regla viva de un proveedor/cliente para un concepto (sin IVA por tarifa); null si no tiene. */
+    public function getReglaEntidadPorAsientoTipo(int $idEmpresa, string $tipoReferencia, int $idReferencia, int $idAsientoTipo): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT * FROM {$this->table}
+              WHERE id_empresa = :e AND tipo_referencia = :tr AND id_referencia = :id
+                AND id_asiento_tipo = :at AND eliminado = false
+              ORDER BY id LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':tr' => $tipoReferencia, ':id' => $idReferencia, ':at' => $idAsientoTipo]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /**
+     * Candado transaccional para «asignar una cuenta» desde el aviso (concepto General, de una
+     * entidad o de un ítem; forma de cobro/pago; concepto de ingreso/egreso): serializa «¿ya tiene
+     * cuenta? → crear» para que dos asignaciones simultáneas no dupliquen la regla.
+     */
+    public function lockAsignacionConcepto(int $idEmpresa, string $destino, string $referencia, int $idAsientoTipo): void
+    {
+        $st = $this->db->prepare("SELECT pg_advisory_xact_lock(hashtext('asignar_concepto:' || :e || ':' || :d || ':' || :r || ':' || :at))");
+        $st->execute([':e' => $idEmpresa, ':d' => $destino, ':r' => $referencia, ':at' => $idAsientoTipo]);
+    }
+
+    /** Nombre del cliente si pertenece a la empresa y no está eliminado; null si no. */
+    public function getNombreClienteEmpresa(int $idEmpresa, int $idCliente): ?string
+    {
+        $st = $this->db->prepare("SELECT nombre FROM clientes WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $idCliente, ':e' => $idEmpresa]);
+        $nombre = $st->fetchColumn();
+        return $nombre === false ? null : (string) $nombre;
+    }
+
+    /** Regla viva de un ítem de compra (por nombre) para un concepto; null si no tiene. */
+    public function getReglaItemCompraPorAsientoTipo(int $idEmpresa, string $referenciaTexto, int $idAsientoTipo): ?array
+    {
+        $st = $this->db->prepare(
+            "SELECT * FROM {$this->table}
+              WHERE id_empresa = :e AND tipo_referencia = 'item_compra' AND TRIM(referencia_texto) = :rt
+                AND id_asiento_tipo = :at AND eliminado = false
+              ORDER BY id LIMIT 1"
+        );
+        $st->execute([':e' => $idEmpresa, ':rt' => trim($referenciaTexto), ':at' => $idAsientoTipo]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
+
+    /** ¿Algún documento de compra o liquidación vivo de la empresa tiene una línea con ese nombre? */
+    public function existeItemCompraEmpresa(int $idEmpresa, string $referenciaTexto): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT EXISTS (SELECT 1 FROM compras_detalle d JOIN compras_cabecera c ON c.id = d.id_compra
+                             WHERE c.id_empresa = :e1 AND c.eliminado = false AND TRIM(d.descripcion) = :rt1)
+                 OR EXISTS (SELECT 1 FROM liquidaciones_detalle d JOIN liquidaciones_cabecera c ON c.id = d.id_cabecera
+                             WHERE c.id_empresa = :e2 AND c.eliminado = false AND TRIM(d.descripcion) = :rt2)"
+        );
+        $rt = trim($referenciaTexto);
+        $st->execute([':e1' => $idEmpresa, ':rt1' => $rt, ':e2' => $idEmpresa, ':rt2' => $rt]);
+        return (bool) $st->fetchColumn();
+    }
+
+    /**
+     * Ítems (nombre de línea) de un lote de documentos de compra, con cuántos documentos los traen.
+     * Solo los nombres de $nombres que existen tal cual: el motivo de fallo los lista separados por
+     * coma y un nombre que lleva comas no se puede reconocer, así que se descarta en vez de adivinarlo.
+     * $tablaDetalle/$colCabecera son literales del código. Falla en silencio ([]).
+     *
+     * @return array<string,int> nombre => documentos
+     */
+    public function getItemsCompraEnDocumentos(string $tablaDetalle, string $colCabecera, array $ids, array $nombres): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        $nombres = array_values(array_unique(array_filter(array_map('trim', $nombres), fn($n) => $n !== '')));
+        if (!$ids || !$nombres || !preg_match('/^[a-z_]+$/', $tablaDetalle) || !preg_match('/^[a-z_]+$/', $colCabecera)) {
+            return [];
+        }
+        try {
+            $st = $this->db->prepare(
+                "SELECT TRIM(d.descripcion) AS nombre, COUNT(DISTINCT d.{$colCabecera}) AS documentos
+                   FROM {$tablaDetalle} d
+                  WHERE d.{$colCabecera} = ANY(string_to_array(:ids, ',')::int[])
+                    AND TRIM(d.descripcion) = ANY(CAST(:nombres AS text[]))
+                  GROUP BY TRIM(d.descripcion)"
+            );
+            $st->execute([':ids' => implode(',', $ids), ':nombres' => self::arrayTextoPg($nombres)]);
+            $out = [];
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $out[(string) $r['nombre']] = (int) $r['documentos'];
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Literal de arreglo de texto de PostgreSQL ({"a","b"}) para pasarlo como un solo parámetro. */
+    private static function arrayTextoPg(array $valores): string
+    {
+        return '{' . implode(',', array_map(
+            fn($v) => '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], (string) $v) . '"',
+            $valores
+        )) . '}';
+    }
+
+    /**
+     * Formas de cobro/pago de la empresa con ese nombre que NO tienen cuenta para ese flujo
+     * (misma lectura que AsientoBuilderService::lineasFormas(): COALESCE(regla del flujo, cuenta de
+     * la forma)). El aviso solo trae el nombre; si hay más de una forma así, quien llama no ofrece nada.
+     *
+     * @return array<int, array{id:int, nombre:string, activo:bool, tipo_cuenta:string}>
+     */
+    public function getFormasSinCuentaPorNombre(int $idEmpresa, string $nombre, string $tipoReferencia): array
+    {
+        $st = $this->db->prepare(
+            "SELECT f.id, f.nombre, f.activo, COALESCE(f.tipo_cuenta_contable, '') AS tipo_cuenta
+               FROM empresa_formas_pago f
+               LEFT JOIN {$this->table} ap ON ap.id_referencia = f.id AND ap.tipo_referencia = :tr
+                                          AND ap.id_empresa = f.id_empresa AND ap.eliminado = false
+              WHERE f.id_empresa = :e AND f.eliminado = false AND TRIM(f.nombre) = :n
+                AND COALESCE(ap.id_cuenta, f.id_cuenta_contable) IS NULL
+              ORDER BY f.id"
+        );
+        $st->execute([':tr' => $tipoReferencia, ':e' => $idEmpresa, ':n' => trim($nombre)]);
+        return array_map(fn($r) => [
+            'id'          => (int) $r['id'],
+            'nombre'      => trim((string) $r['nombre']),
+            'activo'      => $r['activo'] === true || $r['activo'] === 't',
+            'tipo_cuenta' => (string) $r['tipo_cuenta'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /** Igual que getFormasSinCuentaPorNombre() para los conceptos (opciones) de Ingresos/Egresos. */
+    public function getOpcionesSinCuentaPorNombre(int $idEmpresa, string $nombre, string $tipoReferencia): array
+    {
+        $st = $this->db->prepare(
+            "SELECT o.id, o.nombre, o.estado, COALESCE(o.tipo_cuenta_contable, '') AS tipo_cuenta
+               FROM empresa_opciones_ingreso_egreso o
+               LEFT JOIN {$this->table} ap ON ap.id_referencia = o.id AND ap.tipo_referencia = :tr
+                                          AND ap.id_empresa = o.id_empresa AND ap.eliminado = false
+              WHERE o.id_empresa = :e AND o.eliminado = false AND TRIM(o.nombre) = :n
+                AND COALESCE(ap.id_cuenta, o.id_cuenta_contable) IS NULL
+              ORDER BY o.id"
+        );
+        $st->execute([':tr' => $tipoReferencia, ':e' => $idEmpresa, ':n' => trim($nombre)]);
+        return array_map(fn($r) => [
+            'id'          => (int) $r['id'],
+            'nombre'      => trim((string) $r['nombre']),
+            'activo'      => !in_array($r['estado'], [false, 'f', 'false', 0, '0'], true),
+            'tipo_cuenta' => (string) $r['tipo_cuenta'],
+        ], $st->fetchAll(PDO::FETCH_ASSOC));
+    }
+
+    /**
+     * Forma de cobro/pago o concepto de Ingresos/Egresos de la empresa con la cuenta que tiene HOY
+     * para ese flujo/naturaleza: la de la regla (asientos_programados) y la propia del registro.
+     * $tabla es literal del código ('empresa_formas_pago' | 'empresa_opciones_ingreso_egreso').
+     */
+    public function getRegistroConCuentaFlujo(string $tabla, int $idEmpresa, int $id, string $tipoReferencia): ?array
+    {
+        if (!in_array($tabla, ['empresa_formas_pago', 'empresa_opciones_ingreso_egreso'], true)) {
+            return null;
+        }
+        $extra = $tabla === 'empresa_opciones_ingreso_egreso' ? ", COALESCE(r.comportamiento, '') AS comportamiento" : ", '' AS comportamiento";
+        $st = $this->db->prepare(
+            "SELECT r.id, r.nombre, r.id_cuenta_contable, ap.id AS id_regla, ap.id_cuenta AS id_cuenta_regla {$extra}
+               FROM {$tabla} r
+               LEFT JOIN {$this->table} ap ON ap.id_referencia = r.id AND ap.tipo_referencia = :tr
+                                          AND ap.id_empresa = r.id_empresa AND ap.eliminado = false
+              WHERE r.id = :id AND r.id_empresa = :e AND r.eliminado = false
+              ORDER BY ap.id LIMIT 1"
+        );
+        $st->execute([':tr' => $tipoReferencia, ':id' => $id, ':e' => $idEmpresa]);
+        return $st->fetch(PDO::FETCH_ASSOC) ?: null;
+    }
 }

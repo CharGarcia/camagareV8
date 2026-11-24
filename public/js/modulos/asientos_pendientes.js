@@ -69,9 +69,430 @@
 
     const fmtNum = (n) => Number(n).toLocaleString('es-EC');
 
+    /** "…/modulos/asientos_contables" → "…" (base de la app). */
+    function urlApp(urlBase) {
+        return String(urlBase).replace(/\/modulos\/[^/]+\/?$/, '');
+    }
+
     /** "…/modulos/asientos_contables" → "…/modulos/configuracion-contable" (misma base de la app). */
     function urlConfiguracion(urlBase) {
-        return String(urlBase).replace(/\/modulos\/[^/]+\/?$/, '') + '/modulos/configuracion-contable';
+        return urlApp(urlBase) + '/modulos/configuracion-contable';
+    }
+
+    // ── Asignar cuentas desde el aviso ─────────────────────────────────────────────────────
+    // `asignables` (SincronizadorAsientosService::registrarAsignables): una fila por cuenta que se
+    // puede asignar aquí mismo. Cuatro clases:
+    //   entidad  proveedor/cliente × concepto que le falta → en la General o solo para ese tercero.
+    //   item     ítem de compra sin cuenta (reparto por línea) → en la General o solo para ese ítem.
+    //   forma    forma de cobro/pago sin cuenta.
+    //   opcion   concepto de Ingresos/Egresos sin cuenta.
+    // POST configuracion-contable/asignarCuentaAvisoAjax solo COMPLETA lo que falta (no cambia una
+    // cuenta ya puesta). Luego «Volver a generar».
+
+    /** Máximo de filas por grupo en la ventana; el resto se configura con el enlace «Configurar». */
+    const MAX_ASIGNABLES = 25;
+
+    /** Grupo (título) de una fila y su orden en la ventana. */
+    function grupoAsignable(a) {
+        switch (a.clase) {
+            case 'entidad': return { orden: 1, titulo: `${a.seccion} — por ${a.entidad === 'cliente' ? 'cliente' : 'proveedor'}` };
+            case 'item':    return { orden: 2, titulo: `${a.seccion} — por ítem de compra` };
+            case 'forma':   return { orden: 3, titulo: 'Formas de cobro y pago' };
+            case 'opcion':  return { orden: 4, titulo: 'Conceptos de ingresos y egresos' };
+            default:        return { orden: 9, titulo: 'Otras cuentas' };
+        }
+    }
+
+    /** Destinos de una fila: [valor, etiqueta]. Las formas y conceptos tienen uno solo (el propio registro). */
+    function destinosAsignable(a) {
+        if (a.clase === 'entidad') {
+            return [['general', 'En la General'], ['entidad', a.entidad === 'cliente' ? 'Solo este cliente' : 'Solo este proveedor']];
+        }
+        if (a.clase === 'item') return [['general', 'En la General'], ['entidad', 'Solo este ítem']];
+        return [];
+    }
+
+    /** Aviso al elegir «Solo este proveedor/cliente» para quien aún no tiene cuentas propias. */
+    function notaEntidad(a) {
+        if (a.clase !== 'entidad' || a.con_cuentas_propias) return '';
+        const esCliente = a.entidad === 'cliente';
+        return `Este ${esCliente ? 'cliente' : 'proveedor'} pasará a tener cuentas propias: sus ${esCliente ? 'ventas' : 'compras'} dejarán de
+            repartirse por ${esCliente ? 'producto' : 'ítem'}, categoría o marca, y lo que no configure en él se tomará de la General.`;
+    }
+
+    function cabeceraAsignable(a) {
+        const docs = `<span class="text-muted">· ${a.documentos} doc.</span>`;
+        const inactiva = a.inactiva ? ` <span class="badge bg-secondary bg-opacity-10 text-secondary">${a.clase === 'forma' ? 'inactiva' : 'inactivo'}</span>` : '';
+        switch (a.clase) {
+            case 'item':
+                return `<div>Ítem <strong>${escapeHtml(a.nombre)}</strong> ${docs} — falta «${escapeHtml(a.concepto)}»</div>`;
+            case 'forma':
+            case 'opcion':
+                return `<div>${a.clase === 'forma' ? (a.flujo === 'cobro' ? 'Forma de cobro' : 'Forma de pago') : (a.naturaleza === 'egreso' ? 'Concepto de egresos' : 'Concepto de ingresos')}`
+                    + ` <strong>${escapeHtml(a.nombre)}</strong>${inactiva} ${docs} — sin cuenta contable</div>`;
+            default:
+                return `<div><strong>${escapeHtml(a.nombre)}</strong> ${docs} — falta «${escapeHtml(a.concepto)}»</div>`;
+        }
+    }
+
+    function filaAsignable(a, i) {
+        const cabecera = cabeceraAsignable(a);
+        if (a.resuelto) {
+            return `<div class="border-top pt-2 mt-2" data-asig-fila="${i}">${cabecera}`
+                + `<div class="text-success mt-1"><i class="bi bi-check-circle-fill me-1"></i>${escapeHtml(a.resuelto)}</div></div>`;
+        }
+        const destinos = destinosAsignable(a);
+        // Con cuentas propias, lo natural es completar las suyas; si no, la General (no le apaga el
+        // reparto por ítem/producto, categoría o marca).
+        const porDefecto = (a.clase === 'entidad' && a.con_cuentas_propias) ? 'entidad' : 'general';
+        const selector = destinos.length
+            ? `<select class="form-select form-select-sm" style="width:175px;" data-asig-destino title="Dónde guardar la cuenta">`
+                + destinos.map(([v, t]) => `<option value="${v}"${v === porDefecto ? ' selected' : ''}>${t}</option>`).join('')
+                + `</select>`
+            : '';
+        const nota = notaEntidad(a);
+        return `<div class="border-top pt-2 mt-2" data-asig-fila="${i}">${cabecera}
+            <div class="d-flex flex-wrap gap-1 align-items-start mt-1" data-asig-controles>
+                <div class="flex-grow-1" style="min-width:240px;">
+                    <input type="text" class="form-control form-control-sm" autocomplete="off"
+                           placeholder="Buscar cuenta (código o nombre)…" data-asig-input
+                           data-tipo-cuenta="${escapeHtml(a.tipo_cuenta || '')}">
+                    <div class="list-group mt-1 shadow-sm" data-asig-sug style="display:none;max-height:170px;overflow:auto;"></div>
+                </div>
+                ${selector}
+                <button type="button" class="btn btn-sm btn-success" data-asig-guardar disabled>
+                    <i class="bi bi-check-lg me-1"></i>Asignar</button>
+            </div>
+            ${nota ? `<div class="text-warning-emphasis mt-1" style="font-size:.72rem;" data-asig-nota-prov hidden>
+                <i class="bi bi-exclamation-triangle me-1"></i>${nota}</div>` : ''}
+        </div>`;
+    }
+
+    /**
+     * Concepto de una fila de proveedor/cliente/ítem: las filas con la misma clave se resuelven
+     * juntas al asignar la cuenta «En la General».
+     */
+    const claveConcepto = (a) => `${a.clase}|${a.entidad || ''}|${a.tipo_asiento}|${a.id_asiento_tipo}`;
+    const esDeConcepto = (a) => a.clase === 'entidad' || a.clase === 'item';
+
+    /**
+     * Fila resumen de un concepto que les falta a VARIOS proveedores/clientes/ítems: «subtotal…» falta
+     * en 100 proveedores → Asignar en la General. Va arriba del grupo, así ningún concepto queda
+     * escondido detrás del tope de filas y el caso común se resuelve con un solo clic.
+     */
+    function filaResumen(c) {
+        const quienes = c.rep.clase === 'item' ? 'ítems' : (c.rep.entidad === 'cliente' ? 'clientes' : 'proveedores');
+        const docs = c.rep.clase === 'item' ? '' : ` <span class="text-muted">· ${c.documentos} doc.</span>`;
+        const cabecera = `<div><i class="bi bi-collection me-1 text-primary"></i>«${escapeHtml(c.rep.concepto)}» falta en `
+            + `<strong>${c.filas} ${quienes}</strong>${docs}</div>`;
+        const base = `class="border rounded-2 bg-white px-2 pb-2 pt-1 mt-2" data-asig-fila="${c.idx}" data-asig-resumen="${escapeHtml(c.clave)}"`;
+        if (c.resuelto) {
+            return `<div ${base}>${cabecera}<div class="text-success mt-1"><i class="bi bi-check-circle-fill me-1"></i>${escapeHtml(c.resuelto)}</div></div>`;
+        }
+        return `<div ${base}>${cabecera}
+            <div class="d-flex flex-wrap gap-1 align-items-start mt-1" data-asig-controles>
+                <div class="flex-grow-1" style="min-width:240px;">
+                    <input type="text" class="form-control form-control-sm" autocomplete="off"
+                           placeholder="Buscar cuenta (código o nombre)…" data-asig-input
+                           data-tipo-cuenta="${escapeHtml(c.rep.tipo_cuenta || '')}">
+                    <div class="list-group mt-1 shadow-sm" data-asig-sug style="display:none;max-height:170px;overflow:auto;"></div>
+                </div>
+                <button type="button" class="btn btn-sm btn-success" data-asig-guardar disabled>
+                    <i class="bi bi-check-lg me-1"></i>Asignar en la General a los ${c.filas}</button>
+            </div>
+        </div>`;
+    }
+
+    /**
+     * @param {Object[]} asignables Filas recibidas.
+     * @param {Object[]} [omitidos] Lo que el servidor solo contó por el tope por concepto:
+     *                              [{clave_concepto, filas, documentos}] (SincronizadorAsientosService::agregarAsignable).
+     */
+    function htmlAsignables(asignables, omitidos) {
+        const extra = new Map((omitidos || []).map(o => [o.clave_concepto, o]));
+        const grupos = new Map();
+        asignables.forEach((a, i) => {
+            const g = grupoAsignable(a);
+            if (!grupos.has(g.titulo)) grupos.set(g.titulo, { ...g, filas: [] });
+            grupos.get(g.titulo).filas.push([a, i]);
+        });
+        const html = [...grupos.values()].sort((x, y) => x.orden - y.orden).map(g => {
+            // Resumen por concepto (solo si a más de uno le falta el mismo).
+            const porConcepto = new Map();
+            g.filas.forEach(([a, i]) => {
+                if (!esDeConcepto(a)) return;
+                const k = claveConcepto(a);
+                if (!porConcepto.has(k)) porConcepto.set(k, { clave: k, idx: i, rep: a, filas: 0, documentos: 0, pendientes: 0 });
+                const c = porConcepto.get(k);
+                c.filas++;
+                c.documentos += parseInt(a.documentos, 10) || 0;
+                if (!a.resuelto) c.pendientes++;
+                else c.resuelto = c.resuelto || a.resuelto;
+            });
+            // Lo que no viajó (tope por concepto del servidor) también cuenta en el resumen y en el «y N más».
+            let omitidasGrupo = 0;
+            porConcepto.forEach(c => {
+                const o = extra.get(c.clave);
+                if (!o) return;
+                c.filas += parseInt(o.filas, 10) || 0;
+                c.documentos += parseInt(o.documentos, 10) || 0;
+                omitidasGrupo += parseInt(o.filas, 10) || 0;
+            });
+            const resumenes = [...porConcepto.values()].filter(c => c.filas > 1).map(c => {
+                if (c.pendientes > 0) c.resuelto = null;
+                return filaResumen(c);
+            }).join('');
+            const titDetalle = resumenes
+                ? `<div class="text-muted mt-2" style="font-size:.72rem;">Uno por uno (solo si alguno necesita su propia cuenta):</div>`
+                : '';
+            const ocultas = Math.max(0, g.filas.length - MAX_ASIGNABLES) + omitidasGrupo;
+            const resto = ocultas > 0
+                ? `<div class="text-muted mt-2" style="font-size:.75rem;">Y ${ocultas} más: `
+                    + (resumenes ? 'se resuelven con la fila de arriba («En la General») o con el enlace «Configurar».</div>' : 'configúrelos con el enlace «Configurar».</div>')
+                : '';
+            return `<div class="mt-2 pt-1"><div class="fw-semibold text-secondary" style="font-size:.78rem;">${escapeHtml(g.titulo)}</div>`
+                + resumenes + titDetalle
+                + g.filas.slice(0, MAX_ASIGNABLES).map(([a, i]) => filaAsignable(a, i)).join('') + resto + `</div>`;
+        }).join('');
+        return `<div class="text-start small mb-2 border rounded-3 p-2 bg-light" data-asig>
+            <div class="fw-semibold"><i class="bi bi-lightning-charge-fill text-primary me-1"></i>Asigne aquí las cuentas que faltan</div>
+            <div class="text-muted" style="font-size:.75rem;">«En la General» sirve para todos los que no tienen esa cuenta propia;
+                «Solo este…» se la configura únicamente a ese proveedor, cliente o ítem.</div>
+            ${html}
+            <div class="d-flex justify-content-end align-items-center gap-2 mt-2 pt-2 border-top">
+                <span class="text-muted" style="font-size:.75rem;" data-asig-estado>Asigne las cuentas y vuelva a generar.</span>
+                <button type="button" class="btn btn-sm btn-primary" data-asig-regenerar disabled>
+                    <i class="bi bi-arrow-repeat me-1"></i>Volver a generar</button>
+            </div>
+        </div>`;
+    }
+
+    /** Lo que se envía al servidor para una fila y un destino. */
+    function cuerpoAsignar(a, destino, idCuenta) {
+        const p = { clase: a.clase, id_cuenta: String(idCuenta) };
+        if (a.clase === 'entidad' || a.clase === 'item') {
+            p.destino = destino || 'general';
+            p.id_asiento_tipo = String(a.id_asiento_tipo);
+            if (a.clase === 'entidad') p.id_entidad = String(a.id_entidad);
+            else p.referencia_texto = a.referencia_texto;
+        } else if (a.clase === 'forma') {
+            p.id_forma = String(a.id_forma);
+            p.flujo = a.flujo;
+        } else if (a.clase === 'opcion') {
+            p.id_opcion = String(a.id_opcion);
+            p.naturaleza = a.naturaleza;
+        }
+        return new URLSearchParams(p);
+    }
+
+    /**
+     * Conecta los controles de la sección «Asigne aquí…» dentro de la ventana abierta.
+     * `alRegenerar` cierra el aviso y vuelve a generar.
+     */
+    function activarAsignables(contenedor, opts, alRegenerar) {
+        const sec = contenedor.querySelector('[data-asig]');
+        if (!sec) return;
+        const asignables = opts.asignables;
+        const urlCuentas = urlApp(opts.urlBase) + '/modulos/plan-cuentas/searchAjaxCuentas';
+        const urlAsignar = urlConfiguracion(opts.urlBase) + '/asignarCuentaAvisoAjax';
+        const btnRegenerar = sec.querySelector('[data-asig-regenerar]');
+        const estado = sec.querySelector('[data-asig-estado]');
+        let temporizador = null;
+        let consulta = 0;
+
+        const filaDe = (el) => el.closest('[data-asig-fila]');
+        const itemDe = (fila) => asignables[parseInt(fila.getAttribute('data-asig-fila'), 10)];
+
+        function marcarHayCambios() {
+            opts.huboAsignaciones = true;
+            btnRegenerar.disabled = false;
+            estado.textContent = 'Cuentas guardadas. Vuelva a generar para crear los asientos.';
+        }
+        if (opts.huboAsignaciones) marcarHayCambios();
+
+        function marcarResuelta(fila, texto) {
+            fila.querySelector('[data-asig-controles]')?.remove();
+            fila.querySelector('[data-asig-nota-prov]')?.remove();
+            const ok = document.createElement('div');
+            ok.className = 'text-success mt-1';
+            ok.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>${escapeHtml(texto)}`;
+            fila.appendChild(ok);
+        }
+
+        function limpiarSeleccion(input) {
+            input.value = '';
+            delete input.dataset.idCuenta;
+            const fila = filaDe(input);
+            fila.querySelector('[data-asig-guardar]').disabled = true;
+            fila.querySelector('[data-asig-sug]').style.display = 'none';
+        }
+
+        function cerrarSugerencias(excepto) {
+            sec.querySelectorAll('[data-asig-sug]').forEach(s => { if (s !== excepto) s.style.display = 'none'; });
+        }
+
+        function buscar(input) {
+            const sug = filaDe(input).querySelector('[data-asig-sug]');
+            const texto = input.value.trim();
+            if (texto.length < 2) { sug.style.display = 'none'; return; }
+            clearTimeout(temporizador);
+            temporizador = setTimeout(async () => {
+                const mia = ++consulta;
+                try {
+                    const url = `${urlCuentas}?q=${encodeURIComponent(texto)}&tipo=${encodeURIComponent(input.dataset.tipoCuenta || '')}`;
+                    const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(r => r.json());
+                    if (mia !== consulta) return; // llegó una respuesta más nueva
+                    sug.innerHTML = '';
+                    if (!res || !res.ok) {
+                        sug.innerHTML = `<div class="list-group-item py-1 px-2 small text-danger">${escapeHtml((res && res.error) || 'No se pudieron buscar las cuentas.')}</div>`;
+                    } else if (!Array.isArray(res.data) || !res.data.length) {
+                        sug.innerHTML = '<div class="list-group-item py-1 px-2 small text-muted">Sin cuentas de movimiento que coincidan.</div>';
+                    } else {
+                        res.data.forEach(c => {
+                            const b = document.createElement('button');
+                            b.type = 'button';
+                            b.className = 'list-group-item list-group-item-action py-1 px-2 small text-start';
+                            b.textContent = `${c.codigo} - ${c.nombre}`;
+                            b.addEventListener('click', () => {
+                                input.value = `${c.codigo} - ${c.nombre}`;
+                                input.dataset.idCuenta = String(c.id);
+                                sug.style.display = 'none';
+                                filaDe(input).querySelector('[data-asig-guardar]').disabled = false;
+                            });
+                            sug.appendChild(b);
+                        });
+                    }
+                    cerrarSugerencias(sug);
+                    sug.style.display = 'block';
+                } catch (e) {
+                    sug.style.display = 'none';
+                }
+            }, 300);
+        }
+
+        /**
+         * Tras guardar: marca como resueltas EN LOS DATOS la fila y las que quedan resueltas con ella
+         * (también las que no se ven por el tope de filas, para que el resumen y un nuevo dibujado
+         * tras «Descargar PDF» lo reflejen) y luego repinta lo que está en pantalla.
+         */
+        function aplicarResultado(item, destino, cuenta) {
+            if (esDeConcepto(item) && destino === 'general') {
+                // La General cubre ese concepto para todos los de la lista (también para quien tiene
+                // cuentas propias: lo que no configura se toma de la General).
+                asignables.forEach(it => {
+                    if (!it.resuelto && esDeConcepto(it)
+                        && it.tipo_asiento === item.tipo_asiento && it.id_asiento_tipo === item.id_asiento_tipo) {
+                        it.resuelto = `Asignada en la General: ${cuenta}`;
+                    }
+                });
+            } else if (item.clase === 'entidad') {
+                // Ya tiene cuentas propias: sus demás filas dejan de advertirlo.
+                asignables.forEach(it => {
+                    if (it.clase === 'entidad' && it.entidad === item.entidad && it.id_entidad === item.id_entidad
+                        && it.tipo_asiento === item.tipo_asiento) {
+                        it.con_cuentas_propias = true;
+                    }
+                });
+                item.resuelto = `Asignada solo a este ${item.entidad === 'cliente' ? 'cliente' : 'proveedor'}: ${cuenta}`;
+            } else if (item.clase === 'item') {
+                item.resuelto = `Asignada solo a este ítem: ${cuenta}`;
+            } else {
+                item.resuelto = `Asignada: ${cuenta}`;
+            }
+            repintar();
+        }
+
+        /** Lleva la pantalla al estado de los datos: filas y resúmenes resueltos, notas que sobran. */
+        function repintar() {
+            sec.querySelectorAll('[data-asig-fila]').forEach(f => {
+                const it = itemDe(f);
+                const claveRes = f.getAttribute('data-asig-resumen');
+                if (claveRes !== null) {
+                    // El resumen queda resuelto cuando ya no le falta a ninguno de su concepto.
+                    const todos = asignables.filter(x => esDeConcepto(x) && claveConcepto(x) === claveRes);
+                    if (f.querySelector('[data-asig-controles]') && todos.every(x => x.resuelto)) {
+                        marcarResuelta(f, todos[0].resuelto);
+                    }
+                    return;
+                }
+                if (it.con_cuentas_propias) f.querySelector('[data-asig-nota-prov]')?.remove();
+                if (it.resuelto && f.querySelector('[data-asig-controles]')) marcarResuelta(f, it.resuelto);
+            });
+        }
+
+        async function asignar(fila, boton) {
+            if (boton.dataset.enCurso === '1') return; // doble clic
+            const item = itemDe(fila);
+            const input = fila.querySelector('[data-asig-input]');
+            // La fila resumen siempre guarda en la General (no tiene selector).
+            const destino = fila.hasAttribute('data-asig-resumen') ? 'general' : (fila.querySelector('[data-asig-destino]')?.value || '');
+            const idCuenta = input.dataset.idCuenta;
+            if (!idCuenta) return;
+            boton.dataset.enCurso = '1';
+            boton.disabled = true;
+            const htmlBoton = boton.innerHTML;
+            boton.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+            try {
+                const res = await fetch(urlAsignar, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: cuerpoAsignar(item, destino, idCuenta).toString(),
+                }).then(r => r.json());
+                if (!res || !res.ok) {
+                    estado.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle me-1"></i>${escapeHtml((res && res.error) || 'No se pudo asignar la cuenta.')}</span>`;
+                    boton.innerHTML = htmlBoton;
+                    boton.disabled = false;
+                    return;
+                }
+                aplicarResultado(item, destino, res.cuenta || input.value);
+                marcarHayCambios();
+            } catch (e) {
+                estado.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Error de conexión: no se asignó la cuenta.</span>';
+                boton.innerHTML = htmlBoton;
+                boton.disabled = false;
+            } finally {
+                boton.dataset.enCurso = '';
+            }
+        }
+
+        sec.addEventListener('input', (e) => {
+            const input = e.target.closest('[data-asig-input]');
+            if (!input) return;
+            // Al escribir de nuevo, la cuenta elegida deja de valer.
+            if (input.dataset.idCuenta) {
+                delete input.dataset.idCuenta;
+                filaDe(input).querySelector('[data-asig-guardar]').disabled = true;
+            }
+            buscar(input);
+        });
+        sec.addEventListener('keydown', (e) => {
+            const input = e.target.closest('[data-asig-input]');
+            if (!input) return;
+            if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); return; }
+            if (e.key === 'Escape') {
+                const sug = filaDe(input).querySelector('[data-asig-sug]');
+                if (sug.style.display !== 'none') { e.stopPropagation(); sug.style.display = 'none'; }
+                return;
+            }
+            // Cuenta ya elegida: Retroceso/Suprimir la limpia de una vez (no letra por letra).
+            if ((e.key === 'Backspace' || e.key === 'Delete') && input.dataset.idCuenta) {
+                e.preventDefault();
+                limpiarSeleccion(input);
+            }
+        });
+        sec.addEventListener('change', (e) => {
+            const sel = e.target.closest('[data-asig-destino]');
+            if (!sel) return;
+            const fila = filaDe(sel);
+            const nota = fila.querySelector('[data-asig-nota-prov]');
+            if (nota) nota.hidden = !(sel.value === 'entidad' && !itemDe(fila).con_cuentas_propias);
+        });
+        sec.addEventListener('click', (e) => {
+            const boton = e.target.closest('[data-asig-guardar]');
+            if (boton) { asignar(filaDe(boton), boton); return; }
+            if (e.target.closest('[data-asig-regenerar]')) { alRegenerar(); return; }
+            if (!e.target.closest('[data-asig-input]') && !e.target.closest('[data-asig-sug]')) cerrarSugerencias(null);
+        });
     }
 
     /**
@@ -125,6 +546,11 @@
         if (generados > 0) {
             html += `<div class="mb-2"><i class="bi bi-check-circle-fill text-success me-1"></i> Se generaron <strong>${generados}</strong> asiento(s) contable(s).</div>`;
         }
+        // Lo que se puede resolver aquí mismo va primero: es lo más rápido para el usuario.
+        const asignables = (opts.puedeAsignar && Array.isArray(opts.asignables)) ? opts.asignables : [];
+        if (asignables.length && window.Swal) {
+            html += htmlAsignables(asignables, opts.omitidos);
+        }
         if (acciones.length) {
             const items = acciones.map(a => {
                 let enlace = '';
@@ -170,18 +596,29 @@
             // tenerlo a mano mientras se configura, sin volver a generar para leerlo otra vez.
             const conPdf = (hayPendientes || info.length > 0) && !!opts.urlBase
                 && typeof window.CMG_pdfDocumento === 'function';
+            let regenerar = false;
             Swal.fire({
                 icon: interrumpido ? 'info' : (hayPendientes ? 'warning' : 'success'),
                 title: interrumpido ? 'Generación interrumpida' : (hayPendientes ? 'Generación completada con avisos' : 'Asientos generados'),
                 html: html,
-                width: (acciones.length || info.length) ? 640 : undefined,
+                width: asignables.length ? 780 : ((acciones.length || info.length) ? 640 : undefined),
                 confirmButtonText: 'Aceptar',
                 showDenyButton: conPdf,
                 denyButtonText: '<i class="bi bi-file-earmark-pdf me-1"></i> Descargar PDF',
                 denyButtonColor: '#dc3545',
-                allowOutsideClick: !conPdf,
+                allowOutsideClick: !conPdf && !asignables.length,
+                didOpen: (popup) => {
+                    if (asignables.length) {
+                        activarAsignables(popup, opts, () => { regenerar = true; Swal.close(); });
+                    }
+                },
             }).then((res) => {
                 if (res.isDenied) { descargarPdf(opts); return; }
+                if (regenerar) {
+                    // Sigue bloqueado (no se llama terminar()): la nueva generación lo libera al final.
+                    generar(opts.urlBase, onGenerado);
+                    return;
+                }
                 terminar();
                 if (typeof onGenerado === 'function') onGenerado();
             });
@@ -333,6 +770,11 @@
         const acumInfo = [];
         const acumResumen = {};
         const acumAcciones = new Map();
+        // Proveedor + concepto que se puede asignar desde el aviso; los documentos se suman entre lotes.
+        const acumAsignables = new Map();
+        // Lo que el servidor solo contó por su tope por concepto: se suma para el total del resumen.
+        const acumOmitidos = new Map();
+        let puedeAsignar = false;
         let puedeConfigurar = false;
         // Solo lo que de verdad falta generar: módulos encendidos, sin los documentos que no llevan
         // asiento (sin valor, o que dependen de un módulo apagado). Ver getPendientes() en el servidor.
@@ -409,6 +851,24 @@
                     });
                 }
                 if (json.puedeConfigurar) puedeConfigurar = true;
+                if (json.puedeAsignar) puedeAsignar = true;
+                if (Array.isArray(json.asignablesOmitidos)) {
+                    json.asignablesOmitidos.forEach(o => {
+                        if (!o || !o.clave_concepto) return;
+                        const p = acumOmitidos.get(o.clave_concepto) || { clave_concepto: o.clave_concepto, filas: 0, documentos: 0 };
+                        p.filas += parseInt(o.filas, 10) || 0;
+                        p.documentos += parseInt(o.documentos, 10) || 0;
+                        acumOmitidos.set(o.clave_concepto, p);
+                    });
+                }
+                if (Array.isArray(json.asignables)) {
+                    json.asignables.forEach(a => {
+                        if (!a || !a.clave) return;
+                        const previa = acumAsignables.get(a.clave);
+                        if (previa) previa.documentos += parseInt(a.documentos, 10) || 0;
+                        else acumAsignables.set(a.clave, { ...a, documentos: parseInt(a.documentos, 10) || 0 });
+                    });
+                }
                 pendientesReales += parseInt(json.pendientes, 10) || 0;
 
                 let extra = { generados };
@@ -454,8 +914,15 @@
                 acciones.push(a);
             });
 
+            // Dentro de cada grupo (htmlAsignables): por concepto y luego por nombre, así las filas que
+            // se resuelven juntas con «En la General» quedan seguidas.
+            const asignables = [...acumAsignables.values()].sort((a, b) =>
+                String(a.concepto).localeCompare(String(b.concepto), 'es')
+                || String(a.nombre).localeCompare(String(b.nombre), 'es'));
+
             mostrarResultado({
                 urlBase,
+                asignables, puedeAsignar, omitidos: [...acumOmitidos.values()],
                 acciones, urlConfig: puedeConfigurar ? urlConfiguracion(urlBase) : null,
                 pendientes: pendientesReales,
                 info: acumInfo, generados, interrumpido, onGenerado,

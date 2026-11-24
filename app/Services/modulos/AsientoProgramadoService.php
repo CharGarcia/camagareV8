@@ -347,6 +347,247 @@ class AsientoProgramadoService
     }
 
     /**
+     * Tipos de asiento cuyas cuentas se pueden asignar desde el aviso de asientos pendientes, con
+     * el tercero que puede tener cuentas propias en cada uno (cascada "la entidad manda").
+     */
+    public const ENTIDAD_ASIGNABLE_AVISO = [
+        'adquisiciones_compras' => 'proveedor',
+        'ventas_factura'        => 'cliente',
+        'recibos_venta'         => 'cliente',
+    ];
+
+    /**
+     * Asigna, desde el aviso de asientos pendientes (asientos_pendientes.js), la cuenta que le falta
+     * a un asiento. Según $d['clase']:
+     *  - 'entidad': un concepto del asiento, en la General ($d['destino'] = 'general') o como cuenta
+     *               propia del proveedor/cliente ('entidad', con $d['id_entidad']).
+     *  - 'item':    un concepto de compras, en la General o solo para un ítem de compra por su nombre
+     *               ('entidad', con $d['referencia_texto']).
+     *  - 'forma':   una forma de cobro/pago ($d['id_forma'], $d['flujo'] = cobro|pago).
+     *  - 'opcion':  un concepto de Ingresos/Egresos ($d['id_opcion'], $d['naturaleza'] = ingreso|egreso).
+     * SOLO completa lo que falta: si ese lugar ya tiene cuenta no la cambia (eso se hace a conciencia
+     * en Configuración Contable). Una transacción, bajo candado del destino, con auditoría.
+     *
+     * @return array{mensaje:string, cuenta:string}
+     */
+    public function asignarCuentaDesdeAviso(array $d, int $idEmpresa, int $idUsuario): array
+    {
+        $cuenta = $this->repo->getCuentaMovimientoEmpresa($idEmpresa, (int) ($d['id_cuenta'] ?? 0));
+        if ($cuenta === null) {
+            throw new Exception('Elija una cuenta de movimiento del plan de cuentas de la empresa.');
+        }
+        $clase = (string) ($d['clase'] ?? '');
+        return match ($clase) {
+            'entidad', 'item' => $this->asignarConceptoDesdeAviso($clase, $d, $cuenta, $idEmpresa, $idUsuario),
+            'forma', 'opcion' => $this->asignarFormaOpcionDesdeAviso($clase, $d, $cuenta, $idEmpresa, $idUsuario),
+            default           => throw new Exception('No se reconoce qué cuenta asignar.'),
+        };
+    }
+
+    /** Concepto de asientos_tipo en la General, en un proveedor/cliente o en un ítem de compra. */
+    private function asignarConceptoDesdeAviso(string $clase, array $d, array $cuenta, int $idEmpresa, int $idUsuario): array
+    {
+        $destino = (string) ($d['destino'] ?? '');
+        if (!in_array($destino, ['general', 'entidad'], true)) {
+            throw new Exception('Indique dónde guardar la cuenta.');
+        }
+        $idAsientoTipo = (int) ($d['id_asiento_tipo'] ?? 0);
+        $concepto = $this->repo->getAsientoTipoVivo($idAsientoTipo);
+        if ($concepto === null || !isset(self::ENTIDAD_ASIGNABLE_AVISO[$concepto['tipo_asiento']])) {
+            throw new Exception('El concepto contable no es válido.');
+        }
+
+        $idReferencia = $idAsientoTipo;
+        $tipoReferencia = $concepto['tipo_asiento'];
+        $referenciaTexto = null;
+        $donde = 'la configuración General';
+        if ($destino === 'entidad') {
+            if ($clase === 'item') {
+                $referenciaTexto = trim((string) ($d['referencia_texto'] ?? ''));
+                if ($concepto['tipo_asiento'] !== 'adquisiciones_compras' || $referenciaTexto === ''
+                    || !$this->repo->existeItemCompraEmpresa($idEmpresa, $referenciaTexto)) {
+                    throw new Exception('El ítem de compra no existe en los documentos de la empresa.');
+                }
+                $idReferencia = null;
+                $tipoReferencia = 'item_compra';
+                $donde = "el ítem «{$referenciaTexto}»";
+            } else {
+                $tipoReferencia = self::ENTIDAD_ASIGNABLE_AVISO[$concepto['tipo_asiento']];
+                $idReferencia = (int) ($d['id_entidad'] ?? 0);
+                $nombre = $tipoReferencia === 'proveedor'
+                    ? $this->repo->getNombreProveedorEmpresa($idEmpresa, $idReferencia)
+                    : $this->repo->getNombreClienteEmpresa($idEmpresa, $idReferencia);
+                if ($nombre === null) {
+                    throw new Exception("El {$tipoReferencia} no existe o no pertenece a su empresa.");
+                }
+                $donde = "el {$tipoReferencia} {$nombre}";
+            }
+        }
+
+        $data = [
+            'id_asiento_tipo'  => $idAsientoTipo,
+            'id_cuenta'        => (int) $cuenta['id'],
+            'id_referencia'    => $idReferencia,
+            'tipo_referencia'  => $tipoReferencia,
+            'referencia_texto' => $referenciaTexto,
+        ];
+        $this->rules->validar($data);
+        $this->validarNaturalezaCuenta($data, $idEmpresa);
+
+        $this->db->beginTransaction();
+        try {
+            $this->repo->lockAsignacionConcepto($idEmpresa, $tipoReferencia, (string) ($referenciaTexto ?? $idReferencia), $idAsientoTipo);
+
+            $existente = match (true) {
+                $destino === 'general'       => $this->repo->getReglaGeneralPorAsientoTipo($idEmpresa, $idAsientoTipo),
+                $referenciaTexto !== null    => $this->repo->getReglaItemCompraPorAsientoTipo($idEmpresa, $referenciaTexto, $idAsientoTipo),
+                default                      => $this->repo->getReglaEntidadPorAsientoTipo($idEmpresa, $tipoReferencia, (int) $idReferencia, $idAsientoTipo),
+            };
+            $res = $this->guardarReglaDesdeAviso($existente, $data, $cuenta, "«{$concepto['concepto']}»", $donde, $idEmpresa, $idUsuario);
+            $this->db->commit();
+            return $res;
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+    }
+
+    /**
+     * Forma de cobro/pago o concepto de Ingresos/Egresos. Su cuenta vive en dos sitios (la propia del
+     * registro y la regla del flujo/naturaleza en asientos_programados), igual que cuando se asigna en
+     * Configuración Contable: se escriben los dos, en la misma transacción.
+     */
+    private function asignarFormaOpcionDesdeAviso(string $clase, array $d, array $cuenta, int $idEmpresa, int $idUsuario): array
+    {
+        if ($clase === 'forma') {
+            $flujo = (string) ($d['flujo'] ?? '');
+            if (!in_array($flujo, ['cobro', 'pago'], true)) {
+                throw new Exception('Flujo de la forma no válido.');
+            }
+            $id = (int) ($d['id_forma'] ?? 0);
+            $tabla = 'empresa_formas_pago';
+            $tipoReferencia = 'forma_' . $flujo;
+            $que = "la forma de {$flujo}";
+            $repoModulo = new \App\repositories\modulos\FormaPagoRepository();
+        } else {
+            $naturaleza = (string) ($d['naturaleza'] ?? '');
+            if (!in_array($naturaleza, ['ingreso', 'egreso'], true)) {
+                throw new Exception('Naturaleza del concepto no válida.');
+            }
+            $id = (int) ($d['id_opcion'] ?? 0);
+            $tabla = 'empresa_opciones_ingreso_egreso';
+            $tipoReferencia = 'opcion_' . $naturaleza;
+            $que = "el concepto de {$naturaleza}s";
+            $repoModulo = new \App\repositories\modulos\OpcionIngresoEgresoRepository();
+        }
+
+        $registro = $this->repo->getRegistroConCuentaFlujo($tabla, $idEmpresa, $id, $tipoReferencia);
+        if ($registro === null) {
+            throw new Exception(ucfirst($que) . ' no existe o no pertenece a su empresa.');
+        }
+        // Conceptos atados a un módulo (COMPRA, FACTURA_VENTA, ROL…): su cuenta es la del módulo
+        // (mismo bloqueo que ConfiguracionContableController::guardarReglaOpcionAjax()).
+        if ($clase === 'opcion' && $this->repo->tieneCuentaOficialPorComportamiento((string) $registro['comportamiento'])) {
+            throw new Exception('Este concepto toma su cuenta de la configuración de su módulo (Adquisiciones/Ventas/Recibos/Nómina).');
+        }
+
+        $data = [
+            'id_asiento_tipo' => 0,
+            'id_cuenta'       => (int) $cuenta['id'],
+            'id_referencia'   => $id,
+            'tipo_referencia' => $tipoReferencia,
+        ];
+        $this->rules->validar($data);
+        $nombre = trim((string) $registro['nombre']);
+
+        $this->db->beginTransaction();
+        try {
+            $this->repo->lockAsignacionConcepto($idEmpresa, $tipoReferencia, (string) $id, 0);
+            $registro = $this->repo->getRegistroConCuentaFlujo($tabla, $idEmpresa, $id, $tipoReferencia);
+            $actual = (int) ($registro['id_cuenta_regla'] ?? 0) ?: (int) ($registro['id_cuenta_contable'] ?? 0);
+            if ($actual > 0 && $actual !== (int) $cuenta['id']) {
+                $c = $this->repo->getCuentaMovimientoEmpresa($idEmpresa, $actual);
+                throw new Exception(ucfirst($que) . " «{$nombre}» ya tiene la cuenta "
+                    . ($c ? $c['codigo'] . ' - ' . $c['nombre'] : 'configurada')
+                    . '. Si quiere cambiarla, hágalo en Configuración Contable.');
+            }
+            if (empty($registro['id_cuenta_contable'])) {
+                $repoModulo->updateCuentaContable($id, $idEmpresa, (int) $cuenta['id'], $idUsuario);
+            }
+            $existente = !empty($registro['id_regla']) ? $this->repo->findByIdAndEmpresa((int) $registro['id_regla'], $idEmpresa) : null;
+            $res = $this->guardarReglaDesdeAviso($existente, $data, $cuenta, "{$que} «{$nombre}»", '', $idEmpresa, $idUsuario);
+            $this->db->commit();
+        } catch (\Throwable $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
+        }
+
+        // Concepto de anticipo: la misma cuenta pasa a la forma de anticipo si aún no tiene (lo
+        // mismo que hace Configuración Contable). Es un complemento: si falla, lo asignado queda.
+        if ($clase === 'opcion' && trim((string) $registro['comportamiento']) !== '') {
+            try {
+                (new OpcionIngresoEgresoService())->propagarCuentaAnticipoAFormas($idEmpresa, $idUsuario, (string) $registro['comportamiento'], (int) $cuenta['id']);
+            } catch (\Throwable $e) {
+                \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            }
+        }
+        return $res;
+    }
+
+    /**
+     * Crea (o completa, si existe sin cuenta) la regla y deja la auditoría. Va DENTRO de la
+     * transacción del llamador. Si el lugar ya tiene esa misma cuenta no hace nada; si tiene otra, no
+     * la pisa.
+     *
+     * @return array{mensaje:string, cuenta:string}
+     */
+    private function guardarReglaDesdeAviso(?array $existente, array $data, array $cuenta, string $que, string $donde, int $idEmpresa, int $idUsuario): array
+    {
+        $etiqueta = $cuenta['codigo'] . ' - ' . $cuenta['nombre'];
+        $en = $donde !== '' ? " en {$donde}" : '';
+        if ($existente && !empty($existente['id_cuenta'])) {
+            if ((int) $existente['id_cuenta'] === (int) $cuenta['id']) {
+                return ['mensaje' => ucfirst($que) . " ya tenía esa cuenta{$en}.", 'cuenta' => $etiqueta];
+            }
+            $actual = $this->repo->getCuentaMovimientoEmpresa($idEmpresa, (int) $existente['id_cuenta']);
+            throw new Exception(ucfirst($que) . " ya tiene la cuenta "
+                . ($actual ? $actual['codigo'] . ' - ' . $actual['nombre'] : 'configurada')
+                . "{$en}. Si quiere cambiarla, hágalo en Configuración Contable.");
+        }
+
+        if ($existente) {
+            // Fila viva sin cuenta: se completa en vez de crear otra.
+            $id = (int) $existente['id'];
+            $this->repo->update($id, $idEmpresa, $data + ['updated_by' => $idUsuario]);
+            $accion = 'ACTUALIZAR ASIENTO PROGRAMADO';
+        } else {
+            $id = $this->repo->create($data + [
+                'id_empresa' => $idEmpresa,
+                'id_usuario' => $idUsuario,
+                'created_by' => $idUsuario,
+            ]);
+            $accion = 'CREAR ASIENTO PROGRAMADO';
+        }
+
+        $nuevo = $this->repo->findByIdAndEmpresa($id, $idEmpresa);
+        $this->logService->registrar(
+            $idUsuario,
+            $idEmpresa,
+            $accion,
+            'asientos_programados',
+            $id,
+            $existente ?: null,
+            ($nuevo ?: []) + ['origen' => 'aviso de asientos pendientes']
+        );
+        $aQue = str_starts_with($que, 'el ') ? 'al ' . substr($que, 3) : 'a ' . $que; // «a el concepto» → «al concepto»
+        return ['mensaje' => "Cuenta {$etiqueta} asignada {$aQue}{$en}.", 'cuenta' => $etiqueta];
+    }
+
+    /**
      * Concepto de Facturas de Venta => su equivalente de Recibos de Venta. Recibos tiene catálogo
      * propio (database/migrations/20260715_create_recibos_venta_asientos_tipo.sql), espejo del de
      * facturas; un concepto de facturas sin entrada aquí no se copia (se informa como omitido).

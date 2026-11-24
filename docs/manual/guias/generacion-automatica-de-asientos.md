@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido, pestaña asiento contable, ver asiento del documento, generar asiento de una compra
-version: 1.8
+version: 1.9
 orden: 30
 estado: activo
 ---
@@ -159,7 +159,10 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
   Configuración Contable). En Mayores, Estados Financieros y Balance
   de Comprobación el reporte no se puede generar hasta que ese aviso se resuelva. Ese aviso sigue siendo el lugar donde ver los
   problemas: la generación automática es silenciosa a propósito, pero no esconde
-  nada.
+  nada. Además, el aviso permite **asignar ahí mismo** las cuentas que faltan
+  (de compras, ventas, recibos, formas de cobro y pago y conceptos de ingresos y egresos) y
+  volver a generar (ver *Asientos contables → Asignar las cuentas que faltan
+  desde el aviso*).
 - **Configuración Contable**: es donde se corrigen las cuentas. Cada cambio que
   haga ahí habilita el reintento de los documentos que habían fallado.
 - **Períodos Contables**: define hasta qué fecha se puede contabilizar.
@@ -168,8 +171,9 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 - **«Abrí el módulo y mi documento sigue sin asiento»**: casi siempre falta una
   cuenta. Entre a **Asientos Contables**: el aviso de asientos pendientes dice
-  qué configurar y su enlace **Configurar** lo lleva a la sección exacta. Corrija
-  la cuenta y vuelva a abrir el módulo.
+  qué configurar y su enlace **Configurar** lo lleva a la sección exacta. Muchas veces
+  puede asignar la cuenta en el mismo aviso y pulsar **Volver a
+  generar**. Si no, corrija la cuenta y vuelva a abrir el módulo.
 - **«Tengo cientos de documentos atrasados y solo se generaron algunos»**: es lo
   esperado, se procesan de a 50. Vuelva a entrar al módulo (o use el botón de
   generar de Asientos Contables, que los procesa todos con barra de progreso).
@@ -186,6 +190,9 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.9** — El aviso de Asientos Contables, Mayores, Estados Financieros y Balance de
+  Comprobación permite asignar en el acto las cuentas que faltan (compras, ventas,
+  recibos, formas de cobro y pago, conceptos de ingresos y egresos) y volver a generar sin salir.
 - **1.8** — Las facturas y liquidaciones de compra con valor total 0 ya no muestran el aviso «revise
   el documento; si está bien, comuníquese con soporte»: no tienen nada que
   contabilizar y se omiten en silencio.

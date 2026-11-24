@@ -231,25 +231,28 @@ class ConsignacionVentaPdfService
         $pdf = $this->pdf;
         $mL  = $this->marginL;
 
-        // ¿Mostrar la columna de lote? Solo si alguna línea lo tiene.
-        // La caducidad NO se imprime: aunque la línea la tenga registrada, ese ancho
-        // se lo queda la descripción, que es lo que se lee al entregar/recibir.
+        // ¿Mostrar las columnas de lote y caducidad? Cada una solo si alguna línea la tiene.
         $mostrarLote = false;
+        $mostrarCaducidad = false;
         foreach ($detalles as $d) {
-            if (trim((string)($d['lote'] ?? '')) !== '') { $mostrarLote = true; break; }
+            if (trim((string)($d['lote'] ?? '')) !== '') { $mostrarLote = true; }
+            if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') { $mostrarCaducidad = true; }
         }
 
-        // Columnas: sin precios ni subtotales. Cantidad / Ret / Fact y una
+        // Columnas: sin precios ni subtotales. Cant / Ret / Fact y una
         // columna "Acon" (acondicionamiento) para anotar a mano en la entrega.
+        // Títulos abreviados (Bod., Cant.) para que todo quepa en el ancho de la hoja.
         // La descripción (w = 0) absorbe todo el ancho que no ocupan las demás.
+        // 'multi' => la celda pasa a varias líneas si el texto no cabe (la fila crece).
         $cols = [
             ['t' => 'Código',      'w' => 18, 'a' => 'L', 'k' => 'producto_codigo'],
-            ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre'],
-            ['t' => 'Bodega',      'w' => 22, 'a' => 'L', 'k' => 'bodega_nombre'],
+            ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre', 'multi' => true],
+            ['t' => 'Bod.',        'w' => 20, 'a' => 'L', 'k' => 'bodega_nombre',   'multi' => true],
         ];
         if ($mostrarLote) $cols[] = ['t' => 'Lote',      'w' => 16, 'a' => 'L', 'k' => 'lote'];
         $cols[] = ['t' => 'NUP',        'w' => 16, 'a' => 'L', 'k' => 'nup'];
-        $cols[] = ['t' => 'Cantidad',   'w' => 16, 'a' => 'R', 'k' => 'cantidad'];
+        if ($mostrarCaducidad) $cols[] = ['t' => 'Caducidad', 'w' => 15, 'a' => 'C', 'k' => 'fecha_caducidad'];
+        $cols[] = ['t' => 'Cant.',      'w' => 14, 'a' => 'R', 'k' => 'cantidad'];
         // "Ret" = retornado, "Fact" = facturado (abreviados para dar más ancho a la
         // descripción). Lo entregado a cambio NO se muestra como columna: sigue
         // descontándose del saldo por línea y aparece en el resumen final del estado.
@@ -315,17 +318,24 @@ class ConsignacionVentaPdfService
                     $vals[] = ((float)$raw != 0.0) ? number_format((float)$raw, 2) : '';
                 } elseif ($k === '__acon__') {
                     $vals[] = ''; // columna en blanco para anotar el acondicionamiento
+                } elseif ($k === 'fecha_caducidad') {
+                    $ts = trim((string)$raw) !== '' ? strtotime((string)$raw) : false;
+                    $vals[] = $ts ? date('d-m-Y', $ts) : '';
                 } else {
                     $vals[] = (string)$raw;
                 }
             }
 
-            // Altura según la descripción. getNumLines() da el número real de renglones
-            // con la fuente y el ancho de la celda (la estimación por GetStringWidth se
-            // quedaba corta y recortaba descripciones largas).
-            $descW = $cols[$descIdx]['w'];
-            $nLin  = max(1, $pdf->getNumLines((string)$vals[$descIdx], $descW));
-            $h     = max(5.0, $nLin * 4.0);
+            // Altura según la celda multilínea más alta (descripción o bodega).
+            // getNumLines() da el número real de renglones con la fuente y el ancho de la
+            // celda (la estimación por GetStringWidth se quedaba corta y recortaba textos).
+            $nLin = 1;
+            foreach ($cols as $i => $c) {
+                if (!empty($c['multi'])) {
+                    $nLin = max($nLin, $pdf->getNumLines((string)$vals[$i], $c['w']));
+                }
+            }
+            $h = max(5.0, $nLin * 4.0);
 
             $yRow = $pdf->GetY();
 
@@ -342,7 +352,7 @@ class ConsignacionVentaPdfService
             $x = $mL;
             foreach ($cols as $i => $c) {
                 $pdf->SetXY($x, $yRow);
-                if ($i === $descIdx) {
+                if (!empty($c['multi'])) {
                     $pdf->MultiCell($c['w'], $h, $vals[$i], 1, $c['a'], true, 0, '', '', true, 0, false, true, $h, 'M');
                 } else {
                     // stretch = 1: un lote/NUP/código más largo que su columna se condensa

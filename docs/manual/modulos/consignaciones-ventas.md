@@ -6,7 +6,7 @@ ruta_modulo: modulos/consignaciones-ventas
 tipo: modulo
 visibilidad: todos
 etiquetas: consignacion, consignaciones, unidad de medida, cajas, caja, ciento, docena, consignar por caja, salen unidades en vez de cajas, medida, buscar consignacion, buscador, filtros, filtrar consignaciones, buscar por producto, buscar por lote, buscar por NUP, chips, asesor, vendedor, vendedor del cliente, asesor automatico, mercaderia en consignacion, entrega, deposito, liquidar, facturar consignacion, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, cargar desde pedido, llamar pedido, stock por lote, stock del lote, el stock no se actualiza, lote, vencimiento, caducidad, fecha de vencimiento, NUP, acceso total, registros propios, solo mis documentos, quien ve que, permiso actualizar, no puedo guardar, boton guardar no aparece, no tengo permiso para esta accion, demora al guardar, guardar lento, se queda guardando, estado del pedido, pedido procesado, pedido pendiente, eliminar consignacion, editar consignacion, no puedo eliminar la consignacion, documentos relacionados, el stock no volvio, devolver stock, costo promedio, kardex anulado, pestana pedidos, pedidos relacionados, pedido de la consignacion, pendiente del pedido, asiento no generado, faltan cuentas, asiento incompleto, aparecen documentos que no busque, resultados que no corresponden, buscar por producto en el listado, codigo del producto, codigo de producto, ver codigo, NUP repetido, nup duplicado, serie repetida, el nup no puede repetirse, mismo nup dos productos, nup por lote, cada unidad su nup, numero de serie repetido, el modal se cierra al guardar, no se cierra el modal, seguir en la consignacion, imprimir despues de guardar, guardar y seguir, no contabilizar consignaciones, sin asiento de consignacion, apagar asiento, modulos que contabilizan, enfoque sin reclasificacion, consignacion sin asiento, aviso de asientos pendientes, asiento de documento anulado, asiento sigue contabilizado, no se anulo el asiento, no se pudo anular el asiento contable, consignacion duplicada, pedido consignado dos veces, dos consignaciones del mismo pedido, ya tiene consignado, saldo del pedido, pedido en dos ventanas, doble clic, guardar dos veces, se guardo dos veces, no se recibio respuesta del servidor, error al guardar, varias bodegas, distintas bodegas, bodega por producto, bodega por linea, bodega por fila, cambiar de bodega, bodega de despacho, se borran los productos al cambiar de bodega, se pierden los productos agregados, sacar de otra bodega, telefono del cliente en el pdf, telefono en la consignacion, anular consignacion, consignacion anulada, anular devuelve el stock, reactivar consignacion anulada, no descuenta inventario, facturacion afecta al inventario, producto no inventariable en consignacion, no puedo buscar clientes, no aparecen clientes, buscar cliente, crear cliente, nuevo cliente, registrar cliente desde la consignacion, usuario nivel 1 no ve clientes
-version: 1.54
+version: 1.55
 orden: 45
 estado: activo
 ---
@@ -313,10 +313,16 @@ En el recuadro de datos del cliente, debajo de la **Dirección** va el
 **Teléfono** del cliente (el de su ficha) y, en la misma fila a la derecha, la
 **Entrega** (fecha y horario). Si el cliente no tiene teléfono se ve un guion.
 
+El listado de productos tiene las columnas Código, Descripción, **Bod.**
+(bodega), Lote, NUP, **Caducidad**, **Cant.** (cantidad), Ret, Fact y Acon. Lote
+y Caducidad solo aparecen si alguna línea los tiene; la caducidad sale en
+formato dd-mm-aaaa. Si el nombre de la bodega no cabe, pasa a varias líneas y
+la fila crece, igual que la descripción.
+
 Debajo del listado de productos, en este orden:
 
 1. **TOTAL ÍTEMS**, la suma de las cantidades entregadas, al pie de la columna
-   *Cantidad*.
+   *Cant.*
 2. Las **observaciones** del documento, a ancho completo (antes iban apretadas
    arriba, junto a los datos del cliente). Si la consignación no tiene
    observaciones, ese recuadro no se dibuja.
@@ -639,6 +645,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
+- **1.55** — El **PDF** incluye la columna **Caducidad** después de NUP (solo si alguna línea la tiene). Para que todo quepa en la hoja, *Bodega* pasa a llamarse **Bod.** y *Cantidad* **Cant.**; un nombre de bodega largo pasa a varias líneas en vez de cortarse.
 - **1.54** — El **Excel** del comprobante incluye la columna **Caducidad** (después de NUP) con la fecha de vencimiento de cada línea; la columna **Cambio** se reemplaza por **Acon** (en blanco, para anotar el acondicionamiento a mano), y al final los espacios de firma **Emitido por**, **Responsable de traslado**, **Recibí conforme** y **Verificación de acondicionamiento por**, como en el PDF.
 - **1.53** — El **buscador de clientes** del modal ya no depende del permiso de *Facturas de Venta*: basta con poder ver Consignaciones (antes un usuario de nivel 1 sin acceso a Facturas no podía buscar ni elegir clientes). Nuevo botón **Registrar nuevo cliente** en la barra de acciones (solo con permiso de crear en Clientes): el cliente creado queda seleccionado en la consignación.
 - **1.52** — Al cambiar a un cliente sin vendedor asignado, o al borrar el cliente, el **Asesor** que había puesto el cliente anterior se limpia (antes se quedaba y la consignación podía guardarse con el vendedor de otro cliente). Un asesor elegido a mano o el favorito no se tocan.

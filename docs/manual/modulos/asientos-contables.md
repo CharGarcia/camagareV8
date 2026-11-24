@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra, asiento de apertura, cambiar cuenta de la apertura, editar apertura del ejercicio
-version: 1.52
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra, asiento de apertura, cambiar cuenta de la apertura, editar apertura del ejercicio, asignar cuenta desde el aviso, configurar cuenta de gasto, cuenta de costo del proveedor, falta subtotal factura de compras, asignar cuenta al proveedor, asignar cuenta al cliente, cuenta por cobrar del cliente, cuenta de ingreso, forma de pago sin cuenta, concepto sin cuenta, cuenta por ítem, muchos pendientes, asignar a todos, volver a generar
+version: 1.53
 orden: 20
 estado: activo
 ---
@@ -445,6 +445,83 @@ Además:
     (de base de datos) pide comunicarse con soporte; el detalle exacto y los
     números de documento quedan en el registro del servidor.
 
+## Asignar las cuentas que faltan desde el aviso, sin salir
+
+Cuando a un asiento le falta una cuenta que se puede identificar sin dudas, el
+aviso muestra arriba el recuadro **«Asigne aquí las cuentas que faltan»**. Ahí
+se configura la cuenta sin abrir Configuración Contable. Las filas van
+agrupadas así:
+
+| Grupo | Qué falta | Dónde se puede guardar |
+|---|---|---|
+| **Adquisiciones de Compras — por proveedor** | Una cuenta de la compra o liquidación: gasto o costo del subtotal, inventario, cuenta por pagar, propina, ICE o ajuste por redondeo | En la General o **solo para ese proveedor** |
+| **Ventas con Factura / Recibos de Venta — por cliente** | Una cuenta de la factura, nota de crédito o recibo: cuenta por cobrar, ingreso (subtotal), propina, ICE, descuento, costo de ventas, inventario o redondeo | En la General o **solo para ese cliente** |
+| **Adquisiciones de Compras — por ítem de compra** | La cuenta de una línea de compra que no la encontró en su ítem, categoría, marca ni en la General | En la General o **solo para ese ítem** (por su nombre) |
+| **Formas de cobro y pago** | La cuenta de una forma de cobro o de pago que usan ingresos, egresos u otros documentos, **también si está inactiva** | En la propia forma |
+| **Conceptos de ingresos y egresos** | La cuenta de un concepto de ingresos o egresos, también si está inactivo | En el propio concepto |
+
+### Cuando a muchos les falta la misma cuenta
+
+Si la misma cuenta les falta a varios proveedores, clientes o ítems, el grupo
+empieza con una **fila resumen** por cada cuenta, por ejemplo: *«subtotal
+factura de compras» falta en 300 proveedores · 540 doc.* Elija la cuenta y pulse
+**Asignar en la General a los 300**: se guarda una sola vez en la General y
+resuelve a todos. Es lo más rápido cuando hay muchos pendientes, por ejemplo
+justo después de empezar a usar la contabilidad.
+
+Debajo, bajo **«Uno por uno»**, siguen las filas de cada proveedor, cliente o
+ítem, para quien necesite que alguno tenga su propia cuenta. Así ninguna cuenta
+queda escondida aunque haya cientos de filas.
+
+### Asignar fila por fila
+
+Cada fila dice qué falta y cuántos documentos detiene, por ejemplo: *ACME S.A. ·
+3 doc. — falta «subtotal factura de compras»*. Para resolverla:
+
+1. Escriba en **Buscar cuenta** parte del código o del nombre y elija la cuenta de
+   la lista. Solo aparecen cuentas de movimiento, y en los conceptos solo las de la
+   naturaleza correcta (costo o gasto para el subtotal de compras, ingreso para el
+   subtotal de ventas, activo para la cuenta por cobrar o el inventario, pasivo para
+   la cuenta por pagar).
+2. En proveedores, clientes e ítems, elija **dónde** guardarla:
+   - **En la General**: sirve para todos los que no tienen esa cuenta propia. Al
+     asignarla se marcan como resueltas todas las filas de esa misma cuenta (de
+     todos los proveedores, clientes e ítems de la lista).
+   - **Solo este proveedor / cliente / ítem**: se la configura únicamente a él, como
+     en la pestaña **Contable** de su ficha o en la regla por producto (ítem) de Configuración
+     Contable. Si el proveedor o cliente todavía no tenía cuentas propias, el
+     recuadro avisa que sus documentos **dejarán de repartirse por ítem o producto,
+     categoría o marca**: desde ese momento manda él, y lo que no configure en él se
+     toma de la General.
+3. Pulse **Asignar**. La fila queda en verde con la cuenta elegida.
+4. Al terminar, pulse **Volver a generar**: el sistema vuelve a generar los asientos
+   pendientes y muestra el aviso actualizado.
+
+Tenga en cuenta:
+
+- **Solo completa lo que falta.** Si ese lugar ya tiene cuenta (por ejemplo, otro
+  usuario la puso mientras tanto), no se reemplaza: el aviso lo dice y el cambio se
+  hace en Configuración Contable. En una forma de cobro y pago, la cuenta que se
+  asigna desde el aviso vale para los dos flujos, igual que la cuenta de la forma.
+- **Las formas y los conceptos se reconocen por su nombre.** Si hay dos formas (o
+  dos conceptos) sin cuenta con el mismo nombre, no se ofrecen aquí: el sistema no
+  puede saber cuál es. Configúrelas con el enlace **Configurar** o en su módulo.
+- **Los conceptos atados a un módulo** (Compra, Liquidación, Factura de Venta,
+  Recibo, Rol) toman su cuenta de la configuración de ese módulo y no se asignan
+  aquí.
+- **Ítems de compra**: solo se ofrecen los nombres que el sistema encuentra tal cual
+  en las compras de esos documentos. Un nombre con comas no se puede reconocer y se
+  configura por **Configurar**.
+- El recuadro aparece solo a quien tiene permiso de **crear** en Configuración
+  Contable. Sin ese permiso, el aviso sigue con el enlace **Configurar**, como
+  siempre.
+- Las cuentas de **IVA por tarifa**, las cuentas eliminadas del plan, los códigos de
+  retención y los documentos descuadrados no se ofrecen aquí: siguen por el enlace
+  **Configurar** o por la pestaña Asiento contable del documento.
+- Se muestran hasta 25 filas «uno por uno» por grupo. Las demás no se dibujan, pero cuentan en la fila resumen y se resuelven con ella o con el enlace **Configurar**.
+- Cada cuenta asignada queda registrada en el historial del sistema (quién, cuándo
+  y desde el aviso).
+
 ## Documentos migrados sin asiento contable
 
 Un documento que llegó desde el sistema anterior por la migración trae su
@@ -661,6 +738,7 @@ genera el módulo **Cierre del Ejercicio**.
 
 ## Historial de cambios
 
+- **1.53** — El aviso que queda al terminar de generar asientos pendientes permite **asignar ahí mismo** las cuentas que faltan, sin abrir Configuración Contable, y **volver a generar**: en compras y liquidaciones (en la General, solo para el proveedor o solo para un ítem de compra), en facturas, notas de crédito y recibos de venta (en la General o solo para el cliente), en formas de cobro y pago y en conceptos de ingresos y egresos (también inactivos). Cuando a muchos les falta la misma cuenta, una fila resumen la asigna en la General a todos de una vez. También en Estados Financieros, Balance de Comprobación y Mayores.
 - **1.52** — El asiento de **apertura del ejercicio** se puede editar para cambiar sus cuentas (misma fecha y mismos totales), sin revertir el cierre. El de cierre sigue sin editarse.
 - **1.51** — El aviso que queda al terminar de generar asientos pendientes tiene el botón **Descargar PDF**: entrega la lista completa de lo que falta configurar (documentos, terceros y cuentas) para imprimirla, descargarla o verla, sin volver a generar solo para leer el aviso. También en Estados Financieros, Balance de Comprobación y Mayores.
 - **1.50** — Notas de crédito de compra: el cuadre contra el documento mide la cuenta por pagar en el **Debe**, donde la lleva su asiento. Antes la buscaba en el Haber y avisaba «la cartera del asiento es 0.00» con el asiento bien armado.

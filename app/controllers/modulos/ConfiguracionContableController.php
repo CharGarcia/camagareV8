@@ -1502,6 +1502,43 @@ class ConfiguracionContableController extends BaseModuloController
     }
 
     /**
+     * Aviso de asientos pendientes (asientos_pendientes.js) → «Asignar cuenta»: completa la cuenta
+     * que falta sin salir del aviso — un concepto en la General, en un proveedor/cliente o en un ítem
+     * de compra; una forma de cobro/pago; un concepto de Ingresos/Egresos. Solo completa lo que
+     * falta (no cambia una cuenta ya configurada). Ver AsientoProgramadoService::asignarCuentaDesdeAviso().
+     */
+    public function asignarCuentaAvisoAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        try {
+            $res = $this->service->asignarCuentaDesdeAviso(
+                [
+                    'clase'            => trim((string) ($_POST['clase'] ?? '')),
+                    'destino'          => trim((string) ($_POST['destino'] ?? '')),
+                    'id_cuenta'        => (int) ($_POST['id_cuenta'] ?? 0),
+                    'id_asiento_tipo'  => (int) ($_POST['id_asiento_tipo'] ?? 0),
+                    'id_entidad'       => (int) ($_POST['id_entidad'] ?? 0),
+                    'referencia_texto' => (string) ($_POST['referencia_texto'] ?? ''),
+                    'id_forma'         => (int) ($_POST['id_forma'] ?? 0),
+                    'flujo'            => trim((string) ($_POST['flujo'] ?? '')),
+                    'id_opcion'        => (int) ($_POST['id_opcion'] ?? 0),
+                    'naturaleza'       => trim((string) ($_POST['naturaleza'] ?? '')),
+                ],
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario']
+            );
+            echo json_encode(['ok' => true, 'msg' => $res['mensaje'], 'cuenta' => $res['cuenta']]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            $tecnico = $e instanceof \PDOException || !($e instanceof \Exception);
+            echo json_encode(['ok' => false, 'error' => $tecnico ? 'No se pudo asignar la cuenta.' : $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
      * Vista previa de «Copiar configuración de Facturas de Venta» (sección Recibos de Venta).
      */
     public function previsualizarCopiaFacturaReciboAjax(): void
