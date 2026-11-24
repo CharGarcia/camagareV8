@@ -4704,19 +4704,27 @@ function _cmgObsAutoCompra() {
  * pregunta si se pagan con la misma forma de pago (un egreso por compra). `pago` es el
  * mismo payload del egreso recién registrado. Un fallo aquí nunca afecta al pago ya hecho.
  */
-async function _cmgOfrecerPagosPendientesProveedor(pago, nombreForma, msgPago) {
-    const target = document.getElementById('modalCompra') || 'body';
-    const fmt = v => '$' + (parseFloat(v) || 0).toFixed(2);
-
-    let pend;
+async function _cmgConsultarPendientesProveedor(idCompra) {
     try {
-        const r = await fetch(`${window.CMG_urlBase}/getPendientesProveedorAjax?id_compra=${pago.id_compra}`);
-        pend = await r.json();
+        const r = await fetch(`${window.CMG_urlBase}/getPendientesProveedorAjax?id_compra=${idCompra}`);
+        return await r.json();
     } catch (err) {
         console.error('Error al consultar compras pendientes del proveedor:', err);
-        return;
+        return null;
     }
+}
+
+async function _cmgOfrecerPagosPendientesProveedor(pago, nombreForma, msgPago, pend) {
+    const modalEl = document.getElementById('modalCompra');
+    const target = modalEl || 'body';
+    const fmt = v => '$' + (parseFloat(v) || 0).toFixed(2);
+
     if (!pend || !pend.ok || !(pend.cantidad > 0)) return;
+
+    // Si mientras tanto se cerró el modal o se abrió otra compra, el aviso ya no
+    // corresponde a lo que el usuario tiene en pantalla: no se muestra.
+    const idAbierto = parseInt(document.getElementById('mcId')?.value || modalEl?.dataset.id || '0', 10);
+    if (!modalEl || !modalEl.classList.contains('show') || idAbierto !== parseInt(pago.id_compra, 10)) return;
 
     const filas = (pend.detalle || []).map(d =>
         `<tr><td class="text-start">${_esc(d.numero_documento)}</td><td>${_esc(d.fecha_emision)}</td><td class="text-end">${fmt(d.monto)}</td></tr>`
@@ -4903,6 +4911,10 @@ window.CMG_registrarPagoEgreso = async function(e) {
         const res = await resp.json();
 
         if (res.ok) {
+            // Se consulta ya, en paralelo con la recarga de la pestaña: el aviso de más
+            // compras pendientes no debe esperar a que termine de repintarse el panel.
+            const promPendientes = _cmgConsultarPendientesProveedor(payload.id_compra);
+
             Swal.fire({
                 icon: 'success',
                 title: '¡Éxito!',
@@ -4917,17 +4929,19 @@ window.CMG_registrarPagoEgreso = async function(e) {
             
             // Refrescar datos del tab de pagos. El botón no se reactiva hasta que el panel
             // ya muestra el pago nuevo y el monto quedó vacío (§8, «un guardado = un registro»).
-            await window.CMG_cargarPagosTab({ sinMonto: true });
-            
+            const promRecarga = window.CMG_cargarPagosTab({ sinMonto: true });
+
+            // Si el proveedor tiene más compras con saldo, ofrecer pagarlas con la misma
+            // forma de pago, apenas llega la respuesta. Sigue dentro de la bandera "en
+            // curso": el botón no se reactiva hasta que el usuario responde, terminan de
+            // generarse los egresos y el panel quedó recargado.
+            await _cmgOfrecerPagosPendientesProveedor(payload, nombreForma, res.msg || '', await promPendientes);
+            await promRecarga;
+
             // Recargar listado principal de compras en el fondo para reflejar saldos si aplica
             if (typeof window.CMG_fetchSearch === 'function') {
                 window.CMG_fetchSearch(window.CMG_currentPage || 1);
             }
-
-            // Si el proveedor tiene más compras con saldo, ofrecer pagarlas con la misma
-            // forma de pago. Sigue dentro de la bandera "en curso": el botón no se reactiva
-            // hasta que el usuario responde y terminan de generarse los egresos.
-            await _cmgOfrecerPagosPendientesProveedor(payload, nombreForma, res.msg || '');
         } else {
             Swal.fire('Error', res.error || 'No se pudo generar el pago.', 'error');
         }

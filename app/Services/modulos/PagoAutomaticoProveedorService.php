@@ -320,6 +320,8 @@ class PagoAutomaticoProveedorService
             ':id_proveedor'     => $idProveedor,
             ':id_empresa'       => $idEmpresa,
             ':fecha_hasta'      => $fechaHasta,
+            ':id_empresa_cp'    => $idEmpresa,
+            ':id_proveedor_cp'  => $idProveedor,
         ];
         $filtroCompra = '';
         if ($idCompra !== null) {
@@ -354,12 +356,22 @@ class PagoAutomaticoProveedorService
         // Solo compras pagables: ni anuladas/rechazadas ni pendientes de aprobación.
         $compraPagable = \App\Helpers\TiposComprobanteCompra::sqlCompraPagable('c.estado');
         $sql = "
-            WITH pagado AS (
+            WITH compras_prov AS (
+                -- Solo las compras de este proveedor: sin esto, 'pagado' y 'ret' sumaban
+                -- los egresos y retenciones de TODAS las empresas en cada consulta.
+                SELECT cp.id
+                FROM compras_cabecera cp
+                WHERE cp.id_empresa   = :id_empresa_cp
+                  AND cp.id_proveedor = :id_proveedor_cp
+                  AND cp.eliminado    = false
+            ),
+            pagado AS (
                 SELECT ed.id_referencia_documento AS id_doc,
                        SUM(ed.monto_pagado)       AS abonado
                 FROM egresos_detalle ed
                 INNER JOIN egresos_cabecera ec ON ec.id = ed.id_egreso
                 WHERE ed.tipo_documento = 'COMPRA'
+                  AND ed.id_referencia_documento IN (SELECT id FROM compras_prov)
                   AND ec.estado   != 'anulado'
                   AND ec.eliminado = false
                   AND ed.eliminado = false
@@ -380,7 +392,7 @@ class PagoAutomaticoProveedorService
                 SELECT r.id_compra, SUM(r.total_retenido) AS total_retenido
                 FROM retencion_compra_cabecera r
                 WHERE r.eliminado = false
-                  AND r.id_compra IS NOT NULL
+                  AND r.id_compra IN (SELECT id FROM compras_prov)
                   AND UPPER(r.estado) NOT IN ('ANULADO','BORRADOR','PENDIENTE')
                 GROUP BY r.id_compra
             )
