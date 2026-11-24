@@ -381,7 +381,7 @@ class ClienteService
 
     /**
      * Pestaña "Estado de cuenta": el kardex del Reporte de Cartera resumido para la
-     * ficha, con una sola fila por ingreso (ver EstadoCuentaTerceroService).
+     * ficha, con las mismas filas del reporte (ver EstadoCuentaTerceroService).
      */
     public function getEstadoCuenta(int $idCliente, int $idEmpresa, ?string $fechaDesde, ?string $fechaHasta): array
     {

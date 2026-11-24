@@ -399,8 +399,9 @@ debajo su detalle: número, fecha, concepto, documentos que cobró, formas de co
 (banco, cheque, referencia) y quién lo registró. El botón rojo de PDF descarga el
 comprobante de ingreso. Otro clic en la fila lo pliega.
 
-Un ingreso que cobra varias facturas del cliente aparece como **una sola fila**
-con el total cobrado; el reparto por factura se ve al desplegarlo.
+Un ingreso que cobra varias facturas del cliente aparece en **una fila por cada
+factura cobrada**, cada una con su abono y su saldo, igual que en el PDF del
+estado de cuenta. Cualquiera de esas filas despliega el mismo ingreso.
 
 ## Anticipos
 
@@ -574,7 +575,7 @@ cambios del cliente y **no se copia** al replicar el cliente a otra empresa.
 
 ## Historial de cambios
 
-- **3.9** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de cobros* activo, el resumen del pie muestra solo el total de cobros. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de cobros*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Nuevo botón **PDF** junto a Excel. *Todos los movimientos / Historial de cobros* pasa a ser el selector **Movimientos**, junto a las fechas. Nuevo botón **Correo** para enviar el estado de cuenta, con el correo del cliente editable antes de enviar.
+- **3.9** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de cobros* activo, el resumen del pie muestra solo el total de cobros. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de cobros*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Un ingreso que cobra varias facturas sale ahora en una fila por factura (antes una sola), para que la columna **Saldo** coincida fila por fila con el PDF. Nuevo botón **PDF** junto a Excel. *Todos los movimientos / Historial de cobros* pasa a ser el selector **Movimientos**, junto a las fechas. Nuevo botón **Correo** para enviar el estado de cuenta, con el correo del cliente editable antes de enviar.
 - **3.8** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando cliente...* mientras el servidor responde.
 - **3.7** — Nuevo campo **Observaciones** en la pestaña *Comercial* de la ficha: nota interna del cliente (quién pidió crearlo, cliente VIP, cómo atenderlo). Sus cambios quedan en el historial del cliente (quién, cuándo, antes y después).
 - **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático). El **Concepto de ingreso predeterminado** ahora se llena solo con el de facturas de venta cada vez que se abre la ficha; antes quedaba vacío desde la segunda ficha abierta.

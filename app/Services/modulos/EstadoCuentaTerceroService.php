@@ -12,10 +12,9 @@ use App\Rules\RangoFechasRules;
  *
  * No calcula nada propio: toma el kardex del Reporte de Cartera
  * (ReporteCarteraRepository, mismas reglas de enlace que Cuentas por Pagar/Cobrar) y
- * lo resume para el modal: saldo corriendo, totales del período y una sola fila por
- * egreso o ingreso. El kardex trae una fila por cada documento que paga un egreso o
- * cobra un ingreso; aquí se funden y el reparto por documento se ve al desplegar el
- * pago o cobro desde la pestaña.
+ * lo resume para el modal: saldo corriendo y totales del período. Las filas son las
+ * mismas del kardex (una por cada documento que paga un egreso o cobra un ingreso), para
+ * que el saldo coincida fila por fila con el PDF/Excel del Reporte de Cartera.
  *
  * Si el mismo contribuyente está registrado dos veces —una ficha con la cédula y otra
  * con el RUC, que es esa cédula + '001'— el kardex abarca las dos, igual que en el
@@ -95,25 +94,20 @@ class EstadoCuentaTerceroService
     }
 
     /**
-     * @param string $origenCaja Origen que se funde por documento de caja: 'PAGO' (egreso) o 'COBRO' (ingreso).
+     * @param string $origenCaja Origen de caja, que se totaliza aparte en el resumen: 'PAGO' (egreso) o 'COBRO' (ingreso).
      * @return array{movimientos: array, saldo_anterior: float, total_cargos: float,
      *               total_pagos: float, total_otros_abonos: float, saldo_final: float}
      *         total_pagos = egresos (proveedor) o ingresos (cliente); total_otros_abonos = retenciones y NC.
      */
     private function resumir(array $movimientos, float $saldoAnterior, string $origenCaja): array
     {
-        $filas    = [];
-        $filaCaja = []; // id del egreso/ingreso => posición de su fila en $filas
+        // Una fila por línea del kardex, igual que el PDF/Excel del Reporte de Cartera: un
+        // ingreso (o egreso) que cancela varios documentos sale en varias filas, cada una con
+        // su abono y su saldo. Antes se fundían en una sola fila por ingreso/egreso y la
+        // columna Saldo dejaba de coincidir fila por fila con el estado de cuenta en PDF.
+        $filas = [];
         foreach ($movimientos as $m) {
             $monto = (float) $m['monto'];
-            if ($m['origen'] === $origenCaja) {
-                $idCaja = (int) $m['id_orden'];
-                if (isset($filaCaja[$idCaja])) {
-                    $filas[$filaCaja[$idCaja]]['monto'] += $monto;
-                    continue;
-                }
-                $filaCaja[$idCaja] = count($filas);
-            }
             $filas[] = [
                 'fecha'            => $m['fecha'],
                 'tipo_movimiento'  => $m['tipo_movimiento'],
