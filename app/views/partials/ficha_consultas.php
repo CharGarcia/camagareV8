@@ -196,6 +196,13 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                     <label class="form-label small fw-bold d-block mb-1" for="<?= $fcPref ?>_fc_hasta">Hasta</label>
                     <input type="date" class="form-control form-control-sm" id="<?= $fcPref ?>_fc_hasta" data-fc="hasta" style="width: 140px;">
                 </div>
+                <div>
+                    <label class="form-label small fw-bold d-block mb-1" for="<?= $fcPref ?>_fc_filtro">Movimientos</label>
+                    <select class="form-select form-select-sm" id="<?= $fcPref ?>_fc_filtro" data-fc="filtro" style="width: 170px;">
+                        <option value="todos" selected>Todos los movimientos</option>
+                        <option value="pagos"><?= $fcEsc($fcTxt['filtro_pagos']) ?></option>
+                    </select>
+                </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-fc="limpiar" title="Quitar el rango de fechas"><i class="bi bi-eraser"></i></button>
                 <!-- Los datos se consultan recién al pulsar Mostrar (no al abrir la pestaña) -->
                 <button type="button" class="btn btn-sm btn-primary" data-fc="mostrar" title="Consultar el estado de cuenta del período"><i class="bi bi-search me-1"></i>Mostrar</button>
@@ -211,11 +218,7 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                 <button type="button" class="btn btn-sm btn-outline-info d-none" data-fc="correo" title="Enviar el estado de cuenta por correo">
                     <i class="bi bi-envelope me-1"></i>Correo
                 </button>
-                <div class="btn-group btn-group-sm ms-auto" role="group" aria-label="Movimientos">
-                    <button type="button" class="btn btn-outline-secondary active" data-fc-filtro="todos"><i class="bi bi-list-columns-reverse me-1"></i>Todos los movimientos</button>
-                    <button type="button" class="btn btn-outline-secondary" data-fc-filtro="pagos"><i class="bi bi-cash-coin me-1"></i><?= $fcEsc($fcTxt['filtro_pagos']) ?></button>
-                </div>
-                <div class="d-flex align-items-center gap-2">
+                <div class="d-flex align-items-center gap-2 ms-auto">
                     <span class="small text-muted fw-medium" data-fc="info">0-0/0</span>
                     <div class="btn-group btn-group-sm">
                         <button type="button" class="btn btn-outline-secondary" data-fc="prev" title="Anterior" disabled><i class="bi bi-chevron-left"></i></button>

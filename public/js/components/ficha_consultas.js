@@ -674,7 +674,8 @@
             st.peticion++;
             st.detalles.clear();
             ['desde', 'hasta'].forEach(clave => { const x = el(clave); if (x) x.value = ''; });
-            panel.querySelectorAll('[data-fc-filtro]').forEach(b => b.classList.toggle('active', b.dataset.fcFiltro === 'todos'));
+            const filtro = el('filtro');
+            if (filtro) filtro.value = 'todos';
             const tbody = el('tbody');
             if (tbody) tbody.innerHTML = '';
             pintarTotales(null, [], false);
@@ -932,13 +933,13 @@
             });
         }
 
-        panel.querySelectorAll('[data-fc-filtro]').forEach(btn => btn.addEventListener('click', () => {
-            st.filtro = btn.dataset.fcFiltro;
+        // Selector Movimientos (todos / solo pagos o cobros): filtra lo ya cargado, sin consultar.
+        el('filtro')?.addEventListener('change', (e) => {
+            st.filtro = e.target.value === 'pagos' ? 'pagos' : 'todos';
             st.page   = 1;
-            panel.querySelectorAll('[data-fc-filtro]').forEach(b => b.classList.toggle('active', b === btn));
             pintarResumen(st.data);
             pintarMovimientos();
-        }));
+        });
 
         el('prev')?.addEventListener('click', () => {
             if (st.page > 1) { st.page--; pintarMovimientos(); }
