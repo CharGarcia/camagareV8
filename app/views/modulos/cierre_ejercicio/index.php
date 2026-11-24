@@ -271,6 +271,21 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                                 <label for="ceObs" class="form-label small fw-bold">Observaciones</label>
                                 <input type="text" id="ceObs" class="form-control form-control-sm" maxlength="2000" placeholder="Opcional">
                             </div>
+                            <?php // Solo lectura: salen del año elegido (cierre al 31-12, apertura al 01-01 siguiente). ?>
+                            <div class="col-md-6">
+                                <label for="cePeriodoCierra" class="form-label small fw-bold">Período que cierra</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-danger bg-opacity-10 text-danger"><i class="bi bi-lock"></i></span>
+                                    <input type="text" id="cePeriodoCierra" class="form-control form-control-sm bg-light" readonly tabindex="-1">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="cePeriodoInicia" class="form-label small fw-bold">Período que inicia</label>
+                                <div class="input-group input-group-sm">
+                                    <span class="input-group-text bg-success bg-opacity-10 text-success"><i class="bi bi-unlock"></i></span>
+                                    <input type="text" id="cePeriodoInicia" class="form-control form-control-sm bg-light" readonly tabindex="-1">
+                                </div>
+                            </div>
                         </div>
 
                         <div id="ceCargando" class="text-center text-muted py-4 d-none"><span class="spinner-border spinner-border-sm me-2"></span>Calculando…</div>

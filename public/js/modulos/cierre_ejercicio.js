@@ -133,7 +133,23 @@
         $('ceTablaApertura').innerHTML = tablaLineas(apertura, 'No hay saldos de balance que arrastrar.');
     }
 
+    /**
+     * «Período que cierra» y «Período que inicia»: el ejercicio que se cierra (01-01 al
+     * fecha de cierre) y el que arranca con la apertura (fecha de apertura al 31-12).
+     * Sin fechas del servidor se arman del año elegido.
+     */
+    function pintarPeriodos(anio, fechaCierre, fechaApertura) {
+        const a = parseInt(anio, 10);
+        if (!a) { $('cePeriodoCierra').value = ''; $('cePeriodoInicia').value = ''; return; }
+        const fc = fechaCierre ? fecha(fechaCierre) : `31-12-${a}`;
+        const fa = fechaApertura ? fecha(fechaApertura) : `01-01-${a + 1}`;
+        const anioSig = parseInt(fa.substring(6, 10), 10) || (a + 1);
+        $('cePeriodoCierra').value = `Ejercicio ${a}: del 01-01-${a} al ${fc}`;
+        $('cePeriodoInicia').value = `Ejercicio ${anioSig}: del ${fa} al 31-12-${anioSig}`;
+    }
+
     function limpiarModal() {
+        pintarPeriodos('');
         ['ceErrores', 'ceAvisos', 'ceRevertido'].forEach(id => setAlerta(id, ''));
         $('ceResumen').classList.add('d-none');
         $('cePie').classList.add('d-none');
@@ -167,6 +183,7 @@
             const ctx = json.data;
             const anios = ctx.anios.length ? ctx.anios : [ctx.sugerido];
             $('ceAnio').innerHTML = anios.map(a => `<option value="${a}" ${a === ctx.sugerido ? 'selected' : ''}>${a}</option>`).join('');
+            pintarPeriodos($('ceAnio').value);
             modal().show();
             calcular(true);
         } catch (e) {
@@ -174,7 +191,7 @@
         }
     };
 
-    $('ceAnio')?.addEventListener('change', () => calcular(true));
+    $('ceAnio')?.addEventListener('change', () => { pintarPeriodos($('ceAnio').value); calcular(true); });
     $('ceDesde')?.addEventListener('change', () => { $('ceDesdeTodo').checked = false; calcular(false); });
     $('ceDesdeTodo')?.addEventListener('change', () => calcular(false));
 
@@ -217,6 +234,7 @@
         $('ceDesdeTodo').disabled = !!d.saldos_desde_fijo || !!d.saldos_desde_min;
         if (d.saldos_desde_min) $('ceDesde').min = d.saldos_desde_min; else $('ceDesde').removeAttribute('min');
 
+        pintarPeriodos(d.anio, d.fecha_cierre, d.fecha_apertura);
         setAlerta('ceErrores', (d.errores || []).map(esc).join('<br>'));
         setAlerta('ceAvisos', (d.avisos || []).map(esc).join('<br>'));
         $('ceKpis').innerHTML = kpis(d);
@@ -289,6 +307,7 @@
             $('ceDesde').value = d.saldos_desde ? String(d.saldos_desde).substring(0, 10) : '';
             $('ceDesdeTodo').checked = !d.saldos_desde;
             $('ceObs').value = d.observaciones || '';
+            pintarPeriodos(d.anio, d.fecha_cierre, d.fecha_apertura);
 
             if (d.estado === 'vigente' && Number(d.cambios_posteriores) > 0) {
                 setAlerta('ceAvisos', `<i class="bi bi-exclamation-triangle me-1"></i>${d.cambios_posteriores} asiento(s) con fecha hasta el ${esc(d.fmt_fecha_cierre)} `

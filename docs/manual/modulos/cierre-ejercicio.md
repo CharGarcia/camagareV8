@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/cierre_ejercicio
 tipo: modulo
 visibilidad: todos
-etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable, modificar apertura, cambiar cuenta de la apertura, reclasificar saldo inicial, editar asiento de apertura
-version: 1.4
+etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable, periodo que cierra, periodo que inicia, ejercicio siguiente, modificar apertura, cambiar cuenta de la apertura, reclasificar saldo inicial, editar asiento de apertura
+version: 1.5
 orden: 35
 estado: activo
 ---
@@ -97,6 +97,8 @@ registró y cuándo.
 | Saldos de balance desde | No | Desde qué fecha se suman los movimientos de activo, pasivo y patrimonio para la apertura. Si el año anterior se cerró con este módulo, es su apertura y no se puede cambiar. Si no, se sugiere la fecha de la **primera apertura del último grupo de aperturas** registradas hasta el 31-12 del año (ver *Si ya hay asientos de apertura o de cierre*). Si nunca hubo una, se suma todo el histórico. |
 | Todo el histórico | No | Suma los saldos desde el primer asiento de la empresa. |
 | Observaciones | No | Nota libre que queda en el registro del cierre. |
+| Período que cierra | — | Solo lectura. El ejercicio que se cierra, del 01-01 al 31-12 del año elegido (p. ej. *Ejercicio 2025: del 01-01-2025 al 31-12-2025*). |
+| Período que inicia | — | Solo lectura. El ejercicio que arranca con el asiento de apertura, del 01-01 al 31-12 del año siguiente. |
 
 **Cuándo cambiar "Saldos desde":** si la empresa registró a mano un asiento de
 apertura con los saldos de un año que también está cargado en el sistema, ponga
@@ -204,6 +206,8 @@ traídos de la migración:
 
 ## Historial de cambios
 
+- **1.5** — La ventana del cierre muestra el **Período que cierra** y el **Período que inicia**,
+  al crear un cierre nuevo y al abrir uno ya registrado.
 - **1.4** — El asiento de apertura se puede editar desde Asientos Contables para cambiar
   sus cuentas (misma fecha y mismos totales), sin revertir el cierre. Antes pedía revertir.
 - **1.3** — Los períodos que crea el cierre cubren solo los días sin período (uno por
