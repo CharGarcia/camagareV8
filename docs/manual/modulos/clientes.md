@@ -6,7 +6,7 @@ ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
 etiquetas: clientes, observaciones, observacion del cliente, notas del cliente, cliente vip, quien solicito el cliente, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver factura, ver documento, detalle de la factura
-version: 3.8
+version: 3.9
 orden: 10
 estado: activo
 ---
@@ -348,13 +348,29 @@ movimientos. El botón **Excel** descarga exactamente lo que está viendo —los
 movimientos del período elegido, con el saldo de cada fila y el resumen— en una
 hoja de cálculo.
 
+Al abrir la pestaña **no se consulta nada todavía**: elija el período si lo
+necesita y pulse **Mostrar**. Recién entonces aparecen los movimientos y el
+resumen.
+
 Al pie, debajo de los movimientos, se resumen los totales del período: ventas y
 cargos, cobros, retenciones y notas de crédito, y el saldo por cobrar.
 
 - **Desde / Hasta**: limitan el período. Con *Desde*, la primera fila es el
   **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
+  Cambiar una fecha no actualiza la pantalla: hay que pulsar **Mostrar** (o
+  Enter sobre la fecha).
+- **Este mes / Mes pasado / Este año / Año pasado**: enlaces debajo de las
+  fechas que llenan *Desde* y *Hasta* con ese período. Solo ponen las fechas;
+  después pulse **Mostrar**.
+- **Mostrar**: consulta el estado de cuenta con las fechas elegidas; sin fechas
+  trae toda la historia del cliente.
+- **Limpiar** (borrador): quita las fechas y vacía lo que se estaba viendo;
+  vuelva a pulsar **Mostrar**.
 - **Historial de cobros**: deja a la vista solo los cobros (ingresos). El saldo de
-  cada fila sigue siendo el que quedó después de ese cobro.
+  cada fila sigue siendo el que quedó después de ese cobro. El resumen del pie
+  también cambia: queda **solo el total de cobros** del período; los cargos, las
+  retenciones y notas de crédito y los saldos se ocultan hasta volver a *Todos
+  los movimientos*.
 
 Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
 derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
@@ -542,6 +558,7 @@ cambios del cliente y **no se copia** al replicar el cliente a otra empresa.
 
 ## Historial de cambios
 
+- **3.9** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de cobros* activo, el resumen del pie muestra solo el total de cobros. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período.
 - **3.8** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando cliente...* mientras el servidor responde.
 - **3.7** — Nuevo campo **Observaciones** en la pestaña *Comercial* de la ficha: nota interna del cliente (quién pidió crearlo, cliente VIP, cómo atenderlo). Sus cambios quedan en el historial del cliente (quién, cuándo, antes y después).
 - **3.6** — Nueva pestaña **SRI** en la ventana del cliente: ahí pasa la **Forma de Pago SRI (Predeterminada)**, que antes estaba en *Cobros*. En *Cobros*, la primera opción de **Forma de Cobro** ahora dice **Ninguna** (sin cobro automático). El **Concepto de ingreso predeterminado** ahora se llena solo con el de facturas de venta cada vez que se abre la ficha; antes quedaba vacío desde la segunda ficha abierta.

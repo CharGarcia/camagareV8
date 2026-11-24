@@ -521,17 +521,42 @@
         const origenes = conf.origenes || {};
         const textos   = Object.assign({ sinPagos: 'No hay pagos en el período.' }, conf.textos || {});
         const el       = clave => panel.querySelector(`[data-fc="${clave}"]`);
-        const st       = { idCargado: null, filtro: 'todos', data: null, page: 1, peticion: 0, detalles: new Map() };
+        // st.desde = el «Desde» con el que se cargó lo que está en pantalla (no el del input,
+        // que el usuario puede cambiar sin pulsar Mostrar).
+        const st       = { idCargado: null, filtro: 'todos', data: null, page: 1, peticion: 0, desde: '', detalles: new Map() };
 
+        /**
+         * Resumen del pie. Respeta el filtro de movimientos: con "solo pagos/cobros" queda
+         * únicamente el total de pagos o cobros del período; cargos, otros abonos y saldos
+         * se ocultan porque no salen de las filas que se están viendo.
+         */
         function pintarResumen(d) {
+            const soloPagos = st.filtro === 'pagos';
             const set = (clave, v) => { const x = el(clave); if (x) x.textContent = fmtMoneda(v); };
             set('saldo-anterior', d ? d.saldo_anterior : 0);
             set('cargos', d ? d.total_cargos : 0);
             set('pagos', d ? d.total_pagos : 0);
             set('otros', d ? d.total_otros_abonos : 0);
             set('saldo', d ? d.saldo_final : 0);
-            el('card-anterior')?.classList.toggle('d-none', !(d && el('desde')?.value));
+            ['card-cargos', 'card-otros', 'card-saldo'].forEach(c => el(c)?.classList.toggle('d-none', soloPagos));
+            el('card-anterior')?.classList.toggle('d-none', !(d && st.desde && !soloPagos));
             el('ayuda-pago')?.classList.toggle('d-none', !(d && d.puede_ver_pago && d.total_pagos));
+        }
+
+        /** Sin consultar todavía: los datos se piden recién al pulsar Mostrar. */
+        function pintarPendiente() {
+            st.data  = null;
+            st.desde = '';
+            st.page  = 1;
+            st.peticion++; // descarta una respuesta en vuelo
+            st.detalles.clear();
+            const tbody = el('tbody');
+            if (tbody) {
+                tbody.innerHTML = filaMensaje(7, '<i class="bi bi-search fs-4 d-block mb-1"></i>'
+                    + 'Elija el período (opcional) y pulse <b>Mostrar</b>.');
+            }
+            pintarResumen(null);
+            pintarPaginacion(0, 1);
         }
 
         function fila(m, puedeAbrir) {
@@ -571,7 +596,7 @@
 
             const soloPagos = st.filtro === 'pagos';
             const movs  = (d.movimientos || []).filter(m => !soloPagos || m.origen === pago.origen);
-            const desde = el('desde')?.value || '';
+            const desde = st.desde;
 
             const totalPaginas = Math.max(1, Math.ceil(movs.length / POR_PAGINA_EC));
             st.page = Math.min(Math.max(1, st.page), totalPaginas);
@@ -604,11 +629,13 @@
             const tbody = el('tbody');
             tbody.innerHTML = filaMensaje(7, CARGANDO);
 
-            const q = new URLSearchParams({ id, desde: el('desde')?.value || '', hasta: el('hasta')?.value || '' });
+            const desde = el('desde')?.value || '';
+            const q = new URLSearchParams({ id, desde, hasta: el('hasta')?.value || '' });
             const nro  = ++st.peticion;
             const json = await pedirJson(`${cfg.urlBase}/estadoCuentaAjax?${q}`);
             if (nro !== st.peticion) return;
 
+            st.desde = desde;
             if (!json.ok) {
                 st.data = null;
                 tbody.innerHTML = filaMensaje(7, esc(json.error || 'No se pudo cargar el estado de cuenta.'), 'text-danger');
@@ -621,7 +648,7 @@
         }
 
         function reset() {
-            Object.assign(st, { idCargado: null, filtro: 'todos', data: null, page: 1 });
+            Object.assign(st, { idCargado: null, filtro: 'todos', data: null, page: 1, desde: '' });
             st.peticion++;
             st.detalles.clear();
             ['desde', 'hasta'].forEach(clave => { const x = el(clave); if (x) x.value = ''; });
@@ -636,7 +663,11 @@
             const id = idFicha(cfg);
             if (id && st.idCargado === id) return;
             if (st.idCargado !== null) reset();
-            cargar();
+            // Abrir la pestaña no consulta: se espera al botón Mostrar.
+            mostrarSinGuardar(panel, !id);
+            if (!id) return;
+            st.idCargado = id;
+            pintarPendiente();
         }
 
         /** Detalle del egreso/ingreso (respuesta de su getXxxAjax) para la fila desplegable. */
@@ -725,15 +756,40 @@
 
         ['desde', 'hasta'].forEach(clave => {
             const x = el(clave);
-            x?.addEventListener('change', cargar);
+            // Cambiar la fecha no consulta; Enter equivale a Mostrar (y no envía la ficha).
             x?.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter') { e.preventDefault(); cargar(); } // Enter no envía la ficha
+                if (e.key === 'Enter') { e.preventDefault(); cargar(); }
             });
         });
 
+        el('mostrar')?.addEventListener('click', cargar);
+
+        // Atajos de período (este mes, año pasado…): solo llenan las fechas, no consultan.
+        panel.querySelectorAll('[data-fc-rango]').forEach(a => a.addEventListener('click', (e) => {
+            e.preventDefault();
+            const hoy = new Date();
+            const y = hoy.getFullYear();
+            const m = hoy.getMonth();
+            const rangos = {
+                este_mes:    [new Date(y, m, 1),     new Date(y, m + 1, 0)],
+                mes_pasado:  [new Date(y, m - 1, 1), new Date(y, m, 0)],
+                este_anio:   [new Date(y, 0, 1),     new Date(y, 11, 31)],
+                anio_pasado: [new Date(y - 1, 0, 1), new Date(y - 1, 11, 31)],
+            };
+            const r = rangos[a.dataset.fcRango];
+            if (!r) return;
+            const iso = f => `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, '0')}-${String(f.getDate()).padStart(2, '0')}`;
+            const desde = el('desde');
+            const hasta = el('hasta');
+            if (desde) desde.value = iso(r[0]);
+            if (hasta) hasta.value = iso(r[1]);
+            el('mostrar')?.focus();
+        }));
+
+        // Limpiar quita las fechas y lo que se estaba viendo: se vuelve a pulsar Mostrar.
         el('limpiar')?.addEventListener('click', () => {
             ['desde', 'hasta'].forEach(clave => { const x = el(clave); if (x) x.value = ''; });
-            cargar();
+            if (idFicha(cfg)) pintarPendiente();
         });
 
         // Excel: lo arma el servidor con los mismos movimientos y el mismo período que se
@@ -753,6 +809,7 @@
             st.filtro = btn.dataset.fcFiltro;
             st.page   = 1;
             panel.querySelectorAll('[data-fc-filtro]').forEach(b => b.classList.toggle('active', b === btn));
+            pintarResumen(st.data);
             pintarMovimientos();
         }));
 

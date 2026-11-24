@@ -179,7 +179,7 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
             <?= $fcEsc($fcTxt['sin_guardar_ec']) ?>
         </div>
         <div class="d-none" data-fc="con-datos">
-            <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
+            <div class="d-flex flex-wrap align-items-end gap-2 mb-1">
                 <div>
                     <label class="form-label small fw-bold d-block mb-1" for="<?= $fcPref ?>_fc_desde">Desde</label>
                     <input type="date" class="form-control form-control-sm" id="<?= $fcPref ?>_fc_desde" data-fc="desde" style="width: 140px;">
@@ -189,6 +189,8 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                     <input type="date" class="form-control form-control-sm" id="<?= $fcPref ?>_fc_hasta" data-fc="hasta" style="width: 140px;">
                 </div>
                 <button type="button" class="btn btn-sm btn-outline-secondary" data-fc="limpiar" title="Quitar el rango de fechas"><i class="bi bi-eraser"></i></button>
+                <!-- Los datos se consultan recién al pulsar Mostrar (no al abrir la pestaña) -->
+                <button type="button" class="btn btn-sm btn-primary" data-fc="mostrar" title="Consultar el estado de cuenta del período"><i class="bi bi-search me-1"></i>Mostrar</button>
                 <!-- Descarga lo mismo que se está viendo: mismo período y mismos movimientos -->
                 <button type="button" class="btn btn-sm btn-outline-success" data-fc="excel" title="Descargar el estado de cuenta en Excel">
                     <i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel
@@ -204,6 +206,13 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                         <button type="button" class="btn btn-outline-secondary" data-fc="next" title="Siguiente" disabled><i class="bi bi-chevron-right"></i></button>
                     </div>
                 </div>
+            </div>
+            <!-- Atajos de período: solo llenan Desde/Hasta; la consulta sigue siendo con Mostrar -->
+            <div class="d-flex flex-wrap gap-3 mb-2" style="font-size: 0.75rem;">
+                <a href="#" class="text-decoration-none" data-fc-rango="este_mes">Este mes</a>
+                <a href="#" class="text-decoration-none" data-fc-rango="mes_pasado">Mes pasado</a>
+                <a href="#" class="text-decoration-none" data-fc-rango="este_anio">Este año</a>
+                <a href="#" class="text-decoration-none" data-fc-rango="anio_pasado">Año pasado</a>
             </div>
             <div class="ficha-consulta-scroll ficha-consulta-scroll-ec border rounded">
                 <table class="table table-sm mb-0">
@@ -232,7 +241,7 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                         <h6 class="mb-0 fw-bold" data-fc="saldo-anterior">$0.00</h6>
                     </div>
                 </div>
-                <div class="col-6 col-md">
+                <div class="col-6 col-md" data-fc="card-cargos">
                     <div class="card bg-light border-0 text-center p-2">
                         <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['cargos']) ?></span>
                         <h6 class="mb-0 fw-bold text-primary" data-fc="cargos">$0.00</h6>
@@ -244,13 +253,13 @@ if (!defined('FICHA_CONSULTAS_ASSETS')):
                         <h6 class="mb-0 fw-bold text-success" data-fc="pagos">$0.00</h6>
                     </div>
                 </div>
-                <div class="col-6 col-md">
+                <div class="col-6 col-md" data-fc="card-otros">
                     <div class="card bg-light border-0 text-center p-2">
                         <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['otros']) ?></span>
                         <h6 class="mb-0 fw-bold text-warning" data-fc="otros">$0.00</h6>
                     </div>
                 </div>
-                <div class="col-6 col-md">
+                <div class="col-6 col-md" data-fc="card-saldo">
                     <div class="card bg-light border-0 text-center p-2">
                         <span class="small text-muted d-block" style="font-size: 0.7rem;"><?= $fcEsc($fcTxt['saldo']) ?></span>
                         <h6 class="mb-0 fw-bold text-danger" data-fc="saldo">$0.00</h6>

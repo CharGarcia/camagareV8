@@ -6,7 +6,7 @@ ruta_modulo: modulos/proveedores
 tipo: modulo
 visibilidad: todos
 etiquetas: proveedores, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por pagar del proveedor, cuenta de gasto del proveedor, buscar proveedor, buscador, filtros, filtrar proveedores, proveedores sin correo, proveedores por banco, proveedores por ciudad, chips, ordenar por dos columnas, ordenar por ciudad y razon social, proveedor, acreedor, ruc, retencion, cuenta bancaria, plazo, credito, parte relacionada, pago automatico, cheque, egreso automatico, pagos pendientes, resumen comercial, por pagar, buscar, buscador, filtrar, copiar a otra empresa, replicar, duplicar, multiempresa, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, planilla de luz, transacciones, productos comprados, servicios comprados, historial de compras, que le compre, ultimo precio, precio de compra, estado de cuenta, kardex, saldo del proveedor, historial de pagos, pagos realizados, egresos, ver egreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, pestaña informacion, quien creo el proveedor, quien modifico el proveedor, historial del proveedor, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver compra, ver documento, detalle de la compra, lote, observacion del item
-version: 2.18
+version: 2.19
 orden: 10
 estado: activo
 ---
@@ -251,13 +251,29 @@ El *Por pagar* de la pestaña Comercial se calcula documento por documento y no
 incluye facturas del exterior: si el proveedor tiene importaciones o documentos
 pagados de más, puede no coincidir con el saldo de esta pestaña.
 
+Al abrir la pestaña **no se consulta nada todavía**: elija el período si lo
+necesita y pulse **Mostrar**. Recién entonces aparecen los movimientos y el
+resumen.
+
 Al pie, debajo de los movimientos, se resumen los totales del período: compras y
 cargos, pagos, retenciones y notas de crédito, y el saldo por pagar.
 
 - **Desde / Hasta**: limitan el período. Con *Desde*, la primera fila es el
   **saldo anterior** a esa fecha, así el saldo final sigue siendo el real.
+  Cambiar una fecha no actualiza la pantalla: hay que pulsar **Mostrar** (o
+  Enter sobre la fecha).
+- **Este mes / Mes pasado / Este año / Año pasado**: enlaces debajo de las
+  fechas que llenan *Desde* y *Hasta* con ese período. Solo ponen las fechas;
+  después pulse **Mostrar**.
+- **Mostrar**: consulta el estado de cuenta con las fechas elegidas; sin fechas
+  trae toda la historia del proveedor.
+- **Limpiar** (borrador): quita las fechas y vacía lo que se estaba viendo;
+  vuelva a pulsar **Mostrar**.
 - **Historial de pagos**: deja a la vista solo los pagos (egresos). El saldo de
-  cada fila sigue siendo el que quedó después de ese pago.
+  cada fila sigue siendo el que quedó después de ese pago. El resumen del pie
+  también cambia: queda **solo el total de pagos** del período; los cargos, las
+  retenciones y notas de crédito y los saldos se ocultan hasta volver a *Todos
+  los movimientos*.
 
 Los movimientos se muestran de **20 en 20**, con las flechas de avance arriba a la
 derecha, junto a los filtros. Los totales del pie y el saldo anterior corresponden
@@ -531,6 +547,7 @@ lo referencian se conservan intactas. Si solo quiere dejar de usarlo, cámbielo 
 
 ## Historial de cambios
 
+- **2.19** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de pagos* activo, el resumen del pie muestra solo el total de pagos. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período.
 - **2.18** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos y Clientes; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando proveedor...* mientras el servidor responde.
 - **2.17** — *Transacciones*: nueva columna **Det. Adicional** (el texto propio de cada ítem), nueva vista **Por documento** y, con un clic en un documento, una ventana con sus líneas, su **información adicional** y su PDF. El buscador también busca en el detalle adicional (filtro `adicional:`).
 - **2.16** — La pestaña **Estado de cuenta** del proveedor carga más rápido cuando se filtra desde una fecha: el saldo anterior y los movimientos salen de una sola consulta en lugar de dos. Los valores no cambian.
