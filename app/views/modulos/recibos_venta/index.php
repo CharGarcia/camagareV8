@@ -1164,6 +1164,9 @@ $totalPages = $totalPagesOriginal;
         id_forma_pago_sri_def: <?= isset($empresa['id_forma_pago_sri_def']) && $empresa['id_forma_pago_sri_def'] !== null ? (int)$empresa['id_forma_pago_sri_def'] : 'null' ?>,
         id_tarifa_iva_defecto_libre: <?= isset($empresa['id_tarifa_iva_defecto_libre']) && $empresa['id_tarifa_iva_defecto_libre'] !== null ? (int)$empresa['id_tarifa_iva_defecto_libre'] : 'null' ?>,
         editar_precio_factura: <?= (($empresa['editar_precio_factura'] ?? true) === 'true' || ($empresa['editar_precio_factura'] ?? true) === true) ? 'true' : 'false' ?>,
+        // Apagado por defecto: la descripción de un producto del catálogo solo se
+        // puede modificar en el recibo si Empresa → Facturación lo permite.
+        editar_descripcion_factura: <?= (($empresa['editar_descripcion_factura'] ?? false) === 'true' || ($empresa['editar_descripcion_factura'] ?? false) === true) ? 'true' : 'false' ?>,
         editar_iva_factura: <?= (($empresa['editar_iva_factura'] ?? true) === 'true' || ($empresa['editar_iva_factura'] ?? true) === true) ? 'true' : 'false' ?>,
         editar_descuento_factura: <?= (($empresa['editar_descuento_factura'] ?? true) === 'true' || ($empresa['editar_descuento_factura'] ?? true) === true) ? 'true' : 'false' ?>,
         mostrar_propina_factura: <?= (($empresa['mostrar_propina_factura'] ?? false) === 'true' || ($empresa['mostrar_propina_factura'] ?? false) === true) ? 'true' : 'false' ?>
@@ -3581,6 +3584,10 @@ $totalPages = $totalPagesOriginal;
         const seleccionarProductoEnFila = (p, row) => {
             row.querySelector('.input-codigo').value = p.codigo;
             row.querySelector('.input-descripcion').value = p.nombre;
+            // Nombre del catálogo y descripción elegida: ver descEditable() más abajo.
+            row.dataset.nombreCatalogo = p.nombre || '';
+            row.dataset.descElegida = p.nombre || '';
+            delete row.dataset.descTocada;
             row.querySelector('.input-precio').value = parseFloat(p.precio_base).toFixed(rvDecPrecio());
             row.querySelector('.input-id-producto').value = p.id;
             row.dataset.idProducto = p.id;
@@ -3967,10 +3974,51 @@ $totalPages = $totalPagesOriginal;
             }, 300);
         }));
 
+        // Empresa → Facturación «¿Se puede editar la descripción…?»: con un producto
+        // ya elegido en la fila, la descripción deja de ser buscador y pasa a ser
+        // texto editable solo para este recibo (el catálogo y el código no cambian;
+        // el detalle guarda su propia copia). Para cambiar de producto se usa la
+        // columna Código o se elimina la fila. Mismo criterio que Factura de Venta.
+        const descEditable = () => !!EMPRESA_CONFIG.editar_descripcion_factura
+                                && !!tr.querySelector('.input-id-producto').value;
+
         const debDesc = debounceBusqueda(inputDesc);
-        inputDesc.addEventListener('input', debDesc);
+        inputDesc.addEventListener('input', () => {
+            if (descEditable()) {
+                debDesc.cancelar();
+                busqSeq++; busqMostrada = '';
+                dropdownGlobal.classList.add('d-none');
+                return;
+            }
+            // Sin el permiso (y sin modo libre), lo que se escribe sobre un producto ya
+            // elegido es solo una búsqueda: se marca para reponer la descripción si el
+            // usuario sale del campo sin elegir otro producto.
+            if (!EMPRESA_CONFIG.facturacion_libre && tr.querySelector('.input-id-producto').value) {
+                tr.dataset.descTocada = '1';
+            }
+            debDesc();
+        });
+        inputDesc.addEventListener('blur', () => {
+            // Descripción editada y dejada en blanco: vuelve el nombre del catálogo.
+            if (descEditable() && !inputDesc.value.trim() && tr.dataset.nombreCatalogo) {
+                inputDesc.value = tr.dataset.nombreCatalogo;
+                return;
+            }
+            // Sin permiso: se buscó sobre un producto elegido y no se eligió otro →
+            // la descripción vuelve a la del producto (no se guarda un texto a medias).
+            if (!descEditable() && tr.dataset.descTocada && !inputDesc.dataset.enterPendiente
+                && tr.querySelector('.input-id-producto').value && tr.dataset.descElegida) {
+                inputDesc.value = tr.dataset.descElegida;
+            }
+            delete tr.dataset.descTocada;
+        });
 
         inputDesc.addEventListener('keydown', (e) => {
+            if (descEditable()) {
+                // Texto editable: las teclas borran carácter a carácter y Enter no busca.
+                if (e.key === 'Enter') e.preventDefault();
+                return;
+            }
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 e.target.value = '';
                 inputCodigoVisible.value = '';
@@ -5081,6 +5129,8 @@ $totalPages = $totalPagesOriginal;
                 tr.dataset.tipoProduccion = d.tipo_produccion || '01';
                 tr.dataset.inventariable = d.inventariable;
                 tr.querySelector('.input-descripcion').value = d.descripcion || '';
+                tr.dataset.nombreCatalogo = d.producto_nombre || d.descripcion || '';
+                tr.dataset.descElegida = d.descripcion || '';
                 tr.querySelector('.input-codigo').value = d.codigo_principal || '';
                 tr.querySelector('.input-casillero').value = d.casillero || '';
                 tr.querySelector('.input-codigo-auxiliar').value = d.codigo_auxiliar || '';

@@ -613,11 +613,35 @@
             ddProd.style.width = Math.max(r.width, 340) + 'px';
         }
 
+        // Empresa → Facturación «¿Se puede editar la descripción…?»: con un producto ya
+        // elegido, la descripción deja de ser buscador y pasa a ser texto editable solo
+        // para esta proforma (el catálogo y el código no cambian). Para cambiar de
+        // producto se usa la columna Código. Mismo criterio que Factura de Venta.
+        const idProdEl = tr.querySelector('.input-id-producto');
+        const descEditable = () => !!(window.PF_CONFIG && window.PF_CONFIG.editar_descripcion) && !!idProdEl.value;
+        tr.dataset.descElegida    = data.descripcion || '';
+        tr.dataset.nombreCatalogo = data.producto_nombre || data.descripcion || '';
+        inpDesc.addEventListener('blur', () => {
+            // Descripción editada y dejada en blanco: vuelve el nombre del catálogo.
+            if (descEditable() && !inpDesc.value.trim() && tr.dataset.nombreCatalogo) {
+                inpDesc.value = tr.dataset.nombreCatalogo;
+                return;
+            }
+            // Sin permiso: se buscó sobre un producto elegido y no se eligió otro →
+            // la descripción vuelve a la del producto. Si enseguida se elige uno de la
+            // lista, _pfLlenarFilaProducto() la reemplaza.
+            if (!descEditable() && tr.dataset.descTocada && idProdEl.value && tr.dataset.descElegida) {
+                inpDesc.value = tr.dataset.descElegida;
+            }
+            delete tr.dataset.descTocada;
+        });
+
         let timer;
         [inpCod, inpDesc].forEach(inp => {
             // Backspace / Delete con producto seleccionado → limpiar la selección completa
             // (código, descripción e id) de una vez, no letra por letra.
             inp.addEventListener('keydown', e => {
+                if (inp === inpDesc && descEditable()) return; // texto editable: borra carácter a carácter
                 const idProd = tr.querySelector('.input-id-producto');
                 if ((e.key === 'Backspace' || e.key === 'Delete') && idProd && idProd.value) {
                     e.preventDefault();
@@ -630,6 +654,11 @@
 
             inp.addEventListener('input', () => {
                 clearTimeout(timer);
+                if (inp === inpDesc && descEditable()) {
+                    ddProd.classList.add('d-none');
+                    return;
+                }
+                if (inp === inpDesc && idProdEl.value) tr.dataset.descTocada = '1';
                 inpAct = inp;
                 const q = inp.value.trim();
                 if (!q) {
@@ -732,6 +761,9 @@
         tr.querySelector('.input-id-producto').value = p.id    || '';
         tr.querySelector('.input-codigo').value      = p.codigo || '';
         tr.querySelector('.input-descripcion').value = p.nombre || '';
+        tr.dataset.nombreCatalogo = p.nombre || '';
+        tr.dataset.descElegida    = p.nombre || '';
+        delete tr.dataset.descTocada;
         const inpImg = tr.querySelector('.input-imagen');
         if (inpImg) inpImg.value = p.imagen || '';
         tr.querySelector('.input-cantidad').value    = (1).toFixed(decCant());

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/proformas
 tipo: modulo
 visibilidad: todos
-etiquetas: proforma, proformas, crm, oportunidad, proforma desde el crm, embudo de ventas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva
-version: 1.32
+etiquetas: proforma, proformas, crm, oportunidad, proforma desde el crm, embudo de ventas, ordenar por dos columnas, ordenar por estado y fecha, cotizacion, cotizar, presupuesto, oferta, duplicar, duplicar proforma, copiar proforma, repetir cotizacion, volver a cotizar, regresar a borrador, volver a borrador, reabrir proforma, reabrir, desaprobar, quitar aprobacion, editar proforma aprobada, convertir a factura, enviar a pedidos, generar pedido, pasar a pedido, crear pedido desde proforma, despacho, orden de despacho, items sin producto, concepto libre, linea sin producto, pestana pedidos, enviar por whatsapp, exportar excel, info productos, ficha de productos, catalogo, imagenes de productos, informacion adicional, plantillas, plantilla de proforma, guardar como plantilla, condiciones, terminos y condiciones, anexo, pdf de condiciones, texto con formato, clausulas, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, pdf de la proforma, codigo del producto en el pdf, columna codigo, buscar por codigo, codigo en el detalle, columna codigo en la proforma, observaciones en el pdf, numero repetido, secuencial repetido, secuencial duplicado, dos proformas con el mismo numero, buscar proforma, buscador, filtros, filtrar proformas, buscar por producto, proformas vencidas, proformas sin facturar, filtro de fechas, chips, imprimir, impresora, vendedor del cliente, vendedor asignado, vendedor por defecto, celular, movil, telefono, columnas cortadas, descripcion completa, iva al subtotal, iva item por item, iva linea por linea, calculo del iva, cambiar la descripcion del producto en la proforma, editar descripcion, modificar descripcion del item
+version: 1.33
 orden: 15
 estado: activo
 ---
@@ -54,6 +54,16 @@ descripción y producto) de una vez, para volver a buscar. Si escribe a mano sin
 elegir nada de la lista, la línea queda como concepto libre y se guarda tal cual
 lo escribió, código incluido. La tabla de ítems de una **plantilla** funciona
 igual.
+
+## Modificar la descripción de un producto
+
+Si en **Empresa → Facturación** está encendido **¿Se puede editar la descripción de un producto o servicio en la factura?** (viene apagado), después de elegir un producto del catálogo puede escribir sobre su **Descripción** para cambiarla:
+
+- El cambio vale **solo para esa proforma**. El **código** se mantiene y el catálogo de Productos **no cambia**.
+- Con un producto ya elegido, la Descripción deja de buscar: para cambiar de producto use la columna **Código**.
+- Si deja la descripción en blanco, vuelve el nombre del catálogo.
+- Con la opción **apagada**, lo que escriba sobre un producto ya elegido es solo una búsqueda: si sale del campo sin elegir otro producto, vuelve la descripción original. Para convertir la línea en un concepto libre, bórrela con **Retroceso** (limpia el producto) y escriba el texto.
+- Las líneas de las **Plantillas** no cambian con esta opción.
 
 ## Convertir en factura
 
@@ -520,6 +530,7 @@ manual del **CRM**.
 
 ## Historial de cambios
 
+- **1.33** — Detalle: con la opción de Empresa → Facturación **¿Se puede editar la descripción de un producto o servicio en la factura?** encendida (viene apagada), después de elegir un producto se puede modificar su descripción solo para esa proforma, manteniendo el código. Apagada, un texto escrito sobre un producto ya elegido sin elegir otro ya no se guarda: vuelve la descripción original.
 - **1.32** — Nueva pestaña **Información** en la ventana de la proforma (solo niveles 2 y 3, solo lectura): quién la creó y modificó, con fecha y hora, y sus acciones registradas. Ver la guía *Pestaña Información*.
 - **1.31** — **Crear proforma desde una oportunidad del CRM**: abre una proforma nueva con el cliente puesto y, al guardarla, la deja enlazada a la oportunidad, que toma su total como valor.
 - **1.30** — Los **decimales de cantidad y precio** y el logo salen del **establecimiento de la serie** de la proforma, no del primer establecimiento de la empresa: en la ventana (al elegir la serie), al guardar y en el PDF, la ficha de productos, las condiciones y el correo. La conversión a factura, recibo o pedido no cambia: sigue emitiendo por el primer establecimiento con secuencial configurado.

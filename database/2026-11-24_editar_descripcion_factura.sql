@@ -2,9 +2,9 @@
 --  Configuración de facturación: permitir modificar la descripción del ítem
 -- ----------------------------------------------------------------------------
 --  Para qué: en Empresa → Facturación, un interruptor por establecimiento:
---    - editar_descripcion_factura: en Facturas de Venta, después de elegir un
+--    - editar_descripcion_factura: en Facturas de Venta, Recibos de Venta y Proformas, después de elegir un
 --      producto o servicio del catálogo, se puede modificar su descripción solo
---      para esa factura. El código y el producto del catálogo no cambian.
+--      para ese documento. El código y el producto del catálogo no cambian.
 --
 --  Por defecto en false: ninguna empresa cambia de comportamiento hasta activarlo.
 --
@@ -19,7 +19,7 @@ ALTER TABLE empresa_establecimiento
     ADD COLUMN IF NOT EXISTS editar_descripcion_factura BOOLEAN NOT NULL DEFAULT false;
 
 COMMENT ON COLUMN empresa_establecimiento.editar_descripcion_factura IS
-    'Facturas de Venta: permite modificar la descripción de un producto/servicio del catálogo solo en esa factura (el catálogo no cambia).';
+    'Facturas de Venta, Recibos de Venta y Proformas: permite modificar la descripción de un producto/servicio del catálogo solo en ese documento (el catálogo no cambia).';
 
 -- Comprobación (debe devolver 1 fila):
 -- SELECT column_name FROM information_schema.columns

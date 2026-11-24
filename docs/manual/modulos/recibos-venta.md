@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/recibo-venta
 tipo: modulo
 visibilidad: todos
-etiquetas: lector de codigo de barras, escaner, pistola lectora, no sale la descripcion, recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, categoria del producto, marca del producto, ver marca, ver categoria, informacion del producto, ficha del producto, codigo de barras, ubicacion del producto, donde esta el producto, icono i, pasar el mouse, de donde sale el valor del asiento, desglose del asiento, a que corresponde cada valor, que lineas forman la cuenta
-version: 1.36
+etiquetas: lector de codigo de barras, escaner, pistola lectora, no sale la descripcion, recibo de venta, recibos, buscar recibos, buscador, filtros, filtrar recibos, buscar por cliente, buscar por producto, estado de pago, saldo pendiente, nota de venta, venta sin factura, documento interno, sin impuestos, numeracion por fecha, numero con el año, reiniciar numeracion, reinicio anual, reinicio mensual, correlativo por año, correlativo por mes, modo de numeracion, lote, vencimiento, caducidad, fecha de vencimiento, lote y vencimiento, ancho de columna, agrandar columna, ensanchar, codigo cortado, descripcion cortada, no se ve la descripcion completa, redimensionar, precio con impuestos, precio con iva, sale en cero, tipo de identificacion, tipo de documento del cliente, ruc o cedula, es ruc o cedula, cedula o pasaporte, consumidor final, no se cual identificacion tiene el cliente, buscador de clientes, buscar cliente, elegir cliente, datos del cliente, imprimir, impresora, estado del recibo, borrador, emitido, recibo pagado sigue en borrador, no cambia a emitido, recibo sin asiento, asiento del recibo, cuando se emite, no puedo modificar el recibo, no aparece actualizar, editar recibo emitido, corregir recibo, iva del listado, iva diferente, iva no coincide, iva con descuento, columna iva, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, stock descontado dos veces, generar factura desde recibo, generar recibo desde factura, no se pudo eliminar la factura borrador, abono, abonos, cobro parcial, registrar cobro, cobro duplicado, se cobro todo el saldo, factura pagada sola, cobro al autorizar, categoria del producto, marca del producto, ver marca, ver categoria, informacion del producto, ficha del producto, codigo de barras, ubicacion del producto, donde esta el producto, icono i, pasar el mouse, de donde sale el valor del asiento, desglose del asiento, a que corresponde cada valor, que lineas forman la cuenta, cambiar la descripcion del producto en el recibo, editar descripcion, modificar descripcion del item
+version: 1.37
 orden: 35
 estado: activo
 ---
@@ -88,6 +88,15 @@ recibos, sin afectar a los demás usuarios, a las columnas del listado ni a los
 anchos que tenga en Facturas de Venta (cada módulo guarda los suyos). Si al
 ensanchar ya no cabe toda la tabla, aparece una barra para desplazarse a los lados
 en lugar de achicar Cantidad, Precio o IVA.
+
+### Modificar la descripción de un producto en el recibo
+
+Si en **Empresa → Facturación** está encendido **¿Se puede editar la descripción de un producto o servicio en la factura?** (viene apagado), después de elegir un producto o servicio puede escribir sobre su **Descripción** para cambiarla, igual que en [Facturas de Venta](modulos/factura-venta):
+
+- El cambio vale **solo para ese recibo**. El **código** se mantiene y el catálogo de Productos **no cambia**.
+- Con un producto ya elegido, la Descripción deja de buscar: para cambiar de producto use la columna **Código** o elimine la línea.
+- Si deja la descripción en blanco, vuelve el nombre del catálogo.
+- Con la opción **apagada**, lo que escriba sobre un producto ya elegido es solo una búsqueda: si sale del campo sin elegir otro producto, vuelve la descripción original (no aplica si la empresa permite registros libres).
 
 ### Ficha del producto en cada línea (ícono ⓘ)
 
@@ -297,6 +306,7 @@ propio texto, se respeta.
 
 ## Historial de cambios
 
+- **1.37** — Detalle: con la opción de Empresa → Facturación **¿Se puede editar la descripción de un producto o servicio en la factura?** encendida (viene apagada), después de elegir un producto se puede modificar su descripción solo para ese recibo, manteniendo el código. Apagada, un texto escrito sobre un producto ya elegido sin elegir otro ya no se guarda: vuelve la descripción original.
 - **1.36** — Detalle: con el **lector de código de barras** el producto se completa siempre, aunque el internet esté lento. El Enter del lector espera la búsqueda del código y elige el producto cuyo código, código de barras o código auxiliar coincide exactamente (si no hay coincidencia exacta, la lista queda abierta para elegir). Se descartan respuestas atrasadas de búsquedas anteriores y, si la conexión falla, la lista lo indica y basta presionar Enter de nuevo.
 
 - **1.35** — En la pestaña **Asiento contable**, el ícono **ⓘ** de cada línea muestra **de qué líneas del recibo sale ese valor**. Ver *¿De dónde sale cada valor del asiento?*.

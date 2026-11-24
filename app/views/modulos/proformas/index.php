@@ -267,6 +267,9 @@ window.PF_CONFIG  = {
     decimales_precio:   <?= (int) ($empresa['decimales_precio']   ?? 2) ?>,
     decimales_cantidad: <?= (int) ($empresa['decimales_cantidad'] ?? 2) ?>,
     calculo_iva:        '<?= $empresa['calculo_iva_facturacion'] ?? 'linea_linea' ?>',
+    // Empresa → Facturación «¿Se puede editar la descripción…?» (apagado por defecto):
+    // permite modificar la descripción de un producto del catálogo solo en la proforma.
+    editar_descripcion: <?= (($empresa['editar_descripcion_factura'] ?? false) === 'true' || ($empresa['editar_descripcion_factura'] ?? false) === true) ? 'true' : 'false' ?>,
     storageKey: 'pf_borrador_<?= (int)($_SESSION['id_empresa'] ?? 0) ?>_<?= (int)($_SESSION['id_usuario'] ?? 0) ?>',
     // Regresar una proforma aprobada a borrador: solo administrador (nivel 2) y
     // superadministrador (nivel 3). El servidor lo vuelve a validar.

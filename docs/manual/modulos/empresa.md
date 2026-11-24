@@ -197,7 +197,7 @@ guardado en cada línea se conserva y sigue saliendo en el PDF y el XML cuando t
 
 ## Editar la descripción de un producto en la factura
 
-En la pestaña **Facturación**, el interruptor **¿Se puede editar la descripción de un producto o servicio en la factura?** decide si, en **Facturas de Venta**, se puede modificar la descripción de un producto o servicio del catálogo después de elegirlo. El cambio queda solo en esa factura (PDF y XML); el código y el catálogo de Productos no cambian. Se configura por establecimiento y viene **apagado**. Detalle en [Facturas de Venta](modulos/factura-venta).
+En la pestaña **Facturación**, el interruptor **¿Se puede editar la descripción de un producto o servicio en la factura?** decide si, en **Facturas de Venta**, **Recibos de Venta** y **Proformas**, se puede modificar la descripción de un producto o servicio del catálogo después de elegirlo. El cambio queda solo en ese documento; el código y el catálogo de Productos no cambian. Se configura por establecimiento y viene **apagado**. Detalle en [Facturas de Venta](modulos/factura-venta).
 
 ## Sugerencias cuando un producto no tiene saldo
 
@@ -515,7 +515,7 @@ de taxis.
 
 ## Historial de cambios
 
-- **1.43** — Nuevo interruptor en la pestaña *Facturación*: **¿Se puede editar la descripción de un producto o servicio en la factura?** (viene apagado). Permite modificar la descripción de un ítem solo en esa Factura de Venta, sin cambiar el código ni el catálogo.
+- **1.43** — Nuevo interruptor en la pestaña *Facturación*: **¿Se puede editar la descripción de un producto o servicio en la factura?** (viene apagado). Permite modificar la descripción de un ítem solo en esa Factura de Venta, Recibo de Venta o Proforma, sin cambiar el código ni el catálogo.
 - **1.42** — Nuevos interruptores en la pestaña *Facturación*: **Mostrar sugerencias de productos similares** y **Mostrar equivalencias** (vienen apagados). Deciden si Facturas de Venta y Car-Wash ofrecen reemplazos cuando un producto no tiene saldo.
 - **1.41** — La ventana de suscripción vencida permite **enviar un mensaje y el comprobante
   de pago** (PDF o imagen). Le llega por correo a la empresa que administra la suscripción y,
