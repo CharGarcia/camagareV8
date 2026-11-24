@@ -1649,6 +1649,11 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Permite modificar el precio unitario directamente en el detalle de la factura.</div>
                                         </div>
                                         <div class="form-check form-switch mb-3">
+                                            <input class="form-check-input" type="checkbox" role="switch" name="editar_descripcion_factura" id="sw_edit_descripcion" <?= (($empresa['editar_descripcion_factura'] ?? false) === 'true' || ($empresa['editar_descripcion_factura'] ?? false) === true) ? 'checked' : '' ?>>
+                                            <label class="form-check-label small fw-bold" for="sw_edit_descripcion">¿Se puede editar la descripción de un producto o servicio en la factura?</label>
+                                            <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Después de elegir el producto, permite modificar su descripción solo para esa factura. El código y el catálogo de productos no cambian.</div>
+                                        </div>
+                                        <div class="form-check form-switch mb-3">
                                             <input class="form-check-input" type="checkbox" role="switch" name="editar_iva_factura" id="sw_edit_iva" <?= (($empresa['editar_iva_factura'] ?? true) === 'true' || ($empresa['editar_iva_factura'] ?? true) === true) ? 'checked' : '' ?>>
                                             <label class="form-check-label small fw-bold" for="sw_edit_iva">¿Se puede editar el tipo de iva en un producto o servicio en la factura?</label>
                                             <div class="form-text mt-0 sub-text" style="font-size:0.65rem;">Permite cambiar la tarifa de IVA asignada a un ítem en el detalle de la factura.</div>

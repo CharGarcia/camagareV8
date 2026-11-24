@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, sugerencias, productos similares, equivalencias, productos equivalentes, sin saldo, sin stock, ventana de sugerencias, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, ya pague, enviar comprobante, comprobante de pago, reportar pago, adjuntar pago, transferencia, pago en revision, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion
-version: 1.42
+etiquetas: empresa, sugerencias, productos similares, equivalencias, productos equivalentes, sin saldo, sin stock, ventana de sugerencias, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, ya pague, enviar comprobante, comprobante de pago, reportar pago, adjuntar pago, transferencia, pago en revision, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion, editar descripcion en la factura, cambiar descripcion del producto al facturar, modificar descripcion del item
+version: 1.43
 orden: 5
 estado: activo
 ---
@@ -194,6 +194,10 @@ la factura?** decide si la tabla de productos del modal de Factura de Venta mues
 **encendido**; apáguelo si su empresa no usa ese
 dato y quiere más espacio para las demás columnas. Solo cambia la pantalla: lo que ya está
 guardado en cada línea se conserva y sigue saliendo en el PDF y el XML cuando tiene contenido.
+
+## Editar la descripción de un producto en la factura
+
+En la pestaña **Facturación**, el interruptor **¿Se puede editar la descripción de un producto o servicio en la factura?** decide si, en **Facturas de Venta**, se puede modificar la descripción de un producto o servicio del catálogo después de elegirlo. El cambio queda solo en esa factura (PDF y XML); el código y el catálogo de Productos no cambian. Se configura por establecimiento y viene **apagado**. Detalle en [Facturas de Venta](modulos/factura-venta).
 
 ## Sugerencias cuando un producto no tiene saldo
 
@@ -511,6 +515,7 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.43** — Nuevo interruptor en la pestaña *Facturación*: **¿Se puede editar la descripción de un producto o servicio en la factura?** (viene apagado). Permite modificar la descripción de un ítem solo en esa Factura de Venta, sin cambiar el código ni el catálogo.
 - **1.42** — Nuevos interruptores en la pestaña *Facturación*: **Mostrar sugerencias de productos similares** y **Mostrar equivalencias** (vienen apagados). Deciden si Facturas de Venta y Car-Wash ofrecen reemplazos cuando un producto no tiene saldo.
 - **1.41** — La ventana de suscripción vencida permite **enviar un mensaje y el comprobante
   de pago** (PDF o imagen). Le llega por correo a la empresa que administra la suscripción y,
