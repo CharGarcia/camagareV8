@@ -6,7 +6,7 @@ ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
 etiquetas: reporte de inventario, filtros en el excel, saldo al, fecha del saldo en el excel, encabezado del excel, ordenar consignaciones, ordenar movimientos, ordenar valorizacion, ordenar auditoria, ordenar tabla, ordenar de mayor a menor, pdf ordenado, excel ordenado, exportar en el mismo orden, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, pestañas que puede ver, pestañas por usuario, ocultar pestañas, me quitaron una pestaña, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote, costo en cero, no muestra el costo, costo del producto, costo de la ficha, actualice el costo, cambie el costo y no se ve, de donde sale el costo, consignacion de otra bodega, consignacion de otro usuario, no veo una consignacion
-version: 1.49
+version: 1.51
 orden: 40
 estado: activo
 ---
@@ -446,6 +446,24 @@ stock que trae:
   Consignado, Lote, NUP y el rango de Caducidad. Los que no se usaron dicen
   *Todos* o *Todas*. Si se escribió un producto sin elegirlo de la lista, sale
   como **Búsqueda**.
+- **No se repite lo que ya está en las columnas**: si el Excel trae la columna
+  Bodega, Categoría, Producto, Estado, Consignación, Lote, NUP o Caducidad, ese
+  filtro no aparece en el encabezado, porque el dato se lee en cada fila. La
+  única excepción es un rango de Caducidad aplicado (desde/hasta), que sí se
+  indica aunque exista la columna.
+
+### Encabezado del Excel de Movimientos
+
+El Excel de **Movimientos** lleva el mismo tipo de encabezado:
+
+- **Periodo** (fechas Desde/Hasta; sin ellas, *Todo el histórico*) y
+  **Generado el**.
+- **Agrupar por**, **Correcciones** y los filtros con su valor: Tipo, Bodega,
+  Categoría, Marca, Origen, Usuario, Producto, Lote, NUP, Caducidad y
+  Observaciones. Los que no se usaron dicen *Todos* o *Todas*.
+- Con la misma regla: si el Excel trae la columna (por ejemplo Bodega, Producto,
+  Tipo, Origen, Lote u Observaciones en *Detallado*), ese filtro no se repite
+  arriba. El Periodo y un rango de Caducidad aplicado se indican siempre.
 
 ### Excel o PDF con muchos datos
 
@@ -782,6 +800,8 @@ ahí.
 
 ## Historial de cambios
 
+- **1.51** — **Encabezado en el Excel de Movimientos**: el Excel de Movimientos indica el periodo, la fecha de generación, Agrupar por, Correcciones y los filtros aplicados, sin repetir los que ya salen como columna (Bodega, Producto, Tipo, Origen, Lote, Observaciones…).
+- **1.50** — **Encabezado del Excel sin repetir columnas**: los filtros cuyo dato ya sale como columna del Excel (Bodega, Categoría, Producto, Estado, Consignación, Lote, NUP, Caducidad) ya no se listan en el encabezado. Se mantiene el rango de Caducidad cuando se aplicó.
 - **1.49** — **Excel de Existencias**: se retira la columna **Caducidad** del detalle *Por lotes* (agregada en la 1.48). El Excel lleva ahora un encabezado con **Saldo al** (fecha de corte o, sin ella, fecha y hora de la descarga), **Generado el** y todos los filtros aplicados con su valor.
 - **1.48** — **Caducidad en el Excel de *Por lotes***: el Excel de Existencias con el detalle *Por lotes* incluye la columna **Caducidad** junto al Lote; si un lote tiene varias fechas de caducidad, salen todas separadas por coma. La pantalla y el PDF no cambian.
 - **1.47** — **Consignaciones anuladas sin saldo**: una consignación Anulada ya no cuenta como mercadería en poder del cliente; su Saldo es 0 en la pestaña Consignaciones (listado, agrupados, detalle, PDF y Excel) y no suma en el **Consignado** de Existencias. Antes seguía mostrando el saldo completo aunque el stock ya había vuelto a la bodega.

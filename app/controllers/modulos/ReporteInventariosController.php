@@ -2014,7 +2014,11 @@ class ReporteInventariosController extends BaseModuloController
 
             // Existencias: encabezado con la fecha del saldo y TODOS los filtros aplicados,
             // para que el archivo se entienda solo (qué stock es, a qué fecha y de qué).
-            $infoLineas = $tab === 'existencias' ? $this->lineasFiltrosExistencias($idEmpresa) : [];
+            $infoLineas = match ($tab) {
+                'existencias' => $this->lineasFiltrosExistencias($idEmpresa, $headers),
+                'movimientos' => $this->lineasFiltrosMovimientos($idEmpresa, $headers),
+                default       => [],
+            };
 
             $reportService = new \App\Services\ReportService();
             $reportService->exportToExcel($titulo, $headers, $exportData, $titulo, $nombreEmpresa, $infoLineas);
@@ -2029,9 +2033,14 @@ class ReporteInventariosController extends BaseModuloController
      * corresponde el saldo y cada filtro de la pantalla con su valor ("Todos" cuando no se
      * filtró), con los nombres que ve el usuario en vez de los ids.
      *
+     * Un filtro cuyo dato ya sale como columna del Excel (Bodega, Producto, Lote…) no se
+     * repite en el encabezado: el valor se lee en cada fila. La excepción es un rango de
+     * caducidad aplicado, que no se deduce de las fechas que aparecen en la columna.
+     *
+     * @param string[] $headers columnas del Excel que se va a generar.
      * @return array<string,string>
      */
-    private function lineasFiltrosExistencias(int $idEmpresa): array
+    private function lineasFiltrosExistencias(int $idEmpresa, array $headers = []): array
     {
         $f = $this->getFiltrosExistencias();
         $fmt = fn($v) => ($v !== '' && strtotime((string) $v)) ? date('d-m-Y', strtotime((string) $v)) : '';
@@ -2093,7 +2102,124 @@ class ReporteInventariosController extends BaseModuloController
         if ($f['buscar'] !== '') {
             $lineas['Búsqueda'] = $f['buscar'];
         }
+
+        // Un rango de caducidad aplicado no se deduce de las fechas de la columna: se conserva.
+        $conservar = ($cadDesde !== '' || $cadHasta !== '') ? ['Caducidad'] : [];
+        return self::sinFiltrosQueSonColumna($lineas, $headers, [
+            'Bodega'     => 'Bodega',
+            'Categoría'  => 'Categoría',
+            'Marca'      => 'Marca',
+            'Producto'   => 'Producto',
+            'Estado'     => 'Estado',
+            'Consignado' => 'Consignación',
+            'Lote'       => 'Lote',
+            'NUP'        => 'NUP',
+            'Caducidad'  => 'Caducidad',
+        ], $conservar);
+    }
+
+    /**
+     * Quita del encabezado del Excel los filtros cuyo dato ya sale como columna: el valor se
+     * lee en cada fila y repetirlo arriba solo estorba.
+     *
+     * @param array<string,string> $lineas           etiqueta del filtro => valor.
+     * @param string[]             $headers          columnas del Excel que se va a generar.
+     * @param array<string,string> $columnaDelFiltro etiqueta del filtro => columna que lo muestra.
+     * @param string[]             $conservar        filtros que se dejan aunque exista la columna
+     *                                               (p. ej. un rango, que la columna no revela).
+     */
+    private static function sinFiltrosQueSonColumna(array $lineas, array $headers, array $columnaDelFiltro, array $conservar = []): array
+    {
+        foreach ($columnaDelFiltro as $filtro => $columna) {
+            if (in_array($columna, $headers, true) && !in_array($filtro, $conservar, true)) {
+                unset($lineas[$filtro]);
+            }
+        }
         return $lineas;
+    }
+
+    /**
+     * Líneas de encabezado del Excel de Movimientos, con la misma regla que Existencias:
+     * periodo y cada filtro con su valor ("Todos" si no se usó), sin repetir los que ya
+     * salen como columna (Bodega, Producto, Tipo, Origen, Lote, Observaciones).
+     *
+     * @param string[] $headers columnas del Excel que se va a generar.
+     * @return array<string,string>
+     */
+    private function lineasFiltrosMovimientos(int $idEmpresa, array $headers = []): array
+    {
+        $f = $this->getFiltrosMovimientos();
+        $fmt = fn($v) => ($v !== '' && strtotime((string) $v)) ? date('d-m-Y', strtotime((string) $v)) : '';
+        $rango = function (string $desde, string $hasta, string $todos): string {
+            return match (true) {
+                $desde !== '' && $hasta !== '' => "Del {$desde} al {$hasta}",
+                $desde !== ''                  => "Desde {$desde}",
+                $hasta !== ''                  => "Hasta {$hasta}",
+                default                        => $todos,
+            };
+        };
+        $nombreEn = function (array $lista, $id, string $todos): string {
+            if (empty($id)) return $todos;
+            foreach ($lista as $r) {
+                if ((int) $r['id'] === (int) $id) return (string) $r['nombre'];
+            }
+            return $todos;
+        };
+
+        $lineas = [
+            'Periodo'     => $rango($fmt($f['fecha_desde']), $fmt($f['fecha_hasta']), 'Todo el histórico'),
+            'Generado el' => date('d-m-Y H:i:s'),
+        ];
+        $agrupar = [
+            'NINGUNO' => 'Detallado', 'PRODUCTO' => 'Por Producto', 'BODEGA' => 'Por Bodega',
+            'TIPO' => 'Por Tipo', 'ORIGEN' => 'Por Origen', 'FECHA' => 'Por Fecha', 'MES' => 'Por Mes',
+        ];
+        $lineas['Agrupar por']  = $agrupar[$f['agrupar_por']] ?? 'Detallado';
+        $lineas['Correcciones'] = $f['ocultar_correcciones'] ? 'Ocultar las que se anulan' : 'Mostrar todas';
+
+        $tipos = ['entrada' => 'Entrada', 'salida' => 'Salida', 'ajuste' => 'Ajuste', 'transferencia' => 'Transferencia'];
+        $lineas['Tipo']      = $tipos[$f['tipo_movimiento']] ?? 'Todos';
+        $lineas['Bodega']    = $nombreEn((new BodegaRepository())->getBodegasEmpresa($idEmpresa), $f['id_bodega'], 'Todas');
+        $lineas['Categoría'] = $nombreEn((new CategoriaRepository())->getCombo($idEmpresa), $f['id_categoria'], 'Todas');
+        $lineas['Marca']     = $nombreEn((new MarcaRepository())->getCombo($idEmpresa), $f['id_marca'], 'Todas');
+        $lineas['Origen']    = $f['referencia_tipo'] !== ''
+            ? ReporteInventarioRepository::labelOrigen((string) $f['referencia_tipo'])
+            : 'Todos';
+        // La lista de usuarios recorre el kardex: solo se pide si se filtró por uno.
+        $lineas['Usuario'] = !empty($f['id_usuario'])
+            ? $nombreEn((new InventarioRepository())->getUsuariosConMovimientos($idEmpresa), $f['id_usuario'], 'Todos')
+            : 'Todos';
+
+        $producto = 'Todos';
+        if (!empty($f['id_producto'])) {
+            $p = (new ProductoRepository())->getPorId((int) $f['id_producto'], $idEmpresa);
+            if ($p) $producto = trim(($p['codigo'] ?? '') . ' - ' . ($p['nombre'] ?? ''), ' -');
+        }
+        $lineas['Producto'] = $producto;
+
+        $lineas['Lote'] = $f['numero_lote'] !== '' ? $f['numero_lote'] : 'Todos';
+        $lineas['NUP']  = $f['nup'] !== '' ? $f['nup'] : 'Todos';
+        $cadDesde = $fmt($f['fecha_caducidad_desde']);
+        $cadHasta = $fmt($f['fecha_caducidad_hasta']);
+        $lineas['Caducidad']     = $rango($cadDesde, $cadHasta, 'Todas');
+        $lineas['Observaciones'] = $f['observaciones'] !== '' ? $f['observaciones'] : 'Todas';
+        if ($f['buscar'] !== '') {
+            $lineas['Búsqueda'] = $f['buscar'];
+        }
+
+        // El Periodo se conserva aunque exista la columna Fecha: un rango no se lee en las filas.
+        return self::sinFiltrosQueSonColumna($lineas, $headers, [
+            'Bodega'        => 'Bodega',
+            'Categoría'     => 'Categoría',
+            'Marca'         => 'Marca',
+            'Producto'      => 'Producto',
+            'Tipo'          => 'Tipo',
+            'Origen'        => 'Origen',
+            'Lote'          => 'Lote',
+            'NUP'           => 'NUP',
+            'Caducidad'     => 'Caducidad',
+            'Observaciones' => 'Observaciones',
+        ], ($cadDesde !== '' || $cadHasta !== '') ? ['Caducidad'] : []);
     }
 
     /**
