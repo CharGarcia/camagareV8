@@ -356,6 +356,13 @@ class AsientoProgramadoService
         'recibos_venta'         => 'cliente',
     ];
 
+    /** Dimensiones por línea que admite cada tipo de asiento (compras usa el ítem por nombre, no el producto). */
+    public const DIMENSIONES_ASIGNABLES_AVISO = [
+        'adquisiciones_compras' => ['categoria', 'marca'],
+        'ventas_factura'        => ['producto', 'categoria', 'marca'],
+        'recibos_venta'         => ['producto', 'categoria', 'marca'],
+    ];
+
     /**
      * Asigna, desde el aviso de asientos pendientes (asientos_pendientes.js), la cuenta que le falta
      * a un asiento. Según $d['clase']:
@@ -363,6 +370,8 @@ class AsientoProgramadoService
      *               propia del proveedor/cliente ('entidad', con $d['id_entidad']).
      *  - 'item':    un concepto de compras, en la General o solo para un ítem de compra por su nombre
      *               ('entidad', con $d['referencia_texto']).
+     *  - 'dimension': un concepto en la General o solo para un producto/categoría/marca
+     *               ($d['dimension'], $d['id_entidad']); ver DIMENSIONES_ASIGNABLES_AVISO.
      *  - 'forma':   una forma de cobro/pago ($d['id_forma'], $d['flujo'] = cobro|pago).
      *  - 'opcion':  un concepto de Ingresos/Egresos ($d['id_opcion'], $d['naturaleza'] = ingreso|egreso).
      * SOLO completa lo que falta: si ese lugar ya tiene cuenta no la cambia (eso se hace a conciencia
@@ -378,7 +387,7 @@ class AsientoProgramadoService
         }
         $clase = (string) ($d['clase'] ?? '');
         return match ($clase) {
-            'entidad', 'item' => $this->asignarConceptoDesdeAviso($clase, $d, $cuenta, $idEmpresa, $idUsuario),
+            'entidad', 'item', 'dimension' => $this->asignarConceptoDesdeAviso($clase, $d, $cuenta, $idEmpresa, $idUsuario),
             'forma', 'opcion' => $this->asignarFormaOpcionDesdeAviso($clase, $d, $cuenta, $idEmpresa, $idUsuario),
             default           => throw new Exception('No se reconoce qué cuenta asignar.'),
         };
@@ -411,6 +420,18 @@ class AsientoProgramadoService
                 $idReferencia = null;
                 $tipoReferencia = 'item_compra';
                 $donde = "el ítem «{$referenciaTexto}»";
+            } elseif ($clase === 'dimension') {
+                $tipoReferencia = (string) ($d['dimension'] ?? '');
+                if (!in_array($tipoReferencia, self::DIMENSIONES_ASIGNABLES_AVISO[$concepto['tipo_asiento']] ?? [], true)) {
+                    throw new Exception('Esta cuenta no se puede configurar por esa dimensión.');
+                }
+                $idReferencia = (int) ($d['id_entidad'] ?? 0);
+                $nombre = $this->repo->getNombreDimensionEmpresa($tipoReferencia, $idEmpresa, $idReferencia);
+                $etiqueta = ['producto' => 'el producto', 'categoria' => 'la categoría', 'marca' => 'la marca'][$tipoReferencia];
+                if ($nombre === null) {
+                    throw new Exception(ucfirst($etiqueta) . ' no existe o no pertenece a su empresa.');
+                }
+                $donde = "{$etiqueta} «{$nombre}»";
             } else {
                 $tipoReferencia = self::ENTIDAD_ASIGNABLE_AVISO[$concepto['tipo_asiento']];
                 $idReferencia = (int) ($d['id_entidad'] ?? 0);

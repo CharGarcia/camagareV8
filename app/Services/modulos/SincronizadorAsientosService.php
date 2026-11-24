@@ -61,20 +61,25 @@ class SincronizadorAsientosService
     private array $asignablesOmitidos = [];
 
     /**
-     * Módulos cuyos conceptos faltantes se ofrecen para asignar desde el aviso, en la General o
-     * como cuenta propia del tercero (cascada "la entidad manda"): clave del trabajo =>
-     * tipo de asiento, sección visible, [tipo de tercero, tabla del documento, columna del tercero]
-     * y, en compras, [tabla de detalle, columna de cabecera] para ofrecer la cuenta por ítem.
+     * Módulos cuyos conceptos faltantes se ofrecen para asignar desde el aviso: clave del trabajo =>
+     *  - tipo / seccion: tipo de asiento y pestaña del aviso.
+     *  - entidad: [tipo de tercero, tabla del documento, columna del tercero] (cascada "la entidad manda").
+     *  - detalle: [tabla de detalle, columna de cabecera] de las líneas del documento.
+     *  - items:   true en compras: la cuenta por línea se configura por NOMBRE del ítem ('item_compra').
+     *  - dimensiones: dimensiones por línea (vía el producto) que se ofrecen si la empresa ya las usa
+     *    en sus reglas (ver contarReglasPorDimension()). Compras no usa 'producto' sino el ítem.
      * Las formas de cobro/pago y los conceptos de Ingresos/Egresos se ofrecen en cualquier módulo
      * (ver registrarAsignablesFormas()).
      */
     private const ASIGNABLES = [
-        'compras'              => ['tipo' => 'adquisiciones_compras', 'seccion' => 'Adquisiciones de Compras', 'entidad' => ['proveedor', 'compras_cabecera', 'id_proveedor'],       'detalle' => ['compras_detalle', 'id_compra']],
-        'liquidaciones_compra' => ['tipo' => 'adquisiciones_compras', 'seccion' => 'Adquisiciones de Compras', 'entidad' => ['proveedor', 'liquidaciones_cabecera', 'id_proveedor'], 'detalle' => ['liquidaciones_detalle', 'id_cabecera']],
-        'facturas_venta'       => ['tipo' => 'ventas_factura',        'seccion' => 'Ventas con Factura',       'entidad' => ['cliente', 'ventas_cabecera', 'id_cliente']],
-        'notas_credito'        => ['tipo' => 'ventas_factura',        'seccion' => 'Ventas con Factura',       'entidad' => ['cliente', 'notas_credito_cabecera', 'id_cliente']],
-        'recibos_venta'        => ['tipo' => 'recibos_venta',         'seccion' => 'Recibos de Venta',         'entidad' => ['cliente', 'recibos_venta_cabecera', 'id_cliente']],
+        'compras'              => ['tipo' => 'adquisiciones_compras', 'seccion' => 'Adquisiciones de Compras', 'entidad' => ['proveedor', 'compras_cabecera', 'id_proveedor'],       'detalle' => ['compras_detalle', 'id_compra'],               'items' => true, 'dimensiones' => ['categoria', 'marca']],
+        'liquidaciones_compra' => ['tipo' => 'adquisiciones_compras', 'seccion' => 'Adquisiciones de Compras', 'entidad' => ['proveedor', 'liquidaciones_cabecera', 'id_proveedor'], 'detalle' => ['liquidaciones_detalle', 'id_cabecera'],       'items' => true, 'dimensiones' => ['categoria', 'marca']],
+        'facturas_venta'       => ['tipo' => 'ventas_factura',        'seccion' => 'Ventas con Factura',       'entidad' => ['cliente', 'ventas_cabecera', 'id_cliente'],              'detalle' => ['ventas_detalle', 'id_venta'],                 'dimensiones' => ['producto', 'categoria', 'marca']],
+        'notas_credito'        => ['tipo' => 'ventas_factura',        'seccion' => 'Ventas con Factura',       'entidad' => ['cliente', 'notas_credito_cabecera', 'id_cliente'],       'detalle' => ['notas_credito_detalle', 'id_nota_credito'],   'dimensiones' => ['producto', 'categoria', 'marca']],
+        'recibos_venta'        => ['tipo' => 'recibos_venta',         'seccion' => 'Recibos de Venta',         'entidad' => ['cliente', 'recibos_venta_cabecera', 'id_cliente'],       'detalle' => ['recibos_venta_detalle', 'id_recibo'],         'dimensiones' => ['producto', 'categoria', 'marca']],
     ];
+    /** Reglas con cuenta por dimensión de cada tipo de asiento (caché por paso). Ver usoDimensiones(). */
+    private array $usoDimensiones = [];
 
     /**
      * Sección de Configuración Contable de la que sale el asiento de cada módulo (clave del
@@ -416,6 +421,7 @@ class SincronizadorAsientosService
             'puedeConfigurar'  => $this->puedeConfigurar(),
             'asignables'       => array_values($this->asignables),
             'asignablesOmitidos' => $this->getAsignablesOmitidos(),
+            'usoDimensiones'   => $this->getUsoDimensiones(),
             'puedeAsignar'     => $this->puedeAsignar(),
             'info'             => $this->info,
         ];
@@ -2270,8 +2276,8 @@ class SincronizadorAsientosService
             }
 
             // Cuenta por ítem de compra: solo cuando el motivo viene del reparto por línea.
-            if (!empty($cfg['detalle'])) {
-                [$tablaDet, $colCab] = $cfg['detalle'];
+            [$tablaDet, $colCab] = $cfg['detalle'];
+            if (!empty($cfg['items'])) {
                 foreach (self::itemsSinCuenta($motivo) as $concepto => $nombres) {
                     $r = $this->conceptoPorNombre($repo, $tipoAsiento, $concepto);
                     if ($r === null) {
@@ -2288,9 +2294,62 @@ class SincronizadorAsientosService
                     }
                 }
             }
+
+            // Producto / categoría / marca de las líneas: solo las dimensiones que la empresa ya usa
+            // en sus reglas de este tipo de asiento (si no las usa, no se consultan ni se ofrecen).
+            $uso = $this->usoDimensiones($repo, $tipoAsiento);
+            foreach ($cfg['dimensiones'] ?? [] as $dim) {
+                if (($uso[$dim] ?? 0) <= 0) {
+                    continue;
+                }
+                foreach ($repo->getDimensionesSinCuentaEnDocumentos($this->idEmpresa, $dim, $tablaDet, $colCab, $ids, array_keys($conceptos)) as $x) {
+                    $r = $conceptos[$x['id_asiento_tipo']] ?? null;
+                    if ($r === null) {
+                        continue;
+                    }
+                    $this->agregarAsignable("d:{$tipoAsiento}:{$dim}:{$x['id']}:{$x['id_asiento_tipo']}", $x['documentos'], [
+                        'clase'      => 'dimension',
+                        'entidad'    => $dim,
+                        'id_entidad' => $x['id'],
+                        'nombre'     => $x['nombre'],
+                    ] + $this->datosConcepto($tipoAsiento, $cfg['seccion'], $x['id_asiento_tipo'], $r));
+                }
+            }
         } catch (\Throwable $e) {
             error_log('[SincronizadorAsientos] registrarAsignables: ' . $e->getMessage());
         }
+    }
+
+    /** Reglas con cuenta por dimensión del tipo de asiento (una consulta por tipo y paso). */
+    private function usoDimensiones(\App\repositories\modulos\AsientoProgramadoRepository $repo, string $tipoAsiento): array
+    {
+        return $this->usoDimensiones[$tipoAsiento] ??= $repo->contarReglasPorDimension($this->idEmpresa, $tipoAsiento);
+    }
+
+    /**
+     * Uso de cada dimensión por tipo de asiento de las filas ofrecidas, para que el aviso abra cada
+     * pestaña en la vista de la dimensión que la empresa más usa ('entidad' agrupa proveedor/cliente).
+     *
+     * @return array<string, array<string,int>> tipo_asiento => [vista => reglas]
+     */
+    private function getUsoDimensiones(): array
+    {
+        $tipos = [];
+        foreach ($this->asignables as $a) {
+            if (!empty($a['tipo_asiento'])) {
+                $tipos[$a['tipo_asiento']] = true;
+            }
+        }
+        $repo = new \App\repositories\modulos\AsientoProgramadoRepository();
+        $out = [];
+        foreach (array_keys($tipos) as $t) {
+            $out[$t] = [];
+            foreach ($this->usoDimensiones($repo, $t) as $ref => $n) {
+                $vista = in_array($ref, ['proveedor', 'cliente'], true) ? 'entidad' : $ref;
+                $out[$t][$vista] = ($out[$t][$vista] ?? 0) + $n;
+            }
+        }
+        return $out;
     }
 
     /**
@@ -2387,7 +2446,7 @@ class SincronizadorAsientosService
      */
     private static function claveConceptoAsignable(array $d): ?string
     {
-        if (!in_array($d['clase'] ?? '', ['entidad', 'item'], true)) {
+        if (!in_array($d['clase'] ?? '', ['entidad', 'item', 'dimension'], true)) {
             return null;
         }
         return $d['clase'] . '|' . ($d['entidad'] ?? '') . '|' . ($d['tipo_asiento'] ?? '') . '|' . ($d['id_asiento_tipo'] ?? '');

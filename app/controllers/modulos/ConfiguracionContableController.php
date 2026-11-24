@@ -1521,6 +1521,7 @@ class ConfiguracionContableController extends BaseModuloController
                     'id_asiento_tipo'  => (int) ($_POST['id_asiento_tipo'] ?? 0),
                     'id_entidad'       => (int) ($_POST['id_entidad'] ?? 0),
                     'referencia_texto' => (string) ($_POST['referencia_texto'] ?? ''),
+                    'dimension'        => trim((string) ($_POST['dimension'] ?? '')),
                     'id_forma'         => (int) ($_POST['id_forma'] ?? 0),
                     'flujo'            => trim((string) ($_POST['flujo'] ?? '')),
                     'id_opcion'        => (int) ($_POST['id_opcion'] ?? 0),

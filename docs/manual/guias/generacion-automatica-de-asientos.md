@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido, pestaña asiento contable, ver asiento del documento, generar asiento de una compra
-version: 1.9
+version: 1.10
 orden: 30
 estado: activo
 ---
@@ -159,7 +159,7 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
   Configuración Contable). En Mayores, Estados Financieros y Balance
   de Comprobación el reporte no se puede generar hasta que ese aviso se resuelva. Ese aviso sigue siendo el lugar donde ver los
   problemas: la generación automática es silenciosa a propósito, pero no esconde
-  nada. Además, el aviso permite **asignar ahí mismo** las cuentas que faltan
+  nada. Además, el aviso se abre en pestañas por tipo de asiento para **asignar ahí mismo** las cuentas que faltan
   (de compras, ventas, recibos, formas de cobro y pago y conceptos de ingresos y egresos) y
   volver a generar (ver *Asientos contables → Asignar las cuentas que faltan
   desde el aviso*).
@@ -190,6 +190,8 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.10** — El aviso de asientos pendientes se abre en pestañas por tipo de asiento, con una tabla rápida que guarda la cuenta
+  al elegirla (en la General o por proveedor, cliente, ítem, producto, categoría o marca).
 - **1.9** — El aviso de Asientos Contables, Mayores, Estados Financieros y Balance de
   Comprobación permite asignar en el acto las cuentas que faltan (compras, ventas,
   recibos, formas de cobro y pago, conceptos de ingresos y egresos) y volver a generar sin salir.

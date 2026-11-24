@@ -2438,6 +2438,103 @@ class AsientoProgramadoRepository extends BaseRepository
         }
     }
 
+    /**
+     * Cuántas reglas con cuenta tiene la empresa en cada dimensión para un tipo de asiento: dice cómo
+     * contabiliza la empresa en la práctica (por proveedor, por ítem, por categoría…). El aviso de
+     * asientos pendientes abre por defecto la vista de la dimensión más usada. Desde que se retiró
+     * el selector «Contabilizar por» (asientos_preferencia_empresa), esta es la fuente fiable.
+     *
+     * @return array<string,int> tipo_referencia => reglas
+     */
+    public function contarReglasPorDimension(int $idEmpresa, string $tipoAsiento): array
+    {
+        $st = $this->db->prepare(
+            "SELECT ap.tipo_referencia, COUNT(*) AS n
+               FROM {$this->table} ap
+               JOIN asientos_tipo at ON at.id = ap.id_asiento_tipo AND at.tipo_asiento = :t AND at.eliminado = false
+              WHERE ap.id_empresa = :e AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL
+                AND ap.tipo_referencia IN ('proveedor', 'cliente', 'item_compra', 'producto', 'categoria', 'marca')
+              GROUP BY ap.tipo_referencia"
+        );
+        $st->execute([':t' => $tipoAsiento, ':e' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(string) $r['tipo_referencia']] = (int) $r['n'];
+        }
+        return $out;
+    }
+
+    /** Tabla y columna del producto que identifican cada dimensión por línea (literales del código). */
+    private const DIMENSION_LINEA = [
+        'producto'  => ['productos', 'id'],
+        'categoria' => ['categorias', 'id_categoria'],
+        'marca'     => ['marcas', 'id_marca'],
+    ];
+
+    /**
+     * Productos, categorías o marcas de las líneas de un lote de documentos que NO tienen cuenta
+     * propia para cada concepto que falta, con cuántos documentos traen. Lo usa el aviso de asientos
+     * pendientes para la vista «por categoría/marca/producto». Las líneas sin producto (o sin
+     * categoría/marca) no se pueden configurar por esa dimensión: las cubre la General.
+     * $tablaDetalle/$colCabecera son literales del código. Falla en silencio ([]).
+     *
+     * @param int[] $idsConceptos asientos_tipo que faltan
+     * @return array<int, array{id:int, nombre:string, id_asiento_tipo:int, documentos:int}>
+     */
+    public function getDimensionesSinCuentaEnDocumentos(int $idEmpresa, string $dimension, string $tablaDetalle, string $colCabecera, array $ids, array $idsConceptos): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        $idsConceptos = array_values(array_filter(array_map('intval', $idsConceptos)));
+        $def = self::DIMENSION_LINEA[$dimension] ?? null;
+        if (!$def || !$ids || !$idsConceptos || !preg_match('/^[a-z_]+$/', $tablaDetalle) || !preg_match('/^[a-z_]+$/', $colCabecera)) {
+            return [];
+        }
+        [$tablaDim, $colProducto] = $def;
+        try {
+            $st = $this->db->prepare(
+                "SELECT x.id, x.nombre, c.id_at AS id_asiento_tipo, COUNT(DISTINCT d.{$colCabecera}) AS documentos
+                   FROM {$tablaDetalle} d
+                   JOIN productos p ON p.id = d.id_producto
+                   JOIN {$tablaDim} x ON x.id = p.{$colProducto} AND x.eliminado = false
+                   CROSS JOIN unnest(string_to_array(:ats, ',')::int[]) AS c(id_at)
+                  WHERE d.{$colCabecera} = ANY(string_to_array(:ids, ',')::int[])
+                    AND NOT EXISTS (SELECT 1 FROM {$this->table} ap
+                                     WHERE ap.id_empresa = :e AND ap.tipo_referencia = :dim
+                                       AND ap.id_referencia = x.id AND ap.id_asiento_tipo = c.id_at
+                                       AND ap.eliminado = false AND ap.id_cuenta IS NOT NULL)
+                  GROUP BY x.id, x.nombre, c.id_at
+                  ORDER BY x.nombre"
+            );
+            $st->execute([
+                ':ats' => implode(',', $idsConceptos),
+                ':ids' => implode(',', $ids),
+                ':e'   => $idEmpresa,
+                ':dim' => $dimension,
+            ]);
+            return array_map(fn($r) => [
+                'id'              => (int) $r['id'],
+                'nombre'          => trim((string) $r['nombre']),
+                'id_asiento_tipo' => (int) $r['id_asiento_tipo'],
+                'documentos'      => (int) $r['documentos'],
+            ], $st->fetchAll(PDO::FETCH_ASSOC));
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Nombre del producto/categoría/marca si es de la empresa y no está eliminado; null si no. */
+    public function getNombreDimensionEmpresa(string $dimension, int $idEmpresa, int $id): ?string
+    {
+        $tabla = self::DIMENSION_LINEA[$dimension][0] ?? null;
+        if ($tabla === null) {
+            return null;
+        }
+        $st = $this->db->prepare("SELECT nombre FROM {$tabla} WHERE id = :id AND id_empresa = :e AND eliminado = false");
+        $st->execute([':id' => $id, ':e' => $idEmpresa]);
+        $nombre = $st->fetchColumn();
+        return $nombre === false ? null : (string) $nombre;
+    }
+
     /** Literal de arreglo de texto de PostgreSQL ({"a","b"}) para pasarlo como un solo parámetro. */
     private static function arrayTextoPg(array $valores): string
     {
