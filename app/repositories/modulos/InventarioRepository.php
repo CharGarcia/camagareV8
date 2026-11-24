@@ -9,6 +9,61 @@ use PDO;
 class InventarioRepository extends BaseRepository
 {
     /**
+     * Movimientos POSITIVOS que no son una entrada propia del lote: devuelven al stock una
+     * unidad que ya había salido (retornos, reversos, ediciones/eliminaciones de
+     * consignación, notas de crédito…). Llevan el NUP/caducidad de la salida, así que no
+     * deciden cuál es la caducidad del lote ni "fundan" un NUP propio.
+     */
+    public const REFERENCIAS_DEVOLUCION = [
+        'RETORNO_CV', 'CAMBIO_ESTADO_RETORNO_CV', 'ELIMINACION_RETORNO_CV',
+        'EDICION_CONSIGNACION_VENTA', 'ELIMINACION_CONSIGNACION_VENTA',
+        'FACTURACION_CV', 'CAMBIO_PRODUCTO_CV', 'nota_credito',
+    ];
+
+    /**
+     * CADUCIDAD PRINCIPAL DE CADA LOTE — subconsulta (id_producto, numero_lote, caducidad).
+     *
+     * Un lote del fabricante tiene una sola caducidad, pero en el kardex muchos lotes quedaron
+     * con varias: la principal y variantes (fin de mes, fechas sueltas, o la fecha del
+     * movimiento que puso la migración cuando el vencimiento venía en cero). Antes cada
+     * salida tomaba MAX(fecha_caducidad) del lote, es decir la VARIANTE más tardía, y así la
+     * propagaba a cada documento nuevo (caso medido 24-11-2026: lote W020419902 con principal
+     * 23-02-2027 ofrecía 30-11-2027).
+     *
+     * Regla: la caducidad con la que ENTRÓ más cantidad en las entradas propias del lote, en
+     * cualquier bodega (sin devoluciones ni transferencias, que copian la de origen); empate:
+     * la de la primera entrada. Sin ninguna entrada con caducidad, el lote no aparece aquí y
+     * el llamador usa la que tenía (COALESCE con su MAX de siempre).
+     *
+     * La usan el selector de lotes de todos los documentos de salida, el lote automático,
+     * las series de Transferencias, el Encerado y el Reporte de Inventarios: todos tienen que
+     * mostrar y grabar la misma fecha.
+     *
+     * @param string $paramEmpresa placeholder de la empresa en la consulta del llamador (p. ej. ':e').
+     * @param string $condExtra    condiciones adicionales sobre el alias `x` (p. ej. " AND x.id_producto = :p"),
+     *                             para leer solo los productos que hacen falta.
+     */
+    public static function sqlCaducidadPrincipalLote(string $paramEmpresa, string $condExtra = ''): string
+    {
+        $excluir = implode(', ', array_map(
+            static fn($v) => "'" . $v . "'",
+            array_merge(self::REFERENCIAS_DEVOLUCION, ['transferencia_inventario'])
+        ));
+        return "SELECT DISTINCT ON (c.id_producto, c.numero_lote)
+                       c.id_producto, c.numero_lote, c.fecha_caducidad AS caducidad
+                FROM (
+                    SELECT x.id_producto, x.numero_lote, x.fecha_caducidad,
+                           SUM(x.cantidad) AS entrada, MIN(x.fecha_movimiento) AS primera
+                    FROM inventario_kardex x
+                    WHERE x.id_empresa = {$paramEmpresa} AND x.eliminado = false AND x.cantidad > 0
+                      AND NULLIF(TRIM(x.numero_lote), '') IS NOT NULL AND x.fecha_caducidad IS NOT NULL
+                      AND COALESCE(x.referencia_tipo, '') NOT IN ({$excluir}){$condExtra}
+                    GROUP BY x.id_producto, x.numero_lote, x.fecha_caducidad
+                ) c
+                ORDER BY c.id_producto, c.numero_lote, c.entrada DESC, c.primera ASC";
+    }
+
+    /**
      * Observación general de una carga de inventario (alias `ic`) tal como se muestra: de las
      * migradas solo la referencia. Misma regla que App\Helpers\ObservacionCargaInventario.
      */
@@ -416,7 +471,7 @@ class InventarioRepository extends BaseRepository
      */
     public function getLoteMasAntiguo(int $idProducto, int $idBodega, int $idEmpresa, ?string $soloLote = null, bool $soloConStock = true): ?array
     {
-        $whereLote = $soloLote !== null ? "AND numero_lote = :lote" : "";
+        $whereLote = $soloLote !== null ? "AND k.numero_lote = :lote" : "";
         $whereStock = $soloConStock ? "WHERE stock > 0" : "";
         
         // GROUP BY solo numero_lote (no nup): el NUP es opcional (obligatorio_nup),
@@ -430,16 +485,20 @@ class InventarioRepository extends BaseRepository
         // anteriores (antes se grababa la fecha del día cuando la salida no traía
         // una real), así que parecía el próximo a vencer y se elegía antes que un
         // lote real con saldo. Entre lotes reales manda la caducidad, como siempre.
+        // La caducidad es la principal del lote (sqlCaducidadPrincipalLote), no MAX().
         $sql = "SELECT numero_lote, fecha_caducidad, nup
                 FROM (
-                    SELECT numero_lote,
-                           (numero_lote IS NULL OR numero_lote = '' OR UPPER(numero_lote) IN ('SIN LOTE', 'SIN_LOTE')) AS sin_lote,
-                           MAX(fecha_caducidad) as fecha_caducidad, MIN(nup) as nup, MIN(id) as first_id, SUM(cantidad) as stock
-                    FROM inventario_kardex
-                    WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false
-                      AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
+                    SELECT k.numero_lote,
+                           (k.numero_lote IS NULL OR k.numero_lote = '' OR UPPER(k.numero_lote) IN ('SIN LOTE', 'SIN_LOTE')) AS sin_lote,
+                           COALESCE(MAX(cl.caducidad), MAX(k.fecha_caducidad)) as fecha_caducidad,
+                           MIN(k.nup) as nup, MIN(k.id) as first_id, SUM(k.cantidad) as stock
+                    FROM inventario_kardex k
+                    LEFT JOIN (" . self::sqlCaducidadPrincipalLote(':e', ' AND x.id_producto = :p') . ") cl
+                           ON cl.id_producto = k.id_producto AND cl.numero_lote = k.numero_lote
+                    WHERE k.id_empresa = :e AND k.id_producto = :p AND k.id_bodega = :b AND k.eliminado = false
+                      AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e2)
                     $whereLote
-                    GROUP BY numero_lote
+                    GROUP BY k.numero_lote
                 ) t
                 $whereStock
                 ORDER BY sin_lote ASC, fecha_caducidad ASC NULLS LAST, first_id ASC
@@ -1100,21 +1159,25 @@ class InventarioRepository extends BaseRepository
         $params = [':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega];
 
         if ($excludeRefId !== null && $excludeRefTipo !== null) {
-            $whereExcluir = " AND NOT (referencia_id = :erid AND referencia_tipo = :ertipo)";
+            $whereExcluir = " AND NOT (k.referencia_id = :erid AND k.referencia_tipo = :ertipo)";
             $params[':erid'] = $excludeRefId;
             $params[':ertipo'] = $excludeRefTipo;
         }
 
-        $sql = "SELECT COALESCE(numero_lote, 'sin_lote') as numero_lote,
-                       MAX(fecha_caducidad) as fecha_caducidad,
-                       ROUND(SUM(cantidad), 2) as stock_lote
-                FROM inventario_kardex
-                WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b AND eliminado = false
-                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+        // Caducidad = la principal del lote (sqlCaducidadPrincipalLote), no MAX(): con MAX
+        // se ofrecía —y se grababa en el documento— la variante más tardía del lote.
+        $sql = "SELECT COALESCE(k.numero_lote, 'sin_lote') as numero_lote,
+                       COALESCE(MAX(cl.caducidad), MAX(k.fecha_caducidad)) as fecha_caducidad,
+                       ROUND(SUM(k.cantidad), 2) as stock_lote
+                FROM inventario_kardex k
+                LEFT JOIN (" . self::sqlCaducidadPrincipalLote(':e', ' AND x.id_producto = :p') . ") cl
+                       ON cl.id_producto = k.id_producto AND cl.numero_lote = k.numero_lote
+                WHERE k.id_empresa = :e AND k.id_producto = :p AND k.id_bodega = :b AND k.eliminado = false
+                  AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                   $whereExcluir
-                GROUP BY COALESCE(numero_lote, 'sin_lote')
-                HAVING ROUND(SUM(cantidad), 2) > 0
-                ORDER BY MAX(fecha_caducidad) ASC NULLS LAST, numero_lote ASC";
+                GROUP BY COALESCE(k.numero_lote, 'sin_lote')
+                HAVING ROUND(SUM(k.cantidad), 2) > 0
+                ORDER BY 2 ASC NULLS LAST, 1 ASC";
         
         $st = $this->db->prepare($sql);
         $st->execute($params);
@@ -1165,13 +1228,16 @@ class InventarioRepository extends BaseRepository
         $sql = "WITH pares AS (
                     SELECT x.p, x.b FROM unnest(CAST(:prods AS int[]), CAST(:bods AS int[])) AS x(p, b)
                 ),
+                cad_lote AS MATERIALIZED (" . self::sqlCaducidadPrincipalLote(':e', ' AND x.id_producto = ANY(CAST(:prods AS int[]))') . "),
                 g AS (
                     SELECT k.id_producto, k.id_bodega,
                            COALESCE(k.numero_lote, 'sin_lote') AS numero_lote,
-                           MAX(k.fecha_caducidad) AS fecha_caducidad,
+                           -- La principal del lote, no MAX(): ver sqlCaducidadPrincipalLote().
+                           COALESCE(MAX(cl.caducidad), MAX(k.fecha_caducidad)) AS fecha_caducidad,
                            SUM(k.cantidad) AS suma
                     FROM inventario_kardex k
                     JOIN pares ON k.id_producto = pares.p AND k.id_bodega = pares.b
+                    LEFT JOIN cad_lote cl ON cl.id_producto = k.id_producto AND cl.numero_lote = k.numero_lote
                     WHERE k.id_empresa = :e AND k.eliminado = false
                       AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                       $whereExcluir

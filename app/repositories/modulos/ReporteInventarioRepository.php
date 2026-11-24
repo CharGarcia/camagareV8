@@ -584,18 +584,6 @@ class ReporteInventarioRepository extends BaseRepository
     // ────────────────────────────────────────────────────────────────
 
     /**
-     * Movimientos POSITIVOS que no son una entrada propia: devuelven al stock una unidad que
-     * ya había salido (retornos, reversos, ediciones/eliminaciones de consignación, notas de
-     * crédito…). Traen el NUP/caducidad de la salida, no de la compra, así que no pueden
-     * "fundar" un grupo propio en la normalización de abajo.
-     */
-    private const REFERENCIAS_DEVOLUCION = [
-        'RETORNO_CV', 'CAMBIO_ESTADO_RETORNO_CV', 'ELIMINACION_RETORNO_CV',
-        'EDICION_CONSIGNACION_VENTA', 'ELIMINACION_CONSIGNACION_VENTA',
-        'FACTURACION_CV', 'CAMBIO_PRODUCTO_CV', 'nota_credito',
-    ];
-
-    /**
      * Normalización de la clave lote/NUP/caducidad para los desgloses de Existencias.
      *
      * Medido en producción (24-11-2026, diagnósticos en database/diagnosticos/20261124_*):
@@ -641,7 +629,7 @@ class ReporteInventarioRepository extends BaseRepository
                 $condProd = ' AND x.id_producto = :id_producto_norm';
                 $params[':id_producto_norm'] = (int) $filtros['id_producto'];
             }
-            $devol = self::sqlLista(self::REFERENCIAS_DEVOLUCION);
+            $devol = self::sqlLista(InventarioRepository::REFERENCIAS_DEVOLUCION);
             if ($normNup) {
                 $condBod = '';
                 if (!empty($filtros['id_bodega'])) {
@@ -659,22 +647,9 @@ class ReporteInventarioRepository extends BaseRepository
                 $joins .= $j;
             }
             if ($normCad) {
-                // La caducidad del lote es aquella con la que ENTRÓ más cantidad (empate: la
-                // de la primera entrada). DISTINCT ON se queda con la primera por ese orden.
-                $ctes[] = "cad_lote AS MATERIALIZED (
-                    SELECT DISTINCT ON (c.id_producto, c.numero_lote)
-                           c.id_producto, c.numero_lote, c.fecha_caducidad AS caducidad
-                    FROM (
-                        SELECT x.id_producto, x.numero_lote, x.fecha_caducidad,
-                               SUM(x.cantidad) AS entrada, MIN(x.fecha_movimiento) AS primera
-                        FROM inventario_kardex x
-                        WHERE x.id_empresa = :id_empresa_norm AND x.eliminado = false AND x.cantidad > 0
-                          AND NULLIF(TRIM(x.numero_lote), '') IS NOT NULL AND x.fecha_caducidad IS NOT NULL
-                          AND COALESCE(x.referencia_tipo, '') NOT IN ({$devol}, 'transferencia_inventario'){$condProd}
-                        GROUP BY x.id_producto, x.numero_lote, x.fecha_caducidad
-                    ) c
-                    ORDER BY c.id_producto, c.numero_lote, c.entrada DESC, c.primera ASC
-                )";
+                // La misma regla con la que los documentos de salida eligen la caducidad del lote.
+                $ctes[] = "cad_lote AS MATERIALIZED ("
+                    . InventarioRepository::sqlCaducidadPrincipalLote(':id_empresa_norm', $condProd) . ")";
                 [$j, $cad] = self::exprCadNormalizada('k0', 'numero_lote', 'fecha_caducidad');
                 $joins .= $j;
             }

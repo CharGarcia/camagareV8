@@ -2080,7 +2080,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
     /**
      * Ata el vencimiento al lote: elegir un lote deja la lista de vencimiento acotada
      * a la fecha de ESE lote (la relación lote -> fecha es 1:1; getLotesDisponibles()
-     * agrupa por numero_lote y devuelve MAX(fecha_caducidad)), y elegir una fecha
+     * agrupa por numero_lote y devuelve la caducidad principal del lote), y elegir una fecha
      * selecciona su lote. Volver a "Lote..." restaura la lista completa.
      * El mapeo es por índice: las opciones [1..n] de ambos selects van en el mismo
      * orden que `lotes`.
@@ -2705,7 +2705,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigC
                             // El vencimiento se lista SEGÚN el lote elegido: al seleccionar un lote,
                             // el select de caducidad queda acotado a la fecha de ESE lote (la relación
                             // lote -> fecha es 1:1; getLotesDisponibles() agrupa por numero_lote y
-                            // devuelve MAX(fecha_caducidad)). Sin lote elegido se listan todas.
+                            // devuelve la caducidad principal del lote). Sin lote elegido se listan todas.
                             // Se sincroniza por índice: las opciones [1..n] de ambos selects están en
                             // el mismo orden que lotesData, igual que en la grilla principal del modal.
                             const selLoteRow = tr.querySelector('.item-lote');

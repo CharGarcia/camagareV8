@@ -79,13 +79,19 @@ class InventarioEnceradoRepository extends BaseRepository
                       FROM k
                      WHERE (id_producto, id_bodega) IN (SELECT id_producto, id_bodega FROM g)
                   GROUP BY id_producto, id_bodega
-                )
-                SELECT g.id_producto, g.id_bodega, g.lote, g.nup, g.saldo, g.fecha_caducidad,
+                ),
+                -- Caducidad principal de cada lote (InventarioRepository::sqlCaducidadPrincipalLote):
+                -- el ajuste del encerado se graba con la fecha real del lote, no con MAX(), que
+                -- devolvía la variante más tardía cuando el lote quedó con varias caducidades.
+                cad_lote AS MATERIALIZED (" . InventarioRepository::sqlCaducidadPrincipalLote(':e') . ")
+                SELECT g.id_producto, g.id_bodega, g.lote, g.nup, g.saldo,
+                       COALESCE(cl.caducidad, g.fecha_caducidad) AS fecha_caducidad,
                        COALESCE(c.costo_promedio, 0) AS costo_promedio,
                        p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                        b.nombre AS bodega_nombre
                   FROM g
              LEFT JOIN c ON c.id_producto = g.id_producto AND c.id_bodega = g.id_bodega
+             LEFT JOIN cad_lote cl ON cl.id_producto = g.id_producto AND cl.numero_lote = g.lote
              LEFT JOIN productos p ON p.id = g.id_producto
              LEFT JOIN bodegas b   ON b.id = g.id_bodega
               ORDER BY b.nombre, g.id_bodega, p.nombre, g.id_producto, g.lote NULLS FIRST, g.nup NULLS FIRST";

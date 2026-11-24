@@ -650,19 +650,24 @@ class TransferenciaInventarioRepository extends BaseRepository
         $params = [':e' => $idEmpresa, ':p' => $idProducto, ':b' => $idBodega];
         $whereLote = '';
         if ($lote !== null && $lote !== '' && $lote !== 'sin_lote') {
-            $whereLote = " AND numero_lote = :lote";
+            $whereLote = " AND k.numero_lote = :lote";
             $params[':lote'] = $lote;
         }
 
-        $sql = "SELECT nup, MAX(numero_lote) AS numero_lote, MAX(fecha_caducidad) AS fecha_caducidad
-                FROM inventario_kardex
-                WHERE id_empresa = :e AND id_producto = :p AND id_bodega = :b
-                  AND eliminado = false AND nup IS NOT NULL AND nup <> ''
-                  AND tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
+        // Caducidad = la principal del lote (InventarioRepository::sqlCaducidadPrincipalLote),
+        // no MAX(): la serie transferida tiene que llegar con la misma fecha que su lote.
+        $sql = "SELECT k.nup, MAX(k.numero_lote) AS numero_lote,
+                       COALESCE(MAX(cl.caducidad), MAX(k.fecha_caducidad)) AS fecha_caducidad
+                FROM inventario_kardex k
+                LEFT JOIN (" . InventarioRepository::sqlCaducidadPrincipalLote(':e', ' AND x.id_producto = :p') . ") cl
+                       ON cl.id_producto = k.id_producto AND cl.numero_lote = k.numero_lote
+                WHERE k.id_empresa = :e AND k.id_producto = :p AND k.id_bodega = :b
+                  AND k.eliminado = false AND k.nup IS NOT NULL AND k.nup <> ''
+                  AND k.tipo_ambiente = (SELECT CAST(tipo_ambiente AS VARCHAR(1)) FROM empresas WHERE id = :e)
                   {$whereLote}
-                GROUP BY nup
-                HAVING ROUND(SUM(cantidad), 2) > 0
-                ORDER BY nup ASC";
+                GROUP BY k.nup
+                HAVING ROUND(SUM(k.cantidad), 2) > 0
+                ORDER BY k.nup ASC";
         $st = $this->db->prepare($sql);
         $st->execute($params);
         return $st->fetchAll(PDO::FETCH_ASSOC);

@@ -6,7 +6,7 @@ ruta_modulo: modulos/inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: inventario, stock, existencias, kardex, movimientos, ajuste, entradas, salidas, bodega, costo, buscar movimientos, buscador, filtros, filtrar movimientos, buscar por lote, buscar por serial, movimientos por bodega, chips, buscar por codigo de barras, buscar por bodega, buscar movimientos de una factura, buscar por mes, imprimir movimiento, pdf del movimiento, comprobante de movimiento, ficha del movimiento, imprimir registro, imprimir un movimiento, asiento del ajuste, contabilidad del ajuste, merma, faltante, sobrante, perdida de inventario, baja de inventario, asiento contable inventario, buscar por observacion, observacion de la carga, buscar carga de inventario, columna observaciones, editar movimiento, no se puede editar, candado, solo lectura, modificar movimiento, anular movimiento, movimiento bloqueado, costo del producto, costo de la ficha, costo unitario del ajuste, entrada con costo, costo en cero, encerar, encerar existencias, encerar inventario, dejar stock en cero, poner stock en cero, borrar existencias, inventario en cero, reiniciar inventario, empezar inventario de cero, inventario fisico, revertir encerado
-version: 1.17
+version: 1.18
 orden: 20
 estado: activo
 ---
@@ -287,6 +287,18 @@ por el SRI, y así lo dice su pie de página.
 movimientos. Un servicio, o un producto no inventariable, se factura sin
 problema pero no aparece en el kardex ni tiene stock.
 
+## Caducidad que se propone al elegir un lote
+
+Al elegir un lote en una factura, consignación, transferencia, POS, orden de
+producción o encerado, el sistema propone la **caducidad principal del lote**:
+la fecha con la que entró la mayor cantidad de ese lote (si empatan, la de la
+primera entrada). Un lote del fabricante tiene una sola caducidad, pero algunos
+quedaron registrados con variantes (el fin del mes, una fecha suelta o, en lo
+migrado sin vencimiento, la fecha del movimiento); antes se proponía la variante
+más tardía y el documento la grababa. Si ninguna entrada del lote tiene
+caducidad, se propone la que ya tenía. Es la misma fecha que muestra el Reporte
+de Inventarios en *Lote + caducidad*.
+
 ## Errores frecuentes
 
 - **"Falta aplicar el SQL … inventario_encerados"**: el botón *Encerar existencias* necesita su tabla; hay que ejecutar ese SQL en la base de datos.
@@ -307,6 +319,7 @@ problema pero no aparece en el kardex ni tiene stock.
 
 ## Historial de cambios
 
+- **1.18** — Al elegir un lote, la caducidad propuesta es la **principal del lote** (la de la mayor cantidad entrada), no la fecha más tardía registrada: las ventas, consignaciones, transferencias y encerados nuevos ya no copian variantes de la caducidad.
 - **1.17** — Nuevo botón **Encerar existencias** (solo niveles 2 y 3): deja en cero, a una fecha de corte, el stock de las bodegas elegidas con movimientos de compensación (sin asiento contable), con vista previa, confirmación e historial para **revertir** el encerado completo. **Requiere ejecutar** `database/2026-11-18_inventario_encerados.sql`.
 - **1.16** — El saldo de cada bodega se toma **siempre del Kardex**, sea cual sea el proceso que movió el stock. Corregidos tres casos en que quedaba distinto: un ajuste de entrada sobre saldo negativo lo dejaba en 0, con **lotes obligatorios** se guardaba el saldo de un solo lote como saldo de la bodega, y al editar una factura o recibo con dos líneas del mismo producto el saldo quedaba corrido.
 - **1.15** — Al anular un movimiento cuando el stock ya se consumió, el saldo de la bodega queda en el valor real (negativo, igual que el Kardex) y no en 0. Editar un ajuste cambiando de producto o de bodega actualiza **las dos** bodegas (antes la anterior conservaba el movimiento). La importación de ajustes por CSV es **todo o nada** y ya no acepta columnas de vínculo con documentos. Dos anulaciones simultáneas del mismo movimiento ya no devuelven el stock dos veces.
