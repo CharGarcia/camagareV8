@@ -569,13 +569,6 @@ class ReporteInventarioRepository extends BaseRepository
         $selNup  = $conNup  ? 'k.nup'         : 'NULL::varchar';
         $selCad  = $conCad  ? 'k.fecha_caducidad' : 'NULL::date';
 
-        // "Por lotes" no agrupa por caducidad, pero el Excel la muestra: se informan TODAS las
-        // caducidades distintas del lote (normalmente una), ordenadas y separadas por coma.
-        $selCadLote = $desglose === 'LOTE'
-            ? "(SELECT string_agg(to_char(d, 'DD-MM-YYYY'), ', ' ORDER BY d)
-                FROM unnest(ARRAY_AGG(DISTINCT k.fecha_caducidad)) d)"
-            : 'NULL::text';
-
         // El consignado se cruza EXACTAMENTE por las columnas que definen el grupo: si la
         // fila no distingue caducidad, el consignado tampoco, o los números no cuadrarían.
         $groupExtra = '';
@@ -621,7 +614,6 @@ class ReporteInventarioRepository extends BaseRepository
                 FROM (
                     SELECT k.id_producto, k.id_bodega,
                            {$selLote} AS lote, {$selNup} AS nup, {$selCad} AS fecha_caducidad,
-                           {$selCadLote} AS caducidades_lote,
                            p.codigo AS producto_codigo, p.nombre AS producto_nombre,
                            COALESCE(cat.nombre, 'Sin categoría') AS categoria_nombre,
                            COALESCE(mar.nombre, 'Sin marca') AS marca_nombre,

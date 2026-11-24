@@ -407,30 +407,48 @@
         let inputActivo = null;
         let marcada = -1;
 
-        // Lista flotante única (position:fixed en el body, sobre la ventana de SweetAlert).
+        // Lista flotante única. Va DENTRO de la ventana del aviso (no en el <body>): fuera de ella
+        // quedaba oculta detrás y sin clic, porque la ventana del aviso queda por encima de la página.
+        // Se ubica con position:absolute respecto de la ventana (ver ubicarEn()).
+        // La ventana del aviso es la referencia de position:absolute (SweetAlert2 ya la deja relative;
+        // por si una versión no, se fuerza).
+        if (getComputedStyle(contenedor).position === 'static') contenedor.style.position = 'relative';
         const lista = document.createElement('div');
         lista.className = 'list-group shadow';
-        lista.style.cssText = 'position:fixed;z-index:2100;display:none;max-height:220px;overflow:auto;min-width:320px;font-size:.78rem;';
-        document.body.appendChild(lista);
+        lista.style.cssText = 'position:absolute;z-index:20;display:none;max-height:220px;overflow:auto;font-size:.78rem;text-align:left;';
+        contenedor.appendChild(lista);
+
+        /**
+         * Ubica un elemento flotante (lista o ventanita) junto a `ancla`, en coordenadas de la ventana
+         * del aviso: debajo si cabe, si no encima; sin salirse por los lados.
+         */
+        function ubicarEn(el, ancla, ancho) {
+            const pr = contenedor.getBoundingClientRect();
+            const r = ancla.getBoundingClientRect();
+            const w = Math.min(ancho, pr.width - 16);
+            el.style.width = `${w}px`;
+            const alto = el.offsetHeight;
+            const left = Math.max(8, Math.min(r.left - pr.left, pr.width - w - 8));
+            const abajo = r.bottom - pr.top + 2;
+            const arriba = r.top - pr.top - alto - 2;
+            el.style.left = `${left}px`;
+            el.style.top = `${(abajo + alto <= pr.height - 4 || arriba < 4) ? abajo : arriba}px`;
+        }
 
         function cerrarLista() { lista.style.display = 'none'; lista.innerHTML = ''; marcada = -1; }
 
         // Ventanita «qué se le compró» al pulsar el nombre de un proveedor.
         const ventana = document.createElement('div');
         ventana.className = 'card shadow border-primary border-opacity-25 small text-start';
-        ventana.style.cssText = 'position:fixed;z-index:2100;display:none;width:340px;max-height:300px;overflow:auto;padding:.6rem .75rem;font-size:.78rem;';
-        document.body.appendChild(ventana);
+        ventana.style.cssText = 'position:absolute;z-index:21;display:none;max-height:300px;overflow:auto;padding:.6rem .75rem;font-size:.78rem;';
+        contenedor.appendChild(ventana);
         let ventanaDe = null;
         function cerrarVentana() { ventana.style.display = 'none'; ventana.innerHTML = ''; ventanaDe = null; }
         function abrirVentana(boton) {
             if (ventanaDe === boton) { cerrarVentana(); return; } // segundo clic: cierra
             ventana.innerHTML = htmlVentanaCompras(datosCompras(asignables, parseInt(boton.getAttribute('data-asig-compras'), 10)));
             ventana.style.display = 'block';
-            const r = boton.getBoundingClientRect();
-            const alto = ventana.offsetHeight;
-            const abajo = r.bottom + 4 + alto <= window.innerHeight;
-            ventana.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 348))}px`;
-            ventana.style.top = `${abajo ? r.bottom + 4 : Math.max(8, r.top - alto - 4)}px`;
+            ubicarEn(ventana, boton, 340);
             ventanaDe = boton;
         }
         ventana.addEventListener('click', (e) => { if (e.target.closest('[data-asig-compras-cerrar]')) cerrarVentana(); });
@@ -445,10 +463,7 @@
         };
         document.addEventListener('keydown', escVentana, true);
         function ubicarLista(input) {
-            const r = input.getBoundingClientRect();
-            lista.style.left = `${Math.max(8, Math.min(r.left, window.innerWidth - 340))}px`;
-            lista.style.top = `${r.bottom + 2}px`;
-            lista.style.width = `${Math.max(320, r.width)}px`;
+            ubicarEn(lista, input, Math.max(320, input.getBoundingClientRect().width));
         }
 
         function marcarHayCambios() {
@@ -532,8 +547,8 @@
                             lista.appendChild(b);
                         });
                     }
-                    ubicarLista(input);
                     lista.style.display = 'block';
+                    ubicarLista(input);
                 } catch (e) {
                     cerrarLista();
                 }

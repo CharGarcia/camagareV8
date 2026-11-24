@@ -2012,12 +2012,88 @@ class ReporteInventariosController extends BaseModuloController
             $empresa       = (new Empresa())->getPorId($idEmpresa);
             $nombreEmpresa = $empresa['nombre'] ?? '';
 
+            // Existencias: encabezado con la fecha del saldo y TODOS los filtros aplicados,
+            // para que el archivo se entienda solo (qué stock es, a qué fecha y de qué).
+            $infoLineas = $tab === 'existencias' ? $this->lineasFiltrosExistencias($idEmpresa) : [];
+
             $reportService = new \App\Services\ReportService();
-            $reportService->exportToExcel($titulo, $headers, $exportData, $titulo, $nombreEmpresa);
+            $reportService->exportToExcel($titulo, $headers, $exportData, $titulo, $nombreEmpresa, $infoLineas);
             exit;
         } catch (\Throwable $e) {
             echo 'Error al generar Excel: ' . $e->getMessage();
         }
+    }
+
+    /**
+     * Líneas de encabezado del Excel de Existencias (etiqueta => valor): la fecha a la que
+     * corresponde el saldo y cada filtro de la pantalla con su valor ("Todos" cuando no se
+     * filtró), con los nombres que ve el usuario en vez de los ids.
+     *
+     * @return array<string,string>
+     */
+    private function lineasFiltrosExistencias(int $idEmpresa): array
+    {
+        $f = $this->getFiltrosExistencias();
+        $fmt = fn($v) => ($v !== '' && strtotime((string) $v)) ? date('d-m-Y', strtotime((string) $v)) : '';
+
+        // Nombre de un id dentro de una lista [id, nombre].
+        $nombreEn = function (array $lista, $id, string $todos): string {
+            if (empty($id)) return $todos;
+            foreach ($lista as $r) {
+                if ((int) $r['id'] === (int) $id) return (string) $r['nombre'];
+            }
+            return $todos;
+        };
+
+        $corte = $fmt($f['fecha_corte'] ?? '');
+        $lineas = [
+            'Saldo al'   => $corte !== '' ? $corte : date('d-m-Y H:i:s') . ' (saldo actual)',
+            'Generado el' => date('d-m-Y H:i:s'),
+        ];
+
+        $desgloses = [
+            'GENERAL'                   => 'En general',
+            'LOTE'                      => 'Por lotes',
+            'CADUCIDAD'                 => 'Por caducidad',
+            'LOTE_CADUCIDAD'            => 'Lote + caducidad',
+            self::DESGLOSE_CONSIGNACION => 'Lote + consignación',
+        ];
+        $lineas['Detalle'] = $desgloses[$f['desglose']] ?? (string) $f['desglose'];
+        if ($f['desglose'] === 'GENERAL') {
+            $agrupar = ['NINGUNO' => 'Detallado', 'PRODUCTO' => 'Por Producto', 'CATEGORIA' => 'Por Categoría', 'BODEGA' => 'Por Bodega'];
+            $lineas['Agrupar por'] = $agrupar[$f['agrupar_por']] ?? 'Detallado';
+        }
+
+        $lineas['Bodega']    = $nombreEn((new BodegaRepository())->getBodegasEmpresa($idEmpresa), $f['id_bodega'], 'Todas');
+        $lineas['Categoría'] = $nombreEn((new CategoriaRepository())->getCombo($idEmpresa), $f['id_categoria'], 'Todas');
+        $lineas['Marca']     = $nombreEn((new MarcaRepository())->getCombo($idEmpresa), $f['id_marca'], 'Todas');
+
+        $producto = 'Todos';
+        if (!empty($f['id_producto'])) {
+            $p = (new ProductoRepository())->getPorId((int) $f['id_producto'], $idEmpresa);
+            if ($p) $producto = trim(($p['codigo'] ?? '') . ' - ' . ($p['nombre'] ?? ''), ' -');
+        }
+        $lineas['Producto'] = $producto;
+
+        $estados = ['QUIEBRE' => 'En quiebre', 'ALERTA' => 'Bajo mínimo', 'NORMAL' => 'Normal', 'EXCESO' => 'Sobre máximo'];
+        $lineas['Estado']     = $estados[$f['estado_stock']] ?? 'Todos';
+        $consig = ['CON' => 'Con consignado', 'SIN' => 'Sin consignado'];
+        $lineas['Consignado'] = $consig[$f['consignado']] ?? 'Todos';
+        $lineas['Lote']       = $f['numero_lote'] !== '' ? $f['numero_lote'] : 'Todos';
+        $lineas['NUP']        = $f['nup'] !== '' ? $f['nup'] : 'Todos';
+
+        $cadDesde = $fmt($f['fecha_caducidad_desde'] ?? '');
+        $cadHasta = $fmt($f['fecha_caducidad_hasta'] ?? '');
+        $lineas['Caducidad'] = match (true) {
+            $cadDesde !== '' && $cadHasta !== '' => "Del {$cadDesde} al {$cadHasta}",
+            $cadDesde !== ''                     => "Desde {$cadDesde}",
+            $cadHasta !== ''                     => "Hasta {$cadHasta}",
+            default                              => 'Todas',
+        };
+        if ($f['buscar'] !== '') {
+            $lineas['Búsqueda'] = $f['buscar'];
+        }
+        return $lineas;
     }
 
     /**
@@ -2428,8 +2504,9 @@ class ReporteInventariosController extends BaseModuloController
                     // Mismas columnas que la pantalla: solo las que el desglose puede afirmar.
                     $conLote = $modo === 'LOTE' || $modo === 'LOTE_CADUCIDAD';
                     $conNup  = $modo === 'LOTE_CADUCIDAD';
-                    // "Por lotes" también lleva Caducidad en el Excel: la(s) del lote, agregadas.
-                    $conCad  = in_array($modo, ['LOTE', 'CADUCIDAD', 'LOTE_CADUCIDAD'], true);
+                    // "Por lotes" NO lleva Caducidad (a pedido del usuario se retiró la que se
+                    // le había agregado): solo los desgloses que agrupan por caducidad la muestran.
+                    $conCad  = $modo === 'CADUCIDAD' || $modo === 'LOTE_CADUCIDAD';
                     $headers = array_merge(
                         ['Código', 'Producto', 'Bodega'],
                         $conLote ? ['Lote'] : [],
@@ -2438,9 +2515,7 @@ class ReporteInventariosController extends BaseModuloController
                         ['Stock', 'Consignación', 'Stock Total', 'Costo Unit.', 'Valor total']
                     );
                     $data = array_map(function ($r) use ($conLote, $conNup, $conCad) {
-                        $cad = !empty($r['fecha_caducidad'])
-                            ? date('d-m-Y', strtotime($r['fecha_caducidad']))
-                            : (string) ($r['caducidades_lote'] ?? '');
+                        $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '';
                         return array_merge(
                             [$r['producto_codigo'] ?? '', $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? ''],
                             $conLote ? [$r['lote'] ?? ''] : [],
