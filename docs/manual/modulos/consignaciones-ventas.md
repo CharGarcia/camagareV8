@@ -299,7 +299,8 @@ las de períodos cerrados).
 En la pestaña General del comprobante, junto al botón **PDF**, hay un botón
 **Excel** que descarga el detalle de la consignación (producto, bodega, lote,
 NUP, fecha de caducidad, cantidad entregada, retornada y facturada) en una hoja
-de cálculo. La caducidad sale en formato dd-mm-aaaa y queda en blanco en las
+de cálculo, más una columna **Acon** en blanco para anotar a mano el
+acondicionamiento, como en el PDF. La caducidad sale en formato dd-mm-aaaa y queda en blanco en las
 líneas que no la tienen. Al final lleva, como el PDF, los espacios de firma
 **Emitido por** (el usuario que registró la consignación), **Responsable de
 traslado** y **Recibí conforme** (sin nombre, lo escribe quien recibe) y,
@@ -638,7 +639,7 @@ Contables**; reabrir el período permite la operación de inmediato.
 
 ## Historial de cambios
 
-- **1.54** — El **Excel** del comprobante incluye la columna **Caducidad** (después de NUP) con la fecha de vencimiento de cada línea, y al final los espacios de firma **Emitido por**, **Responsable de traslado**, **Recibí conforme** y **Verificación de acondicionamiento por**, como en el PDF.
+- **1.54** — El **Excel** del comprobante incluye la columna **Caducidad** (después de NUP) con la fecha de vencimiento de cada línea; la columna **Cambio** se reemplaza por **Acon** (en blanco, para anotar el acondicionamiento a mano), y al final los espacios de firma **Emitido por**, **Responsable de traslado**, **Recibí conforme** y **Verificación de acondicionamiento por**, como en el PDF.
 - **1.53** — El **buscador de clientes** del modal ya no depende del permiso de *Facturas de Venta*: basta con poder ver Consignaciones (antes un usuario de nivel 1 sin acceso a Facturas no podía buscar ni elegir clientes). Nuevo botón **Registrar nuevo cliente** en la barra de acciones (solo con permiso de crear en Clientes): el cliente creado queda seleccionado en la consignación.
 - **1.52** — Al cambiar a un cliente sin vendedor asignado, o al borrar el cliente, el **Asesor** que había puesto el cliente anterior se limpia (antes se quedaba y la consignación podía guardarse con el vendedor de otro cliente). Un asesor elegido a mano o el favorito no se tocan.
 - **1.51** — La pestaña **Información** pasa a ser la pieza común del sistema (ver la guía *Pestaña Información*); la línea de tiempo se titula *Acciones registradas*.

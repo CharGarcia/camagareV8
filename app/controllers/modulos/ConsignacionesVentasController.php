@@ -565,7 +565,7 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($cons['estado'] ?? '')));
 
             $headerRow = 7;
-            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Caducidad', 'Cantidad', 'Retorno', 'Facturados', 'Cambio'];
+            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Caducidad', 'Cantidad', 'Retorno', 'Facturados', 'Acon'];
             $col = 'A';
             foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
             $headerStyle = [
@@ -590,11 +590,11 @@ class ConsignacionesVentasController extends BaseModuloController
                 $sheet->setCellValue('G' . $row, (float)($d['cantidad'] ?? 0));
                 $sheet->setCellValue('H' . $row, (float)($d['retornado'] ?? 0));
                 $sheet->setCellValue('I' . $row, (float)($d['facturado'] ?? 0));
-                $sheet->setCellValue('J' . $row, (float)($d['cambiado'] ?? 0));
+                // "Acon" (acondicionamiento) queda en blanco para anotarlo a mano, como en el PDF.
                 $row++;
             }
             if ($row > $headerRow + 1) {
-                $sheet->getStyle('G' . ($headerRow + 1) . ':J' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('G' . ($headerRow + 1) . ':I' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             }
 
             $obs = trim((string)($cons['observaciones'] ?? ''));
