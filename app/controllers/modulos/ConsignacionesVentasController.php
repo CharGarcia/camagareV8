@@ -549,11 +549,11 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setTitle('Consignacion');
 
             $sheet->setCellValue('A1', strtoupper((string)($empresa['nombre'] ?? '')));
-            $sheet->mergeCells('A1:I1');
+            $sheet->mergeCells('A1:J1');
             $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(12);
 
             $sheet->setCellValue('A2', 'CONSIGNACIÓN EN VENTAS N.° ' . ($numero !== '' ? $numero : '—'));
-            $sheet->mergeCells('A2:I2');
+            $sheet->mergeCells('A2:J2');
             $sheet->getStyle('A2')->getFont()->setBold(true);
 
             $fecha = !empty($cons['fecha_emision']) ? date('d-m-Y', strtotime((string)$cons['fecha_emision'])) : '';
@@ -565,40 +565,83 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($cons['estado'] ?? '')));
 
             $headerRow = 7;
-            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Cantidad', 'Retorno', 'Facturados', 'Cambio'];
+            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Caducidad', 'Cantidad', 'Retorno', 'Facturados', 'Cambio'];
             $col = 'A';
             foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
             $headerStyle = [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
             ];
-            $sheet->getStyle('A' . $headerRow . ':I' . $headerRow)->applyFromArray($headerStyle);
+            $sheet->getStyle('A' . $headerRow . ':J' . $headerRow)->applyFromArray($headerStyle);
 
             $row = $headerRow + 1;
             foreach ($detalles as $d) {
+                // Caducidad de la línea (dd-mm-aaaa); en blanco si la línea no la tiene.
+                $fc = trim((string)($d['fecha_caducidad'] ?? ''));
+                $tsFc = $fc !== '' ? strtotime($fc) : false;
+                $caducidad = $tsFc ? date('d-m-Y', $tsFc) : '';
+
                 $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('C' . $row, (string)($d['bodega_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('D' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
                 $sheet->setCellValueExplicit('E' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValue('F' . $row, (float)($d['cantidad'] ?? 0));
-                $sheet->setCellValue('G' . $row, (float)($d['retornado'] ?? 0));
-                $sheet->setCellValue('H' . $row, (float)($d['facturado'] ?? 0));
-                $sheet->setCellValue('I' . $row, (float)($d['cambiado'] ?? 0));
+                $sheet->setCellValueExplicit('F' . $row, $caducidad, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->setCellValue('G' . $row, (float)($d['cantidad'] ?? 0));
+                $sheet->setCellValue('H' . $row, (float)($d['retornado'] ?? 0));
+                $sheet->setCellValue('I' . $row, (float)($d['facturado'] ?? 0));
+                $sheet->setCellValue('J' . $row, (float)($d['cambiado'] ?? 0));
                 $row++;
             }
             if ($row > $headerRow + 1) {
-                $sheet->getStyle('F' . ($headerRow + 1) . ':I' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
+                $sheet->getStyle('G' . ($headerRow + 1) . ':J' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             }
 
             $obs = trim((string)($cons['observaciones'] ?? ''));
             if ($obs !== '') {
                 $row++;
                 $sheet->setCellValue('A' . $row, 'Observaciones: ' . $obs);
-                $sheet->mergeCells('A' . $row . ':H' . $row);
+                $sheet->mergeCells('A' . $row . ':J' . $row);
             }
 
-            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'] as $c) {
+            // Firmas, igual que en el PDF: "Emitido por" lleva el usuario que registró la
+            // consignación, "Responsable de traslado" el de la cabecera y "Recibí conforme"
+            // va sin nombre (lo escribe y firma quien recibe). Se dejan filas en blanco para
+            // firmar a mano y la etiqueta lleva un borde superior que hace de línea de firma.
+            $firmas = [
+                ['A', 'C', 'Emitido por',             strtoupper(trim((string)($cons['creado_por_nombre'] ?? '')))],
+                ['D', 'F', 'Responsable de traslado', trim((string)($cons['responsable_traslado_nombre'] ?? ''))],
+                ['G', 'J', 'Recibí conforme',         ''],
+            ];
+            $rowLinea  = $row + 4;
+            $rowNombre = $rowLinea + 1;
+            foreach ($firmas as [$ini, $fin, $etiqueta, $nombreFirma]) {
+                $sheet->mergeCells($ini . $rowLinea . ':' . $fin . $rowLinea);
+                $sheet->setCellValue($ini . $rowLinea, $etiqueta);
+                $sheet->getStyle($ini . $rowLinea . ':' . $fin . $rowLinea)->applyFromArray([
+                    'font'      => ['bold' => true],
+                    'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+                    'borders'   => ['top' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
+                ]);
+
+                $sheet->mergeCells($ini . $rowNombre . ':' . $fin . $rowNombre);
+                $sheet->setCellValueExplicit($ini . $rowNombre, $nombreFirma, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                $sheet->getStyle($ini . $rowNombre)->getAlignment()
+                    ->setHorizontal(\PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER);
+            }
+
+            // Segunda fila, como en el PDF: verificación de acondicionamiento, bajo la
+            // primera firma y sin nombre impreso (se firma a mano).
+            $rowAcond = $rowNombre + 4;
+            $sheet->mergeCells('A' . $rowAcond . ':C' . $rowAcond);
+            $sheet->setCellValue('A' . $rowAcond, 'VERIFICACIÓN DE ACONDICIONAMIENTO POR:');
+            $sheet->getStyle('A' . $rowAcond . ':C' . $rowAcond)->applyFromArray([
+                'font'      => ['bold' => true],
+                'alignment' => ['horizontal' => \PhpOffice\PhpSpreadsheet\Style\Alignment::HORIZONTAL_CENTER],
+                'borders'   => ['top' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]],
+            ]);
+
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'] as $c) {
                 $sheet->getColumnDimension($c)->setAutoSize(true);
             }
 
