@@ -19,8 +19,9 @@
  *                                                 resumenPorModulo, acciones, puedeConfigurar, info }
  *
  * `acciones` es lo que se muestra: qué configurar, una línea por sección de Configuración Contable,
- * sin cifras (ver SincronizadorAsientosService::registrarAccion()). Cada una enlaza a
- * /modulos/configuracion-contable (URL limpia: tipo y sección viajan en sesión vía entrarAjax) si `puedeConfigurar`.
+ * sin cifras (ver SincronizadorAsientosService::registrarAccion()). Va sin enlace: lo que se puede
+ * asignar aquí mismo está en las pestañas por tipo de asiento (`asignables`, ver htmlConPestanas()).
+ * El servidor sigue mandando `puedeConfigurar`, que esta ventana ya no usa.
  *
  * `info` es un canal INFORMATIVO (azul): notas que no son error ni pendiente. Los documentos
  * traídos por la migración solo se cuentan si el sistema anterior nunca los contabilizó (ver
@@ -88,9 +89,8 @@
     // El aviso se arma en pestañas: «General» (lo de siempre: generados, qué configurar, notas) y una
     // por tipo de asiento con pendientes (Ventas con Factura, Adquisiciones de Compras…). Cada una
     // muestra una tabla delgada: Nombre · Doc. · una columna por cuenta que falta (normalmente solo
-    // el subtotal). La primera fila, «Todos — en la General», resuelve la cuenta para todos; debajo,
-    // según la vista elegida («Ver por»), los proveedores/clientes, ítems, productos, categorías o
-    // marcas. La vista por defecto es la dimensión que la empresa más usa en sus reglas
+    // el subtotal). Cada fila es un registro según la vista elegida («Ver por»): proveedores/clientes,
+    // ítems, productos, categorías o marcas; no hay fila «General» (se prestaba a confusión). La vista por defecto es la dimensión que la empresa más usa en sus reglas
     // (`usoDimensiones`). La cuenta se GUARDA AL ELEGIRLA (POST configuracion-contable/asignarCuentaAvisoAjax,
     // que solo completa lo que falta). Luego «Volver a generar».
 
@@ -100,8 +100,12 @@
     /** Orden de las pestañas de tipo de asiento. */
     const ORDEN_PESTANAS = ['Ventas con Factura', 'Recibos de Venta', 'Adquisiciones de Compras', 'Cobros y Pagos', 'Ingresos y Egresos'];
 
-    /** Orden y nombre de las vistas («Ver por») de una pestaña de conceptos. */
-    const VISTAS = ['general', 'entidad', 'item_compra', 'producto', 'categoria', 'marca'];
+    /**
+     * Orden de las vistas («Ver por») de una pestaña de conceptos. No hay vista ni fila «General»
+     * a propósito: una sola celda que asignaba la cuenta a todos se prestaba a confusión. Cada fila
+     * es un registro concreto (proveedor, cliente, ítem, producto, categoría o marca).
+     */
+    const VISTAS = ['entidad', 'item_compra', 'producto', 'categoria', 'marca'];
 
     const esDeConcepto = (a) => a.clase === 'entidad' || a.clase === 'item' || a.clase === 'dimension';
 
@@ -124,7 +128,7 @@
 
     function etiquetaVista(v, esCliente) {
         return {
-            general: 'Solo la General', entidad: esCliente ? 'Por cliente' : 'Por proveedor', item_compra: 'Por ítem',
+            entidad: esCliente ? 'Por cliente' : 'Por proveedor', item_compra: 'Por ítem',
             producto: 'Por producto', categoria: 'Por categoría', marca: 'Por marca',
         }[v] || v;
     }
@@ -135,7 +139,7 @@
     /**
      * Arma las pestañas a partir de las filas: por pestaña, sus conceptos (columnas), las vistas que
      * tienen filas y la vista por defecto (la dimensión con más reglas en la empresa; si la empresa no
-     * tiene reglas por ninguna dimensión, la General).
+     * tiene reglas por ninguna, la primera disponible: proveedor/cliente).
      */
     function construirPestanas(asignables, uso) {
         const mapa = new Map();
@@ -160,21 +164,60 @@
         });
         pestanas.forEach(p => {
             p.conceptos = [...p.conceptos.values()];
-            p.vistas = VISTAS.filter(v => v === 'general' || p.vistas.has(v));
+            p.vistas = VISTAS.filter(v => p.vistas.has(v));
             const usoTipo = (uso && uso[p.tipo]) || {};
-            let mejor = 'general', max = 0;
-            p.vistas.forEach(v => { if (v !== 'general' && (usoTipo[v] || 0) > max) { max = usoTipo[v]; mejor = v; } });
+            let mejor = p.vistas[0] || 'entidad', max = 0;
+            p.vistas.forEach(v => { if ((usoTipo[v] || 0) > max) { max = usoTipo[v]; mejor = v; } });
             p.vistaPorDefecto = mejor;
         });
         return pestanas;
     }
 
-    /** Cuentas que siguen faltando en una pestaña (para el contador de la pestaña). */
-    function pendientesPestana(p, asignables) {
-        if (p.deConceptos) {
-            return p.conceptos.filter(c => p.indices.some(i => asignables[i].id_asiento_tipo === c.id && !asignables[i].resuelto)).length;
-        }
-        return p.indices.filter(i => !asignables[i].resuelto).length;
+    /** Vista que se está mostrando en una pestaña (la elegida o la por defecto). */
+    const vistaActual = (p, opts) => ((opts && opts.vistaPorPestana) || {})[p.titulo] || p.vistaPorDefecto;
+
+    /**
+     * Registros (filas) de una vista: un proveedor, un ítem, una categoría… con su celda por concepto.
+     * Ordenados por nombre.
+     */
+    function filasDeVista(p, asignables, vista) {
+        const filas = new Map();
+        p.indices.forEach(i => {
+            const a = asignables[i];
+            if (!esDeConcepto(a) || vistaDe(a) !== vista) return;
+            const k = claveFila(a);
+            if (!filas.has(k)) filas.set(k, { nombre: a.nombre, docs: 0, celdas: new Map(), items: [], itemsTotal: 0 });
+            const f = filas.get(k);
+            f.docs = Math.max(f.docs, parseInt(a.documentos, 10) || 0);
+            if (Array.isArray(a.items) && a.items.length) {
+                f.items = [...new Set([...f.items, ...a.items])].slice(0, 10);
+                f.itemsTotal = Math.max(f.itemsTotal, a.items_total || 0, f.items.length);
+            }
+            f.celdas.set(a.id_asiento_tipo, i);
+        });
+        return [...filas.values()].sort((x, y) => String(x.nombre).localeCompare(String(y.nombre), 'es'));
+    }
+
+    /** Registros de una vista que el servidor solo contó (tope por concepto): el mayor entre sus conceptos. */
+    function omitidosDeVista(p, omitidos, vista) {
+        let omit = 0;
+        (omitidos || []).forEach(o => {
+            const [clase, entidad, tipo] = String(o.clave_concepto).split('|');
+            const v = clase === 'entidad' ? 'entidad' : (clase === 'item' ? 'item_compra' : entidad);
+            if (tipo === p.tipo && v === vista) omit = Math.max(omit, parseInt(o.filas, 10) || 0);
+        });
+        return omit;
+    }
+
+    /**
+     * Contador de la pestaña: REGISTROS que todavía tienen alguna cuenta por configurar en la vista
+     * que se ve (4 proveedores sin cuenta → 4), incluidos los que no se dibujan por el tope.
+     */
+    function pendientesPestana(p, asignables, vista, omitidos) {
+        if (!p.deConceptos) return p.indices.filter(i => !asignables[i].resuelto).length;
+        const v = vista || p.vistaPorDefecto;
+        const pendientes = filasDeVista(p, asignables, v).filter(f => [...f.celdas.values()].some(i => !asignables[i].resuelto)).length;
+        return pendientes + omitidosDeVista(p, omitidos, v);
     }
 
     /** Celda de cuenta: input que guarda al elegir, o la cuenta ya asignada. */
@@ -188,70 +231,39 @@
             data-destino="${destino}" data-tipo-cuenta="${escapeHtml(tipoCuenta || '')}"></td>`;
     }
 
-    /** Contenido (tabla) de una pestaña de conceptos en la vista elegida. */
+    /**
+     * Celda «Compró»: lo que se le compró al proveedor en los documentos pendientes (los ítems más
+     * repetidos primero), para que el usuario sepa qué cuenta asignarle. Completo al pasar el mouse.
+     */
+    function celdaItems(f) {
+        if (!f.items.length) return `<td class="px-1 text-muted"></td>`;
+        const mas = f.itemsTotal > f.items.length ? ` y ${f.itemsTotal - f.items.length} más` : '';
+        const texto = f.items.join(', ') + mas;
+        return `<td class="px-1 text-muted text-truncate" style="max-width:240px;font-size:.74rem;" title="${escapeHtml('Compró: ' + texto)}">${escapeHtml(texto)}</td>`;
+    }
+
+    /** Contenido (tabla) de una pestaña de conceptos en la vista elegida: un registro por fila. */
     function htmlTablaConceptos(p, asignables, omitidos, vista) {
         const ths = p.conceptos.map(c => `<th class="px-1 text-truncate" style="max-width:190px;" title="${escapeHtml(c.nombre)}">${escapeHtml(c.nombre)}</th>`).join('');
-        // Fila «Todos — en la General»: una celda por concepto; resuelta si la General ya lo cubre.
-        // Documentos detenidos: los de la vista por tercero (cada documento tiene un solo tercero).
-        let docsTodos = 0;
-        const docsPorConcepto = new Map();
-        p.indices.forEach(i => {
-            const a = asignables[i];
-            if (a.clase !== 'entidad') return;
-            docsPorConcepto.set(a.id_asiento_tipo, (docsPorConcepto.get(a.id_asiento_tipo) || 0) + (parseInt(a.documentos, 10) || 0));
-        });
-        (omitidos || []).forEach(o => {
-            const [clase, , tipo, idAt] = String(o.clave_concepto).split('|');
-            if (clase === 'entidad' && tipo === p.tipo) {
-                docsPorConcepto.set(parseInt(idAt, 10), (docsPorConcepto.get(parseInt(idAt, 10)) || 0) + (parseInt(o.documentos, 10) || 0));
-            }
-        });
-        docsPorConcepto.forEach(n => { docsTodos = Math.max(docsTodos, n); });
-        const celdasTodos = p.conceptos.map(c => {
-            const delConcepto = p.indices.filter(i => asignables[i].id_asiento_tipo === c.id);
-            const enGeneral = delConcepto.map(i => asignables[i].resuelto).find(r => r && r.startsWith('Asignada en la General'));
-            const todos = delConcepto.every(i => asignables[i].resuelto);
-            return celdaCuenta(c.rep, 'general', c.tipo_cuenta, enGeneral || (todos ? asignables[delConcepto[0]].resuelto : null));
-        }).join('');
-        let filasHtml = `<tr class="table-light"><td class="px-1 fw-semibold text-nowrap"><i class="bi bi-globe2 me-1 text-primary"></i>Todos — en la General</td>`
-            + `<td class="px-1 text-end text-muted">${docsTodos || ''}</td>${celdasTodos}</tr>`;
-
-        let resto = 0;
-        if (vista !== 'general') {
-            const filas = new Map();
-            p.indices.forEach(i => {
-                const a = asignables[i];
-                if (!esDeConcepto(a) || vistaDe(a) !== vista) return;
-                const k = claveFila(a);
-                if (!filas.has(k)) filas.set(k, { nombre: a.nombre, docs: 0, celdas: new Map() });
-                const f = filas.get(k);
-                f.docs = Math.max(f.docs, parseInt(a.documentos, 10) || 0);
-                f.celdas.set(a.id_asiento_tipo, i);
-            });
-            const lista = [...filas.values()].sort((x, y) => String(x.nombre).localeCompare(String(y.nombre), 'es'));
-            filasHtml += lista.slice(0, MAX_FILAS_TABLA).map(f => {
-                const celdas = p.conceptos.map(c => {
-                    const i = f.celdas.get(c.id);
-                    if (i === undefined) return `<td class="px-1 text-muted text-center">—</td>`;
-                    return celdaCuenta(i, 'entidad', c.tipo_cuenta, asignables[i].resuelto);
-                }).join('');
-                return `<tr><td class="px-1 text-truncate" style="max-width:260px;" title="${escapeHtml(f.nombre)}">${escapeHtml(f.nombre)}</td>`
-                    + `<td class="px-1 text-end text-muted">${f.docs}</td>${celdas}</tr>`;
+        const lista = filasDeVista(p, asignables, vista);
+        const conItems = lista.some(f => f.items.length);
+        const filasHtml = lista.slice(0, MAX_FILAS_TABLA).map(f => {
+            const celdas = p.conceptos.map(c => {
+                const i = f.celdas.get(c.id);
+                if (i === undefined) return `<td class="px-1 text-muted text-center">—</td>`;
+                return celdaCuenta(i, 'entidad', c.tipo_cuenta, asignables[i].resuelto);
             }).join('');
-            // Lo que no se dibuja: filas sobre el tope + las que el servidor solo contó (máximo por concepto).
-            let omit = 0;
-            (omitidos || []).forEach(o => {
-                const [clase, entidad, tipo] = String(o.clave_concepto).split('|');
-                const v = clase === 'entidad' ? 'entidad' : (clase === 'item' ? 'item_compra' : entidad);
-                if (tipo === p.tipo && v === vista) omit = Math.max(omit, parseInt(o.filas, 10) || 0);
-            });
-            resto = Math.max(0, lista.length - MAX_FILAS_TABLA) + omit;
-        }
+            return `<tr><td class="px-1 text-truncate" style="max-width:260px;" title="${escapeHtml(f.nombre)}">${escapeHtml(f.nombre)}</td>`
+                + (conItems ? celdaItems(f) : '')
+                + `<td class="px-1 text-end text-muted">${f.docs}</td>${celdas}</tr>`;
+        }).join('');
+        // Lo que no se dibuja: registros sobre el tope + los que el servidor solo contó.
+        const resto = Math.max(0, lista.length - MAX_FILAS_TABLA) + omitidosDeVista(p, omitidos, vista);
         const pie = resto > 0
-            ? `<div class="text-muted mt-1" style="font-size:.72rem;">Y ${resto} más: se resuelven con «Todos — en la General» o con el enlace «Configurar» de la pestaña General.</div>`
+            ? `<div class="text-muted mt-1" style="font-size:.72rem;">Y ${resto} más: configúrelos en Configuración Contable, o vuelva a generar después de asignar estos para ver los siguientes.</div>`
             : '';
         return `<div style="overflow-x:auto;"><table class="table table-sm table-bordered mb-0 align-middle" style="font-size:.78rem;">
-            <thead class="table-light"><tr><th class="px-1">Nombre</th><th class="px-1 text-end" style="width:48px;">Doc.</th>${ths}</tr></thead>
+            <thead class="table-light"><tr><th class="px-1">Nombre</th>${conItems ? '<th class="px-1" title="Lo que se le compró en los documentos pendientes de contabilizar">Compró</th>' : ''}<th class="px-1 text-end" style="width:48px;">Doc.</th>${ths}</tr></thead>
             <tbody>${filasHtml}</tbody></table></div>${pie}`;
     }
 
@@ -267,7 +279,7 @@
                 + celdaCuenta(i, '', a.tipo_cuenta, a.resuelto) + `</tr>`;
         }).join('');
         const resto = filas.length > MAX_FILAS_TABLA
-            ? `<div class="text-muted mt-1" style="font-size:.72rem;">Y ${filas.length - MAX_FILAS_TABLA} más: configúrelos con el enlace «Configurar».</div>` : '';
+            ? `<div class="text-muted mt-1" style="font-size:.72rem;">Y ${filas.length - MAX_FILAS_TABLA} más: configúrelos en Configuración Contable.</div>` : '';
         return `<table class="table table-sm table-bordered mb-0 align-middle" style="font-size:.78rem;">
             <thead class="table-light"><tr><th class="px-1">Nombre</th><th class="px-1" style="width:70px;">Flujo</th><th class="px-1 text-end" style="width:48px;">Doc.</th><th class="px-1">Cuenta</th></tr></thead>
             <tbody>${html}</tbody></table>${resto}`;
@@ -276,13 +288,13 @@
     /** Cuerpo de una pestaña (barra «Ver por» + tabla). */
     function htmlCuerpoPestana(p, opts) {
         if (!p.deConceptos) return htmlTablaRegistros(p, opts.asignables);
-        const vista = (opts.vistaPorPestana || {})[p.titulo] || p.vistaPorDefecto;
+        const vista = vistaActual(p, opts);
         const selector = p.vistas.length > 1
             ? `<div class="d-flex align-items-center gap-2 mb-1"><label class="small text-muted mb-0">Ver por</label>
                 <select class="form-select form-select-sm" style="width:170px;height:24px;padding-top:0;padding-bottom:0;font-size:.76rem;" data-asig-vista="${escapeHtml(p.titulo)}">`
                 + p.vistas.map(v => `<option value="${v}"${v === vista ? ' selected' : ''}>${etiquetaVista(v, p.esCliente)}</option>`).join('')
-                + `</select><span class="text-muted" style="font-size:.72rem;">«Todos — en la General» sirve para todos los que no tienen su propia cuenta.</span></div>`
-            : '';
+                + `</select><span class="text-muted" style="font-size:.72rem;">Elija la cuenta en cada fila: se guarda al elegirla.</span></div>`
+            : `<div class="text-muted mb-1" style="font-size:.72rem;">Elija la cuenta en cada fila: se guarda al elegirla.</div>`;
         return selector + htmlTablaConceptos(p, opts.asignables, opts.omitidos, vista);
     }
 
@@ -296,7 +308,7 @@
         const activa = opts.pestanaActiva || 'general';
         const nav = [`<li class="nav-item"><button type="button" class="nav-link py-1 px-2${activa === 'general' ? ' active' : ''}" data-asig-tab="general">General</button></li>`]
             .concat(pestanas.map(p => {
-                const n = pendientesPestana(p, opts.asignables);
+                const n = pendientesPestana(p, opts.asignables, vistaActual(p, opts), opts.omitidos);
                 const badge = n > 0
                     ? ` <span class="badge rounded-pill bg-warning text-dark" data-asig-badge="${p.id}">${n}</span>`
                     : ` <i class="bi bi-check-circle-fill text-success" data-asig-badge="${p.id}"></i>`;
@@ -320,7 +332,7 @@
     function cuerpoAsignar(a, destino, idCuenta) {
         const p = { clase: a.clase, id_cuenta: String(idCuenta) };
         if (esDeConcepto(a)) {
-            p.destino = destino || 'general';
+            p.destino = destino || 'entidad';
             p.id_asiento_tipo = String(a.id_asiento_tipo);
             if (a.clase === 'entidad') p.id_entidad = String(a.id_entidad);
             else if (a.clase === 'dimension') { p.dimension = a.entidad; p.id_entidad = String(a.id_entidad); }
@@ -336,20 +348,10 @@
     }
 
     /**
-     * Tras guardar: marca como resueltas EN LOS DATOS la fila y las que quedan resueltas con ella
-     * (también las que no se dibujan, para que los contadores y un nuevo dibujado lo reflejen).
+     * Tras guardar: marca como resuelta EN LOS DATOS la fila guardada (los contadores y un nuevo
+     * dibujado lo reflejan). Cada celda guarda solo para su registro; el aviso ya no asigna a la General.
      */
     function aplicarResultado(asignables, item, destino, cuenta) {
-        if (esDeConcepto(item) && destino === 'general') {
-            // La General cubre ese concepto para todos (también para quien tiene cuentas propias:
-            // lo que no configura se toma de la General).
-            asignables.forEach(it => {
-                if (!it.resuelto && esDeConcepto(it) && it.tipo_asiento === item.tipo_asiento && it.id_asiento_tipo === item.id_asiento_tipo) {
-                    it.resuelto = `Asignada en la General: ${cuenta}`;
-                }
-            });
-            return;
-        }
         if (item.clase === 'entidad') {
             asignables.forEach(it => {
                 if (it.clase === 'entidad' && it.entidad === item.entidad && it.id_entidad === item.id_entidad && it.tipo_asiento === item.tipo_asiento) {
@@ -405,7 +407,7 @@
                 if (panel) panel.innerHTML = htmlCuerpoPestana(p, opts);
                 const badge = sec.querySelector(`[data-asig-badge="${p.id}"]`);
                 if (badge) {
-                    const n = pendientesPestana(p, asignables);
+                    const n = pendientesPestana(p, asignables, vistaActual(p, opts), opts.omitidos);
                     badge.outerHTML = n > 0
                         ? `<span class="badge rounded-pill bg-warning text-dark" data-asig-badge="${p.id}">${n}</span>`
                         : `<i class="bi bi-check-circle-fill text-success" data-asig-badge="${p.id}"></i>`;
@@ -538,39 +540,9 @@
     }
 
     /**
-     * Enlace «Configurar»: las URLs de navegación van limpias, sin parámetros. Se deja en sesión qué
-     * tipo de asiento y sección abrir (ConfiguracionContableController::entrarAjax()) y se navega a
-     * `modulos/configuracion-contable`. La pestaña se abre ANTES del fetch, dentro del clic, para que
-     * el navegador no la bloquee como ventana emergente; si igual la bloquea, se navega aquí mismo.
-     */
-    document.addEventListener('click', function (e) {
-        const a = e.target.closest ? e.target.closest('a[data-asientos-cfg-tipo]') : null;
-        if (!a) return;
-        e.preventDefault();
-
-        const url = a.getAttribute('href');
-        const destino = window.open('', '_blank');
-        if (destino) destino.opener = null;
-        const cuerpo = new URLSearchParams({
-            tipo: a.getAttribute('data-asientos-cfg-tipo'),
-            seccion: a.getAttribute('data-asientos-cfg-seccion') || 'general',
-        });
-        fetch(`${url}/entrarAjax`, {
-            method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: cuerpo.toString(),
-        })
-            .catch(() => null) // sin la sección igual se abre la pantalla
-            .then(() => {
-                if (destino) destino.location.href = url;
-                else window.location.href = url;
-            });
-    });
-
-    /**
      * Arma y muestra el resultado final (generados + acciones + notas), acumulados de
-     * todos los pasos. Las acciones dicen QUÉ configurar (una línea por sección, sin cifras) y,
-     * si el usuario puede entrar a Configuración Contable, enlazan directo a esa sección.
+     * todos los pasos. Las acciones dicen QUÉ configurar (una línea por sección, sin cifras), sin
+     * enlace: lo que se puede asignar aquí mismo va en las pestañas por tipo de asiento.
      */
     function mostrarResultado(opts) {
         // Los `warnings` del backend (conceptos/formas de pago sin cuenta, etc.) ya NO se muestran
@@ -592,13 +564,6 @@
         const asignables = (opts.puedeAsignar && Array.isArray(opts.asignables) && window.Swal) ? opts.asignables : [];
         if (acciones.length) {
             const items = acciones.map(a => {
-                let enlace = '';
-                if (opts.urlConfig && a.tipo) {
-                    // URL limpia: el tipo y la sección viajan en sesión (ver abrirConfiguracion()).
-                    enlace = ` <a href="${escapeHtml(opts.urlConfig)}" target="_blank" rel="noopener" class="text-nowrap"`
-                        + ` data-asientos-cfg-tipo="${escapeHtml(a.tipo)}" data-asientos-cfg-seccion="${escapeHtml(a.seccion || 'general')}">`
-                        + `<i class="bi bi-box-arrow-up-right me-1"></i>Configurar</a>`;
-                }
                 // Qué documentos, de quién y qué cuentas faltan (ver SincronizadorAsientosService::detalleDeLote).
                 const det = Array.isArray(a.detalles) ? a.detalles : [];
                 const maxDet = 8;
@@ -608,7 +573,7 @@
                         + (det.length > maxDet ? `<li>y ${det.length - maxDet} grupo(s) más</li>` : '')
                         + `</ul>`
                     : '';
-                return `<li class="mb-1">${escapeHtml(a.texto)}.${enlace}${sub}</li>`;
+                return `<li class="mb-1">${escapeHtml(a.texto)}.${sub}</li>`;
             }).join('');
             html += `<div class="text-start small mb-2"><i class="bi bi-exclamation-triangle text-warning me-1"></i> `
                 + `<strong>Para generar los asientos que faltan:</strong>`
@@ -821,7 +786,6 @@
         // Reglas por dimensión de cada tipo de asiento: decide la vista por defecto de cada pestaña.
         const usoDimensiones = {};
         let puedeAsignar = false;
-        let puedeConfigurar = false;
         // Solo lo que de verdad falta generar: módulos encendidos, sin los documentos que no llevan
         // asiento (sin valor, o que dependen de un módulo apagado). Ver getPendientes() en el servidor.
         let pendientesReales = 0;
@@ -896,7 +860,6 @@
                         if (!a.dependeDe) previa.dependeDe = null; // también falta de forma directa
                     });
                 }
-                if (json.puedeConfigurar) puedeConfigurar = true;
                 if (json.puedeAsignar) puedeAsignar = true;
                 if (json.usoDimensiones && typeof json.usoDimensiones === 'object') {
                     Object.entries(json.usoDimensiones).forEach(([tipo, usos]) => { usoDimensiones[tipo] = { ...(usoDimensiones[tipo] || {}), ...(usos || {}) }; });
@@ -914,7 +877,15 @@
                     json.asignables.forEach(a => {
                         if (!a || !a.clave) return;
                         const previa = acumAsignables.get(a.clave);
-                        if (previa) previa.documentos += parseInt(a.documentos, 10) || 0;
+                        if (previa) {
+                            previa.documentos += parseInt(a.documentos, 10) || 0;
+                            // El mismo proveedor en otro paso: se suman sus ítems (sin repetir, hasta 10).
+                            if (Array.isArray(a.items) && a.items.length) {
+                                const todos = [...new Set([...(previa.items || []), ...a.items])];
+                                previa.items = todos.slice(0, 10);
+                                previa.items_total = Math.max(todos.length, previa.items_total || 0, a.items_total || 0);
+                            }
+                        }
                         else acumAsignables.set(a.clave, { ...a, documentos: parseInt(a.documentos, 10) || 0 });
                     });
                 }
@@ -963,8 +934,7 @@
                 acciones.push(a);
             });
 
-            // Por concepto y luego por nombre (cada tabla vuelve a ordenar sus filas por nombre); así las filas que
-            // se resuelven juntas con «En la General» quedan seguidas.
+            // Por concepto y luego por nombre (cada tabla vuelve a ordenar sus filas por nombre).
             const asignables = [...acumAsignables.values()].sort((a, b) =>
                 String(a.concepto).localeCompare(String(b.concepto), 'es')
                 || String(a.nombre).localeCompare(String(b.nombre), 'es'));
@@ -972,7 +942,7 @@
             mostrarResultado({
                 urlBase,
                 asignables, puedeAsignar, omitidos: [...acumOmitidos.values()], usoDimensiones,
-                acciones, urlConfig: puedeConfigurar ? urlConfiguracion(urlBase) : null,
+                acciones,
                 pendientes: pendientesReales,
                 info: acumInfo, generados, interrumpido, onGenerado,
             });

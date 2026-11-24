@@ -1693,7 +1693,15 @@ class ReporteInventariosController extends BaseModuloController
                 $empresa['logo_ruta'] = $establecimientos[0]['logo_ruta'];
             }
 
-            (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'D', ['completo' => true]);
+            // Mismas columnas que el comprobante para el cliente de la consignación
+            // (Configuración de Empresa → Consignaciones); el saldo sale siempre.
+            $columnas = (array) \App\Services\modulos\ConfigModuloService::crear()->valor(
+                $idEmpresa,
+                'modulos/consignaciones-ventas',
+                'columnas_pdf',
+                (int) ($cons['id_cliente'] ?? 0) ?: null
+            );
+            (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'D', ['completo' => true, 'columnas' => $columnas]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             $this->errorDescarga('Error al generar el PDF: ' . $e->getMessage(), 500);
@@ -2420,7 +2428,8 @@ class ReporteInventariosController extends BaseModuloController
                     // Mismas columnas que la pantalla: solo las que el desglose puede afirmar.
                     $conLote = $modo === 'LOTE' || $modo === 'LOTE_CADUCIDAD';
                     $conNup  = $modo === 'LOTE_CADUCIDAD';
-                    $conCad  = $modo === 'CADUCIDAD' || $modo === 'LOTE_CADUCIDAD';
+                    // "Por lotes" también lleva Caducidad en el Excel: la(s) del lote, agregadas.
+                    $conCad  = in_array($modo, ['LOTE', 'CADUCIDAD', 'LOTE_CADUCIDAD'], true);
                     $headers = array_merge(
                         ['Código', 'Producto', 'Bodega'],
                         $conLote ? ['Lote'] : [],
@@ -2429,7 +2438,9 @@ class ReporteInventariosController extends BaseModuloController
                         ['Stock', 'Consignación', 'Stock Total', 'Costo Unit.', 'Valor total']
                     );
                     $data = array_map(function ($r) use ($conLote, $conNup, $conCad) {
-                        $cad = !empty($r['fecha_caducidad']) ? date('d-m-Y', strtotime($r['fecha_caducidad'])) : '';
+                        $cad = !empty($r['fecha_caducidad'])
+                            ? date('d-m-Y', strtotime($r['fecha_caducidad']))
+                            : (string) ($r['caducidades_lote'] ?? '');
                         return array_merge(
                             [$r['producto_codigo'] ?? '', $r['producto_nombre'] ?? '', $r['bodega_nombre'] ?? ''],
                             $conLote ? [$r['lote'] ?? ''] : [],

@@ -502,7 +502,7 @@ class ConsignacionesVentasController extends BaseModuloController
                 $renderer->generar($plantilla, $cons, $detalles, [], [], $empresa, 'D');
             } else {
                 (new \App\Services\modulos\ConsignacionVentaPdfService())
-                    ->generar($cons, $detalles, $empresa, 'D');
+                    ->generar($cons, $detalles, $empresa, 'D', ['columnas' => $this->columnasDetalle($idEmpresa, $cons)]);
             }
         } catch (\Throwable $e) {
             http_response_code(500);
@@ -564,37 +564,77 @@ class ConsignacionesVentasController extends BaseModuloController
             $sheet->setCellValue('A5', 'Resp. traslado: ' . (string)($cons['responsable_traslado_nombre'] ?? ''));
             $sheet->setCellValue('D5', 'Estado: ' . ucfirst((string)($cons['estado'] ?? '')));
 
+            // Columnas del detalle: las mismas que el PDF para este cliente (personalización
+            // de Configuración de Empresa → Consignaciones). Lote y Caducidad solo salen si
+            // alguna línea los tiene. "Acon" queda en blanco para anotar a mano.
+            $visibles = $this->columnasDetalle($idEmpresa, $cons);
+            $hayLote = false; $hayCaducidad = false;
+            foreach ($detalles as $d) {
+                if (trim((string)($d['lote'] ?? '')) !== '') { $hayLote = true; }
+                if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') { $hayCaducidad = true; }
+            }
+            $posibles = [
+                'codigo'      => ['Código',      'texto'],
+                'descripcion' => ['Descripción', 'texto'],
+                'bodega'      => ['Bodega',      'texto'],
+                'lote'        => ['Lote',        'texto'],
+                'nup'         => ['NUP',         'texto'],
+                'caducidad'   => ['Caducidad',   'texto'],
+                'cantidad'    => ['Cantidad',    'numero'],
+                'retornado'   => ['Retorno',     'numero'],
+                'facturado'   => ['Facturados',  'numero'],
+                'acon'        => ['Acon',        'blanco'],
+            ];
+            $columnas = [];
+            foreach ($posibles as $clave => $def) {
+                if (!in_array($clave, $visibles, true) && !in_array($clave, ['descripcion', 'cantidad'], true)) continue;
+                if ($clave === 'lote' && !$hayLote) continue;
+                if ($clave === 'caducidad' && !$hayCaducidad) continue;
+                $columnas[$clave] = $def;
+            }
+
             $headerRow = 7;
-            $headers = ['Código', 'Descripción', 'Bodega', 'Lote', 'NUP', 'Caducidad', 'Cantidad', 'Retorno', 'Facturados', 'Acon'];
+            $letras = [];
             $col = 'A';
-            foreach ($headers as $h) { $sheet->setCellValue($col . $headerRow, $h); $col++; }
+            foreach ($columnas as $clave => $def) {
+                $letras[$clave] = $col;
+                $sheet->setCellValue($col . $headerRow, $def[0]);
+                $ultimaCol = $col;
+                $col++;
+            }
             $headerStyle = [
                 'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
                 'fill' => ['fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID, 'startColor' => ['rgb' => '3C465A']],
             ];
-            $sheet->getStyle('A' . $headerRow . ':J' . $headerRow)->applyFromArray($headerStyle);
+            $sheet->getStyle('A' . $headerRow . ':' . $ultimaCol . $headerRow)->applyFromArray($headerStyle);
 
             $row = $headerRow + 1;
             foreach ($detalles as $d) {
-                // Caducidad de la línea (dd-mm-aaaa); en blanco si la línea no la tiene.
-                $fc = trim((string)($d['fecha_caducidad'] ?? ''));
-                $tsFc = $fc !== '' ? strtotime($fc) : false;
-                $caducidad = $tsFc ? date('d-m-Y', $tsFc) : '';
-
-                $sheet->setCellValueExplicit('A' . $row, (string)($d['producto_codigo'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValueExplicit('B' . $row, (string)($d['producto_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValueExplicit('C' . $row, (string)($d['bodega_nombre'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValueExplicit('D' . $row, (string)($d['lote'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValueExplicit('E' . $row, (string)($d['nup'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValueExplicit('F' . $row, $caducidad, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
-                $sheet->setCellValue('G' . $row, (float)($d['cantidad'] ?? 0));
-                $sheet->setCellValue('H' . $row, (float)($d['retornado'] ?? 0));
-                $sheet->setCellValue('I' . $row, (float)($d['facturado'] ?? 0));
-                // "Acon" (acondicionamiento) queda en blanco para anotarlo a mano, como en el PDF.
+                foreach ($columnas as $clave => $def) {
+                    $celda = $letras[$clave] . $row;
+                    switch ($clave) {
+                        case 'codigo':      $txt = (string)($d['producto_codigo'] ?? ''); break;
+                        case 'descripcion': $txt = (string)($d['producto_nombre'] ?? ''); break;
+                        case 'bodega':      $txt = (string)($d['bodega_nombre'] ?? ''); break;
+                        case 'lote':        $txt = (string)($d['lote'] ?? ''); break;
+                        case 'nup':         $txt = (string)($d['nup'] ?? ''); break;
+                        case 'caducidad':
+                            // dd-mm-aaaa; en blanco si la línea no la tiene.
+                            $fc   = trim((string)($d['fecha_caducidad'] ?? ''));
+                            $tsFc = $fc !== '' ? strtotime($fc) : false;
+                            $txt  = $tsFc ? date('d-m-Y', $tsFc) : '';
+                            break;
+                        default: $txt = null;
+                    }
+                    if ($def[1] === 'texto') {
+                        $sheet->setCellValueExplicit($celda, (string)$txt, \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+                    } elseif ($def[1] === 'numero') {
+                        $sheet->setCellValue($celda, (float)($d[$clave] ?? 0));
+                        $sheet->getStyle($celda)->getNumberFormat()->setFormatCode('#,##0.00');
+                    }
+                    // 'blanco' (Acon): se deja vacía para anotar a mano.
+                }
                 $row++;
-            }
-            if ($row > $headerRow + 1) {
-                $sheet->getStyle('G' . ($headerRow + 1) . ':I' . ($row - 1))->getNumberFormat()->setFormatCode('#,##0.00');
             }
 
             $obs = trim((string)($cons['observaciones'] ?? ''));
@@ -659,6 +699,23 @@ class ConsignacionesVentasController extends BaseModuloController
         exit;
     }
 
+    /**
+     * Columnas visibles del detalle de productos (PDF y Excel) para el cliente de la
+     * consignación: las propias del cliente o, si no tiene, las de la empresa
+     * (Configuración de Empresa → Consignaciones). Sin personalizar, las de siempre.
+     *
+     * @return string[] claves del catálogo App\Helpers\ConfigModulo (opción 'columnas_pdf')
+     */
+    private function columnasDetalle(int $idEmpresa, array $cons): array
+    {
+        return (array) \App\Services\modulos\ConfigModuloService::crear()->valor(
+            $idEmpresa,
+            self::RUTA_MODULO,
+            'columnas_pdf',
+            (int) ($cons['id_cliente'] ?? 0) ?: null
+        );
+    }
+
     /** Datos de la empresa (con logo del establecimiento) para el PDF. */
     private function cargarEmpresaParaPdf(int $idEmpresa, $idPuntoEmision = null): array
     {
@@ -709,7 +766,8 @@ class ConsignacionesVentasController extends BaseModuloController
             if ($plantilla) {
                 $pdfString = $renderer->generar($plantilla, $cons, $detalles, [], [], $empresa, 'S');
             } else {
-                $pdfString = (new \App\Services\modulos\ConsignacionVentaPdfService())->generar($cons, $detalles, $empresa, 'S');
+                $pdfString = (new \App\Services\modulos\ConsignacionVentaPdfService())
+                    ->generar($cons, $detalles, $empresa, 'S', ['columnas' => $this->columnasDetalle($idEmpresa, $cons)]);
             }
 
             $numero = trim((string)($cons['serie'] ?? '') . '-' . (string)($cons['secuencial'] ?? ''), '-');

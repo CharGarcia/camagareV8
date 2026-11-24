@@ -65,7 +65,7 @@ class ConfiguracionContableController extends BaseModuloController
     private const SECCIONES_ABRIR = ['general', 'cliente', 'proveedor', 'empleado', 'ingresos', 'egresos', 'cobros', 'pagos'];
 
     /**
-     * Enlace «Configurar» del aviso de asientos pendientes: deja en sesión qué tipo de asiento y
+     * Entrada con destino (p. ej. desde Configuración de Producción): deja en sesión qué tipo de asiento y
      * qué sección abrir, y el JS navega a la URL limpia (`modulos/configuracion-contable`, sin
      * parámetros). index() lo lee y lo borra. Mismo patrón que TallerTableroController::entrarAjax().
      */

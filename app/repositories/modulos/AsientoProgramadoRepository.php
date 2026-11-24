@@ -2535,6 +2535,52 @@ class AsientoProgramadoRepository extends BaseRepository
         return $nombre === false ? null : (string) $nombre;
     }
 
+    /**
+     * Qué compró cada proveedor (o cliente) en un lote de documentos: las descripciones de sus
+     * líneas, las más repetidas primero. El aviso de asientos pendientes las muestra junto al
+     * proveedor para que el usuario sepa qué cuenta asignarle (gasto de combustible, inventario…).
+     * Solo cuenta los documentos del lote, es decir, los pendientes de contabilizar. Literales del
+     * código en tablas y columnas. Falla en silencio ([]).
+     *
+     * @return array<int, array{items: string[], total: int}> id del tercero => hasta $max ítems y cuántos distintos hay
+     */
+    public function getItemsPorEntidadEnDocumentos(string $tablaDoc, string $colEntidad, string $tablaDetalle, string $colCabecera, array $ids, int $max = 10): array
+    {
+        $ids = array_values(array_filter(array_map('intval', $ids)));
+        foreach ([$tablaDoc, $colEntidad, $tablaDetalle, $colCabecera] as $ident) {
+            if (!preg_match('/^[a-z_]+$/', $ident)) {
+                return [];
+            }
+        }
+        if (!$ids) {
+            return [];
+        }
+        try {
+            $st = $this->db->prepare(
+                "SELECT c.{$colEntidad} AS id, TRIM(d.descripcion) AS item, COUNT(*) AS n
+                   FROM {$tablaDetalle} d
+                   JOIN {$tablaDoc} c ON c.id = d.{$colCabecera}
+                  WHERE c.id = ANY(string_to_array(:ids, ',')::int[])
+                    AND TRIM(COALESCE(d.descripcion, '')) <> ''
+                  GROUP BY c.{$colEntidad}, TRIM(d.descripcion)
+                  ORDER BY c.{$colEntidad}, n DESC, item"
+            );
+            $st->execute([':ids' => implode(',', $ids)]);
+            $out = [];
+            foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $id = (int) $r['id'];
+                $out[$id] ??= ['items' => [], 'total' => 0];
+                $out[$id]['total']++;
+                if (count($out[$id]['items']) < $max) {
+                    $out[$id]['items'][] = (string) $r['item'];
+                }
+            }
+            return $out;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
     /** Literal de arreglo de texto de PostgreSQL ({"a","b"}) para pasarlo como un solo parámetro. */
     private static function arrayTextoPg(array $valores): string
     {

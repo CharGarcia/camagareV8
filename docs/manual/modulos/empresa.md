@@ -5,8 +5,8 @@ categoria: Configuración de empresa
 ruta_modulo: modulos/empresa
 tipo: modulo
 visibilidad: admin
-etiquetas: empresa, sugerencias, productos similares, equivalencias, productos equivalentes, sin saldo, sin stock, ventana de sugerencias, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, ya pague, enviar comprobante, comprobante de pago, reportar pago, adjuntar pago, transferencia, pago en revision, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion, editar descripcion en la factura, cambiar descripcion del producto al facturar, modificar descripcion del item
-version: 1.44
+etiquetas: empresa, consignaciones, columnas de la consignacion, columnas por cliente, personalizar pdf, personalizar comprobante, caducidad por cliente, ocultar columnas del pdf, sugerencias, productos similares, equivalencias, productos equivalentes, sin saldo, sin stock, ventana de sugerencias, datos de la empresa, ruc, suscripcion, suscripcion vencida, vigencia, vencimiento, pago pendiente, aviso de pago, ya pague, enviar comprobante, comprobante de pago, reportar pago, adjuntar pago, transferencia, pago en revision, renovacion, mensualidad, cuota del sistema, establecimiento, punto de emision, logo, logo por punto de emision, logo de la caja, logo por sucursal, otra marca, quitar logo, ambiente, pruebas, produccion, configuracion, correo, email, smtp, envio de correos, cuerpo del correo, asunto, plantilla de correo, remitente, documentos legales, acuerdo de uso de datos, contrato de uso del sistema, aceptacion de documentos, documentos firmados, documentos cargados, archivos de la empresa, secuenciales, numeracion, tipos de documento, codDoc, eliminar secuencial, crear secuenciales, agregar todos los faltantes, facturas de reembolso, punto unico por empresa, punto inactivo, eliminar punto de emision con documentos, puntos duplicados, secuencial inicial, numero inicial, hueco, huecos, rellenar hueco, salto de numeracion, siguiente numero, retomar numeracion, presentacion de los items, agrupar items, agrupar por nombre, agrupar por lote, agrupar por nup, agrupar por serie, juntar lineas repetidas, sumar items iguales, mostrar lote en la factura, mostrar caducidad, mostrar unidad de medida, mostrar nup, descripcion del item, tirilla, ticket, impresion termica, modo de numeracion, numeracion por fecha, secuencial por fecha, reiniciar numeracion, reinicio anual, reinicio mensual, numeracion anual, numeracion mensual, correlativo por año, correlativo por mes, empezar de cero cada año, prefijo del año, numero con el año, volver a empezar la numeracion, editar descripcion en la factura, cambiar descripcion del producto al facturar, modificar descripcion del item
+version: 1.45
 orden: 5
 estado: activo
 ---
@@ -141,6 +141,31 @@ pestañas *Inventario* (aprobación de cargas) y *Pagos al Banco* (aprobación d
 lotes de transferencia) se centralizó en el módulo **Aprobaciones**
 (`modulos/aprobaciones-config`), junto con los demás procesos que requieren
 autorización.
+
+## Pestaña Consignaciones: columnas del comprobante por cliente
+
+En la pestaña **Consignaciones** se eligen las columnas del detalle de productos
+que salen en el **PDF y el Excel** del comprobante de las Consignaciones de
+Venta: Código, Descripción, Bodega, Lote, NUP, Caducidad, Cantidad, Retorno,
+Facturados y Acon. Descripción y Cantidad salen siempre.
+
+1. En **Para todos los clientes (por defecto)** marque las columnas que deben
+   salir normalmente. Vienen marcadas todas menos **Caducidad**, que es como
+   salía el comprobante antes de esta opción.
+2. Si un cliente necesita otras columnas (por ejemplo, la fecha de caducidad),
+   búsquelo en **Clientes con columnas propias**, agréguelo y marque sus columnas.
+   Al agregarlo, arranca con las columnas por defecto ya marcadas.
+3. Pulse **Guardar Configuración**.
+
+Un cliente de la lista usa **solo sus columnas**, aunque después cambien las
+columnas por defecto. Para que vuelva a usar las de la empresa, quítelo de la
+lista con la ✕ y guarde. Lote y Caducidad, aunque estén marcadas, solo salen si
+alguna línea de la consignación las tiene. Cada cambio queda registrado en el
+historial del sistema.
+
+Esta pestaña es parte de la **personalización de módulos**: cuando otro módulo
+admita opciones de este tipo, tendrá su propia pestaña aquí. Ver la guía
+*Personalización de módulos por empresa y por cliente*.
 
 ## Correo de comprobantes electrónicos
 
@@ -515,6 +540,7 @@ de taxis.
 
 ## Historial de cambios
 
+- **1.45** — Nueva pestaña **Consignaciones**: columnas del PDF y del Excel del comprobante de consignación, por defecto para toda la empresa y propias para los clientes que se elijan (por ejemplo, mostrar la fecha de caducidad solo a algunos clientes).
 - **1.44** — *¿Se puede editar la descripción de un producto o servicio en la factura?*: en Facturas y Recibos de Venta la descripción modificada ahora queda también en el catálogo de Productos, con el mismo código. En Proformas sigue quedando solo en la proforma.
 - **1.43** — Nuevo interruptor en la pestaña *Facturación*: **¿Se puede editar la descripción de un producto o servicio en la factura?** (viene apagado). Permite modificar la descripción de un ítem solo en esa Factura de Venta, Recibo de Venta o Proforma, sin cambiar el código ni el catálogo.
 - **1.42** — Nuevos interruptores en la pestaña *Facturación*: **Mostrar sugerencias de productos similares** y **Mostrar equivalencias** (vienen apagados). Deciden si Facturas de Venta y Car-Wash ofrecen reemplazos cuando un producto no tiene saldo.

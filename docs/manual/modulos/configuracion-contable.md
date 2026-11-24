@@ -6,7 +6,7 @@ ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
 etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario, iva al gasto, iva en compras al gasto, iva no deducible, cuenta de gasto en el iva, iva como costo, centro de costo en el buscador, proyecto en el buscador, ver centro de costo de la cuenta, produccion, cuentas de produccion, productos en proceso, materia prima, producto terminado, mano de obra aplicada, costos indirectos aplicados, merma anormal, orden de produccion, asignar categoria, asignar marca, producto sin categoria, producto sin marca
-version: 1.42
+version: 1.43
 orden: 5
 estado: activo
 ---
@@ -27,9 +27,9 @@ necesita.
 El selector **Seleccionar Tipo de Asiento** solo lista los tipos que la empresa usa:
 los que tienen algún registro en su módulo (por ejemplo, *Suscripciones - Devengo*
 aparece cuando hay al menos una suscripción) o que ya tienen alguna cuenta
-configurada. *Cierre del Ejercicio* aparece siempre. Si llega desde el aviso de
-asientos pendientes con **Configurar**, el tipo pedido se muestra aunque no cumpla
-esa regla.
+configurada. *Cierre del Ejercicio* aparece siempre. Si llega desde otra pantalla
+con un tipo de asiento ya elegido (por ejemplo, desde Configuración de Producción),
+el tipo pedido se muestra aunque no cumpla esa regla.
 
 ## De lo general a lo específico
 
@@ -572,14 +572,14 @@ permiso **Actualizar** de este módulo.
 Si el error es en un solo documento, el problema no está aquí sino en ese
 documento o en la ficha de la entidad implicada.
 
-## Llegar desde el aviso de asientos pendientes
+## Desde el aviso de asientos pendientes
 
 El aviso de asientos sin generar (Asientos Contables, Mayores, Estados
-Financieros y Balance de Comprobación) trae, en cada línea, un enlace
-**Configurar**. Abre esta pantalla en otra pestaña con el tipo de asiento ya
-elegido y la sección donde falta la cuenta desplegada: la General, las reglas por
-Proveedor o por Cliente, las formas de cobro o de pago, o los conceptos de
-ingresos o egresos. Solo falta asignar la cuenta.
+Financieros y Balance de Comprobación) ya no trae un enlace a esta pantalla: la
+mayoría de las cuentas que faltan se asignan en el propio aviso, en la pestaña de
+cada tipo de asiento (ver *Asientos contables → Asignar las cuentas que faltan
+desde el aviso*). Lo que el aviso no puede asignar (IVA por tarifa, códigos de
+retención, cuentas eliminadas) se configura aquí.
 
 ## Errores frecuentes
 
@@ -640,6 +640,8 @@ ingresos o egresos. Solo falta asignar la cuenta.
 
 ## Historial de cambios
 
+- **1.43** — El aviso de asientos pendientes ya no trae el enlace **Configurar** a esta pantalla: las cuentas que faltan
+  se asignan en el propio aviso, en la pestaña de cada tipo de asiento. Lo que el aviso no puede asignar se configura aquí.
 - **1.42** — En el aviso de productos sin categoría o marca, cada producto tiene **Asignar categoría** / **Asignar marca** para cambiarla ahí mismo, sin abrir Productos.
 - **1.41** — Nuevo tipo de asiento **Producción** (materia prima, productos en proceso, producto terminado, mano de obra, costos indirectos y merma), visible solo en las empresas que usan el módulo Producción y para los usuarios con acceso a él, con su interruptor en *Módulos que contabilizan*.
 - **1.40** — Al buscar una cuenta, cada sugerencia muestra el **centro de costo** y el **proyecto** vigentes de la cuenta, si los tiene.

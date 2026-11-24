@@ -99,6 +99,9 @@ class EmpresaController extends BaseModuloController
             'documentosLegales' => $documentosLegales,
             'documentosEmpresa' => $documentosEmpresa,
             'productoPropina' => $productoPropina,
+            // Personalización por módulo (una pestaña por módulo del catálogo
+            // App\Helpers\ConfigModulo, p. ej. «Consignaciones»).
+            'configModulos' => \App\Services\modulos\ConfigModuloService::crear()->datosPantalla($idEmpresa),
             'rutaModulo' => self::RUTA_MODULO,
             'fullWidth' => true
         ]);
@@ -180,6 +183,25 @@ class EmpresaController extends BaseModuloController
                     $this->requireActualizar();
                     $res = $this->service->saveInventarioConfig($idEmpresa, $_POST);
                     echo json_encode(['ok' => $res]);
+                    break;
+                case 'config_modulo':
+                    // Personalización de un módulo (catálogo App\Helpers\ConfigModulo).
+                    // Llega como JSON en `config`: {modulo, valores: {clave: valor},
+                    // clientes: {clave: {id_cliente: valor}}}.
+                    $this->requireActualizar();
+                    $idUsuario = (int) ($_SESSION['id_usuario'] ?? 0);
+                    $cfg = json_decode((string) ($_POST['config'] ?? ''), true);
+                    if (!is_array($cfg)) {
+                        throw new \Exception('Datos de configuración no válidos.');
+                    }
+                    \App\Services\modulos\ConfigModuloService::crear()->guardar(
+                        $idEmpresa,
+                        $idUsuario,
+                        (string) ($cfg['modulo'] ?? ''),
+                        is_array($cfg['valores'] ?? null) ? $cfg['valores'] : [],
+                        is_array($cfg['clientes'] ?? null) ? $cfg['clientes'] : []
+                    );
+                    echo json_encode(['ok' => true]);
                     break;
                 case 'enviar_documentos_legales':
                     // Se puede (re)enviar mientras no estén ACEPTADOS: sin enviar aún, o
@@ -270,6 +292,28 @@ class EmpresaController extends BaseModuloController
             $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
             $buscar = trim((string) ($_GET['q'] ?? ''));
             $rows = (new \App\repositories\modulos\ProductoRepository())->getServicios($idEmpresa, $buscar);
+            echo json_encode(['ok' => true, 'data' => $rows]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'data' => [], 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Clientes que coinciden con lo escrito, para elegir a qué clientes se aplica
+     * una opción personalizada «solo los clientes seleccionados».
+     */
+    public function getClientesConfigAjax(): void
+    {
+        header('Content-Type: application/json');
+        try {
+            $this->requireLeer();
+            $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
+            $buscar = trim((string) ($_GET['q'] ?? ''));
+            // Una petición por tecla: suelta el candado de la sesión.
+            session_write_close();
+            $rows = \App\Services\modulos\ConfigModuloService::crear()->buscarClientes($idEmpresa, $buscar);
             echo json_encode(['ok' => true, 'data' => $rows]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

@@ -81,6 +81,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         Inventario
                     </button>
                 </li>
+                <?php foreach (($configModulos ?? []) as $cmTab): ?>
+                    <!-- Personalización del módulo (catálogo App\Helpers\ConfigModulo) -->
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="cfgmod-<?= htmlspecialchars($cmTab['slug']) ?>-tab" data-bs-toggle="tab" data-bs-target="#cfgmod-<?= htmlspecialchars($cmTab['slug']) ?>" type="button" role="tab">
+                            <?= htmlspecialchars($cmTab['titulo']) ?>
+                        </button>
+                    </li>
+                <?php endforeach; ?>
             </ul>
         </div>
         <div class="card-body p-0">
@@ -2023,10 +2031,13 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                     </form>
                 </div>
 
+                <?php foreach (($configModulos ?? []) as $cm) { require __DIR__ . '/config_modulo_pane.php'; } ?>
+
             </div>
         </div>
     </div>
 </div>
+<script src="<?= $base ?>/js/modulos/empresa_config_modulos.js?v=<?= asset_ver('/js/modulos/empresa_config_modulos.js') ?>"></script>
 
 <!-- Modal: ICE -->
 <div class="modal fade" id="modalIce" tabindex="-1" aria-hidden="true">

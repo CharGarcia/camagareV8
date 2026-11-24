@@ -55,6 +55,8 @@ class SincronizadorAsientosService
     private array $conceptosPorTipo = [];
     /** Filas que se envían por concepto en un paso; el resto solo se cuenta. Ver agregarAsignable(). */
     private const MAX_ASIGNABLES_POR_CONCEPTO = 100;
+    /** Ítems comprados que se envían por proveedor (los más repetidos); del resto solo se dice cuántos. */
+    private const MAX_ITEMS_POR_FILA = 10;
     /** Filas en la lista por clave de concepto (para el tope). */
     private array $filasPorConcepto = [];
     /** Lo omitido por el tope: clave de concepto => [filas, documentos, vistas (claves ya contadas)]. */
@@ -2234,7 +2236,7 @@ class SincronizadorAsientosService
      *  - 'forma'    forma de cobro/pago sin cuenta.
      *  - 'opcion'   concepto de Ingresos/Egresos sin cuenta.
      * Lo que no se puede identificar sin ambigüedad (IVA por tarifa, cuentas eliminadas, nombres
-     * repetidos o con comas) no se ofrece: sigue por el enlace «Configurar».
+     * repetidos o con comas) no se ofrece: se configura en Configuración Contable.
      * Nunca interrumpe la generación: ante cualquier error, simplemente no ofrece filas.
      */
     private function registrarAsignables(string $clave, string $motivo, array $ids): void
@@ -2263,7 +2265,13 @@ class SincronizadorAsientosService
             }
 
             [$tipoEntidad, $tablaDoc, $colEntidad] = $cfg['entidad'];
+            [$tablaDet, $colCab] = $cfg['detalle'];
+            // En compras, qué le compraron a cada proveedor en estos documentos: ayuda a elegir la cuenta.
+            $itemsPorEntidad = !empty($cfg['items'])
+                ? $repo->getItemsPorEntidadEnDocumentos($tablaDoc, $colEntidad, $tablaDet, $colCab, $ids, self::MAX_ITEMS_POR_FILA)
+                : [];
             foreach ($repo->getEntidadesPorDocumento($tablaDoc, $colEntidad, $tipoEntidad, $tipoAsiento, $ids) as $p) {
+                $items = $itemsPorEntidad[$p['id']] ?? null;
                 foreach ($conceptos as $idAt => $r) {
                     $this->agregarAsignable("e:{$tipoAsiento}:{$tipoEntidad}:{$p['id']}:{$idAt}", $p['documentos'], [
                         'clase'               => 'entidad',
@@ -2271,12 +2279,12 @@ class SincronizadorAsientosService
                         'id_entidad'          => $p['id'],
                         'nombre'              => $p['nombre'],
                         'con_cuentas_propias' => $p['con_cuentas_propias'],
-                    ] + $this->datosConcepto($tipoAsiento, $cfg['seccion'], $idAt, $r));
+                    ] + ($items ? ['items' => $items['items'], 'items_total' => $items['total']] : [])
+                      + $this->datosConcepto($tipoAsiento, $cfg['seccion'], $idAt, $r));
                 }
             }
 
             // Cuenta por ítem de compra: solo cuando el motivo viene del reparto por línea.
-            [$tablaDet, $colCab] = $cfg['detalle'];
             if (!empty($cfg['items'])) {
                 foreach (self::itemsSinCuenta($motivo) as $concepto => $nombres) {
                     $r = $this->conceptoPorNombre($repo, $tipoAsiento, $concepto);
@@ -2411,6 +2419,13 @@ class SincronizadorAsientosService
     {
         if (isset($this->asignables[$clave])) {
             $this->asignables[$clave]['documentos'] += $documentos;
+            // El mismo proveedor en otro lote del paso: se suman sus ítems (sin repetir, con tope).
+            if (!empty($datos['items'])) {
+                $prev = $this->asignables[$clave]['items'] ?? [];
+                $todos = array_values(array_unique(array_merge($prev, $datos['items'])));
+                $this->asignables[$clave]['items'] = array_slice($todos, 0, self::MAX_ITEMS_POR_FILA);
+                $this->asignables[$clave]['items_total'] = max(count($todos), (int) ($this->asignables[$clave]['items_total'] ?? 0), (int) ($datos['items_total'] ?? 0));
+            }
             return;
         }
         // Tope por concepto: sin cuentas General, cada proveedor e ítem de cada compra sería una fila

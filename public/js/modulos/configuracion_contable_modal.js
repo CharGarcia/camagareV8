@@ -2836,7 +2836,7 @@
         }
     });
 
-    // Enlace «Configurar» del aviso de asientos pendientes (asientos_pendientes.js): el tipo de
+    // Entrada con destino (p. ej. desde Configuración de Producción, vía entrarAjax): el tipo de
     // asiento y la sección llegan en window.ASIENTOPROG_ABRIR (la vista los toma de la sesión, vía
     // entrarAjax(); la URL queda limpia). Carga ese tipo de asiento y abre la sección.
     const SECCIONES_ENLACE = {

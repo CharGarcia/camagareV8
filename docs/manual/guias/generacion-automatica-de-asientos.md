@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido, pestaña asiento contable, ver asiento del documento, generar asiento de una compra
-version: 1.10
+version: 1.11
 orden: 30
 estado: activo
 ---
@@ -171,7 +171,7 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 - **«Abrí el módulo y mi documento sigue sin asiento»**: casi siempre falta una
   cuenta. Entre a **Asientos Contables**: el aviso de asientos pendientes dice
-  qué configurar y su enlace **Configurar** lo lleva a la sección exacta. Muchas veces
+  qué configurar. Muchas veces
   puede asignar la cuenta en el mismo aviso y pulsar **Volver a
   generar**. Si no, corrija la cuenta y vuelva a abrir el módulo.
 - **«Tengo cientos de documentos atrasados y solo se generaron algunos»**: es lo
@@ -190,6 +190,8 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.11** — Las tablas del aviso muestran un registro por fila (sin la fila «Todos — en la General») y las líneas
+  del aviso ya no llevan el enlace «Configurar».
 - **1.10** — El aviso de asientos pendientes se abre en pestañas por tipo de asiento, con una tabla rápida que guarda la cuenta
   al elegirla (en la General o por proveedor, cliente, ítem, producto, categoría o marca).
 - **1.9** — El aviso de Asientos Contables, Mayores, Estados Financieros y Balance de

@@ -35,14 +35,27 @@ class ConsignacionVentaPdfService
     /** true = estado completo (con saldo por línea y resumen final); false = comprobante de entrega. */
     private bool $completo = false;
 
+    /** Claves de las columnas visibles del detalle (catálogo ConfigModulo, opción 'columnas_pdf'). */
+    private array $columnas = [];
+
     /**
-     * @param array $opciones ['completo' => bool].
+     * @param array $opciones ['completo' => bool, 'columnas' => string[]|null].
+     *                        'columnas': claves visibles según la personalización de la
+     *                        empresa o del cliente (ConfigModuloService::valor()); sin
+     *                        ella, las columnas por defecto del catálogo.
      *                        Sin opciones se genera el comprobante de entrega de siempre.
      */
     public function generar(array $cabecera, array $detalles, array $empresa, string $outputDest = 'I', array $opciones = [])
     {
         $numero = trim((string)($cabecera['serie'] ?? '') . '-' . (string)($cabecera['secuencial'] ?? ''), '-');
         $this->completo = !empty($opciones['completo']);
+        $this->columnas = is_array($opciones['columnas'] ?? null)
+            ? $opciones['columnas']
+            : (array) \App\Helpers\ConfigModulo::porDefecto('modulos/consignaciones-ventas', 'columnas_pdf');
+        // Descripción y cantidad no se pueden quitar (la fila de totales cuelga de Cantidad).
+        foreach (['descripcion', 'cantidad'] as $fija) {
+            if (!in_array($fija, $this->columnas, true)) $this->columnas[] = $fija;
+        }
 
         $this->pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $this->pdf->SetCreator('Sistema');
@@ -231,38 +244,51 @@ class ConsignacionVentaPdfService
         $pdf = $this->pdf;
         $mL  = $this->marginL;
 
-        // ¿Mostrar las columnas de lote y caducidad? Cada una solo si alguna línea la tiene.
-        $mostrarLote = false;
-        $mostrarCaducidad = false;
+        // Lote y caducidad solo se muestran si alguna línea los tiene (aunque estén
+        // entre las columnas elegidas).
+        $hayLote = false;
+        $hayCaducidad = false;
         foreach ($detalles as $d) {
-            if (trim((string)($d['lote'] ?? '')) !== '') { $mostrarLote = true; }
-            if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') { $mostrarCaducidad = true; }
+            if (trim((string)($d['lote'] ?? '')) !== '') { $hayLote = true; }
+            if (trim((string)($d['fecha_caducidad'] ?? '')) !== '') { $hayCaducidad = true; }
         }
 
-        // Columnas: sin precios ni subtotales. Cant / Ret / Fact y una
-        // columna "Acon" (acondicionamiento) para anotar a mano en la entrega.
-        // Títulos abreviados (Bod., Cant.) para que todo quepa en el ancho de la hoja.
-        // La descripción (w = 0) absorbe todo el ancho que no ocupan las demás.
-        // 'multi' => la celda pasa a varias líneas si el texto no cabe (la fila crece).
-        $cols = [
-            ['t' => 'Código',      'w' => 18, 'a' => 'L', 'k' => 'producto_codigo'],
-            ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre', 'multi' => true],
-            ['t' => 'Bod.',        'w' => 20, 'a' => 'L', 'k' => 'bodega_nombre',   'multi' => true],
+        // Columnas posibles, en orden y con las claves del catálogo
+        // App\Helpers\ConfigModulo (opción 'columnas_pdf'). Cuáles salen lo decide
+        // $this->columnas: la personalización de la empresa o del cliente.
+        // Sin precios ni subtotales. Títulos abreviados (Bod., Cant., Ret, Fact) para
+        // que todo quepa en el ancho de la hoja. La descripción (w = 0) absorbe todo
+        // el ancho que no ocupan las demás. 'multi' => la celda pasa a varias líneas
+        // si el texto no cabe (la fila crece).
+        // Lo entregado a cambio NO se muestra como columna: sigue descontándose del
+        // saldo por línea y aparece en el resumen final del estado.
+        $posibles = [
+            'codigo'      => ['t' => 'Código',      'w' => 18, 'a' => 'L', 'k' => 'producto_codigo'],
+            'descripcion' => ['t' => 'Descripción', 'w' => 0,  'a' => 'L', 'k' => 'producto_nombre', 'multi' => true],
+            'bodega'      => ['t' => 'Bod.',        'w' => 20, 'a' => 'L', 'k' => 'bodega_nombre',   'multi' => true],
+            'lote'        => ['t' => 'Lote',        'w' => 16, 'a' => 'L', 'k' => 'lote'],
+            'nup'         => ['t' => 'NUP',         'w' => 16, 'a' => 'L', 'k' => 'nup'],
+            'caducidad'   => ['t' => 'Caducidad',   'w' => 15, 'a' => 'C', 'k' => 'fecha_caducidad'],
+            'cantidad'    => ['t' => 'Cant.',       'w' => 14, 'a' => 'R', 'k' => 'cantidad'],
+            'retornado'   => ['t' => 'Ret',         'w' => 13, 'a' => 'R', 'k' => 'retornado'],
+            'facturado'   => ['t' => 'Fact',        'w' => 13, 'a' => 'R', 'k' => 'facturado'],
+            // Comprobante de entrega: "Acon" en blanco para anotar el acondicionamiento a mano.
+            'acon'        => ['t' => 'Acon',        'w' => 12, 'a' => 'C', 'k' => '__acon__'],
         ];
-        if ($mostrarLote) $cols[] = ['t' => 'Lote',      'w' => 16, 'a' => 'L', 'k' => 'lote'];
-        $cols[] = ['t' => 'NUP',        'w' => 16, 'a' => 'L', 'k' => 'nup'];
-        if ($mostrarCaducidad) $cols[] = ['t' => 'Caducidad', 'w' => 15, 'a' => 'C', 'k' => 'fecha_caducidad'];
-        $cols[] = ['t' => 'Cant.',      'w' => 14, 'a' => 'R', 'k' => 'cantidad'];
-        // "Ret" = retornado, "Fact" = facturado (abreviados para dar más ancho a la
-        // descripción). Lo entregado a cambio NO se muestra como columna: sigue
-        // descontándose del saldo por línea y aparece en el resumen final del estado.
-        $cols[] = ['t' => 'Ret',        'w' => 13, 'a' => 'R', 'k' => 'retornado'];
-        $cols[] = ['t' => 'Fact',       'w' => 13, 'a' => 'R', 'k' => 'facturado'];
-        // Comprobante de entrega: "Acon" en blanco para anotar el acondicionamiento a mano.
-        // Estado completo: en su lugar va el saldo que sigue en poder del cliente.
-        $cols[] = $this->completo
-            ? ['t' => 'Saldo', 'w' => 16, 'a' => 'R', 'k' => 'saldo']
-            : ['t' => 'Acon',  'w' => 12, 'a' => 'C', 'k' => '__acon__'];
+        $cols = [];
+        foreach ($posibles as $clave => $c) {
+            if ($clave === 'acon' && $this->completo) {
+                continue; // en el estado completo su lugar lo ocupa el saldo (abajo)
+            }
+            if (!in_array($clave, $this->columnas, true)) continue;
+            if ($clave === 'lote' && !$hayLote) continue;
+            if ($clave === 'caducidad' && !$hayCaducidad) continue;
+            $cols[] = $c;
+        }
+        // Estado completo: siempre cierra con el saldo que sigue en poder del cliente.
+        if ($this->completo) {
+            $cols[] = ['t' => 'Saldo', 'w' => 16, 'a' => 'R', 'k' => 'saldo'];
+        }
 
         $fixed = 0.0;
         foreach ($cols as $c) { $fixed += $c['w']; }
