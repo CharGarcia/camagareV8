@@ -120,7 +120,7 @@ $rucEmpresa = htmlspecialchars($rucEmpresa ?? '');
                         <div class="col-md-6">
                             <label class="form-label fw-bold small text-muted">Seleccionar Carpeta o Archivos XML</label>
                             <input type="file" class="form-control form-control-sm shadow-none" id="archivos_xml_input" accept=".xml" multiple webkitdirectory directory>
-                            <div class="form-text">Puedes subir múltiples archivos XML o seleccionar una carpeta entera.</div>
+                            <div class="form-text">Puedes subir múltiples archivos XML o seleccionar una carpeta entera. No hay límite de archivos: se envían por lotes de 10.</div>
 
                             <button type="button" class="btn btn-primary btn-sm mt-3 shadow-sm px-4" id="btnProcesarXml" onclick="procesarArchivosXml()">
                                 <i class="bi bi-upload me-1"></i> Procesar XMLs

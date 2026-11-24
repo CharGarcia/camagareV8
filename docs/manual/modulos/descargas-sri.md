@@ -6,7 +6,7 @@ ruta_modulo: modulos/descargas-sri
 tipo: modulo
 visibilidad: todos
 etiquetas: descargas sri, claves a no registrar, documentos para no descargar, lista negra, ignorar documento, no volver a descargar, documento anulado, factura anulada en el sri, emitida por error, otro establecimiento, alcance, comprobantes recibidos, xml, facturas de proveedores, importar compras, portal sri, empresas del sistema, documentos entre empresas, compra automática, factura entre empresas, adicional del item, detalle adicional, pdf, ride, leer pdf, cargar pdf, registrar desde pdf, comprobante sin xml, inteligencia artificial, clave de acceso, archivo txt, documento de más de un mes, sri no responde, no carga el documento, ingreso manual, registrar a mano, digitar comprobante, comprobante emitido sin xml, factura emitida en otro sistema, sin ia
-version: 1.19
+version: 1.20
 orden: 50
 estado: activo
 ---
@@ -313,6 +313,12 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 - **Carga Masiva XML: "no son de tipo XML (.xml)"**: solo se procesan archivos
   `.xml`. Si la carpeta tiene otros archivos (PDF, imágenes), se omiten y el
   aviso final indica cuántos se dejaron fuera.
+- **Carga Masiva XML: "Carga incompleta"**: la carga no tiene límite de
+  archivos; el sistema los envía **por lotes de 10** (o menos, si son pesados) y
+  muestra el avance. Si un lote no llega al servidor (corte de conexión, otro
+  registro en curso para la misma empresa), los demás lotes sí se procesan y el
+  aviso final **lista por nombre los archivos que quedaron sin procesar**.
+  Vuelva a cargar solo esos; los ya registrados no se duplican.
 - **No aparece la pestaña "Desde PDF"**: la empresa actual no tiene IA
   configurada y usted no es superadministrador. Configure Anthropic en
   *IA Soporte → Configuración*, o pida a un superadministrador que lea el PDF
@@ -444,6 +450,12 @@ se escribe una nueva; no hay forma de recuperarla desde el sistema.
 
 ## Historial de cambios
 
+- **1.20** — **Carga Masiva XML sin límite de archivos**: antes todos los XML
+  viajaban en un solo envío y el servidor descartaba sin aviso los que pasaban
+  de su tope (20). Ahora se envían por lotes de 10 con una barra de avance, y si
+  alguno no se procesa el aviso final lo lista por nombre. El correo a los
+  aprobadores de compras sigue siendo **uno solo por carga**, al terminar el
+  último lote, con todas las compras que quedaron pendientes.
 - **1.19** — Nueva pestaña **Ingreso manual**: registra a mano, sin
   inteligencia artificial, los comprobantes **emitidos por la empresa** cuyo XML
   no entrega el SRI. Usa la misma ventana de *Desde PDF*, con el emisor lleno y

@@ -367,11 +367,61 @@ class DescargasSriController extends BaseModuloController
             $db->prepare('SELECT pg_advisory_unlock(?, hashtext(?))')->execute([$lockNs, $ruc]);
         }
 
-        // Aprobación de compras: un solo correo con todas las que quedaron
-        // pendientes en este lote, en vez de uno por comprobante.
-        $registerService->notificarComprasPendientes();
+        // Aprobación de compras: un solo correo con todas las pendientes, en vez de uno
+        // por comprobante. La pantalla envía la carga en varios lotes (peticiones) con
+        // `aviso_al_cierre=1`: cada lote guarda sus pendientes en la sesión y el correo
+        // sale una sola vez en cerrarCargaXmlAjax(). Sin ese campo, avisa aquí mismo.
+        if (($_POST['aviso_al_cierre'] ?? '') === '1') {
+            $nuevas = $registerService->tomarComprasPendientes();
+            if ($nuevas) {
+                $_SESSION[self::SESION_PENDIENTES_XML] = array_merge(
+                    (array) ($_SESSION[self::SESION_PENDIENTES_XML] ?? []),
+                    $nuevas
+                );
+            }
+        } else {
+            $registerService->notificarComprasPendientes();
+        }
 
         echo json_encode(['ok' => true, 'resultados' => $resultados, 'total' => $total]);
+        exit;
+    }
+
+    /** Compras pendientes de aprobación acumuladas por los lotes de la Carga Masiva XML. */
+    private const SESION_PENDIENTES_XML = 'sri_xml_compras_pendientes';
+
+    /**
+     * Cierra una Carga Masiva XML: envía UN correo a los aprobadores con todas las
+     * compras que quedaron pendientes en sus lotes. Si una carga anterior no llegó a
+     * cerrarse (se cerró la pestaña, se cortó la conexión), sus pendientes siguen en
+     * la sesión y salen en este mismo aviso.
+     */
+    public function cerrarCargaXmlAjax(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $pendientes = (array) ($_SESSION[self::SESION_PENDIENTES_XML] ?? []);
+        unset($_SESSION[self::SESION_PENDIENTES_XML]);
+        // El envío del correo puede tardar: no frenar las demás peticiones del usuario.
+        session_write_close();
+
+        $notificadas = 0;
+        // El aviso se arma por empresa (el correo va a los aprobadores de cada una):
+        // si quedó algo de una carga sin cerrar hecha en otra empresa, sale aparte.
+        $porEmpresa = [];
+        foreach ($pendientes as $p) {
+            if (is_array($p) && !empty($p['id_empresa'])) {
+                $porEmpresa[(int) $p['id_empresa']][] = $p;
+            }
+        }
+        foreach ($porEmpresa as $grupo) {
+            $registerService = new DocumentoAutomatedRegisterService();
+            $registerService->agregarComprasPendientes($grupo);
+            $notificadas += $registerService->notificarComprasPendientes();
+        }
+
+        echo json_encode(['ok' => true, 'notificadas' => $notificadas]);
         exit;
     }
     // ── Desde PDF (RIDE): leer con IA → revisar → registrar ─────────────────

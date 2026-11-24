@@ -527,6 +527,36 @@ class DocumentoAutomatedRegisterService
     }
 
     /**
+     * Entrega las compras pendientes acumuladas SIN enviar el correo y vacía la
+     * lista (así el destructor tampoco lo envía). Lo usa la Carga Masiva XML, que
+     * llega en varias peticiones (lotes): cada una guarda sus pendientes y el
+     * aviso sale una sola vez al cerrar la carga, con agregarComprasPendientes()
+     * + notificarComprasPendientes().
+     *
+     * @return array<int, array{id:int, id_empresa:int, token:string}>
+     */
+    public function tomarComprasPendientes(): array
+    {
+        $pendientes = $this->comprasPendientes;
+        $this->comprasPendientes = [];
+        return $pendientes;
+    }
+
+    /** Suma compras pendientes tomadas antes con tomarComprasPendientes(). */
+    public function agregarComprasPendientes(array $pendientes): void
+    {
+        foreach ($pendientes as $c) {
+            if (!is_array($c) || empty($c['id']) || empty($c['id_empresa']) || empty($c['token'])) continue;
+            if ($this->esComprapendiente((int) $c['id'])) continue;
+            $this->comprasPendientes[] = [
+                'id'         => (int) $c['id'],
+                'id_empresa' => (int) $c['id_empresa'],
+                'token'      => (string) $c['token'],
+            ];
+        }
+    }
+
+    /**
      * Red de seguridad: hay ocho sitios que registran comprobantes en lote (la
      * pantalla de Descargas SRI, el agente automático, la API v1…). En vez de
      * exigirle a cada uno que recuerde cerrar, el aviso sale también al liberar

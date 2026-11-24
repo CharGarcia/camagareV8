@@ -175,37 +175,140 @@ function procesarArchivosXml() {
     btn.disabled = true;
     btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Procesando XMLs...`;
 
-    const formData = new FormData();
-    archivosXml.forEach(f => formData.append('archivos_xml[]', f));
+    enviarXmlPorLotes(archivosXml, omitidos).finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = `<i class="bi bi-upload me-1"></i> Procesar XMLs`;
+    });
+}
 
-    fetch(`${BASE_URL}/modulos/descargas_sri/procesarArchivosXmlAjax`, {
-        method: 'POST',
-        body: formData
-    })
-    .then(res => res.json())
-    .then(data => {
-        btn.disabled = false;
-        btn.innerHTML = `<i class="bi bi-upload me-1"></i> Procesar XMLs`;
-        
-        if (data.ok) {
-            renderResultados(data.resultados);
-            input.value = '';
-            Swal.fire({
-                icon: 'success',
-                title: 'Proceso Masivo Finalizado',
-                text: `Se procesaron ${data.total} archivos correctamente.`
-                    + (omitidos > 0 ? ` Se omitieron ${omitidos} archivo(s) que no son de tipo XML (.xml).` : ''),
-                timer: 3000
-            });
-        } else {
-            Swal.fire('Error', data.error, 'error');
+// Tope de cada envío de la Carga Masiva XML. PHP descarta en silencio los archivos que
+// pasan de `max_file_uploads` (20 por defecto) y rechaza la petición entera si supera
+// `post_max_size`, así que la selección se parte en lotes pequeños y se envían uno tras
+// otro: no hay límite de archivos por carga y ninguno se pierde sin aviso.
+const XML_LOTE_MAX_ARCHIVOS = 10;
+const XML_LOTE_MAX_BYTES = 6 * 1024 * 1024;
+
+function armarLotesXml(archivos) {
+    const lotes = [];
+    let lote = [];
+    let bytes = 0;
+    archivos.forEach(f => {
+        if (lote.length > 0 && (lote.length >= XML_LOTE_MAX_ARCHIVOS || bytes + f.size > XML_LOTE_MAX_BYTES)) {
+            lotes.push(lote);
+            lote = [];
+            bytes = 0;
         }
-    })
-    .catch(err => {
-        console.error(err);
-        btn.disabled = false;
-        btn.innerHTML = `<i class="bi bi-upload me-1"></i> Procesar XMLs`;
-        Swal.fire('Error', 'Problema de conexión con el servidor.', 'error');
+        lote.push(f);
+        bytes += f.size;
+    });
+    if (lote.length > 0) lotes.push(lote);
+    return lotes;
+}
+
+async function enviarXmlPorLotes(archivosXml, omitidos) {
+    const escapar = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const lotes = armarLotesXml(archivosXml);
+    const total = archivosXml.length;
+    const barra = porc => `<div class="progress"><div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: ${porc}%">${porc}%</div></div>`;
+
+    let enviados = 0;      // archivos ya enviados (con o sin éxito)
+    let procesados = 0;    // archivos que el servidor confirmó haber recibido
+    const sinProcesar = []; // nombres de los archivos que no llegaron a procesarse
+    let detenido = '';     // mensaje del servidor que obliga a parar (p. ej. otro registro en curso)
+
+    Swal.fire({
+        title: 'Procesando XML',
+        html: `Enviando <b>${total}</b> archivo(s)...<br><br>${barra(0)}`,
+        allowOutsideClick: false,
+        showConfirmButton: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    for (let i = 0; i < lotes.length; i++) {
+        const lote = lotes[i];
+
+        if (detenido) {
+            lote.forEach(f => sinProcesar.push(f.name));
+            continue;
+        }
+
+        try {
+            const formData = new FormData();
+            lote.forEach(f => formData.append('archivos_xml[]', f));
+            // El correo de compras pendientes de aprobación no sale por lote: el
+            // servidor las acumula y se envía uno solo al cerrar la carga (abajo).
+            formData.append('aviso_al_cierre', '1');
+
+            const res = await fetch(`${BASE_URL}/modulos/descargas_sri/procesarArchivosXmlAjax`, {
+                method: 'POST',
+                body: formData
+            });
+            const data = await res.json();
+
+            if (data.ok) {
+                renderResultados(data.resultados);
+                const recibidos = Array.isArray(data.resultados) ? data.resultados.length : 0;
+                procesados += recibidos;
+                // El servidor recibió menos archivos de los enviados (su límite es menor
+                // que el lote): los que sobran son los últimos del lote.
+                lote.slice(recibidos).forEach(f => sinProcesar.push(f.name));
+            } else {
+                lote.forEach(f => sinProcesar.push(f.name));
+                if (data.en_curso) detenido = data.error || 'Ya hay un registro de comprobantes en curso.';
+                else console.error('Lote de XML rechazado:', data.error);
+            }
+        } catch (err) {
+            // Fallo de red o respuesta no válida: el lote se da por no procesado y se
+            // sigue con el siguiente; al final se listan sus archivos.
+            console.error(err);
+            lote.forEach(f => sinProcesar.push(f.name));
+        }
+
+        enviados += lote.length;
+        const porc = Math.round((enviados / total) * 100);
+        Swal.update({
+            html: `Procesando: <b>${enviados}</b> de <b>${total}</b> archivo(s)...<br><br>${barra(porc)}`
+        });
+    }
+
+    // Cierre de la carga: un solo correo a los aprobadores con todas las compras que
+    // quedaron pendientes. Se llama aunque algún lote haya fallado. Si el cierre no
+    // llega, las pendientes quedan guardadas y salen con el cierre de la próxima carga.
+    if (procesados > 0) {
+        for (let intento = 0; intento < 2; intento++) {
+            try {
+                const resCierre = await fetch(`${BASE_URL}/modulos/descargas_sri/cerrarCargaXmlAjax`, { method: 'POST' });
+                if (resCierre.ok) break;
+            } catch (err) {
+                console.error('No se pudo cerrar la carga de XML:', err);
+            }
+        }
+    }
+
+    const notaOmitidos = omitidos > 0 ? ` Se omitieron ${omitidos} archivo(s) que no son de tipo XML (.xml).` : '';
+
+    if (sinProcesar.length === 0) {
+        document.getElementById('archivos_xml_input').value = '';
+        Swal.fire({
+            icon: 'success',
+            title: 'Proceso Masivo Finalizado',
+            text: `Se procesaron ${procesados} archivo(s). Revise el resultado de cada uno en la tabla.` + notaOmitidos,
+            timer: 4000
+        });
+        return;
+    }
+
+    const MAX_LISTA = 30;
+    const lista = sinProcesar.slice(0, MAX_LISTA).map(n => `<li>${escapar(n)}</li>`).join('')
+        + (sinProcesar.length > MAX_LISTA ? `<li>… y ${sinProcesar.length - MAX_LISTA} más</li>` : '');
+    Swal.fire({
+        icon: procesados > 0 ? 'warning' : 'error',
+        title: procesados > 0 ? 'Carga incompleta' : 'No se pudo procesar',
+        html: (detenido ? `<p>${escapar(detenido)}</p>` : '')
+            + `<p>Se procesaron <b>${procesados}</b> de <b>${total}</b> archivo(s). `
+            + `Quedaron <b>${sinProcesar.length}</b> sin procesar; vuelva a cargarlos:</p>`
+            + `<ul class="text-start small" style="max-height:220px;overflow:auto;">${lista}</ul>`
+            + (notaOmitidos ? `<p class="small text-muted mb-0">${notaOmitidos}</p>` : '')
     });
 }
 
