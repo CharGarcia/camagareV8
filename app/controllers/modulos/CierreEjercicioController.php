@@ -209,12 +209,12 @@ class CierreEjercicioController extends BaseModuloController
     {
         $this->requireLeer();
         [$rows, $nombreEmpresa] = $this->filasExportacion();
-        $headers = ['Año', 'Fecha cierre', 'Inicio apertura', 'Fin nuevo período', 'Saldos desde', 'Asiento cierre', 'Asiento apertura', 'Resultado del año',
+        $headers = ['Año', 'Saldos desde', 'Fecha cierre', 'Inicio apertura', 'Fin nuevo período', 'Asiento cierre', 'Asiento apertura', 'Resultado del año',
                     'Resultados anteriores', 'Activos', 'Pasivos', 'Patrimonio', 'Estado', 'Registrado por', 'Registrado el'];
         $data = [];
         foreach ($rows as $r) {
             $data[] = [
-                $r['anio'], $r['fmt_fecha_cierre'], $r['fmt_fecha_apertura'], $r['fmt_fin_periodo'], $r['fmt_saldos_desde'], $r['numero_cierre'] ?? '', $r['numero_apertura'] ?? '',
+                $r['anio'], $r['fmt_saldos_desde'], $r['fmt_fecha_cierre'], $r['fmt_fecha_apertura'], $r['fmt_fin_periodo'], $r['numero_cierre'] ?? '', $r['numero_apertura'] ?? '',
                 (float) $r['resultado'], (float) $r['resultado_anterior'], (float) $r['total_activos'],
                 (float) $r['total_pasivos'], (float) $r['total_patrimonio'], $r['estado_texto'],
                 $r['creado_por_nombre'] ?? '', $r['fmt_created_at'],
@@ -250,9 +250,9 @@ class CierreEjercicioController extends BaseModuloController
                 <thead>
                     <tr>
                         <th style="width:6%">Año</th>
+                        <th style="width:9%">Saldos desde</th>
                         <th style="width:9%">Inicio apertura</th>
                         <th style="width:9%">Fin nuevo período</th>
-                        <th style="width:9%">Saldos desde</th>
                         <th style="width:10%">Asiento cierre</th>
                         <th style="width:10%">Asiento apertura</th>
                         <th style="width:11%" class="r">Resultado del año</th>
@@ -266,9 +266,9 @@ class CierreEjercicioController extends BaseModuloController
                     <?php foreach ($rows as $r): ?>
                         <tr>
                             <td style="width:6%"><?= (int) $r['anio'] ?></td>
+                            <td style="width:9%"><?= htmlspecialchars($r['fmt_saldos_desde']) ?></td>
                             <td style="width:9%"><?= htmlspecialchars($r['fmt_fecha_apertura']) ?></td>
                             <td style="width:9%"><?= htmlspecialchars($r['fmt_fin_periodo']) ?></td>
-                            <td style="width:9%"><?= htmlspecialchars($r['fmt_saldos_desde']) ?></td>
                             <td style="width:10%"><?= htmlspecialchars((string) ($r['numero_cierre'] ?? '')) ?></td>
                             <td style="width:10%"><?= htmlspecialchars((string) ($r['numero_apertura'] ?? '')) ?></td>
                             <td style="width:11%" class="r"><?= $n($r['resultado']) ?></td>

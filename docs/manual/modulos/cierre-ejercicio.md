@@ -91,9 +91,9 @@ registró y cuándo.
 
 ### Columnas del listado
 
-Año, Fecha cierre (31-12 del año cerrado), **Inicio apertura** (fecha del asiento de
-apertura, 01-01 del año siguiente), **Fin nuevo período** (31-12 del año siguiente), Saldos
-desde, Asiento cierre, Asiento apertura, Resultado del año, Activos, Patrimonio, Estado y
+Año, Saldos desde, Fecha cierre (31-12 del año cerrado), **Inicio apertura** (fecha del asiento de
+apertura, 01-01 del año siguiente), **Fin nuevo período** (31-12 del año siguiente),
+Asiento cierre, Asiento apertura, Resultado del año, Activos, Patrimonio, Estado y
 Registrado. Todas se pueden ordenar, ocultar desde el botón de columnas y salen también en
 el Excel y el PDF.
 
