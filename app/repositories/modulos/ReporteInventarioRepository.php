@@ -113,6 +113,41 @@ class ReporteInventarioRepository extends BaseRepository
         parent::__construct('inventario_kardex');
     }
 
+    // ────────────────────────────────────────────────────────────────
+    // CANCELAR UNA CONSULTA EN CURSO (botón "Cancelar" de la barra de progreso)
+    // ────────────────────────────────────────────────────────────────
+
+    /**
+     * Pone a la conexión de ESTA petición una etiqueta (application_name) con la que otra
+     * petición puede encontrarla y cancelar su consulta. La conexión no es persistente
+     * (Database::getConnection, una por petición), así que la etiqueta muere con ella.
+     * set_config en vez de SET porque SET no admite parámetros.
+     */
+    public function etiquetarConexion(string $etiqueta): void
+    {
+        $st = $this->db->prepare("SELECT set_config('application_name', :etiqueta, false)");
+        $st->execute([':etiqueta' => $etiqueta]);
+    }
+
+    /**
+     * Cancela la consulta que esté corriendo en la conexión con esa etiqueta
+     * (pg_cancel_backend: corta solo la sentencia en curso, no cierra la conexión; la
+     * petición que la lanzó recibe el error 57014 y termina). Devuelve cuántas canceló.
+     * La etiqueta la arma el controlador con el id del usuario: nadie cancela lo ajeno.
+     */
+    public function cancelarConsultaEtiquetada(string $etiqueta): int
+    {
+        $st = $this->db->prepare(
+            "SELECT pg_cancel_backend(pid) AS cancelada
+               FROM pg_stat_activity
+              WHERE application_name = :etiqueta
+                AND datname = current_database()
+                AND pid <> pg_backend_pid()"
+        );
+        $st->execute([':etiqueta' => $etiqueta]);
+        return count(array_filter($st->fetchAll(PDO::FETCH_COLUMN)));
+    }
+
     public static function labelOrigen(?string $tipo): string
     {
         if ($tipo === null || $tipo === '') {
@@ -1700,8 +1735,8 @@ class ReporteInventarioRepository extends BaseRepository
             $where .= " AND cvd.fecha_caducidad <= :fecha_caducidad_hasta";
             $params[':fecha_caducidad_hasta'] = $filtros['fecha_caducidad_hasta'];
         }
-        // Categoría y marca llegan solo desde el desglose "Lote + consignación" de Existencias
-        // (la pestaña Consignaciones no tiene esos filtros). Van como subconsulta sobre
+        // Categoría llega solo desde el desglose "Lote + consignación" de Existencias; marca,
+        // de ahí y del filtro Marca de la pestaña Consignaciones. Van como subconsulta sobre
         // productos en vez de un JOIN dentro del CTE de líneas: así no cambian el plan de
         // la consulta base, que es la más cara del módulo.
         if (!empty($filtros['id_categoria'])) {
@@ -1885,7 +1920,7 @@ class ReporteInventarioRepository extends BaseRepository
      *  Son los únicos que el modal de detalle reaplica: los de cabecera (cliente, fecha, estado,
      *  asesor, responsable) ya se cumplen por el solo hecho de estar viendo ese documento. */
     public const FILTROS_LINEA_CONSIGNACION = [
-        'id_producto', 'id_bodega', 'numero_lote', 'nup',
+        'id_producto', 'id_bodega', 'id_marca', 'numero_lote', 'nup',
         'fecha_caducidad_desde', 'fecha_caducidad_hasta',
     ];
 

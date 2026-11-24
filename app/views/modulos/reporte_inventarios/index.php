@@ -539,6 +539,13 @@ $riSubtitulo = count($riNombres) > 1
                                 </select>
                             </div>
                             <div>
+                                <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Marca</label>
+                                <select id="ri-cv-marca" class="form-select form-select-sm shadow-none border" style="width:140px;">
+                                    <option value="">Todas</option>
+                                    <?php foreach (($marcas ?? []) as $m): ?><option value="<?= (int) $m['id'] ?>"><?= htmlspecialchars($m['nombre']) ?></option><?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div>
                                 <label class="form-label small fw-bold mb-1 d-block text-muted text-uppercase" style="font-size:.65rem;">Asesor</label>
                                 <select id="ri-cv-vendedor" class="form-select form-select-sm shadow-none border" style="width:140px;">
                                     <option value="">Todos</option>

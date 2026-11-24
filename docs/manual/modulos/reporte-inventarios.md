@@ -5,8 +5,8 @@ categoria: Reportes
 ruta_modulo: modulos/reporte_inventarios
 tipo: modulo
 visibilidad: todos
-etiquetas: reporte de inventario, filtros en el excel, saldo al, fecha del saldo en el excel, encabezado del excel, ordenar consignaciones, ordenar movimientos, ordenar valorizacion, ordenar auditoria, ordenar tabla, ordenar de mayor a menor, pdf ordenado, excel ordenado, exportar en el mismo orden, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, pestañas que puede ver, pestañas por usuario, ocultar pestañas, me quitaron una pestaña, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote, costo en cero, no muestra el costo, costo del producto, costo de la ficha, actualice el costo, cambie el costo y no se ve, de donde sale el costo, consignacion de otra bodega, consignacion de otro usuario, no veo una consignacion
-version: 1.51
+etiquetas: reporte de inventario, filtros en el excel, saldo al, fecha del saldo en el excel, encabezado del excel, ordenar consignaciones, ordenar movimientos, ordenar valorizacion, ordenar auditoria, ordenar tabla, ordenar de mayor a menor, pdf ordenado, excel ordenado, exportar en el mismo orden, comprobar con contabilidad, cuadrar con contabilidad, inventario vs contabilidad, kardex vs contabilidad, valor del inventario contable, cuenta de inventario, no cuadra con contabilidad, no descarga el excel, excel no descarga, excel en blanco, demasiados datos, excel muy grande, filtrar por año, no descarga el pdf, pdf en blanco, pdf muy grande, excel de la consignacion, numero de factura en el excel, numero de retorno en el excel, totales en el excel, existencias, stock por bodega, valorizacion, kardex, faltantes, exportar, auditoria, stock cacheado, corregir stock, consignaciones, stock por lote, por caducidad, que se vence, vencimientos, limpiar filtros, lento, tarda, se cuelga, tarda en abrir, tarda en entrar, busqueda lenta, se recarga la pagina, ordenar por columna, pierde el resultado, no puedo abrir otro modulo mientras carga, primeras 5000 filas, listado recortado, lote, nup, asesor, detalle de consignacion, totales del detalle, pdf del documento relacionado, permisos, pestañas, no veo la pestaña, no aparece consignaciones, no aparece existencias, pestañas que puede ver, pestañas por usuario, ocultar pestañas, me quitaron una pestaña, pdf de la consignacion, estado de la consignacion, imprimir consignacion con saldo, consignacion completa, saldo en poder del cliente, no veo una bodega, bodegas asignadas, acceso a bodegas, solo mi bodega, falta una bodega, no aparece la bodega, codigo de producto en consignacion, codigo del producto en el detalle, codigo como primera columna, columna codigo, codigo de producto en el reporte, ordenar por codigo, lote mas consignacion, que lote tiene cada cliente, lote por cliente, consignacion por lote, con quien salio el lote, entregas por lote, se genera solo, se consulta solo, no muestra datos, boton mostrar, hay que pulsar mostrar, al elegir el producto se pone a cargar, al cambiar el anio se pone a cargar, no quiero que cargue solo, carga sola, consulta automatica, lotes en cero, lote agotado, no muestra lotes vacios, stock cero, lotes sin stock, filas en cero, por que no aparece el lote, lote desaparecio del reporte, boton mostrar bloqueado, no puedo pulsar mostrar, doble clic en mostrar, barra de progreso, porcentaje de avance, cuanto falta, se queda cargando, indicador de carga, stock negativo, por que esta en negativo, saldo negativo, negativo en existencias, seguimiento, trazabilidad del lote, de donde sale el negativo, lote sin entrada, lote duplicado, lote mal escrito, movimientos de otro ambiente, kardex de un lote, filtros no funcionan, no filtra, no coge los filtros, filtro de estado, filtro consignado, saldo a fecha, fecha de corte, saldo inicial, saldo anterior, saldo de arranque, saldo al inicio del mes, kardex empieza en cero, saldo empieza en cero, resumen de cuadre, cuadre de inventario, no cuadra, movimientos y existencias no coinciden, saldo distinto, reverso por cambio a borrador, retorno en borrador, reactivacion, entrada por reactivacion, correcciones, ocultar correcciones, movimientos que se anulan, el saldo no es el stock, filtro de lote en existencias, stock del lote, costo en cero, no muestra el costo, costo del producto, costo de la ficha, actualice el costo, cambie el costo y no se ve, de donde sale el costo, consignacion de otra bodega, consignacion de otro usuario, no veo una consignacion, cancelar, cancelar reporte, detener consulta, parar la consulta, tarda mucho, cancelar excel, cancelar pdf, filtrar por marca, marca en consignaciones, consignaciones por marca, fecha hasta menor que desde, rango de fechas, fechas al reves, diferencia en el resumen de cuadre, no cuadra y auditoria no muestra nada
+version: 1.53
 orden: 40
 estado: activo
 ---
@@ -201,6 +201,18 @@ sin quedarse esperando resultados que todavía no se pidieron.
 Al abrir el módulo, y cada vez que se limpian los filtros, la tabla muestra
 *Aplica los filtros y genera el reporte* hasta el primer Mostrar.
 
+## Rango de fechas: Hasta no puede ser anterior a Desde
+
+En todas las pestañas, el calendario de **Hasta** no deja elegir un día anterior
+a **Desde** (ni Desde uno posterior a Hasta), tanto en las fechas del periodo
+como en las de **caducidad**. Si se escribe a mano un rango invertido, **Mostrar**,
+**Excel** y **PDF** avisan *«Rango de fechas no válido»* y no consultan.
+
+Antes se podía: el reporte salía sin error pero mal. En *Movimientos*, el
+**Resumen de cuadre** mostraba una diferencia (p. ej. *Diferencia de −1.00*) que
+no existe, y la pestaña *Auditoría* no encontraba nada porque el inventario sí
+estaba bien. Si vio ese aviso, revise primero las fechas.
+
 ## Limpiar los filtros
 
 Cada pestaña tiene, junto al botón **Mostrar**, un botón con un icono de goma
@@ -276,6 +288,20 @@ barra dice en cuál va:
 | 80 – 99 % | *Recibiendo datos · 1,4 MB de 4,7 MB* | **Real.** Son los datos que ya llegaron al navegador sobre el total que el servidor anunció. |
 
 La barra no llega a 100 %: al terminar, la tabla con los datos ocupa su lugar.
+
+### Cancelar un reporte que tarda demasiado
+
+Debajo de la barra hay un botón **Cancelar**. Al pulsarlo la consulta se
+detiene **también en el servidor** (no solo deja de esperarse en la pantalla),
+la tabla avisa *"Consulta cancelada"* y el botón **Mostrar** vuelve a quedar
+libre para ajustar los filtros (un rango de fechas más corto, una bodega, una
+marca) y volver a consultar. Funciona igual en las cinco pestañas.
+
+El aviso **"Generando Excel…"** o **"Generando PDF…"** de las exportaciones trae
+el mismo botón **Cancelar**: corta la descarga y la consulta.
+
+Volver a pulsar **Mostrar** con otros filtros mientras la anterior sigue
+corriendo también cancela la anterior en el servidor.
 
 Si aun así se llegaran a solapar dos búsquedas de la misma pestaña, la anterior
 se descarta y la tabla muestra solo el resultado de la última.
@@ -518,8 +544,8 @@ al pasar el mouse.
 
 ### Búsqueda y filtros
 
-Los filtros de **Producto, Bodega, Lote, NUP y Caducidad** actúan sobre las
-líneas: si busca un lote, el "Total productos" y el "Saldo" de cada fila suman
+Los filtros de **Producto, Bodega, Marca, Lote, NUP y Caducidad** actúan sobre
+las líneas: si busca un lote o una marca, el "Total productos" y el "Saldo" de cada fila suman
 **solo** las líneas de ese lote, no el documento entero. Los de **Cliente,
 Asesor, Responsable, Estado, fechas y N° Consignación** actúan sobre el
 documento completo. El N° de consignación acepta tanto el secuencial solo
@@ -800,6 +826,8 @@ ahí.
 
 ## Historial de cambios
 
+- **1.53** — **Control del rango de fechas**: Hasta ya no puede ser anterior a Desde (periodo y caducidad, en todas las pestañas, en pantalla y en el servidor). Con el rango invertido, el resumen de cuadre de Movimientos anunciaba diferencias inexistentes.
+- **1.52** — **Cancelar un reporte largo**: la barra de progreso de las cinco pestañas y el aviso «Generando Excel/PDF…» traen un botón **Cancelar** que detiene la consulta también en el servidor. **Filtro Marca en Consignaciones**: muestra solo las líneas de productos de esa marca (el listado, el detalle, el Excel y el PDF).
 - **1.51** — **Encabezado en el Excel de Movimientos**: el Excel de Movimientos indica el periodo, la fecha de generación, Agrupar por, Correcciones y los filtros aplicados, sin repetir los que ya salen como columna (Bodega, Producto, Tipo, Origen, Lote, Observaciones…).
 - **1.50** — **Encabezado del Excel sin repetir columnas**: los filtros cuyo dato ya sale como columna del Excel (Bodega, Categoría, Producto, Estado, Consignación, Lote, NUP, Caducidad) ya no se listan en el encabezado. Se mantiene el rango de Caducidad cuando se aplicó.
 - **1.49** — **Excel de Existencias**: se retira la columna **Caducidad** del detalle *Por lotes* (agregada en la 1.48). El Excel lleva ahora un encabezado con **Saldo al** (fecha de corte o, sin ella, fecha y hora de la descarga), **Generado el** y todos los filtros aplicados con su valor.

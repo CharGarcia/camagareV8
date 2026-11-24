@@ -106,6 +106,105 @@ function RI_colores(n) {
 const RI_busquedas = {};
 
 // ════════════════════════════════════════════════════════════════════
+// CANCELAR UNA CONSULTA LARGA
+// ════════════════════════════════════════════════════════════════════
+// Cada consulta (Mostrar, Excel o PDF) viaja con un id_consulta propio. Con él el servidor
+// etiqueta su conexión a PostgreSQL, y el botón "Cancelar" pide cortar esa consulta en la
+// base (cancelarConsultaAjax): abortar solo el fetch dejaría a la base trabajando igual.
+
+// ════════════════════════════════════════════════════════════════════
+// RANGOS DE FECHAS (Desde ≤ Hasta)
+// ════════════════════════════════════════════════════════════════════
+// Con "Hasta" anterior a "Desde" el reporte no da error pero sale mal: en Movimientos el
+// saldo inicial suma todo lo anterior a "Desde" (incluidos movimientos posteriores a
+// "Hasta") y el resumen de cuadre muestra una diferencia que no existe. Por eso:
+//  - el calendario de cada "Hasta" no deja elegir un día anterior a su "Desde" (y al revés);
+//  - Mostrar, Excel y PDF se niegan a consultar con un rango invertido (escrito a mano);
+//  - el servidor lo vuelve a validar (ReporteInventariosController::validarRangosFechas).
+const RI_RANGOS_FECHA = [
+    ['ri-mv-fecha-desde', 'ri-mv-fecha-hasta'],
+    ['ri-cv-fecha-desde', 'ri-cv-fecha-hasta'],
+    ['ri-ex-caducidad-desde', 'ri-ex-caducidad-hasta'],
+    ['ri-mv-caducidad-desde', 'ri-mv-caducidad-hasta'],
+    ['ri-cv-caducidad-desde', 'ri-cv-caducidad-hasta'],
+];
+
+/** Pone min/max en cada par según el valor del otro. Llamarla también después de llenar
+ *  las fechas por código (selector Año/Mes de Movimientos, Limpiar). */
+function RI_actualizarLimitesFechas() {
+    RI_RANGOS_FECHA.forEach(([idDesde, idHasta]) => {
+        const desde = document.getElementById(idDesde);
+        const hasta = document.getElementById(idHasta);
+        if (!desde || !hasta) return;
+        hasta.min = desde.value || '';
+        desde.max = hasta.value || '';
+    });
+}
+
+function RI_vincularRangosFechas() {
+    RI_RANGOS_FECHA.forEach(([idDesde, idHasta]) => {
+        [idDesde, idHasta].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('change', RI_actualizarLimitesFechas);
+        });
+    });
+    RI_actualizarLimitesFechas();
+}
+
+/** Mensaje si algún rango de los parámetros está invertido; '' si todo está bien. */
+function RI_errorRangosFechas(params) {
+    const pares = [
+        ['fecha_desde', 'fecha_hasta', 'la fecha'],
+        ['fecha_caducidad_desde', 'fecha_caducidad_hasta', 'la caducidad'],
+    ];
+    for (const [d, h, nombre] of pares) {
+        const desde = params.get(d) || '';
+        const hasta = params.get(h) || '';
+        if (desde !== '' && hasta !== '' && hasta < desde) {
+            const fmt = v => v.split('-').reverse().join('-');
+            return `En ${nombre}, "Hasta" (${fmt(hasta)}) no puede ser anterior a "Desde" (${fmt(desde)}).`;
+        }
+    }
+    return '';
+}
+
+function RI_nuevoIdConsulta() {
+    if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 12);
+}
+
+/** Pide al servidor cortar la consulta con ese id. Sin respuesta que esperar: si falla, la
+ *  consulta simplemente termina sola. keepalive para que salga aunque se cambie de página. */
+function RI_cancelarEnServidor(idConsulta) {
+    if (!idConsulta) return;
+    fetch(BASE_URL + '/' + RUTA_MODULO + '/cancelarConsultaAjax', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-Requested-With': 'XMLHttpRequest' },
+        body: 'id_consulta=' + encodeURIComponent(idConsulta),
+        keepalive: true,
+    }).catch(() => { /* la consulta terminará por su cuenta */ });
+}
+
+/** Botón "Cancelar" de la barra de progreso de una pestaña. */
+function RI_cancelarGenerar(tab) {
+    const control = RI_busquedas[tab];
+    const st = RI_Cargando._tabs[tab];
+    if (!control) return;
+    delete RI_busquedas[tab];
+    control.abort();
+    RI_cancelarEnServidor(control.idConsulta);
+    RI_Cargando.terminar(tab);
+    if (st) {
+        const tbody = document.getElementById(st.prefijo + '-tbody');
+        if (tbody) {
+            tbody.innerHTML = `<tr><td colspan="${st.colSpan}" class="text-center py-4 text-muted">
+                <i class="bi bi-x-circle me-1"></i>Consulta cancelada. Ajusta los filtros (por ejemplo, un rango de fechas
+                más corto o una bodega) y pulsa <strong>Mostrar</strong>.</td></tr>`;
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════
 // INDICADOR DE CARGA (bloqueo del botón Mostrar + barra de progreso)
 // ════════════════════════════════════════════════════════════════════
 /**
@@ -171,7 +270,7 @@ const RI_Cargando = {
         this.terminar(tab);   // por si quedó vivo el intervalo de una consulta cancelada
 
         const st = {
-            prefijo: ui.prefijo, inicio: Date.now(), espera: this._esperaDe(tab),
+            prefijo: ui.prefijo, colSpan: ui.colSpan, inicio: Date.now(), espera: this._esperaDe(tab),
             pct: 0, bytes: 0, total: 0, recibiendo: false, msConsulta: 0, timer: null, pintado: false,
         };
         this._tabs[tab] = st;
@@ -201,6 +300,10 @@ const RI_Cargando = {
                              aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" style="width:0%"></div>
                     </div>
                     <div class="small text-muted mt-2"><span id="${ui.prefijo}-carga-pct">0</span> %</div>
+                    <button type="button" class="btn btn-sm btn-outline-danger mt-3"
+                            onclick="RI_cancelarGenerar('${tab}')" title="Detener la consulta">
+                        <i class="bi bi-x-circle me-1"></i>Cancelar
+                    </button>
                 </div></td></tr>`;
             st.pintado = true;
         }
@@ -293,8 +396,20 @@ const RI_Cargando = {
  */
 function RI_fetchGenerar(tab, params, onOk, onError, ui) {
     params.set('tab', tab);
-    if (RI_busquedas[tab]) RI_busquedas[tab].abort();
+    const errorRango = RI_errorRangosFechas(params);
+    if (errorRango) {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'warning', title: 'Rango de fechas no válido', text: errorRango });
+        onError(errorRango);
+        return;
+    }
+    if (RI_busquedas[tab]) {
+        // La consulta anterior de la pestaña queda obsoleta: se corta también en la base.
+        RI_busquedas[tab].abort();
+        RI_cancelarEnServidor(RI_busquedas[tab].idConsulta);
+    }
     const control = new AbortController();
+    control.idConsulta = RI_nuevoIdConsulta();
+    params.set('id_consulta', control.idConsulta);
     RI_busquedas[tab] = control;
     const vigente = () => RI_busquedas[tab] === control;
 
@@ -356,11 +471,22 @@ function RI_descargarExport(formato, params) {
     // El archivo sale en el mismo orden que la tabla en pantalla (RI_Orden).
     const tbody = formato === 'consignacion' ? 'ri-cv-modal-tbody' : RI_Orden.TBODY_POR_TAB[params.get('tab')];
     if (tbody && typeof RI_Orden !== 'undefined') RI_Orden.aplicarA(params, tbody);
+    const errorRango = RI_errorRangosFechas(params);
+    if (errorRango) {
+        if (typeof Swal !== 'undefined') Swal.fire({ icon: 'warning', title: 'Rango de fechas no válido', text: errorRango });
+        else alert(errorRango);
+        return;
+    }
     const esPdf = formato === 'pdf' || formato === 'consignacion-pdf';
     const accion = { pdf: 'exportPdf', consignacion: 'consignacionExcel', 'consignacion-pdf': 'consignacionPdf' }[formato] || 'exportExcel';
+    // Botón "Cancelar" en el aviso "Generando…": corta la descarga y la consulta en la base.
+    const idConsulta = RI_nuevoIdConsulta();
+    params.set('id_consulta', idConsulta);
     CMG_descargar(BASE_URL + '/' + RUTA_MODULO + '/' + accion + '?' + params.toString(), {
         nombre: esPdf ? 'PDF' : 'Excel',
         archivo: 'ReporteInventarios.' + (esPdf ? 'pdf' : 'xlsx'),
+        cancelable: true,
+        alCancelar: () => RI_cancelarEnServidor(idConsulta),
     });
 }
 
@@ -395,6 +521,7 @@ function RI_limpiarFiltros(prefijo, etiquetas, colsPorDefecto) {
             || colsPorDefecto || 10;
         tbody.innerHTML = `<tr><td colspan="${cols}" class="text-center py-5 text-muted"><i class="bi bi-filter-circle fs-3 d-block mb-2"></i>Aplica los filtros y genera el reporte.</td></tr>`;
     }
+    RI_actualizarLimitesFechas();
 }
 
 // Desgloses de Existencias por debajo de producto×bodega. Deben coincidir con
@@ -846,6 +973,7 @@ window.RI_Movimientos = {
             document.getElementById('ri-mv-fecha-desde').value = `${anio}-${mes}-01`;
             document.getElementById('ri-mv-fecha-hasta').value = `${anio}-${mes}-${String(ultimoDia).padStart(2, '0')}`;
         }
+        RI_actualizarLimitesFechas();
     },
 
     /** conSaldo = false con filtros de Tipo/Origen/Usuario/Observaciones: ahí el saldo
@@ -1018,7 +1146,7 @@ window.RI_Consignaciones = {
      *  cuadren con el "Total productos" y el "Saldo" de la fila. */
     _filtrosLinea() {
         return RI_paramsFromIds({
-            id_producto: 'ri-cv-id-producto', id_bodega: 'ri-cv-bodega',
+            id_producto: 'ri-cv-id-producto', id_bodega: 'ri-cv-bodega', id_marca: 'ri-cv-marca',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
         });
@@ -1145,7 +1273,7 @@ window.RI_Consignaciones = {
 
         const params = RI_paramsFromIds({
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
-            id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor', id_responsable_traslado: 'ri-cv-responsable',
+            id_bodega: 'ri-cv-bodega', id_marca: 'ri-cv-marca', id_vendedor: 'ri-cv-vendedor', id_responsable_traslado: 'ri-cv-responsable',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
@@ -1173,7 +1301,7 @@ window.RI_Consignaciones = {
     _filtros() {
         const params = RI_paramsFromIds({
             id_cliente: 'ri-cv-id-cliente', id_producto: 'ri-cv-id-producto',
-            id_bodega: 'ri-cv-bodega', id_vendedor: 'ri-cv-vendedor', id_responsable_traslado: 'ri-cv-responsable',
+            id_bodega: 'ri-cv-bodega', id_marca: 'ri-cv-marca', id_vendedor: 'ri-cv-vendedor', id_responsable_traslado: 'ri-cv-responsable',
             fecha_desde: 'ri-cv-fecha-desde', fecha_hasta: 'ri-cv-fecha-hasta',
             fecha_caducidad_desde: 'ri-cv-caducidad-desde', fecha_caducidad_hasta: 'ri-cv-caducidad-hasta',
             numero_lote: 'ri-cv-lote', nup: 'ri-cv-nup', secuencial: 'ri-cv-secuencial',
@@ -1720,6 +1848,7 @@ document.addEventListener('DOMContentLoaded', function () {
     RI_setupAutocomplete('ri-au-search-producto', 'ri-au-dropdown-producto', 'ri-au-id-producto', 'ri-au-producto-seleccionado', '/getProductosAjax?q=');
 
     RI_Orden.init();
+    RI_vincularRangosFechas();
 
     // El selector Año de Movimientos viene con un año elegido; las fechas (el filtro
     // real) hay que derivarlas al cargar, sin lanzar todavía ninguna consulta.

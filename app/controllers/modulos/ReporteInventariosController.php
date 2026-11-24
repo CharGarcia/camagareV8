@@ -125,6 +125,97 @@ class ReporteInventariosController extends BaseModuloController
     }
 
     /**
+     * Etiqueta de la conexión para el botón "Cancelar": une el usuario con el id que generó
+     * el navegador para esa consulta. Al llevar el id del usuario, cancelarConsultaAjax solo
+     * puede alcanzar consultas propias. null si el id no llegó o no tiene el formato esperado
+     * (entonces la consulta corre igual, solo que sin poder cancelarse en el servidor).
+     */
+    private static function etiquetaConsulta(): ?string
+    {
+        $id = (string) ($_REQUEST['id_consulta'] ?? '');
+        if (!preg_match('/^[A-Za-z0-9-]{8,40}$/', $id)) {
+            return null;
+        }
+        return 'cmg_ri:' . (int) ($_SESSION['id_usuario'] ?? 0) . ':' . $id;
+    }
+
+    /**
+     * Rechaza un rango invertido ("Hasta" anterior a "Desde") en fecha y en caducidad. No da
+     * error en SQL, pero el resultado sale mal: en Movimientos el saldo inicial sumaba todo
+     * lo anterior a "Desde" (incluido lo posterior a "Hasta") y el resumen de cuadre
+     * anunciaba una diferencia que no existe. La pantalla ya lo impide; esto cubre la URL.
+     */
+    private static function validarRangosFechas(): void
+    {
+        $pares = [
+            ['fecha_desde', 'fecha_hasta', 'la fecha'],
+            ['fecha_caducidad_desde', 'fecha_caducidad_hasta', 'la caducidad'],
+        ];
+        foreach ($pares as [$d, $h, $nombre]) {
+            $desde = trim((string) ($_REQUEST[$d] ?? ''));
+            $hasta = trim((string) ($_REQUEST[$h] ?? ''));
+            if ($desde !== '' && $hasta !== '' && strtotime($hasta) !== false && strtotime($desde) !== false
+                && strtotime($hasta) < strtotime($desde)) {
+                throw new \InvalidArgumentException(sprintf(
+                    'En %s, "Hasta" (%s) no puede ser anterior a "Desde" (%s).',
+                    $nombre, date('d-m-Y', strtotime($hasta)), date('d-m-Y', strtotime($desde))
+                ));
+            }
+        }
+    }
+
+    /** Marca la conexión de esta petición para que el botón "Cancelar" pueda cortarla. */
+    private function marcarConsultaCancelable(): void
+    {
+        $etiqueta = self::etiquetaConsulta();
+        if ($etiqueta !== null) {
+            try {
+                $this->repository->etiquetarConexion($etiqueta);
+            } catch (\Throwable $e) {
+                // Sin etiqueta la consulta sigue funcionando; solo no se podrá cancelar.
+                error_log('ReporteInventario etiquetarConexion: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /** ¿La excepción es la cancelación pedida con el botón "Cancelar"? (SQLSTATE 57014) */
+    private static function esConsultaCancelada(\Throwable $e): bool
+    {
+        for (; $e !== null; $e = $e->getPrevious()) {
+            if ($e instanceof \PDOException && (string) $e->getCode() === '57014') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Botón "Cancelar" de la barra de progreso (y del aviso "Generando…" de Excel/PDF): corta
+     * en PostgreSQL la consulta que lanzó ESTE usuario con ese id_consulta. El navegador ya
+     * abortó su petición; sin esto, la base seguiría trabajando hasta terminar la consulta.
+     */
+    public function cancelarConsultaAjax(): void
+    {
+        $this->requireLeer();
+        $this->liberarSesion();
+        header('Content-Type: application/json');
+
+        $etiqueta = self::etiquetaConsulta();
+        if ($etiqueta === null) {
+            echo json_encode(['ok' => false, 'error' => 'Consulta no válida.']);
+            exit;
+        }
+        try {
+            $canceladas = $this->repository->cancelarConsultaEtiquetada($etiqueta);
+            echo json_encode(['ok' => true, 'canceladas' => $canceladas]);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => 'No se pudo cancelar la consulta.']);
+        }
+        exit;
+    }
+
+    /**
      * Suelta el candado del archivo de sesión. PHP lo mantiene tomado durante toda la
      * petición, así que mientras corre un "Mostrar" o una exportación de varios segundos,
      * cualquier otra petición del mismo usuario (abrir otro módulo, el buscador de
@@ -394,6 +485,7 @@ class ReporteInventariosController extends BaseModuloController
             'id_cliente'         => $_REQUEST['id_cliente']  ?? '',
             'id_producto'        => $_REQUEST['id_producto'] ?? '',
             'id_bodega'          => $_REQUEST['id_bodega']   ?? '',
+            'id_marca'           => $_REQUEST['id_marca']    ?? '',
             'id_vendedor'        => $_REQUEST['id_vendedor'] ?? '',
             'id_responsable_traslado' => $_REQUEST['id_responsable_traslado'] ?? '',
             'fecha_desde'        => $_REQUEST['fecha_desde'] ?? '',
@@ -432,7 +524,9 @@ class ReporteInventariosController extends BaseModuloController
             $tab = $this->normalizarPestana($_REQUEST['tab'] ?? 'existencias');
             $this->requirePestana($tab);
             $this->liberarSesion();
+            self::validarRangosFechas();
             $this->comprimirRespuesta();
+            $this->marcarConsultaCancelable();
 
             $resultado = match ($tab) {
                 'movimientos'    => $this->generarMovimientos($idEmpresa),
@@ -450,6 +544,16 @@ class ReporteInventariosController extends BaseModuloController
             header('X-Json-Bytes: ' . strlen($json));
             echo $json;
         } catch (\Throwable $e) {
+            if (self::esConsultaCancelada($e)) {
+                // El usuario pulsó "Cancelar": no es un error del sistema, no se registra.
+                echo json_encode(['ok' => false, 'cancelada' => true, 'error' => 'Consulta cancelada.']);
+                exit;
+            }
+            if ($e instanceof \InvalidArgumentException) {
+                // Filtro mal puesto (p. ej. rango de fechas invertido): se explica, no es un error del sistema.
+                echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+                exit;
+            }
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             error_log('ReporteInventario Exception: ' . $e->getMessage() . ' on line ' . $e->getLine());
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
@@ -2000,7 +2104,7 @@ class ReporteInventariosController extends BaseModuloController
         $this->requirePestana($tab);
         $this->liberarSesion();
 
-        [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
+        [$headers, $exportData, $titulo] = $this->datosExportCancelable($idEmpresa, $tab);
         $exportData = self::ordenarExport($headers, $exportData);
 
         $maxFilas = self::maxFilasExcel(count($headers));
@@ -2296,7 +2400,7 @@ class ReporteInventariosController extends BaseModuloController
         $this->requirePestana($tab);
         $this->liberarSesion();
 
-        [$headers, $exportData, $titulo] = $this->datosExport($idEmpresa, $tab);
+        [$headers, $exportData, $titulo] = $this->datosExportCancelable($idEmpresa, $tab);
         $exportData = self::ordenarExport($headers, $exportData);
 
         if (count($exportData) > self::PDF_MAX_FILAS) {
@@ -2461,6 +2565,29 @@ class ReporteInventariosController extends BaseModuloController
             ''
         );
         return $rows;
+    }
+
+    /**
+     * datosExport() con la conexión marcada para el botón "Cancelar" del aviso "Generando…".
+     * Si el usuario canceló, responde sin registrar un error (el navegador ya no espera nada).
+     * @return array{0: array, 1: array, 2: string}
+     */
+    private function datosExportCancelable(int $idEmpresa, string $tab): array
+    {
+        try {
+            self::validarRangosFechas();
+        } catch (\InvalidArgumentException $e) {
+            $this->errorDescarga($e->getMessage(), 422);
+        }
+        $this->marcarConsultaCancelable();
+        try {
+            return $this->datosExport($idEmpresa, $tab);
+        } catch (\Throwable $e) {
+            if (self::esConsultaCancelada($e)) {
+                $this->errorDescarga('Consulta cancelada.', 409);
+            }
+            throw $e;
+        }
     }
 
     /** @return array{0: array, 1: array, 2: string} [headers, filas, título] */

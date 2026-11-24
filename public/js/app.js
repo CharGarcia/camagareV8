@@ -465,19 +465,42 @@ window.CMG_Identificacion = (function () {
         var nombre = opciones.nombre || nombreDesdeUrl(url);
         var titulo = nombre === 'archivo' ? 'el archivo' : 'el ' + nombre;
 
+        // opciones.cancelable: el aviso "Generando…" trae un botón Cancelar que aborta la
+        // descarga; opciones.alCancelar() permite además cortar el trabajo en el servidor
+        // (p. ej. Reporte de Inventarios cancela la consulta en PostgreSQL).
+        var control = (opciones.cancelable && typeof AbortController !== 'undefined') ? new AbortController() : null;
+        var cancelado = false;
+
         if (typeof Swal !== 'undefined') {
+            var texto = 'Esto puede tardar si hay muchos datos.';
             Swal.fire({
                 title: 'Generando ' + (nombre === 'archivo' ? 'archivo' : nombre) + '…',
-                text: 'Esto puede tardar si hay muchos datos.',
+                html: control
+                    ? '<div>' + texto + '</div><button type="button" class="btn btn-sm btn-outline-danger mt-3" id="cmg-descarga-cancelar">'
+                      + '<i class="bi bi-x-circle me-1"></i>Cancelar</button>'
+                    : undefined,
+                text: control ? undefined : texto,
                 allowOutsideClick: false,
                 allowEscapeKey: false,
-                didOpen: function () { Swal.showLoading(); }
+                didOpen: function () {
+                    Swal.showLoading();
+                    var btn = control ? document.getElementById('cmg-descarga-cancelar') : null;
+                    if (btn) btn.addEventListener('click', function () {
+                        cancelado = true;
+                        control.abort();
+                        Swal.close();
+                        if (typeof opciones.alCancelar === 'function') {
+                            try { opciones.alCancelar(); } catch (e) { console.error(e); }
+                        }
+                    });
+                }
             });
         }
 
         // opciones.cuerpo (objeto): el archivo se pide por POST con ese JSON, para los que se
         // arman con datos que solo tiene la pantalla (p. ej. el aviso de asientos pendientes).
         var peticion = { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'same-origin' };
+        if (control) peticion.signal = control.signal;
         if (opciones.cuerpo) {
             peticion.method = 'POST';
             peticion.headers['Content-Type'] = 'application/json';
@@ -487,6 +510,7 @@ window.CMG_Identificacion = (function () {
 
         return fetch(url, peticion)
             .then(function (response) {
+                if (cancelado) return null;
                 var tipo = response.headers.get('Content-Type') || '';
                 if (tipo.indexOf('application/json') !== -1) {
                     return response.json().then(function (res) {
@@ -508,7 +532,9 @@ window.CMG_Identificacion = (function () {
                     };
                 });
             })
+            .then(function (r) { return cancelado ? null : r; })
             .catch(function (err) {
+                if (cancelado || (err && err.name === 'AbortError')) return null;
                 console.error(err);
                 aviso('error', 'Error de conexión', 'No se pudo comunicar con el servidor.');
                 return null;
