@@ -2605,6 +2605,22 @@ class AsientoBuilderService
                 default                    => false,
             };
 
+            // Un concepto SIN monto en esta factura no participa ni cuenta como «sin cuenta» (mismo
+            // criterio que compras, ensamblarAdquisicion): una factura en cero sin propina pedía
+            // configurar «Propina en venta». Mismo valor que usa cada bloque de abajo para postear.
+            $esPropina = str_contains($codigo, 'PROPINA') || str_contains($concepto, 'propina');
+            $sinMonto = match (true) {
+                $esPorCobrar              => $importeTotal <= 0,
+                $esSubtotal               => ($tieneReglaDescuento ? $subtotal + $descuento : $subtotal) <= 0,
+                $esIce                    => $totalIce <= 0,
+                $esPropina                => $propina <= 0,
+                $esCosto || $esInventario => $costoRealInventario <= 0,
+                default                   => false,
+            };
+            if ($sinMonto) {
+                continue;
+            }
+
             // Si NO hay cuenta General/Cliente para este concepto, solo se perdona cuando se reparte
             // por línea — puede que la cuenta exista solo a nivel de Producto/Categoría/Marca/Tipo de
             // producción (antes esto se descartaba sin más, aunque la categoría SÍ tuviera la cuenta).
@@ -2799,10 +2815,12 @@ class AsientoBuilderService
                     ". Configúrela en Contabilidad → Configuración contable, concepto «ventas»."
                 );
             }
-            // Factura en cero: no es configuración (el aviso de sincronización la reconoce por
-            // este texto y no manda a Configuración Contable).
+            // Factura en cero y nada más que postear (p. ej. descuento del 100 % sin cuenta de
+            // descuento y sin costo de ventas): no es configuración ni un error del documento. El
+            // texto «no tiene valor que contabilizar» lo reconoce SincronizadorAsientosService y lo
+            // deja como nota informativa, sin contarlo como pendiente ni mandar a soporte.
             if ($importeTotal <= 0 && $subtotal <= 0) {
-                throw new \Exception("No se generó ninguna línea del asiento: el documento no tiene líneas con valor (el detalle está vacío o en cero).");
+                throw new \Exception("No se generó ninguna línea del asiento: la factura está en cero y no tiene valor que contabilizar.");
             }
             throw new \Exception("No se ha configurado ninguna cuenta para este asiento o los montos son cero.");
         }

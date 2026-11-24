@@ -5,7 +5,7 @@ categoria: Contabilidad
 tipo: guia
 visibilidad: todos
 etiquetas: asientos automáticos, generar asientos, contabilidad automática, asientos pendientes, asientos que faltan, contabilizar documentos, no se generó el asiento, factura sin asiento, sincronizar contabilidad, asientos en segundo plano, costo de ventas pendiente, asiento sin costo, actualizar asiento repetido, pestaña asiento contable, ver asiento del documento, generar asiento de una compra
-version: 1.11
+version: 1.12
 orden: 30
 estado: activo
 ---
@@ -118,6 +118,14 @@ contable…*.
 - **Una factura o liquidación de compra con valor total 0 no se contabiliza ni genera aviso**:
   no tiene nada que registrar, así que no aparece como pendiente ni pide revisarla
   o comunicarse con soporte. Si luego se le corrige el total, se contabiliza sola.
+- **Una factura de venta completamente en cero no se contabiliza ni genera aviso**:
+  total, subtotal, descuento y propina en 0 y sin costo de ventas. Si tiene descuento
+  (por ejemplo, del 100 %) o sacó mercadería del inventario, sí lleva asiento: la venta
+  contra el descuento, o su costo de ventas. Si aun así no queda nada que registrar, el
+  aviso lo dice como nota informativa, sin pedir cuentas.
+- **Solo se piden las cuentas de lo que el documento tiene**: una factura de venta sin
+  propina, sin ICE o sin costo no pide la cuenta de Propina, ICE o Costo de ventas,
+  aunque no estén configuradas.
 - **Los documentos traídos de la migración no se contabilizan**, porque su
   contabilidad viene del sistema anterior. Esto alcanza también a lo que nace de
   ellos: el retorno o la facturación de una consignación migrada tampoco generan
@@ -190,6 +198,7 @@ permiso para ver el módulo tampoco genera nada, porque ni siquiera puede abrirl
 
 ## Historial de cambios
 
+- **1.12** — Una factura de venta completamente en cero (sin descuento, propina ni costo) ya no se cuenta como pendiente. Las facturas de venta ya no piden la cuenta de un concepto que no tienen (por ejemplo, «Propina en venta» en una factura sin propina).
 - **1.11** — Las tablas del aviso muestran un registro por fila (sin la fila «Todos — en la General») y las líneas
   del aviso ya no llevan el enlace «Configurar».
 - **1.10** — El aviso de asientos pendientes se abre en pestañas por tipo de asiento, con una tabla rápida que guarda la cuenta

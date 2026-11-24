@@ -729,11 +729,30 @@ class SincronizadorAsientosService
         //        para que AsientoBuilderService resuelva su costo real y quede registrado — mismo
         //        mecanismo de "cuenta pendientes → el usuario confirma → genera" que ya usa el resto
         //        del sistema (Compras, Liquidaciones, etc.), acotado a la empresa activa.
+        //    Factura COMPLETAMENTE en cero (total, subtotal, descuento y propina en 0, y sin costo de
+        //    ventas en el Kardex): no hay nada que contabilizar, igual que una compra en cero, así
+        //    que no se cuenta como pendiente ni se avisa. A diferencia de compras, NO basta el total
+        //    en cero: una factura con descuento del 100 % sí tiene asiento (venta bruta contra
+        //    descuento) y una que saca inventario tiene su costo de ventas.
         $sqlFacturas = "SELECT v.id
                         FROM ventas_cabecera v
                         WHERE v.id_empresa = ?
                           AND v.eliminado = false
                           AND v.estado IN ('autorizado', 'contabilizado')
+                          AND NOT (
+                                ABS(COALESCE(v.importe_total, 0)) < 0.01
+                            AND ABS(COALESCE(v.total_sin_impuestos, 0)) < 0.01
+                            AND ABS(COALESCE(v.total_descuento, 0)) < 0.01
+                            AND ABS(COALESCE(v.propina, 0)) < 0.01
+                            AND NOT EXISTS (
+                                    SELECT 1 FROM inventario_kardex k
+                                    WHERE k.referencia_tipo = 'factura_venta'
+                                      AND k.referencia_id = v.id
+                                      AND k.tipo_movimiento = 'salida'
+                                      AND k.eliminado = false
+                                      AND ABS(COALESCE(k.costo_total, 0)) >= 0.01
+                                )
+                          )
                           AND (
                                 v.id_asiento_contable IS NULL
                              OR NOT EXISTS (
@@ -2653,11 +2672,12 @@ class SincronizadorAsientosService
         $m    = mb_strtolower($motivo, 'UTF-8');
         $area = self::AREAS[$clave] ?? null;
 
-        // Sin valor que contabilizar (egreso con todos los cheques anulados, formas en 0, etc.):
-        // no hay nada que configurar, así que no es una acción sino una nota informativa.
+        // Sin valor que contabilizar (egreso con todos los cheques anulados, formas en 0, factura de
+        // venta en cero sin costo, etc.): no hay nada que configurar, así que no es una acción sino
+        // una nota informativa.
         if (str_contains($m, 'que contabilizar')) {
             $nota = "Algunos documentos de {$nombreModulo} no tienen valor que contabilizar "
-                  . '(sin formas de cobro/pago vigentes o en cero): no requieren configuración.';
+                  . '(están en cero): no requieren configuración.';
             if (!in_array($nota, $this->info, true)) {
                 $this->info[] = $nota;
             }
