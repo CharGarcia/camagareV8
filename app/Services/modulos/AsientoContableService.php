@@ -39,7 +39,8 @@ class AsientoContableService
     /**
      * Lo activa SOLO CierreEjercicioService. Con él:
      *  - se pueden crear y anular los asientos de cierre/apertura del ejercicio, que ninguna
-     *    otra pantalla puede tocar (ver validarOrigenCierreEjercicio());
+     *    otra pantalla puede tocar (ver validarOrigenCierreEjercicio()), salvo cambiar las
+     *    cuentas de la apertura (ver validarEdicionApertura());
      *  - no se exige que la fecha esté en un período abierto: cerrar el año es justamente lo
      *    que se hace cuando sus meses ya están cerrados, y el propio módulo bloquea el año.
      */
@@ -405,7 +406,13 @@ class AsientoContableService
         // asiento— para que no se pueda sacar un asiento de un período cerrado cambiándole
         // la fecha, ni meterlo a uno cerrado.
         $idAsientoPrevio = (int) ($cabeceraData['id'] ?? 0);
-        $this->validarOrigenCierreEjercicio((string) ($cabeceraData['modulo_origen'] ?? ''));
+        $previo = $idAsientoPrevio > 0 ? $this->repository->getDetalleAsiento($idAsientoPrevio, $idEmpresa) : null;
+        // Reclasificar cuentas del asiento de apertura del ejercicio sí se permite desde Asientos
+        // (ver validarEdicionApertura()); todo lo demás de cierre/apertura sigue siendo del módulo.
+        $edicionApertura = $previo !== null && $this->validarEdicionApertura($previo, $cabeceraData);
+        if (!$edicionApertura) {
+            $this->validarOrigenCierreEjercicio((string) ($cabeceraData['modulo_origen'] ?? ''));
+        }
         if (!empty($cabeceraData['fecha_asiento']) && !$this->desdeCierreEjercicio) {
             $this->periodosService->validarFechaPermitida(
                 (string) $cabeceraData['fecha_asiento'],
@@ -415,8 +422,9 @@ class AsientoContableService
             );
         }
         if ($idAsientoPrevio > 0) {
-            $previo = $this->repository->getDetalleAsiento($idAsientoPrevio, $idEmpresa);
-            $this->validarOrigenCierreEjercicio((string) ($previo['modulo_origen'] ?? ''));
+            if (!$edicionApertura) {
+                $this->validarOrigenCierreEjercicio((string) ($previo['modulo_origen'] ?? ''));
+            }
             if (!empty($previo['fecha_asiento']) && !$this->desdeCierreEjercicio) {
                 $this->periodosService->validarFechaPermitida(
                     (string) $previo['fecha_asiento'],
@@ -727,6 +735,47 @@ class AsientoContableService
         if (in_array($moduloOrigen, [\App\Helpers\CierreEjercicioSql::ORIGEN_CIERRE, \App\Helpers\CierreEjercicioSql::ORIGEN_APERTURA], true)) {
             throw new \Exception('Este asiento lo generó el Cierre del Ejercicio. Para cambiarlo, revierta el cierre desde ese módulo y vuelva a generarlo.');
         }
+    }
+
+    /**
+     * Edición del asiento de APERTURA del ejercicio desde Asientos: se permite cambiar sus
+     * cuentas (reclasificar un saldo, partir una línea) sin revertir el cierre, siempre que
+     * el asiento siga siendo la misma apertura: vivo, mismo cierre, misma fecha, contabilizado
+     * y con los mismos totales. Así el año cerrado no se toca y el cierre lo sigue
+     * encontrando para revertirlo. El asiento de CIERRE (31-12, año bloqueado) y anular la
+     * apertura siguen siendo exclusivos del módulo Cierre del Ejercicio.
+     *
+     * @return bool true si es una edición de apertura válida; false si no es una apertura.
+     * @throws \Exception si es una apertura pero el cambio sale de esos límites.
+     */
+    private function validarEdicionApertura(array $previo, array $cabeceraData): bool
+    {
+        if ($this->desdeCierreEjercicio
+            || ($previo['modulo_origen'] ?? '') !== \App\Helpers\CierreEjercicioSql::ORIGEN_APERTURA) {
+            return false;
+        }
+        $msg = 'En el asiento de apertura del ejercicio solo se pueden cambiar las cuentas y las líneas; ';
+        if (($previo['estado'] ?? '') === 'anulado') {
+            throw new \Exception('Este asiento de apertura está anulado (se revirtió su cierre): no se puede modificar.');
+        }
+        if (($cabeceraData['modulo_origen'] ?? '') !== \App\Helpers\CierreEjercicioSql::ORIGEN_APERTURA
+            || (int) ($cabeceraData['id_referencia_origen'] ?? 0) !== (int) ($previo['id_referencia_origen'] ?? 0)
+            || strtolower(trim((string) ($cabeceraData['tipo_comprobante'] ?? ''))) !== strtolower(trim((string) ($previo['tipo_comprobante'] ?? '')))) {
+            throw new \Exception($msg . 'el tipo y el origen deben quedar igual.');
+        }
+        if (substr((string) ($cabeceraData['fecha_asiento'] ?? ''), 0, 10) !== substr((string) ($previo['fecha_asiento'] ?? ''), 0, 10)) {
+            throw new \Exception($msg . 'la fecha debe seguir siendo ' . date('d-m-Y', strtotime((string) $previo['fecha_asiento'])) . '.');
+        }
+        if (strtolower(trim((string) ($cabeceraData['estado'] ?? ''))) !== 'contabilizado') {
+            throw new \Exception($msg . 'debe quedar contabilizado.');
+        }
+        if (abs((float) $cabeceraData['total_debe'] - (float) ($previo['total_debe'] ?? 0)) >= 0.005
+            || abs((float) $cabeceraData['total_haber'] - (float) ($previo['total_haber'] ?? 0)) >= 0.005) {
+            throw new \Exception($msg . 'los totales deben seguir siendo '
+                . number_format((float) ($previo['total_debe'] ?? 0), 2, ',', '.')
+                . '. Para cambiar los saldos, revierta el cierre desde Cierre del Ejercicio y vuelva a generarlo.');
+        }
+        return true;
     }
 
     public function anular(int $idAsiento, int $idEmpresa, int $idUsuario): void

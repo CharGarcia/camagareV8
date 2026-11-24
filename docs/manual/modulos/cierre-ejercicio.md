@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/cierre_ejercicio
 tipo: modulo
 visibilidad: todos
-etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable
-version: 1.3
+etiquetas: cierre del ejercicio, apertura duplicada, ya existe apertura, cierre manual, apertura manual, saldos iniciales duplicados, cierre anual, cierre contable, cerrar el año, cierre de año, apertura, asiento de apertura, asiento de cierre, saldos iniciales del año, pasar de un año a otro, arrastrar saldos, resultados acumulados, utilidad acumulada, perdida acumulada, utilidad del ejercicio, perdida del ejercicio, resumen de resultados, cuentas de resultados en cero, cerrar periodo, bloquear año, revertir cierre, reabrir año, nuevo año contable, modificar apertura, cambiar cuenta de la apertura, reclasificar saldo inicial, editar asiento de apertura
+version: 1.4
 orden: 35
 estado: activo
 ---
@@ -148,9 +148,14 @@ traídos de la migración:
   como *Resultados anteriores* en la vista previa.
 - **Bloqueo del año.** El cierre bloquea el año en Períodos Contables. Nadie puede
   registrar, modificar ni anular documentos con fecha de ese año.
-- **Los asientos no se tocan desde Asientos Contables.** Los asientos de cierre y
-  apertura no se pueden editar ni anular desde el Libro Diario. Para cambiarlos,
-  se revierte el cierre y se genera de nuevo.
+- **Cambiar cuentas de la apertura desde Asientos Contables.** En el asiento de
+  apertura (AP-) se pueden cambiar las cuentas y las líneas, por ejemplo para pasar
+  un saldo a otra cuenta o repartirlo en dos, sin revertir el cierre. Deben quedar
+  la misma fecha, el mismo tipo y los mismos totales. Para cambiar los saldos, se
+  revierte el cierre y se genera de nuevo.
+- **El asiento de cierre no se toca.** El asiento de cierre (CI-) no se edita, y
+  ninguno de los dos se anula desde Asientos Contables: se revierte el cierre.
+  Al revertir, la apertura se anula con los cambios que se le hayan hecho.
 - **Cambios posteriores.** Si pese al bloqueo cambian asientos del año (por ejemplo,
   una migración o una importación de comprobantes ya emitidos, que no revisan los
   períodos), el cierre se marca con ⚠ en el listado y el detalle lo
@@ -191,10 +196,16 @@ traídos de la migración:
 - **"Ya existe el cierre del ejercicio…"**: hay un cierre posterior. Revierta
   primero los cierres más recientes.
 - **"Este asiento lo generó el Cierre del Ejercicio"** (en Asientos Contables):
-  esos asientos solo se cambian revirtiendo el cierre.
+  aparece al editar el asiento de cierre o al anular cualquiera de los dos. Se
+  cambian revirtiendo el cierre.
+- **"En el asiento de apertura del ejercicio solo se pueden cambiar las cuentas…"**:
+  se cambió la fecha, el tipo, el estado o los totales de la apertura. Deje esos
+  datos como estaban y cambie solo las cuentas, o revierta el cierre.
 
 ## Historial de cambios
 
+- **1.4** — El asiento de apertura se puede editar desde Asientos Contables para cambiar
+  sus cuentas (misma fecha y mismos totales), sin revertir el cierre. Antes pedía revertir.
 - **1.3** — Los períodos que crea el cierre cubren solo los días sin período (uno por
   tramo), sin superponerse a los existentes. Si un período abierto cruza el inicio o el fin
   del año, el cierre pide ajustarlo. Los períodos de un año cerrado no se reabren desde

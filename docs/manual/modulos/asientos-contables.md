@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/asientos_contables
 tipo: modulo
 visibilidad: todos
-etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra
-version: 1.51
+etiquetas: asientos, cuenta eliminada, cuenta configurada no funciona, asiento contable, diario, debe, haber, partida doble, cuadrado, comprobante, contabilidad, imprimir, pdf, excel, documento origen, cuadre con el documento, total de la factura, cuenta por cobrar, cartera, editar asiento desde el documento, pestaña asiento contable, editado a mano, restaurar asiento automático, permisos de contabilidad, documentos migrados, migración, sistema anterior, buscar asiento, buscador, filtros, filtrar asientos, buscar por cuenta, buscar por referencia, libro diario, chips, asiento descuadrado, búsqueda lenta, se queda buscando, filtrar por origen, origen del asiento, módulo de origen, vista previa, costo de ventas, asiento sin costo, duplicar asiento, copiar asiento, clonar asiento, repetir asiento, centro de costo sugerido, proyecto sugerido, cambiar centro de costo desde el documento, cambiar proyecto desde la compra, período cerrado, no generar asientos de años anteriores, excluir año, ingreso sin valor, egreso sin valor, cheques anulados, siempre salen pendientes, vuelve a pedir generar, dice que se generaron y siguen pendientes, no puedo editar el asiento, no aparecen las cuentas, buscador de cuentas vacío, de qué documento es el asiento, nota de crédito en compras, factura de compra, asiento de apertura, cambiar cuenta de la apertura, editar apertura del ejercicio
+version: 1.52
 orden: 20
 estado: activo
 ---
@@ -621,8 +621,14 @@ tienen un documento individual con tercero que mostrar.
 ## Asientos de cierre y apertura del ejercicio
 
 Los asientos con origen *Cierre del ejercicio* (CI-) y *Apertura del ejercicio* (AP-) los
-genera el módulo **Cierre del Ejercicio**. No se pueden editar ni anular desde aquí: para
-cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
+genera el módulo **Cierre del Ejercicio**.
+
+- **Apertura (AP-)**: se pueden cambiar sus cuentas y sus líneas (pasar un saldo a otra
+  cuenta, repartirlo en dos) sin revertir el cierre. La fecha, el tipo y los totales deben
+  quedar iguales y el asiento debe seguir contabilizado.
+- **Cierre (CI-)**: no se edita.
+- **Ninguno de los dos se anula desde aquí.** Para cambiar los saldos se revierte el cierre
+  en ese módulo y se genera de nuevo.
 
 ## Errores frecuentes
 
@@ -655,6 +661,7 @@ cambiarlos se revierte el cierre en ese módulo y se genera de nuevo.
 
 ## Historial de cambios
 
+- **1.52** — El asiento de **apertura del ejercicio** se puede editar para cambiar sus cuentas (misma fecha y mismos totales), sin revertir el cierre. El de cierre sigue sin editarse.
 - **1.51** — El aviso que queda al terminar de generar asientos pendientes tiene el botón **Descargar PDF**: entrega la lista completa de lo que falta configurar (documentos, terceros y cuentas) para imprimirla, descargarla o verla, sin volver a generar solo para leer el aviso. También en Estados Financieros, Balance de Comprobación y Mayores.
 - **1.50** — Notas de crédito de compra: el cuadre contra el documento mide la cuenta por pagar en el **Debe**, donde la lleva su asiento. Antes la buscaba en el Haber y avisaba «la cartera del asiento es 0.00» con el asiento bien armado.
 - **1.49** — Campo *Documento origen* en la cabecera del asiento: tipo de documento (factura de compra, nota de crédito en compras o en ventas, ingreso, etc.), número y tercero.
