@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/empresas-sistema
 tipo: modulo
 visibilidad: superadmin
-etiquetas: empresas del sistema, desactivar empresa, empresa inactiva, cerrar sesiones, sacar usuarios, sesion cerrada, prestador de servicios turisticos, prestador turistico, empresa de turismo, turismo, iva 8 feriados, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
-version: 1.23
+etiquetas: empresas del sistema, consultar ruc, buscar ruc en el sri, datos del sri, establecimiento del sri, sucursal del ruc, desactivar empresa, empresa inactiva, cerrar sesiones, sacar usuarios, sesion cerrada, prestador de servicios turisticos, prestador turistico, empresa de turismo, turismo, iva 8 feriados, aviso empresas sin suscripcion, aviso navbar, empresas por revisar, empresas sin suscripcion, sin suscripcion, no pagan, empresas que no pagan, regalia, sin cobro, cortesia, plan sin costo, exonerar suscripcion, empresa gratis, empresa administradora, administradora de suscripciones, empresa que controla las suscripciones, controladora, suscripcion por defecto, crear empresa, alta de empresa, establecimientos, sucursales, matriz, usuarios asignados, documentos legales, suscripcion, empresas del grupo, eliminar establecimiento, establecimiento activo, un solo establecimiento activo, buscar empresa, filtrar empresas, filtros de empresas, exportar empresas, pdf de empresas, excel de empresas, ordenar empresas, columnas del listado, telefono de la empresa, correo de la empresa, empresa como cliente, registrar cliente automaticamente, cliente de la controladora, facturar a la empresa
+version: 1.24
 orden: 1
 estado: activo
 ---
@@ -27,6 +27,37 @@ documentos legales), y para intervenir en la configuración de una empresa ya
 existente cuando hace falta ayuda que el propio cliente no puede resolver
 desde el módulo Empresa: agregar/quitar establecimientos, revisar usuarios
 asignados, reenviar documentos legales, etc.
+
+## Crear una empresa: buscar en el SRI por RUC y establecimiento
+
+En la ventana **Crear empresa**, el primer campo es el **Establecimiento**
+(3 dígitos, por defecto `001`) y luego el **RUC**. Con los dos datos, el
+sistema consulta al SRI y llena el formulario con la información de **ese
+establecimiento** del contribuyente:
+
+1. Escriba el código del establecimiento (por ejemplo `002`; si escribe `2`
+   el sistema lo completa a `002`).
+2. Escriba el RUC (13 dígitos). Al salir del campo, o al pulsar la lupa, se
+   consulta al SRI.
+3. Se llenan:
+   - **Razón social**: la del contribuyente (es la misma en todos sus
+     establecimientos).
+   - **Nombre comercial, dirección, provincia y ciudad**: los del
+     establecimiento escrito.
+4. Debajo aparece la lista de **establecimientos que el RUC tiene en el SRI**
+   (la matriz y los cerrados vienen marcados; al pasar el mouse se ve el nombre
+   y la dirección de cada uno).
+
+Si cambia el código del establecimiento después de consultar, los datos se
+vuelven a llenar con los del nuevo establecimiento, sin consultar otra vez al
+SRI. Si cambia el RUC, se hace una consulta nueva.
+
+- Si el establecimiento **no existe** en el SRI para ese RUC, aparece un aviso
+  con los establecimientos que sí tiene; solo se llena la razón social.
+- Si el establecimiento figura **CERRADO** en el SRI, sus datos se llenan igual,
+  pero con un aviso para revisarlo antes de crear la empresa.
+- Si la provincia o la ciudad del SRI no se reconocen en el catálogo, quedan
+  vacías y se eligen a mano.
 
 ## Buscar, filtrar y exportar el listado
 
@@ -236,6 +267,10 @@ las empresas que ese usuario tiene asignadas.
   (aunque sea el mismo valor) para forzar la resincronización.
 
 ## Historial de cambios
+
+- **1.24** — Al crear una empresa, primero se escribe el **establecimiento** y luego el RUC: la
+  consulta al SRI llena el nombre comercial, la dirección, la provincia y la ciudad de **ese
+  establecimiento** (antes, siempre los de la matriz) y muestra los establecimientos del RUC.
 
 - **1.23** — Desactivar o eliminar una empresa **cierra en máximo 5 minutos** las sesiones de los usuarios que trabajan en ella (salvo superadministradores). Antes seguían trabajando hasta cerrar sesión.
 - **1.22** — Nuevo interruptor **Prestador de servicios turísticos** (solo superadministrador): habilita el

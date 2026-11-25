@@ -17,6 +17,10 @@ class SriIdentificationService
 {
     private string $apiUrl;
     private int $timeout;
+    private ?Provincia $modeloProvincia = null;
+    private ?Ciudad $modeloCiudad = null;
+    /** @var array<string, array{0:string, 1:string, 2:string}> */
+    private array $cacheUbicaciones = [];
 
     public function __construct(?string $apiUrl = null, int $timeout = 15)
     {
@@ -199,24 +203,7 @@ class SriIdentificationService
             $direccionCompleta = $this->fixEncoding($direccionCompleta);
             $establecimiento = $this->extraerEstablecimiento($estMatriz);
 
-            // Parsear direccionCompleta: "PICHINCHA / QUITO / LA CONCEPCIÓN / MANUEL SERRANO..."
-            // Provincia = primer /, Ciudad = segundo /, Dirección = último / (calle)
-            $partes = array_map('trim', explode('/', $direccionCompleta));
-            $nombreProvincia = $partes[0] ?? '';
-            $nombreCiudad = $partes[1] ?? '';
-            $direccion = !empty($partes) ? trim($partes[count($partes) - 1]) : '';
-            if ($nombreProvincia !== '' || $nombreCiudad !== '') {
-                $modeloProv = new Provincia();
-                $modeloCiud = new Ciudad();
-                $codProvBuscado = $modeloProv->getCodigoPorNombre($nombreProvincia);
-                if ($codProvBuscado !== null) {
-                    $codProv = $codProvBuscado;
-                    $codCiudBuscado = $modeloCiud->getCodigoPorNombreYProvincia($nombreCiudad, $codProv);
-                    if ($codCiudBuscado !== null) {
-                        $codCiud = $codCiudBuscado;
-                    }
-                }
-            }
+            [$direccion, $codProv, $codCiud] = $this->resolverUbicacion($direccionCompleta);
         }
 
         return [
@@ -265,16 +252,60 @@ class SriIdentificationService
         $out = [];
         foreach ($establecimientos as $est) {
             if (!is_array($est)) continue;
+            $direccionCompleta = $this->fixEncoding($this->strClean((string) ($est['direccionCompleta'] ?? '')));
+            [$calle, $codProv, $codCiud] = $this->resolverUbicacion($direccionCompleta);
             $out[] = [
                 'codigo'    => $this->extraerEstablecimiento($est),
                 'nombre'    => $this->fixEncoding($this->strClean((string) ($est['nombreFantasiaComercial'] ?? ''))),
-                'direccion' => $this->fixEncoding($this->strClean((string) ($est['direccionCompleta'] ?? ''))),
+                'direccion' => $direccionCompleta,
                 'estado'    => strtoupper((string) ($est['estado'] ?? '')),
                 'matriz'    => ($est['tipoEstablecimiento'] ?? '') === 'MAT' || ($est['matriz'] ?? '') === 'SI',
+                // Dirección partida igual que la de la matriz: la usa Empresas del sistema
+                // para llenar el establecimiento elegido al crear una empresa.
+                'calle'      => $calle,
+                'cod_prov'   => $codProv,
+                'cod_ciudad' => $codCiud,
             ];
         }
         usort($out, static fn($a, $b) => strcmp($a['codigo'], $b['codigo']));
         return $out;
+    }
+
+    /**
+     * Parte la direccionCompleta del SRI ("PICHINCHA / QUITO / LA CONCEPCIÓN / MANUEL SERRANO...")
+     * en [calle, cod_prov, cod_ciudad]: provincia = 1.er tramo, ciudad = 2.º, calle = el último.
+     * Códigos vacíos si la provincia o la ciudad no se reconocen en el catálogo.
+     *
+     * @return array{0:string, 1:string, 2:string}
+     */
+    private function resolverUbicacion(string $direccionCompleta): array
+    {
+        if ($direccionCompleta === '') {
+            return ['', '', ''];
+        }
+        $clave = mb_strtoupper($direccionCompleta);
+        if (isset($this->cacheUbicaciones[$clave])) {
+            return $this->cacheUbicaciones[$clave];
+        }
+        $partes = array_map('trim', explode('/', $direccionCompleta));
+        $nombreProvincia = $partes[0] ?? '';
+        $nombreCiudad = $partes[1] ?? '';
+        $calle = trim($partes[count($partes) - 1]);
+        $codProv = '';
+        $codCiud = '';
+        if ($nombreProvincia !== '' || $nombreCiudad !== '') {
+            $this->modeloProvincia ??= new Provincia();
+            $this->modeloCiudad ??= new Ciudad();
+            $codProvBuscado = $this->modeloProvincia->getCodigoPorNombre($nombreProvincia);
+            if ($codProvBuscado !== null) {
+                $codProv = $codProvBuscado;
+                $codCiudBuscado = $this->modeloCiudad->getCodigoPorNombreYProvincia($nombreCiudad, $codProv);
+                if ($codCiudBuscado !== null) {
+                    $codCiud = $codCiudBuscado;
+                }
+            }
+        }
+        return $this->cacheUbicaciones[$clave] = [$calle, $codProv, $codCiud];
     }
 
     /**

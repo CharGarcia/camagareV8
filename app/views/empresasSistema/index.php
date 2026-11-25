@@ -265,16 +265,18 @@ document.addEventListener('DOMContentLoaded', function () {
                 <div class="modal-body">
                     <div id="crear-empresa-msg" class="d-none"></div>
                     <div class="row g-3">
+                        <!-- Primero el establecimiento: la consulta al SRI llena los datos de ESE
+                             establecimiento del RUC (nombre comercial, dirección, provincia, ciudad). -->
+                        <div class="col-md-3">
+                            <label for="crear-establecimiento" class="form-label">Establecimiento *</label>
+                            <input type="text" id="crear-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" required placeholder="001" maxlength="3" inputmode="numeric" pattern="[0-9]{1,3}" title="3 dígitos (000 a 999)" value="001" autocomplete="off">
+                        </div>
                         <div class="col-md-4">
                             <label for="crear-ruc" class="form-label">RUC *</label>
                             <div class="input-group input-group-sm">
                                 <input type="text" id="crear-ruc" name="ruc" class="form-control form-control-sm solo-numero" required placeholder="1234567890001" maxlength="13" inputmode="numeric" pattern="[0-9]{13}" title="13 dígitos numéricos" autocomplete="off">
-                                <button type="button" id="btn-consultar-ruc" class="btn btn-outline-secondary btn-sm" title="Consultar datos del RUC"><i class="bi bi-search"></i></button>
+                                <button type="button" id="btn-consultar-ruc" class="btn btn-outline-secondary btn-sm" title="Consultar en el SRI los datos de este RUC y establecimiento"><i class="bi bi-search"></i></button>
                             </div>
-                        </div>
-                        <div class="col-md-3">
-                            <label for="crear-establecimiento" class="form-label">Establecimiento *</label>
-                            <input type="text" id="crear-establecimiento" name="establecimiento" class="form-control form-control-sm solo-numero" required placeholder="001" maxlength="3" value="001">
                         </div>
                         <div class="col-md-3">
                             <label for="crear-estado" class="form-label">Estado</label>
@@ -286,6 +288,9 @@ document.addEventListener('DOMContentLoaded', function () {
                         <div class="col-md-2">
                             <label for="crear-max-usuarios" class="form-label">Usuarios</label>
                             <input type="number" id="crear-max-usuarios" name="max_usuarios" class="form-control form-control-sm" min="1" max="9999" value="3" required>
+                        </div>
+                        <div class="col-12 d-none" id="crear-est-sri-wrap">
+                            <div class="form-text small mt-0" id="crear-est-sri"></div>
                         </div>
                         <div class="col-12">
                             <label for="crear-nombre" class="form-label">Razón social *</label>
@@ -1425,6 +1430,113 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
         toggleComboWrap();
     }
 
+    // Última respuesta del SRI para el RUC del modal Crear. Trae TODOS los establecimientos
+    // del RUC: al cambiar el establecimiento se vuelven a llenar los datos sin consultar otra vez.
+    var sriDatos = null;
+    var sriRuc = '';
+
+    function rucCrearActual() {
+        var inp = document.getElementById('crear-ruc');
+        return inp ? (inp.value || '').replace(/\D/g, '') : '';
+    }
+
+    function codigoEstablecimientoCrear() {
+        var inp = document.getElementById('crear-establecimiento');
+        var v = inp ? (inp.value || '').replace(/\D/g, '') : '';
+        if (v === '') return '';
+        v = ('000' + v).slice(-3);
+        if (inp) inp.value = v;
+        return v;
+    }
+
+    function ocultarEstablecimientosSri() {
+        var wrap = document.getElementById('crear-est-sri-wrap');
+        var info = document.getElementById('crear-est-sri');
+        if (info) info.textContent = '';
+        if (wrap) wrap.classList.add('d-none');
+    }
+
+    function limpiarDatosSri() {
+        sriDatos = null;
+        sriRuc = '';
+        ocultarEstablecimientosSri();
+    }
+
+    function pintarEstablecimientosSri() {
+        var wrap = document.getElementById('crear-est-sri-wrap');
+        var info = document.getElementById('crear-est-sri');
+        if (!wrap || !info) return;
+        var lista = (sriDatos && sriDatos.establecimientos) || [];
+        if (!lista.length) { ocultarEstablecimientosSri(); return; }
+        info.innerHTML = '';
+        var tit = document.createElement('i');
+        tit.className = 'bi bi-shop me-1';
+        info.appendChild(tit);
+        info.appendChild(document.createTextNode('Establecimientos del RUC en el SRI: '));
+        lista.forEach(function(e, i) {
+            if (i > 0) info.appendChild(document.createTextNode(' · '));
+            var s = document.createElement('span');
+            s.className = e.estado === 'CERRADO' ? 'text-danger' : 'fw-semibold';
+            s.textContent = e.codigo + (e.matriz ? ' (matriz)' : '') + (e.estado === 'CERRADO' ? ' (cerrado)' : '');
+            if (e.nombre) s.title = e.nombre + (e.direccion ? ' — ' + e.direccion : '');
+            info.appendChild(s);
+        });
+        wrap.classList.remove('d-none');
+    }
+
+    function ponerUbicacionCrear(codProv, codCiud) {
+        var selProv = document.getElementById('crear-provincia');
+        if (!selProv) return;
+        selProv.value = codProv || '';
+        cargarCiudades(codProv || '', 'crear-ciudad', codCiud || '');
+    }
+
+    // Llena el formulario con los datos del establecimiento escrito, tomados de sriDatos.
+    function aplicarEstablecimientoSri() {
+        var d = sriDatos;
+        if (!d) return;
+        var lista = d.establecimientos || [];
+        var cod = codigoEstablecimientoCrear();
+        if (cod === '') {
+            cod = d.establecimiento || '001';
+            document.getElementById('crear-establecimiento').value = cod;
+        }
+
+        // La razón social es del contribuyente: igual para todos sus establecimientos.
+        document.getElementById('crear-nombre').value = d.nombre || '';
+
+        // Sin lista (respuesta antigua o sin establecimientos): datos de la matriz, como antes.
+        if (!lista.length) {
+            document.getElementById('crear-nombre-comercial').value = d.nombre_comercial || '';
+            document.getElementById('crear-direccion').value = d.direccion || '';
+            if (d.cod_prov) ponerUbicacionCrear(d.cod_prov, d.cod_ciudad);
+            return;
+        }
+
+        var est = null;
+        lista.forEach(function(e) { if (!est && e.codigo === cod) est = e; });
+
+        if (!est) {
+            document.getElementById('crear-nombre-comercial').value = d.nombre || '';
+            document.getElementById('crear-direccion').value = '';
+            ponerUbicacionCrear('', '');
+            var disponibles = lista.map(function(e) {
+                return e.codigo + (e.estado === 'CERRADO' ? ' (cerrado)' : '');
+            }).join(', ');
+            EMPSIS_alerta('warning', 'Establecimiento no registrado',
+                'El RUC no tiene el establecimiento ' + cod + ' en el SRI. Establecimientos registrados: ' + disponibles + '.');
+            return;
+        }
+
+        document.getElementById('crear-nombre-comercial').value = est.nombre || d.nombre || '';
+        document.getElementById('crear-direccion').value = est.calle || est.direccion || '';
+        ponerUbicacionCrear(est.cod_prov, est.cod_ciudad);
+        if (est.estado === 'CERRADO') {
+            EMPSIS_alerta('warning', 'Establecimiento cerrado',
+                'El establecimiento ' + cod + ' figura como CERRADO en el SRI. Se llenaron sus datos, pero revise antes de crear la empresa.');
+        }
+    }
+
     function consultarRucSri() {
         var inp = document.getElementById('crear-ruc');
         var btn = document.getElementById('btn-consultar-ruc');
@@ -1450,19 +1562,14 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
                 btn.innerHTML = '<i class="bi bi-search"></i>';
                 if (res.ok && res.data) {
                     var d = res.data;
-                    document.getElementById('crear-nombre').value = d.nombre || '';
-                    document.getElementById('crear-nombre-comercial').value = d.nombre_comercial || '';
-                    document.getElementById('crear-direccion').value = d.direccion || '';
                     if (d.tipo && modalCrear) {
                         var tipoInput = modalCrear.querySelector('input[name="tipo"]');
                         if (tipoInput) tipoInput.value = d.tipo;
                     }
-                    var codProv = d.cod_prov || '';
-                    var codCiud = d.cod_ciudad || '';
-                    if (codProv) {
-                        document.getElementById('crear-provincia').value = codProv;
-                        cargarCiudades(codProv, 'crear-ciudad', codCiud);
-                    }
+                    sriDatos = d;
+                    sriRuc = num;
+                    pintarEstablecimientosSri();
+                    aplicarEstablecimientoSri();
                 } else {
                     EMPSIS_alerta('warning', 'Consulta del RUC', res.error || 'No se pudo consultar el RUC.');
                 }
@@ -1481,11 +1588,34 @@ window.EMPSIS_confirmar = function (titulo, texto, boton, peligro) {
     if (crearRuc) {
         crearRuc.addEventListener('blur', function() {
             var n = (this.value || '').replace(/\D/g, '');
-            if (n.length === 13) consultarRucSri();
+            // Ya consultado (p. ej. salir del campo sin cambiarlo): no repetir la consulta.
+            if (n.length === 13 && !(sriDatos && sriRuc === n)) consultarRucSri();
+        });
+        // Otro RUC: lo consultado ya no aplica.
+        crearRuc.addEventListener('input', function() {
+            if (sriDatos && rucCrearActual() !== sriRuc) limpiarDatosSri();
         });
     }
     if (btnConsultar) {
         btnConsultar.addEventListener('click', consultarRucSri);
+    }
+    // Cambiar el establecimiento después de consultar: se llenan los datos del nuevo con lo
+    // que ya trajo el SRI (sin consultarlo otra vez). Si aún no se consultó y el RUC está
+    // completo, se consulta.
+    var crearEstablecimiento = document.getElementById('crear-establecimiento');
+    if (crearEstablecimiento) {
+        crearEstablecimiento.addEventListener('change', function() {
+            if (codigoEstablecimientoCrear() === '') return;
+            if (sriDatos && sriRuc === rucCrearActual()) {
+                aplicarEstablecimientoSri();
+            } else if (rucCrearActual().length === 13) {
+                consultarRucSri();
+            }
+        });
+    }
+    var formCrearSri = document.getElementById('form-crear-empresa');
+    if (formCrearSri) {
+        formCrearSri.addEventListener('reset', limpiarDatosSri);
     }
 
     function ocultarMsgForm(containerId) {
