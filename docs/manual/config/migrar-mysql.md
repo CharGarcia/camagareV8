@@ -6,7 +6,7 @@ ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
 etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano, detalle adicional del item, adicional por linea, det. adicional migrado, info adicional del producto en la factura, re-migrar retenciones, retenciones pendientes, retencion pendiente migrada, retencion no se descuenta
-version: 1.30
+version: 1.31
 orden: 2
 estado: activo
 ---
@@ -40,8 +40,13 @@ Ejemplo (con datos ficticios):
 <ftp_docs_pass>contraseña</ftp_docs_pass>
 ```
 
-El botón **Probar conexión** muestra si faltan. Nunca escriba estas
-contraseñas en el código, en el manual ni en un mensaje de commit.
+Si la contraseña lleva los caracteres `&` o `<`, escríbalos como `&amp;` y
+`&lt;`; de lo contrario el archivo queda con un error de formato.
+
+El botón **Probar conexión** dice exactamente qué corregir: si no existe
+`parametros.xml`, si tiene un error de formato (con la línea) o qué etiqueta
+falta o está vacía. Nunca escriba estas contraseñas en el código, en el
+manual ni en un mensaje de commit.
 
 ## Migrar empresas: cada establecimiento es un cliente distinto
 
@@ -585,7 +590,15 @@ Una retención en borrador todavía no está emitida, así que Egresos y Cuentas
 - **«Faltan las credenciales de la BD anterior (MySQL)»** o **«Faltan las
   credenciales del FTP de documentos»**: agregue el usuario y la contraseña en
   `config/parametros.xml` del servidor (ver *Credenciales del sistema
-  anterior*).
+  anterior*). El mensaje nombra la etiqueta que falta o está vacía.
+
+- **«No se pudieron leer las credenciales… tiene un error de formato (línea
+  N…)»**: `parametros.xml` no es un XML válido, así que no se lee ninguna
+  clave. Revise la línea indicada; lo más común es un `&` o `<` dentro de una
+  contraseña (escríbalos como `&amp;` y `&lt;`) o una etiqueta sin cerrar.
+
+- **«No existe config/parametros.xml en el servidor»**: cree el archivo a
+  partir del de otro servidor y agregue las claves.
 
 - **Una factura de venta migrada no trae el detalle adicional de sus ítems**
   (columna *Det. Adicional* / *Adicional* de cada línea): se migró con una
@@ -705,6 +718,7 @@ Una retención en borrador todavía no está emitida, así que Egresos y Cuentas
 
 ## Historial de cambios
 
+- **1.31** — Los avisos de credenciales distinguen si falta `parametros.xml`, si tiene un error de formato (con la línea) o qué etiqueta falta; antes un XML mal formado se informaba como «faltan las credenciales».
 - **1.30** — Las credenciales de la base MySQL anterior y del FTP de documentos ya no tienen valor por defecto en el código: se leen solo de `config/parametros.xml`. Nueva sección *Credenciales del sistema anterior*.
 - **1.29** — **Retenciones en compra**: al volver a ejecutarlas ya no se modifican las retenciones propias del sistema nuevo que la migración solo enlazó por número, ni se regresan a borrador las migradas pendientes que ya se enviaron o autorizaron desde el sistema nuevo. Nueva sección *Retenciones en compra: re-migrar y retenciones pendientes*.
 - **1.28** — **Facturas de venta**: se migra el detalle adicional de cada

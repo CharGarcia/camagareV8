@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\MigracionMysql;
 
+use App\Helpers\ParametrosXml;
 use PDO;
 use RuntimeException;
 
@@ -91,24 +92,22 @@ class LegacyMysqlConnection
     private static function config(): array
     {
         // Servidor, puerto y base no son secretos: tienen valor por defecto. Usuario y clave, no.
-        $cfg = ['host' => 'camagare.com.ec', 'port' => 3306, 'user' => '', 'pass' => '', 'db' => 'sistema'];
-        $file = (defined('MVC_CONFIG') ? MVC_CONFIG : dirname(__DIR__, 3) . '/config') . '/parametros.xml';
-        if (is_file($file)) {
-            $xml = @simplexml_load_file($file);
-            if ($xml !== false) {
-                if (!empty($xml->mysql_legacy_host)) $cfg['host'] = (string) $xml->mysql_legacy_host;
-                if (!empty($xml->mysql_legacy_port)) $cfg['port'] = (int) $xml->mysql_legacy_port;
-                if (!empty($xml->mysql_legacy_user)) $cfg['user'] = (string) $xml->mysql_legacy_user;
-                if (!empty($xml->mysql_legacy_pass)) $cfg['pass'] = (string) $xml->mysql_legacy_pass;
-                if (!empty($xml->mysql_legacy_db))   $cfg['db']   = (string) $xml->mysql_legacy_db;
-            }
+        // Distingue archivo ausente, XML mal formado y etiquetas faltantes (ParametrosXml).
+        $problema = ParametrosXml::problemaCredenciales(
+            'de la BD anterior (MySQL)',
+            ['mysql_legacy_user', 'mysql_legacy_pass'],
+            ['mysql_legacy_host', 'mysql_legacy_port', 'mysql_legacy_db']
+        );
+        if ($problema !== null) {
+            throw new RuntimeException($problema);
         }
-        if ($cfg['user'] === '' || $cfg['pass'] === '') {
-            throw new RuntimeException(
-                'Faltan las credenciales de la BD anterior (MySQL). Agréguelas en config/parametros.xml del servidor: '
-                . '<mysql_legacy_user> y <mysql_legacy_pass> (y, si cambian, <mysql_legacy_host>, <mysql_legacy_port> y <mysql_legacy_db>).'
-            );
-        }
-        return $cfg;
+        $port = ParametrosXml::valor('mysql_legacy_port');
+        return [
+            'host' => ParametrosXml::valor('mysql_legacy_host') ?: 'camagare.com.ec',
+            'port' => $port !== '' ? (int) $port : 3306,
+            'user' => ParametrosXml::valor('mysql_legacy_user'),
+            'pass' => ParametrosXml::valor('mysql_legacy_pass'),
+            'db'   => ParametrosXml::valor('mysql_legacy_db') ?: 'sistema',
+        ];
     }
 }

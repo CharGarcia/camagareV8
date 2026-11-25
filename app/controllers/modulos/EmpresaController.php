@@ -29,6 +29,37 @@ class EmpresaController extends BaseModuloController
         return self::RUTA_MODULO;
     }
 
+    /**
+     * Submódulos del menú Inventarios que habilitan la pestaña «Inventario».
+     * Bodegas y Unidades de medida no cuentan: son catálogos que también usan
+     * Ventas/Compras sin que el usuario trabaje con el inventario.
+     */
+    private const RUTAS_INVENTARIO = ['modulos/inventario', 'modulos/transferencias-inventario'];
+
+    /** ¿Ve la pestaña «Inventario»? Solo si tiene acceso al módulo de inventarios. */
+    private function puedeVerPestanaInventario(): bool
+    {
+        return \App\Helpers\Permisos::puedeVerAlguna(self::RUTAS_INVENTARIO);
+    }
+
+    /**
+     * Pestañas de personalización (catálogo App\Helpers\ConfigModulo) que el usuario
+     * puede ver: cada una solo si tiene acceso al módulo que personaliza
+     * (p. ej. «Consignaciones» → modulos/consignaciones-ventas).
+     *
+     * @return string[] rutas de módulo permitidas
+     */
+    private function modulosConfigPermitidos(): array
+    {
+        $out = [];
+        foreach (array_keys(\App\Helpers\ConfigModulo::CATALOGO) as $modulo) {
+            if (\App\Helpers\Permisos::puedeVer($modulo)) {
+                $out[] = $modulo;
+            }
+        }
+        return $out;
+    }
+
     public function index(): void
     {
         $this->requireLeer();
@@ -101,7 +132,13 @@ class EmpresaController extends BaseModuloController
             'productoPropina' => $productoPropina,
             // Personalización por módulo (una pestaña por módulo del catálogo
             // App\Helpers\ConfigModulo, p. ej. «Consignaciones»).
-            'configModulos' => \App\Services\modulos\ConfigModuloService::crear()->datosPantalla($idEmpresa),
+            // Cada pestaña solo si el usuario tiene acceso al módulo que personaliza.
+            'configModulos' => array_intersect_key(
+                \App\Services\modulos\ConfigModuloService::crear()->datosPantalla($idEmpresa),
+                array_flip($this->modulosConfigPermitidos())
+            ),
+            // Pestaña «Inventario»: solo con acceso al módulo de inventarios.
+            'verPestanaInventario' => $this->puedeVerPestanaInventario(),
             'rutaModulo' => self::RUTA_MODULO,
             'fullWidth' => true
         ]);
@@ -181,6 +218,9 @@ class EmpresaController extends BaseModuloController
                     break;
                 case 'inventario_config':
                     $this->requireActualizar();
+                    if (!$this->puedeVerPestanaInventario()) {
+                        throw new \Exception('No tiene acceso al módulo de inventarios.');
+                    }
                     $res = $this->service->saveInventarioConfig($idEmpresa, $_POST);
                     echo json_encode(['ok' => $res]);
                     break;
@@ -193,6 +233,9 @@ class EmpresaController extends BaseModuloController
                     $cfg = json_decode((string) ($_POST['config'] ?? ''), true);
                     if (!is_array($cfg)) {
                         throw new \Exception('Datos de configuración no válidos.');
+                    }
+                    if (!in_array((string) ($cfg['modulo'] ?? ''), $this->modulosConfigPermitidos(), true)) {
+                        throw new \Exception('No tiene acceso al módulo que intenta personalizar.');
                     }
                     \App\Services\modulos\ConfigModuloService::crear()->guardar(
                         $idEmpresa,
@@ -309,6 +352,9 @@ class EmpresaController extends BaseModuloController
         header('Content-Type: application/json');
         try {
             $this->requireLeer();
+            if (empty($this->modulosConfigPermitidos())) {
+                throw new \Exception('No tiene acceso a los módulos personalizables.');
+            }
             $idEmpresa = (int) ($_SESSION['id_empresa'] ?? 0);
             $buscar = trim((string) ($_GET['q'] ?? ''));
             // Una petición por tecla: suelta el candado de la sesión.

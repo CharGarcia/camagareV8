@@ -76,11 +76,14 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         Facturación
                     </button>
                 </li>
+                <?php if (!empty($verPestanaInventario)): ?>
+                <!-- Solo con acceso al módulo de inventarios (EmpresaController::puedeVerPestanaInventario) -->
                 <li class="nav-item" role="presentation">
                     <button class="nav-link px-2 py-1 small text-nowrap" style="font-size: 0.75rem;" id="inventario-tab" data-bs-toggle="tab" data-bs-target="#inventario_config" type="button" role="tab">
                         Inventario
                     </button>
                 </li>
+                <?php endif; ?>
                 <?php foreach (($configModulos ?? []) as $cmTab): ?>
                     <!-- Personalización del módulo (catálogo App\Helpers\ConfigModulo) -->
                     <li class="nav-item" role="presentation">
@@ -2005,6 +2008,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                 </div>
 
                 <!-- Pestaña: Reglas Inventario -->
+                <?php if (!empty($verPestanaInventario)): ?>
                 <div class="tab-pane fade" id="inventario_config" role="tabpanel">
                     <form id="form-inventario-config" method="POST">
                         <input type="hidden" name="section" value="inventario_config">
@@ -2030,6 +2034,7 @@ $warnIcon = '<i class="bi bi-exclamation-circle-fill text-warning ms-1" title="C
                         </div>
                     </form>
                 </div>
+                <?php endif; ?>
 
                 <?php foreach (($configModulos ?? []) as $cm) { require __DIR__ . '/config_modulo_pane.php'; } ?>
 

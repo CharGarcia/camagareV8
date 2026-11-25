@@ -54,26 +54,25 @@ class ImportarAntiguoService
     private static function configFtp(): array
     {
         // Servidor y puerto no son secretos: tienen valor por defecto. Usuario y clave, no.
-        $cfg = ['host' => '64.225.69.65', 'user' => '', 'pass' => '', 'port' => 21];
-        $file = (defined('MVC_CONFIG') ? MVC_CONFIG : dirname(__DIR__, 3) . '/config') . '/parametros.xml';
-        if (is_file($file)) {
-            $xml = @simplexml_load_file($file);
-            if ($xml !== false) {
-                if (!empty($xml->ftp_docs_host)) $cfg['host'] = (string) $xml->ftp_docs_host;
-                if (!empty($xml->ftp_docs_user)) $cfg['user'] = (string) $xml->ftp_docs_user;
-                if (!empty($xml->ftp_docs_pass)) $cfg['pass'] = (string) $xml->ftp_docs_pass;
-                if (!empty($xml->ftp_docs_port)) $cfg['port'] = (int) $xml->ftp_docs_port;
-            }
-        }
-        return $cfg;
+        $port = \App\Helpers\ParametrosXml::valor('ftp_docs_port');
+        return [
+            'host' => \App\Helpers\ParametrosXml::valor('ftp_docs_host') ?: '64.225.69.65',
+            'user' => \App\Helpers\ParametrosXml::valor('ftp_docs_user'),
+            'pass' => \App\Helpers\ParametrosXml::valor('ftp_docs_pass'),
+            'port' => $port !== '' ? (int) $port : 21,
+        ];
     }
 
     private function nuevoScanner(): FtpDocumentosScanner
     {
         if ($this->ftpUser === '' || $this->ftpPass === '') {
+            // Explica si falta el archivo, si el XML está mal formado o qué etiqueta falta.
             throw new \RuntimeException(
-                'Faltan las credenciales del FTP de documentos. Agréguelas en config/parametros.xml del servidor: '
-                . '<ftp_docs_user> y <ftp_docs_pass> (y, si cambian, <ftp_docs_host> y <ftp_docs_port>).'
+                \App\Helpers\ParametrosXml::problemaCredenciales(
+                    'del FTP de documentos',
+                    ['ftp_docs_user', 'ftp_docs_pass'],
+                    ['ftp_docs_host', 'ftp_docs_port']
+                ) ?? 'Faltan las credenciales del FTP de documentos (<ftp_docs_user> y <ftp_docs_pass> en config/parametros.xml).'
             );
         }
         return new FtpDocumentosScanner($this->ftpHost, $this->ftpUser, $this->ftpPass, $this->ftpPort);
