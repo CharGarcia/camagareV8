@@ -56,20 +56,22 @@ class FacturaExpressPublicoController extends Controller
 
         $token = trim($_GET['token'] ?? '');
 
-        // Reconstruir ítems seleccionados desde el POST
+        // Ítems elegidos: solo las filas con la casilla marcada (id_item viene únicamente
+        // del checkbox; las filas desmarcadas igual mandan sus campos ocultos y antes se
+        // facturaban). Del navegador solo se toma qué ítem, la cantidad y el precio
+        // escrito; descripción, producto, IVA y el precio de los ítems de precio fijo los
+        // pone el Service desde la plantilla guardada (recibirSolicitudPublica).
         $itemsSeleccionados = [];
         $itemsRaw = $_POST['items'] ?? [];
         if (is_array($itemsRaw)) {
             foreach ($itemsRaw as $item) {
-                $cantidad = (float) ($item['cantidad'] ?? 0);
-                if ($cantidad <= 0) continue;
+                if (!is_array($item)) continue;
+                $idItem = (int) ($item['id_item'] ?? 0);
+                if ($idItem <= 0) continue;
                 $itemsSeleccionados[] = [
-                    'id_item'        => (int) ($item['id_item'] ?? 0),
-                    'id_producto'    => (int) ($item['id_producto'] ?? 0) ?: null,
-                    'descripcion'    => trim($item['descripcion'] ?? ''),
-                    'cantidad'       => $cantidad,
-                    'precio_unitario'=> (float) ($item['precio_unitario'] ?? 0),
-                    'porcentaje_iva' => (float) ($item['porcentaje_iva'] ?? 0),
+                    'id_item'         => $idItem,
+                    'cantidad'        => (string) ($item['cantidad'] ?? ''),
+                    'precio_unitario' => (string) ($item['precio_unitario'] ?? ''),
                 ];
             }
         }

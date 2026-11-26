@@ -147,6 +147,10 @@ class FacturaExpressQrService
             throw new Exception('Has enviado demasiadas solicitudes. Por favor espera un momento antes de intentar nuevamente.');
         }
 
+        // Los ítems se arman con los datos de la plantilla guardada, no con los del
+        // navegador (que se pueden manipular): ver itemsDesdePlantilla().
+        $itemsSeleccionados = $this->itemsDesdePlantilla((int) $plantilla['id'], $itemsSeleccionados);
+
         // Validar datos del formulario
         $this->rules->validarSolicitudPublica($formData, $itemsSeleccionados);
 
@@ -201,6 +205,60 @@ class FacturaExpressQrService
             'plantilla'     => $plantilla,
             'data'          => $data,
         ];
+    }
+
+    /**
+     * Arma los ítems de una solicitud pública con los datos GUARDADOS de la plantilla.
+     * El formulario es público y sin login: todo lo que manda el navegador se puede
+     * alterar. Por eso del POST solo se acepta:
+     *   - qué ítems eligió (id_item, que debe ser un ítem activo de ESTA plantilla),
+     *   - la cantidad, solo si el ítem tiene «cantidad editable» (si no, la de la plantilla),
+     *   - el precio, solo si el ítem tiene «precio editable» (si no, el de la plantilla).
+     * Descripción, producto e IVA salen siempre de la plantilla (el IVA de un ítem de
+     * catálogo es la tarifa actual del producto, ya sincronizada por el repositorio).
+     * Antes se usaban tal cual el precio, el IVA y la descripción de campos ocultos, y
+     * con una plantilla sin aprobación manual se facturaba con el precio que llegara.
+     */
+    private function itemsDesdePlantilla(int $idPlantilla, array $elegidos): array
+    {
+        $catalogo = [];
+        foreach ($this->repo->getItemsActivosPorPlantilla($idPlantilla) as $it) {
+            $catalogo[(int) $it['id']] = $it;
+        }
+        $si = static fn ($v): bool => in_array($v, [true, 1, '1', 't', 'true'], true);
+
+        $items = [];
+        $vistos = [];
+        foreach ($elegidos as $sel) {
+            $idItem = (int) ($sel['id_item'] ?? 0);
+            $it     = $catalogo[$idItem] ?? null;
+            if ($it === null) {
+                throw new \InvalidArgumentException('Uno de los productos elegidos ya no está disponible. Recarga la página e intenta nuevamente.');
+            }
+            if (isset($vistos[$idItem])) {
+                continue; // la misma fila enviada dos veces: se cuenta una sola
+            }
+            $vistos[$idItem] = true;
+
+            $cantidad = (float) ($it['cantidad_default'] ?? 1);
+            if ($si($it['cantidad_editable'] ?? false)) {
+                $cantidad = $this->rules->numeroPublico((string) ($sel['cantidad'] ?? ''), 'cantidad', (string) $it['descripcion']);
+            }
+            $precio = (float) $it['precio_unitario'];
+            if ($si($it['precio_editable'] ?? false)) {
+                $precio = $this->rules->numeroPublico((string) ($sel['precio_unitario'] ?? ''), 'precio', (string) $it['descripcion']);
+            }
+
+            $items[] = [
+                'id_item'         => $idItem,
+                'id_producto'     => !empty($it['id_producto']) ? (int) $it['id_producto'] : null,
+                'descripcion'     => (string) $it['descripcion'],
+                'cantidad'        => $cantidad,
+                'precio_unitario' => $precio,
+                'porcentaje_iva'  => (float) ($it['porcentaje_iva'] ?? 0),
+            ];
+        }
+        return $items;
     }
 
     // ═══════════════════════════════════════════════════════

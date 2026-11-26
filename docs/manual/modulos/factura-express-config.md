@@ -224,6 +224,16 @@ La revisión de solicitudes tiene permisos aparte, en
   **tarifa actual del producto**: si cambia la tarifa del producto, la
   plantilla la toma sola. Una línea escrita a mano, sin elegir un producto,
   queda con IVA 0%.
+- **El cliente no puede cambiar lo que la plantilla no le permite.** Al recibir
+  la solicitud, el sistema toma la descripción, el IVA y el precio de cada línea
+  de la plantilla guardada, no de lo que llega del celular del cliente. Solo
+  acepta la cantidad que escribió si la línea tiene **Cant. editable**, y el
+  precio que escribió si tiene **Precio edit.**; si no, usa la cantidad por
+  defecto y el precio de la plantilla. Solo se facturan las líneas que el
+  cliente dejó **marcadas**. Si elige una línea que ya no existe en la
+  plantilla (por ejemplo, porque usted la editó mientras él llenaba el
+  formulario), ve *«Uno de los productos elegidos ya no está disponible.
+  Recarga la página e intenta nuevamente.»*
 - Al editar una plantilla, sus líneas se reemplazan por las que quedan en
   pantalla al guardar. Las solicitudes ya recibidas conservan los ítems que el
   cliente envió.
@@ -276,4 +286,4 @@ La revisión de solicitudes tiene permisos aparte, en
 ## Historial de cambios
 
 - **1.0** — Versión inicial del manual.
-- **1.1** — Buscador con ventana de **Filtros** (estado, aprobación manual, serie, forma de pago, solicitudes pendientes, fechas y más). Ahora también se puede ordenar por Descripción, Ítems y Solicitudes. Los botones **PDF** y **Excel** ya descargan el listado con los filtros aplicados.
+- **1.1** — Buscador con ventana de **Filtros** (estado, aprobación manual, serie, forma de pago, solicitudes pendientes, fechas y más). Ahora también se puede ordenar por Descripción, Ítems y Solicitudes. Los botones **PDF** y **Excel** ya descargan el listado con los filtros aplicados. Seguridad del formulario público: el precio, el IVA y la descripción se toman siempre de la plantilla (el cliente solo cambia cantidad o precio si la línea lo permite) y ya no se facturan las líneas que el cliente desmarcó.

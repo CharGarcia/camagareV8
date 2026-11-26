@@ -85,6 +85,30 @@ class FacturaExpressQrRules
         }
     }
 
+    /**
+     * Cantidad o precio escrito por el cliente en el formulario público (ítems con
+     * «cantidad/precio editable»). Debe ser un número finito: la cantidad mayor a cero y
+     * el precio mayor o igual a cero, ambos con un tope razonable.
+     */
+    public function numeroPublico(string $valor, string $tipo, string $descripcion): float
+    {
+        $v = str_replace(',', '.', trim($valor));
+        $nombre = $tipo === 'precio' ? 'El precio' : 'La cantidad';
+        if ($v === '' || !is_numeric($v) || !is_finite((float) $v)) {
+            throw new \InvalidArgumentException("{$nombre} de «{$descripcion}» no es " . ($tipo === 'precio' ? 'válido.' : 'válida.'));
+        }
+        $n = (float) $v;
+        if ($tipo === 'precio' ? $n < 0 : $n <= 0) {
+            throw new \InvalidArgumentException($tipo === 'precio'
+                ? "El precio de «{$descripcion}» no puede ser negativo."
+                : "La cantidad de «{$descripcion}» debe ser mayor a cero.");
+        }
+        if ($n > 1000000) {
+            throw new \InvalidArgumentException("{$nombre} de «{$descripcion}» es demasiado alto.");
+        }
+        return $n;
+    }
+
     // ── Validar identificación ecuatoriana ────────────────────────────────────
     private function validarIdentificacion(string $id, string $tipo): void
     {
