@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/clientes
 tipo: modulo
 visibilidad: todos
-etiquetas: clientes, observaciones, observacion del cliente, notas del cliente, cliente vip, quien solicito el cliente, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver factura, ver documento, detalle de la factura
-version: 3.9
+etiquetas: clientes, observaciones, observacion del cliente, notas del cliente, cliente vip, quien solicito el cliente, contable, cuenta contable, cuentas contables, asiento contable, configuracion contable, cuenta por cobrar del cliente, cuenta de ventas del cliente, cliente, cartera, buscar cliente, buscador, filtros, filtrar clientes, clientes sin correo, clientes por ciudad, clientes por vendedor, chips, ordenar por dos columnas, ordenar por ciudad y nombre, ruc, cedula, consumidor final, deudores, cobro automatico, cobros pendientes, forma de cobro, ingreso automatico, cheque, dias de credito, visitas, dias de visita, ruta de visita, rutero, frecuencia de visita, vendedor, preventa, visita del vendedor, horario de atencion, orden de visita, importar clientes, carga masiva, asignar vendedor, transacciones, productos vendidos, servicios vendidos, historial de ventas, que le vendi, ultimo precio, precio de venta, estado de cuenta, kardex, saldo del cliente, historial de cobros, cobros realizados, ingresos, ver ingreso, cedula y ruc, cliente duplicado, proveedor duplicado, identificacion repetida, ruc es la cedula mas 001, mismo tercero dos fichas, estado de cuenta partido, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, imprimir, impresora, detalle adicional, det adicional, informacion adicional, info adicional, por documento, ver factura, ver documento, detalle de la factura, qr de registro, registro por qr, autorregistro, el cliente llena sus datos, formulario para clientes, actualizar datos del cliente, codigo qr clientes, imprimir qr
+version: 4.0
 orden: 10
 estado: activo
 ---
@@ -479,6 +479,29 @@ cambie aquí se ve allá y viceversa.
 
 Con la ficha nueva (sin guardar) la pestaña pide primero guardar el cliente.
 
+## QR de registro: que el cliente escriba sus datos
+
+El botón **QR de registro**, junto a **Mapa**, abre el código QR de la empresa.
+El cliente lo escanea con su celular, llena sus datos y queda registrado en
+Clientes al instante, sin que nadie los digite. Es **un solo QR para toda la
+empresa**: sirve en todos los establecimientos.
+
+En la ventana puede:
+
+- Ver el QR y el **enlace** (con el botón para copiarlo y mandarlo, por ejemplo,
+  por WhatsApp).
+- Personalizar el **Título** y el **Mensaje** del impreso. Se muestran en la
+  hoja impresa y arriba del formulario que ve el cliente.
+- **Imprimir QR**: genera una hoja A4 con el logo, el nombre de la empresa, el
+  título, el mensaje y el código, y pregunta si quiere imprimir, descargar o ver.
+- Apagar **QR activo**: el enlace deja de funcionar (el cliente ve *«Este enlace
+  no está disponible o ha sido desactivado.»*). Al volver a encenderlo funciona
+  el mismo QR impreso.
+- Ver cuántos registros llegaron por QR (total, hoy, nuevos y actualizados).
+
+Guía completa, con lo que ve el cliente y sus reglas:
+[QR de registro de clientes](guias/qr-registro-clientes).
+
 ## Carga masiva desde Excel
 
 En *Configuración → Importador desde Excel* la entidad **Clientes** permite
@@ -576,6 +599,7 @@ cambios del cliente y **no se copia** al replicar el cliente a otra empresa.
 
 ## Historial de cambios
 
+- **4.0** (26-11-2026) — Nuevo botón **QR de registro** junto a Mapa: un QR por empresa para que el cliente registre o actualice sus datos desde el celular, con título y mensaje personalizables e impresión del QR.
 - **3.9** (24-11-2026) — Pestaña **Estado de cuenta**: nuevo botón **Mostrar** junto a Limpiar; los datos ya no se cargan al abrir la pestaña ni al cambiar una fecha, sino al pulsarlo. Con *Historial de cobros* activo, el resumen del pie muestra solo el total de cobros. Enlaces **Este mes / Mes pasado / Este año / Año pasado** debajo de las fechas para llenar el período. El **Excel** respeta *Historial de cobros*. Nueva fila fija de **totales y saldo final** al pie de la tabla. Un ingreso que cobra varias facturas sale ahora en una fila por factura (antes una sola), para que la columna **Saldo** coincida fila por fila con el PDF. La tabla ya no se corta de 20 en 20: muestra todo el período (hasta 500 movimientos por página), para que la última fila sea el saldo final. Nuevo botón **PDF** junto a Excel. *Todos los movimientos / Historial de cobros* pasa a ser el selector **Movimientos**, junto a las fechas. Nuevo botón **Correo** para enviar el estado de cuenta, con el correo del cliente editable antes de enviar.
 - **3.8** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando cliente...* mientras el servidor responde.
 - **3.7** — Nuevo campo **Observaciones** en la pestaña *Comercial* de la ficha: nota interna del cliente (quién pidió crearlo, cliente VIP, cómo atenderlo). Sus cambios quedan en el historial del cliente (quién, cuándo, antes y después).

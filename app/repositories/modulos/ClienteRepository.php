@@ -554,6 +554,34 @@ class ClienteRepository extends BaseRepository
     }
 
     /**
+     * QR de registro de clientes: actualiza SOLO los datos que el cliente escribe en el
+     * formulario público (nombre, correo y, si los envió, teléfono y dirección) y
+     * reactiva la ficha si estaba eliminada. No toca tipo ni número de identificación,
+     * vendedor, plazo, formas de pago ni ningún otro dato comercial.
+     */
+    public function actualizarDatosQr(int $id, int $idEmpresa, array $data, int $idUsuario): void
+    {
+        $sql = "UPDATE {$this->table} SET
+                    nombre    = :nombre,
+                    email     = :email,
+                    telefono  = COALESCE(NULLIF(:tel, ''), telefono),
+                    direccion = COALESCE(NULLIF(:dir, ''), direccion),
+                    eliminado = false, deleted_at = NULL, deleted_by = NULL,
+                    updated_at = CURRENT_TIMESTAMP, updated_by = :uid
+                WHERE id = :id AND id_empresa = :id_empresa";
+        $st = $this->db->prepare($sql);
+        $st->execute([
+            ':nombre'     => $this->caparTexto('nombre', $data['nombre']),
+            ':email'      => $this->caparTexto('email', $data['email']),
+            ':tel'        => (string) $this->caparTexto('telefono', $data['telefono'] ?? ''),
+            ':dir'        => (string) $this->caparTexto('direccion', $data['direccion'] ?? ''),
+            ':uid'        => $idUsuario,
+            ':id'         => $id,
+            ':id_empresa' => $idEmpresa,
+        ]);
+    }
+
+    /**
      * Inserta un nuevo cliente con campos de auditoría.
      */
     public function create(array $data): int

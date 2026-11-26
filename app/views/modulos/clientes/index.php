@@ -153,6 +153,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="btnExportPdf" href="<?= $urlBaseClientes ?>/export-pdf?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-danger" title="Descargar PDF"><i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span></a>
                 <a id="btnExportExcel" href="<?= $urlBaseClientes ?>/export-excel?b=<?= urlencode($buscar) ?>&orden=<?= urlencode($ordenParam ?? '') ?>" class="btn btn-outline-success" title="Descargar Excel"><i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span></a>
                 <a href="<?= $urlBaseClientes ?>/mapa" class="btn btn-outline-secondary" title="Mapa de clientes"><i class="bi bi-map"></i><span class="d-none d-md-inline"> Mapa</span></a>
+                <button type="button" class="btn btn-outline-secondary" title="QR para que los clientes registren o actualicen sus datos" onclick="CLIQR_abrir()"><i class="bi bi-qr-code"></i><span class="d-none d-md-inline"> QR de registro</span></button>
                 <?php if ($perm['crear']): ?>
                     <button type="button" class="btn btn-outline-primary d-none" id="btnCopiarClientesEmpresa" title="Copiar todos los clientes a otra empresa" onclick="abrirModalCopiarClientesEmpresa()">
                         <i class="bi bi-arrow-left-right"></i> Copiar a otra empresa
@@ -220,6 +221,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
 <script>window.BASE_URL = '<?= $base ?>';</script>
 <?php include 'modal_cliente.php'; ?>
+<?php include __DIR__ . '/modal_qr_registro.php'; ?>
 
 <!-- Modal: Copiar todos los clientes a otra empresa -->
 <div class="modal fade" id="modalCopiarClientesEmpresa" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">

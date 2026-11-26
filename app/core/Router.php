@@ -222,6 +222,14 @@ class Router
                 $action        = (($parts[2] ?? '') === 'aprobar') ? 'aprobar' : 'index';
             }
 
+            // /registro-cliente/{token}[/enviar|/sri] → QR de registro de clientes (sin auth)
+            if (($parts[0] ?? '') === 'registro-cliente') {
+                $controller    = 'RegistroCliente';
+                $_GET['token'] = $parts[1] ?? '';
+                $sub           = $parts[2] ?? '';
+                $action        = $sub === 'enviar' ? 'enviar' : ($sub === 'sri' ? 'consultarSri' : 'index');
+            }
+
             // /factura-express/* → formulario público QR (sin auth)
             if (($parts[0] ?? '') === 'factura-express') {
                 $controller = 'FacturaExpressPublico';

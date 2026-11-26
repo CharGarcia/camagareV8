@@ -1047,6 +1047,159 @@ class ClientesController extends BaseModuloController
         exit;
     }
 
+    // ── QR de registro de clientes (uno por empresa) ──────────────────────────
+
+    /** Enlace público que abre el QR (absoluto: se escanea con la cámara del celular). */
+    private function urlQrRegistro(array $cfg): string
+    {
+        return url_absoluta('registro-cliente/' . rawurlencode((string) $cfg['token']));
+    }
+
+    private function datosQrRegistro(?array $cfg, \App\Services\modulos\ClienteQrService $svc, int $idEmpresa): array
+    {
+        if ($cfg === null) {
+            return ['existe' => false];
+        }
+        return [
+            'existe'  => true,
+            'url'     => $this->urlQrRegistro($cfg),
+            'activo'  => in_array($cfg['activo'], [true, 1, '1', 't', 'true'], true),
+            'titulo'  => (string) ($cfg['titulo'] ?? ''),
+            'mensaje' => (string) ($cfg['mensaje'] ?? ''),
+            'resumen' => $svc->resumen($idEmpresa),
+        ];
+    }
+
+    /**
+     * Ventana «QR de registro»: devuelve el QR de la empresa. La primera vez lo genera
+     * si el usuario puede crear o actualizar clientes; quien solo ve, lo consulta.
+     */
+    public function qrRegistroAjax(): void
+    {
+        $this->requireLeer();
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $svc = \App\Services\modulos\ClienteQrService::crear();
+            if (!$svc->disponible()) {
+                echo json_encode(['ok' => false, 'error' => 'Falta aplicar el SQL del QR de registro (database/2026-11-26_clientes_qr_registro.sql).']);
+                exit;
+            }
+            $perm      = $this->getPermisos();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $puede     = !empty($perm['actualizar']) || !empty($perm['crear']);
+            $cfg       = $svc->getConfig($idEmpresa, (int) $_SESSION['id_usuario'], $puede);
+            echo json_encode(['ok' => true, 'puedeEditar' => !empty($perm['actualizar'])]
+                + $this->datosQrRegistro($cfg, $svc, $idEmpresa), JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Imagen SVG del QR para la ventana (generada en el servidor con TCPDF, sin enviar
+     * el enlace —que lleva el token— a un servicio externo).
+     */
+    public function qrRegistroSvg(): void
+    {
+        $this->requireLeer();
+        $svc = \App\Services\modulos\ClienteQrService::crear();
+        $cfg = $svc->disponible() ? $svc->getConfig((int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], false) : null;
+        if ($cfg === null) {
+            http_response_code(404);
+            exit;
+        }
+        $autoload = MVC_ROOT . '/vendor/autoload.php';
+        if (file_exists($autoload)) {
+            require_once $autoload;
+        }
+        $qr = new \TCPDF2DBarcode($this->urlQrRegistro($cfg), 'QRCODE,M');
+        header('Content-Type: image/svg+xml; charset=utf-8');
+        header('Cache-Control: private, max-age=300');
+        echo $qr->getBarcodeSVGcode(6, 6, 'black');
+        exit;
+    }
+
+    /** Guarda si el QR está activo y el título/mensaje del impreso. */
+    public function guardarQrRegistroAjax(): void
+    {
+        $this->requireActualizar();
+        header('Content-Type: application/json; charset=utf-8');
+        try {
+            $svc       = \App\Services\modulos\ClienteQrService::crear();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $cfg = $svc->guardarConfig(
+                $idEmpresa,
+                (int) $_SESSION['id_usuario'],
+                ($_POST['activo'] ?? '1') === '1',
+                (string) ($_POST['titulo'] ?? ''),
+                (string) ($_POST['mensaje'] ?? '')
+            );
+            echo json_encode(['ok' => true, 'msg' => 'QR de registro guardado.', 'puedeEditar' => true]
+                + $this->datosQrRegistro($cfg, $svc, $idEmpresa), JSON_UNESCAPED_UNICODE);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * PDF para imprimir el QR (A4 vertical): título, mensaje, el código QR y el enlace.
+     * El QR lo dibuja Html2Pdf (<qrcode>), sin servicios externos. Se abre con
+     * CMG_pdfDocumento (Imprimir / Descargar / Ver).
+     */
+    public function qrRegistroPdf(): void
+    {
+        $this->requireLeer();
+        try {
+            $svc       = \App\Services\modulos\ClienteQrService::crear();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+            $cfg       = $svc->disponible() ? $svc->getConfig($idEmpresa, (int) $_SESSION['id_usuario'], false) : null;
+            if ($cfg === null) {
+                throw new \RuntimeException('Aún no se ha generado el QR de registro de esta empresa.');
+            }
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $e       = static fn ($v): string => htmlspecialchars((string) $v, ENT_QUOTES);
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $nombreE = trim((string) (($empresa['nombre_comercial'] ?? '') ?: ($empresa['nombre'] ?? '')));
+            $titulo  = trim((string) ($cfg['titulo'] ?? '')) ?: \App\Services\modulos\ClienteQrService::TITULO_DEFECTO;
+            $mensaje = trim((string) ($cfg['mensaje'] ?? ''));
+            $url     = $this->urlQrRegistro($cfg);
+            $logo    = \App\Helpers\ReportePdf::logo($idEmpresa);
+
+            $html = '<page backtop="15mm" backbottom="15mm" backleft="15mm" backright="15mm">'
+                . '<table style="width:100%;border-collapse:collapse;"><tr><td style="width:100%;text-align:center;">'
+                . ($logo !== '' ? '<img src="' . $e($logo) . '" style="max-width:55mm;max-height:25mm;"><br><br>' : '')
+                . '<span style="font-size:15pt;color:#555;">' . $e($nombreE) . '</span><br><br>'
+                . '<span style="font-size:28pt;font-weight:bold;color:#0f172a;">' . $e($titulo) . '</span><br><br>'
+                . ($mensaje !== '' ? '<span style="font-size:14pt;color:#333;">' . nl2br($e($mensaje)) . '</span><br><br>' : '')
+                . '</td></tr><tr><td style="width:100%;text-align:center;padding-top:6mm;">'
+                . '<qrcode value="' . $e($url) . '" ec="M" style="width:110mm;border:none;"></qrcode>'
+                . '</td></tr><tr><td style="width:100%;text-align:center;padding-top:6mm;">'
+                . '<span style="font-size:9pt;color:#777;">' . $e($url) . '</span>'
+                . '</td></tr></table></page>';
+
+            $pdf = new \Spipu\Html2Pdf\Html2Pdf('P', 'A4', 'es');
+            $pdf->writeHTML($html);
+            $pdf->output('QR_Registro_Clientes.pdf', 'I');
+            exit;
+        } catch (\Throwable $ex) {
+            \App\Services\ErrorLogService::registrar($ex, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo json_encode(['ok' => false, 'error' => $ex->getMessage()]);
+            exit;
+        }
+    }
+
     public function exportPdf(): void
     {
         $this->requireLeer();
