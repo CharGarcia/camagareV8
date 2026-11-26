@@ -550,7 +550,7 @@
                 (d.detalles || []).forEach(det => {
                     window.GR_agregarLinea({
                         id_producto: det.id_producto,
-                        codigo_principal: det.producto_codigo,
+                        codigo_principal: det.producto_codigo || det.codigo_principal || "",
                         descripcion: det.producto_nombre,
                         cantidad: det.cantidad
                     });
@@ -1275,7 +1275,7 @@
                 (d.detalles || []).forEach(det => {
                     window.GR_agregarLinea({
                         id_producto: det.id_producto,
-                        codigo_principal: det.producto_codigo,
+                        codigo_principal: det.producto_codigo || det.codigo_principal || "",
                         descripcion: det.producto_nombre,
                         cantidad: det.cantidad
                     });

@@ -149,9 +149,19 @@ class XmlGuiaRemisionService
         $detallesEl = $dom->createElement('detalles');
         foreach ($detalles as $d) {
             $det = $dom->createElement('detalle');
-            $this->txt($dom, $det, 'codigoInterno', $d['codigo_principal'] ?? '');
-            if (!empty($d['codigo_auxiliar'])) {
-                $this->txt($dom, $det, 'codigoAdicional', $d['codigo_auxiliar']);
+            // codigoInterno es opcional en el XSD (v1.1.0), pero si va no puede
+            // estar vacío (error 35 "minLength 1"). Línea sin código: se usa el
+            // del producto vinculado y, si tampoco hay, la etiqueta no se envía.
+            $codigo = trim((string) ($d['codigo_principal'] ?? ''));
+            if ($codigo === '') {
+                $codigo = trim((string) ($d['producto_codigo'] ?? ''));
+            }
+            if ($codigo !== '') {
+                $this->txt($dom, $det, 'codigoInterno', mb_substr($codigo, 0, 25));
+            }
+            $codigoAux = trim((string) ($d['codigo_auxiliar'] ?? ''));
+            if ($codigoAux !== '') {
+                $this->txt($dom, $det, 'codigoAdicional', mb_substr($codigoAux, 0, 25));
             }
             $this->txt($dom, $det, 'descripcion', $d['descripcion'] ?? '');
             $this->txt($dom, $det, 'cantidad',    $this->dec6((float)($d['cantidad'] ?? 0)));

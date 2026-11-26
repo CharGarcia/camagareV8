@@ -5,7 +5,7 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, error 45, secuencial registrado, sin documento de sustento, numero de documento de sustento, fecha invalida, fecha del documento de sustento, mensajes del sri, historial de envios, informacion, quien creo, quien modifico, auditoria
+etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, error 45, secuencial registrado, sin documento de sustento, numero de documento de sustento, fecha invalida, fecha del documento de sustento, mensajes del sri, error 35, archivo no cumple estructura xml, codigointerno, linea sin codigo, historial de envios, informacion, quien creo, quien modifico, auditoria
 version: 1.20
 orden: 55
 estado: activo
@@ -356,6 +356,11 @@ traslado entre bodegas).
 - **"Ingrese el número del documento de sustento o elija «Sin documento sustento»"**:
   eligió un tipo de documento de sustento pero no escribió su número. Complételo
   (con su fecha) o cambie el tipo a *Sin documento sustento*.
+- **El SRI responde "[35] ARCHIVO NO CUMPLE ESTRUCTURA XML … codigoInterno"**: una
+  línea del detalle no tenía código (concepto escrito a mano o línea de una
+  factura sin producto). Ya no ocurre: si la línea no tiene código se usa el del
+  producto vinculado y, si tampoco hay, la guía se envía sin código en esa línea
+  (el SRI lo permite). Basta con volver a pulsar **Enviar al SRI**.
 - **El stock no bajó al emitir la guía**: es correcto, la guía no mueve
   inventario.
 
@@ -370,7 +375,7 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 
 ## Historial de cambios
 
-- **1.20** — **Documento de sustento**: si se elige un tipo, el número y la fecha son obligatorios; con *Sin documento sustento* no se piden y no viajan al SRI (antes la guía se enviaba con el tipo y sin número, y el SRI la devolvía por fecha inválida). La **pestaña SRI** muestra ahora el detalle completo de cada error del SRI (código, mensaje e información adicional), el ambiente y la fecha y hora correctas (antes salía «Invalid Date»). Nueva **pestaña Información** (niveles 2 y 3).
+- **1.20** — **Documento de sustento**: si se elige un tipo, el número y la fecha son obligatorios; con *Sin documento sustento* no se piden y no viajan al SRI (antes la guía se enviaba con el tipo y sin número, y el SRI la devolvía por fecha inválida). La **pestaña SRI** muestra ahora el detalle completo de cada error del SRI (código, mensaje e información adicional), el ambiente y la fecha y hora correctas (antes salía «Invalid Date»). Nueva **pestaña Información** (niveles 2 y 3). Las líneas **sin código** ya no hacen que el SRI devuelva la guía con el error 35 (*codigoInterno*): se usa el código del producto o se omite. Al cargar los productos desde una factura, las líneas sin producto del catálogo toman el código que tenía la factura.
 
 - **1.19** — En el listado, la columna que muestra el estado ante el SRI (borrador, autorizado, anulado…) se llama ahora **Estado SRI** (antes solo «Estado»), igual en el selector de columnas, el filtro y las exportaciones a PDF y Excel, para no confundirla con el estado de pago o de correo.
 - **1.18** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.
