@@ -461,6 +461,9 @@ $to         = $to         ?? 0;
     // cargada desde el XML del SRI) para que no pierda su tipo al abrirla.
     window.CMG_tiposComprobanteTodos = <?= json_encode(array_column($tiposComprobanteTodos ?? [], 'comprobante', 'codigo_comprobante')) ?>;
     window.CMG_sucursal = <?= json_encode($sucursal_principal ?? []) ?>;
+    // Establecimientos del mismo RUC (null si el RUC tiene uno solo): botón y aviso de
+    // reasignación del modal (ver mcActualizarReasignarEst en compras.js).
+    window.MC_REASIGNAR_EST = <?= json_encode($reasignarEst ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     // Anchos de Código/Descripción/Adicional del detalle elegidos por el usuario
     // (CMG_detalleColumnas, mismo componente que Factura de Venta).
     window.MC_DET_ANCHOS = <?= json_encode((object) \App\Helpers\PreferenciasHelper::getAnchosDetalle($vistaConfig ?? [])) ?>;

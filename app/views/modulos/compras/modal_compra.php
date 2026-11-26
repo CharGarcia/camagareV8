@@ -33,6 +33,10 @@
           <button type="button" class="btn btn-outline-success btn-sm px-2 d-none" id="mcBtnExcel" onclick="mcExportarExcel()" title="Exportar Excel">
             <i class="bi bi-file-earmark-excel fs-6"></i>
           </button>
+          <!-- Reasignar a otro establecimiento del mismo RUC (solo si el RUC tiene varios). -->
+          <button type="button" class="btn btn-outline-primary btn-sm px-2 d-none" id="mcBtnReasignarEst" onclick="mcReasignarEstablecimiento()" title="Reasignar esta compra a otro establecimiento">
+            <i class="bi bi-shop fs-6"></i>
+          </button>
 
           <!-- Aprobación de la compra (checkpoint 'aprobacion_compras'). Solo se
                muestran cuando la compra está pendiente y el usuario es aprobador. -->
@@ -49,6 +53,12 @@
         <div id="mcAprobAviso" class="alert d-flex align-items-center gap-2 py-2 px-3 mb-0 rounded-0 border-0 border-bottom d-none">
           <i class="bi bi-hourglass-split" id="mcAprobAvisoIcono"></i>
           <span class="small" id="mcAprobAvisoTexto"></span>
+        </div>
+
+        <!-- Aviso: el RUC tiene varios establecimientos (reasignación individual / masiva) -->
+        <div id="mcReasignarEstAviso" class="alert alert-info d-flex align-items-center gap-2 py-1 px-3 mb-0 rounded-0 border-0 border-bottom d-none">
+          <i class="bi bi-shop"></i>
+          <span class="small" id="mcReasignarEstAvisoTexto"></span>
         </div>
 
         <!-- Aviso de solo lectura (compra migrada o período contable cerrado) -->
