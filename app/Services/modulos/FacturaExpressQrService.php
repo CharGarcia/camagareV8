@@ -550,6 +550,12 @@ class FacturaExpressQrService
         return $this->repo->getTarifasIva();
     }
 
+    /** Catálogo global de formas de pago SRI como [codigo => nombre]. */
+    public function getFormasPagoSriMapa(): array
+    {
+        return $this->repo->getFormasPagoSriMapa();
+    }
+
     public function getEmpresaConfig(int $idEmpresa): array
     {
         return $this->repo->getEmpresaConfig($idEmpresa);

@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-express-solicitudes
 tipo: modulo
 visibilidad: todos
-etiquetas: factura express, solicitudes factura express, solicitud de factura, solicitudes qr, qr, aprobar solicitud, aprobar y facturar, rechazar solicitud, motivo del rechazo, solicitudes pendientes, pendientes, facturadas, rechazadas, aprobadas, autofacturacion, cliente pidio factura, pedido de factura, factura desde el celular, campana, notificacion, aviso en la barra, contador de pendientes, correo de nueva solicitud, editar items antes de facturar, cambiar precio, cambiar cantidad, agregar linea, cliente nuevo, crear cliente automatico, estado de la solicitud, consultar estado, enlace de estado, panel movil, celular, qr solicitudes, buscar solicitud, buscar por cedula, buscar por correo
-version: 1.0
+etiquetas: factura express, solicitudes factura express, solicitud de factura, solicitudes qr, qr, aprobar solicitud, aprobar y facturar, rechazar solicitud, motivo del rechazo, solicitudes pendientes, pendientes, facturadas, rechazadas, aprobadas, autofacturacion, cliente pidio factura, pedido de factura, factura desde el celular, campana, notificacion, aviso en la barra, contador de pendientes, correo de nueva solicitud, editar items antes de facturar, cambiar precio, cambiar cantidad, agregar linea, cliente nuevo, crear cliente automatico, estado de la solicitud, consultar estado, enlace de estado, panel movil, celular, qr solicitudes, buscar solicitud, buscar por cedula, buscar por correo, filtros, filtrar por estado, embudo, filtrar por fecha, filtrar por monto, filtrar por plantilla, configurar qr, ver todas las solicitudes
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -56,9 +56,12 @@ se facturan solas al llegar y aparecen ya como **Facturada**.
 
 ## El listado
 
-Al entrar se muestran las solicitudes **Pendientes**. Con los botones de
-arriba puede cambiar a **Aprobadas**, **Rechazadas**, **Facturadas** o
-**Todas**.
+Al entrar se muestran las solicitudes **Pendientes**: el buscador trae puesto
+el filtro *Estado: Pendiente* (se ve como una etiqueta junto al campo de
+búsqueda). Para ver otro estado pulse el botón de **Filtros** (embudo) y elija
+**Pendiente**, **Aprobada**, **Rechazada** o **Facturada** en *Estado*; para
+ver **todas**, quite la etiqueta del estado con su **×** o deje *Estado* en
+*Todos*.
 
 | Columna | Qué muestra |
 |---------|-------------|
@@ -71,9 +74,41 @@ arriba puede cambiar a **Aprobadas**, **Rechazadas**, **Facturadas** o
 | Estado | Pendiente, Aprobada, Rechazada o Facturada |
 
 El buscador **Buscar solicitud...** busca por nombre del cliente,
-identificación o correo. Puede ordenar con clic en los encabezados y ocultar
-columnas desde el botón de columnas. El botón **Configuración QR** lleva al
-módulo de plantillas.
+identificación, correo o plantilla. Puede ordenar con clic en los encabezados y
+ocultar columnas desde el botón de columnas.
+
+### Filtros
+
+El botón de **Filtros** (embudo), a la izquierda del buscador, abre la ventana
+*Filtros de solicitudes*:
+
+| Filtro | Qué hace |
+|--------|----------|
+| Estado | Pendiente, Aprobada, Rechazada o Facturada |
+| Plantilla | Nombre de la plantilla QR por la que llegó |
+| Monto | Rango de montos (mínimo y máximo) |
+| Fecha de solicitud | Rango de fechas, con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado* y *Este año* |
+| Cliente, Identificación, Correo, Teléfono | Datos que escribió el cliente |
+
+Cada filtro activo aparece como una etiqueta junto al buscador; con su **×** se
+quita.
+
+A la derecha del buscador están el botón de columnas, **PDF** y **Excel**. Las
+plantillas y sus códigos QR se administran en su propio módulo,
+[Configuración QR](modulos/factura-express-config).
+
+### Exportar a PDF y Excel
+
+Los dos botones descargan **las mismas solicitudes que ve en pantalla**: con la
+búsqueda, los filtros y el orden aplicados, pero sin paginar (todas las páginas).
+
+- **PDF** (hoja horizontal): encabezado con el logo y el nombre de la empresa,
+  la búsqueda y filtros aplicados, un resumen (solicitudes, pendientes,
+  facturadas, rechazadas y monto total) y el listado con fecha, cliente,
+  identificación, correo, teléfono, plantilla, monto y estado.
+- **Excel**: además de esas columnas incluye el tipo de identificación, quién
+  procesó la solicitud, la fecha en que se procesó y la nota (por ejemplo, el
+  motivo del rechazo).
 
 ### En el celular
 
@@ -207,3 +242,4 @@ tienen permisos aparte, en [Configuración QR](modulos/factura-express-config).
 ## Historial de cambios
 
 - **1.0** — Versión inicial del manual.
+- **1.1** — El filtro de estado (Pendiente, Aprobada, Rechazada, Facturada) pasa a la ventana de **Filtros**, con nuevos filtros por plantilla, monto, fecha y datos del cliente. Se quitó el botón de Configuración QR de esta pantalla (las plantillas se administran en su propio módulo). Los botones **PDF** y **Excel** ya descargan el listado con los filtros aplicados. El detalle de una solicitud procesada muestra quién la procesó.

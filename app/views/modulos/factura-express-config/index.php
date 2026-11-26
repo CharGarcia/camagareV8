@@ -48,18 +48,59 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-        <!-- Buscador + exportación -->
-        <div class="d-flex align-items-center gap-2">
-            <div class="input-group input-group-sm" style="width:300px">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="fexqrBuscar" class="form-control border-start-0 ps-0 shadow-none border"
-                       placeholder="Buscar plantilla..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                <?php if ($buscar !== ''): ?>
-                    <a href="<?= $urlBase ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                <?php endif; ?>
-            </div>
+        <!-- Buscador (FiltrosModal) + columnas y exportación -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal), igual que Proveedores: texto libre sobre
+            // nombre y descripción + botón embudo con los filtros + chips de los activos.
+            // Las claves deben existir en los mapas de
+            // FacturaExpressQrRepository::getListadoPlantillas().
+            $opcionesSiNo = fn(string $si, string $no) => [['v' => 'si', 'l' => $si], ['v' => 'no', 'l' => $no]];
+            $opcionesSerie = array_map(fn($p) => [
+                'v' => (string) $p['id'],
+                'l' => trim(($p['cod_establecimiento'] ?? '') . '-' . ($p['codigo_punto'] ?? ''), '-'),
+            ], $puntosEmision ?? []);
+            $opcionesFormaPago = array_map(fn($f) => ['v' => (string) $f['codigo'], 'l' => (string) $f['nombre']], $formasPago ?? []);
+            $tP = 'Plantilla';
+            $filtrosPlantillas = [
+                ['tab' => $tP, 'key' => 'nombre',      'label' => 'Nombre',      'icon' => 'bi-qr-code',   'type' => 'text', 'grupo' => 'Plantilla', 'col' => 6],
+                ['tab' => $tP, 'key' => 'descripcion', 'label' => 'Descripción', 'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Plantilla', 'col' => 6],
+                ['tab' => $tP, 'key' => 'estado', 'label' => 'Estado', 'icon' => 'bi-flag', 'type' => 'select', 'grupo' => 'Plantilla', 'col' => 4, 'options' => [
+                    ['v' => 'activo',   'l' => 'Activo'],
+                    ['v' => 'inactivo', 'l' => 'Inactivo'],
+                ]],
+                ['tab' => $tP, 'key' => 'aprobacion', 'label' => 'Aprobación manual', 'icon' => 'bi-person-check', 'type' => 'select', 'grupo' => 'Plantilla', 'col' => 4, 'options' => $opcionesSiNo('Requiere aprobación', 'Se factura sola')],
+                ['tab' => $tP, 'key' => 'items',      'label' => 'Ítems',             'icon' => 'bi-box-seam',     'type' => 'number_range', 'grupo' => 'Plantilla', 'col' => 4],
+                ['tab' => $tP, 'key' => 'id_punto',   'label' => 'Serie',             'icon' => 'bi-upc',          'type' => 'select', 'grupo' => 'Facturación', 'col' => 6, 'options' => $opcionesSerie],
+                ['tab' => $tP, 'key' => 'forma_pago', 'label' => 'Forma de pago',     'icon' => 'bi-cash-coin',    'type' => 'select', 'grupo' => 'Facturación', 'col' => 6, 'options' => $opcionesFormaPago],
+                ['tab' => $tP, 'key' => 'pendientes',  'label' => 'Solicitudes pendientes', 'icon' => 'bi-bell', 'type' => 'select',       'grupo' => 'Solicitudes', 'col' => 6, 'options' => $opcionesSiNo('Con pendientes', 'Sin pendientes')],
+                ['tab' => $tP, 'key' => 'solicitudes', 'label' => 'Total de solicitudes',   'icon' => 'bi-list-ol', 'type' => 'number_range', 'grupo' => 'Solicitudes', 'col' => 6],
+                ['tab' => $tP, 'key' => 'registro', 'label' => 'Fecha de creación', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Registro', 'col' => 12, 'atajos' => true],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorFEXQR"></div>
+            <input type="hidden" id="fexqrBuscar" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorFEXQR',
+                        hiddenInputId: 'fexqrBuscar',
+                        placeholder: 'Buscar plantilla...',
+                        titulo: 'Filtros de plantillas QR',
+                        inputWidth: 360,
+                        extraId: 'fmExtraFEXQR',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosPlantillas, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#fexqrTbody',
+                        onApply: () => window.fexqrBuscar && window.fexqrBuscar(1),
+                    }).init();
+                });
+            </script>
 
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraFEXQR" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'nombre'       => 'Nombre',
@@ -74,12 +115,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                 <a id="fexqrBtnPdf"
                    href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="fexqrBtnExcel"
                    href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -121,7 +162,7 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     <?php if (empty($rows)): ?>
                         <tr><td colspan="6" class="text-center py-5 text-muted">
                             <i class="bi bi-qr-code fs-3 d-block mb-2 opacity-25"></i>
-                            No hay plantillas QR. Crea la primera para comenzar.
+                            <?= $buscar !== '' ? 'No hay plantillas QR con los filtros aplicados.' : 'No hay plantillas QR. Crea la primera para comenzar.' ?>
                         </td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r):
@@ -185,18 +226,20 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
     const baseUrl = '<?= rtrim($base, '/') ?>';
     window.currentSort = '<?= $ordenCol ?>';
     window.currentDir  = '<?= $ordenDir ?>';
-    let timer;
 
     window.fexqrCambiarPagina = p => fexqrBuscar(p);
 
+    // Los filtros viajan dentro de `b` (estado:activo nombre:… texto libre), armado por FiltrosModal.
     window.fexqrBuscar = async function(page = 1) {
-        const b   = document.getElementById('fexqrBuscar').value.trim();
-        const uri = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        const b     = document.getElementById('fexqrBuscar').value.trim();
+        const tbody = document.getElementById('fexqrTbody');
+        const uri   = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        tbody.classList.add('fm-cargando-target');
         try {
             const r = await fetch(uri, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             const d = await r.json();
             if (d.ok) {
-                document.getElementById('fexqrTbody').innerHTML          = d.rows;
+                tbody.innerHTML = d.rows || `<tr><td colspan="6" class="text-center py-5 text-muted"><i class="bi bi-qr-code fs-3 d-block mb-2 opacity-25"></i>No hay plantillas QR con los filtros aplicados.</td></tr>`;
                 document.getElementById('fexqrPaginContainer').innerHTML = d.pagination;
                 document.getElementById('fexqrPaginInfo').textContent    = d.info;
                 if (d.pdf_url)   document.getElementById('fexqrBtnPdf').href   = d.pdf_url;
@@ -214,13 +257,12 @@ $to   = $total > 0 ? min($page * $perPage, $total) : 0;
                     }
                 });
             }
-        } catch(e) { console.error(e); }
+        } catch(e) {
+            console.error(e);
+        } finally {
+            tbody.classList.remove('fm-cargando-target');
+        }
     };
-
-    document.getElementById('fexqrBuscar').addEventListener('input', () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fexqrBuscar(1), 400);
-    });
 
     window.CMG_initSort('factura_express_config', (col, dir) => {
         window.currentSort = col;

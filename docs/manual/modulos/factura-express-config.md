@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/factura-express-config
 tipo: modulo
 visibilidad: todos
-etiquetas: factura express, factura express qr, codigo qr, qr, qr para facturar, qr clientes, qr solicitudes, plantilla qr, nueva plantilla qr, formulario publico, formulario sin login, autofacturacion, auto facturacion, cliente pide su factura, solicitar factura, pedir factura, factura desde el celular, escanear qr, cartel con qr, imprimir qr, copiar url, enlace publico, link para clientes, consultorio, mostrador, caja rapida, factura automatica, aprobacion manual, requiere aprobacion, serie de facturacion, establecimiento, punto de emision, forma de pago, limite de solicitudes, anti spam, solicitudes por hora, mensaje de bienvenida, mensaje de agradecimiento, campos visibles, telefono, direccion, productos del formulario, servicios del formulario, cantidad editable, precio editable, preseleccionado, iva del producto, plantilla inactiva, desactivar qr, eliminar plantilla
-version: 1.0
+etiquetas: factura express, factura express qr, codigo qr, qr, qr para facturar, qr clientes, qr solicitudes, plantilla qr, nueva plantilla qr, formulario publico, formulario sin login, autofacturacion, auto facturacion, cliente pide su factura, solicitar factura, pedir factura, factura desde el celular, escanear qr, cartel con qr, imprimir qr, copiar url, enlace publico, link para clientes, consultorio, mostrador, caja rapida, factura automatica, aprobacion manual, requiere aprobacion, serie de facturacion, establecimiento, punto de emision, forma de pago, limite de solicitudes, anti spam, solicitudes por hora, mensaje de bienvenida, mensaje de agradecimiento, campos visibles, telefono, direccion, productos del formulario, servicios del formulario, cantidad editable, precio editable, preseleccionado, iva del producto, plantilla inactiva, desactivar qr, eliminar plantilla, filtros, filtrar plantillas, embudo, buscar plantilla, plantillas con pendientes
+version: 1.1
 orden: 0
 estado: activo
 ---
@@ -57,6 +57,40 @@ El listado muestra estas columnas:
 Puede buscar con **Buscar plantilla...** (busca en el nombre y la descripción),
 ordenar haciendo clic en los encabezados y ocultar columnas desde el botón de
 columnas. Al hacer clic en una fila se abre la plantilla para editarla.
+
+### Filtros
+
+El botón de **Filtros** (embudo), a la izquierda del buscador, abre la ventana
+*Filtros de plantillas QR*:
+
+| Filtro | Qué hace |
+|--------|----------|
+| Nombre, Descripción | Texto de la plantilla |
+| Estado | Activo o Inactivo |
+| Aprobación manual | *Requiere aprobación* o *Se factura sola* |
+| Ítems | Rango de cantidad de productos o servicios |
+| Serie | Establecimiento y punto de emisión de la plantilla |
+| Forma de pago | Forma de pago con la que se facturan las solicitudes |
+| Solicitudes pendientes | *Con pendientes* o *Sin pendientes* |
+| Total de solicitudes | Rango de solicitudes recibidas |
+| Fecha de creación | Rango de fechas, con atajos *Hoy*, *Esta semana*, *Este mes*, *Mes pasado* y *Este año* |
+
+Cada filtro activo aparece como una etiqueta junto al buscador; con su **×** se
+quita. A la derecha del buscador están el botón de columnas, **PDF** y
+**Excel**.
+
+### Exportar a PDF y Excel
+
+Los dos botones descargan **las mismas plantillas que ve en pantalla**: con la
+búsqueda, los filtros y el orden aplicados, pero sin paginar.
+
+- **PDF** (hoja horizontal): encabezado con el logo y el nombre de la empresa,
+  la búsqueda y filtros aplicados, un resumen (plantillas, activas, inactivas y
+  solicitudes pendientes) y el listado con nombre, descripción, serie, forma de
+  pago, tipo de aprobación, ítems, solicitudes, pendientes y estado.
+- **Excel**: además incluye el máximo de solicitudes por hora, la fecha de
+  creación y el **enlace público** de cada plantilla (la dirección que abre el
+  código QR de clientes).
 
 ## Cómo se crea una plantilla
 
@@ -242,3 +276,4 @@ La revisión de solicitudes tiene permisos aparte, en
 ## Historial de cambios
 
 - **1.0** — Versión inicial del manual.
+- **1.1** — Buscador con ventana de **Filtros** (estado, aprobación manual, serie, forma de pago, solicitudes pendientes, fechas y más). Ahora también se puede ordenar por Descripción, Ítems y Solicitudes. Los botones **PDF** y **Excel** ya descargan el listado con los filtros aplicados.

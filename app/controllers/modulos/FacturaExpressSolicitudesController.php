@@ -71,8 +71,11 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         $idEmpresa  = (int) $_SESSION['id_empresa'];
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
-        $buscar   = trim($_GET['b'] ?? '');
-        $estado   = trim($_GET['estado'] ?? 'pendiente');
+        // El estado se filtra desde el modal de filtros (estado:valor dentro de b).
+        // Al entrar sin búsqueda se muestran las pendientes, como antes; el chip
+        // "Estado: Pendiente" se puede quitar para ver todas.
+        $buscar   = isset($_GET['b']) ? trim((string) $_GET['b']) : 'estado:pendiente';
+        $estado   = trim($_GET['estado'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'created_at');
         $ordenDir = strtoupper(trim($_GET['dir'] ?? $prefsVista['__ordenDir__'] ?? 'DESC'));
@@ -121,7 +124,7 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         try {
             $idEmpresa = (int) $_SESSION['id_empresa'];
             $buscar    = trim($_GET['b'] ?? '');
-            $estado    = trim($_GET['estado'] ?? 'pendiente');
+            $estado    = trim($_GET['estado'] ?? '');   // el estado viaja en b (estado:valor)
             $page      = max(1, (int) ($_GET['page'] ?? 1));
             $ordenCol  = trim($_GET['sort'] ?? 'created_at');
             $ordenDir  = strtoupper(trim($_GET['dir'] ?? 'DESC'));
@@ -165,8 +168,8 @@ class FacturaExpressSolicitudesController extends BaseModuloController
             $paginHtml = ob_get_clean();
 
             $urlExportBase = rtrim(BASE_URL, '/') . '/modulos/factura-express-solicitudes';
-            $pdfUrl   = $urlExportBase . '/export-pdf?b='   . urlencode($buscar) . '&estado=' . urlencode($estado) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
-            $excelUrl = $urlExportBase . '/export-excel?b=' . urlencode($buscar) . '&estado=' . urlencode($estado) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
+            $pdfUrl   = $urlExportBase . '/export-pdf?b='   . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
+            $excelUrl = $urlExportBase . '/export-excel?b=' . urlencode($buscar) . '&sort=' . urlencode($ordenCol) . '&dir=' . urlencode($ordenDir);
 
             echo json_encode([
                 'ok'         => true,
@@ -181,6 +184,134 @@ class FacturaExpressSolicitudesController extends BaseModuloController
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
         }
         exit;
+    }
+
+    // ── Exportación del listado (PDF / Excel) ─────────────────────────────────
+
+    /**
+     * Solicitudes a exportar: las mismas del listado (búsqueda, filtros del modal y
+     * orden de pantalla), sin paginar.
+     */
+    private function filasExportacion(): array
+    {
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $buscar    = trim((string) ($_GET['b'] ?? ''));
+        $ordenCol  = trim((string) ($_GET['sort'] ?? 'created_at'));
+        $ordenDir  = strtoupper(trim((string) ($_GET['dir'] ?? 'DESC')));
+
+        $result = $this->service->getListadoSolicitudes($idEmpresa, $buscar, '', 1, 0, $ordenCol, $ordenDir);
+        return [$result['rows'], $buscar];
+    }
+
+    private static function fechaExport(?string $f): string
+    {
+        return !empty($f) ? date('d-m-Y H:i:s', strtotime($f)) : '-';
+    }
+
+    public function exportPdf(): void
+    {
+        $this->requireLeer();
+        try {
+            [$rows, $buscar] = $this->filasExportacion();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $pt  = 7.5;
+            $esc = static fn ($v): string => htmlspecialchars((string) $v);
+            $txt = static fn (string $k, float $w) => static fn (array $r): string
+                => \App\Helpers\ReportePdf::texto((string) ($r[$k] ?? '') ?: '-', \App\Helpers\ReportePdf::anchoPt($w, true), $pt);
+
+            $cols = [
+                ['lbl' => 'Fecha',          'w' => 12, 'cls' => 'text-center', 'val' => static fn (array $r): string => self::fechaExport($r['created_at'] ?? null)],
+                ['lbl' => 'Cliente',        'w' => 21, 'cls' => '', 'val' => $txt('nombre_cliente', 21)],
+                ['lbl' => 'Identificación', 'w' => 11, 'cls' => '', 'val' => $txt('identificacion', 11)],
+                ['lbl' => 'Correo',         'w' => 18, 'cls' => '', 'val' => $txt('correo_cliente', 18)],
+                ['lbl' => 'Teléfono',       'w' => 9,  'cls' => '', 'val' => $txt('telefono_cliente', 9)],
+                ['lbl' => 'Plantilla',      'w' => 12, 'cls' => '', 'val' => $txt('nombre_plantilla', 12)],
+                ['lbl' => 'Monto',          'w' => 9,  'cls' => 'text-end',
+                 'val' => static fn (array $r): string => number_format((float) ($r['monto_total'] ?? 0), 2),
+                 'tot' => static fn (array $f): float => array_sum(array_map(static fn ($r) => (float) ($r['monto_total'] ?? 0), $f))],
+                ['lbl' => 'Estado',         'w' => 8,  'cls' => 'text-center', 'val' => static fn (array $r): string => $esc(ucfirst((string) ($r['estado'] ?? '')))],
+            ];
+
+            $porEstado = array_count_values(array_map(static fn ($r) => (string) ($r['estado'] ?? ''), $rows));
+            $n         = count($rows);
+            $empresa   = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $cabecera  = \App\Helpers\ReportePdf::encabezado($idEmpresa, (string) ($empresa['nombre'] ?? ''), 'Solicitudes Factura Express')
+                . ($buscar !== '' ? \App\Helpers\ReportePdf::filtros(['Búsqueda y filtros' => $buscar]) : '')
+                . \App\Helpers\ReportePdf::indicadores([
+                    ['Solicitudes', number_format($n)],
+                    ['Pendientes', number_format($porEstado['pendiente'] ?? 0), false, '#997404'],
+                    ['Facturadas', number_format($porEstado['facturada'] ?? 0), false, '#146c43'],
+                    ['Rechazadas', number_format($porEstado['rechazada'] ?? 0), false, '#b02a37'],
+                    ['Monto total', '$' . number_format(array_sum(array_map(static fn ($r) => (float) ($r['monto_total'] ?? 0), $rows)), 2), true],
+                ]);
+
+            $html2pdf = new \Spipu\Html2Pdf\Html2Pdf('L', 'A4', 'es');
+            \App\Helpers\ReportePdf::escribir($html2pdf, $pt, $cabecera, $cols, $rows,
+                "TOTALES ({$n} " . ($n === 1 ? 'solicitud' : 'solicitudes') . ')',
+                'Sin solicitudes para los filtros aplicados.');
+            $html2pdf->output('Solicitudes_Factura_Express_' . date('Ymd_His') . '.pdf', 'D');
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo json_encode(['ok' => false, 'error' => 'Error al generar el PDF: ' . $e->getMessage()]);
+            exit;
+        }
+    }
+
+    public function exportExcel(): void
+    {
+        $this->requireLeer();
+        try {
+            [$rows, $buscar] = $this->filasExportacion();
+            $idEmpresa = (int) $_SESSION['id_empresa'];
+
+            $autoload = MVC_ROOT . '/vendor/autoload.php';
+            if (file_exists($autoload)) {
+                require_once $autoload;
+            }
+
+            $headers = ['Fecha', 'Cliente', 'Tipo Id.', 'Identificación', 'Correo', 'Teléfono', 'Plantilla', 'Monto', 'Estado', 'Procesado por', 'Fecha de proceso', 'Nota'];
+            $data = [];
+            foreach ($rows as $r) {
+                $data[] = [
+                    self::fechaExport($r['created_at'] ?? null),
+                    (string) ($r['nombre_cliente'] ?? ''),
+                    (string) ($r['tipo_identificacion'] ?? ''),
+                    (string) ($r['identificacion'] ?? ''),
+                    (string) ($r['correo_cliente'] ?? ''),
+                    (string) ($r['telefono_cliente'] ?? ''),
+                    (string) ($r['nombre_plantilla'] ?? ''),
+                    round((float) ($r['monto_total'] ?? 0), 2),
+                    ucfirst((string) ($r['estado'] ?? '')),
+                    (string) ($r['aprobado_por_nombre'] ?? ''),
+                    !empty($r['aprobado_at']) ? self::fechaExport($r['aprobado_at']) : '',
+                    (string) ($r['nota_aprobacion'] ?? ''),
+                ];
+            }
+
+            $empresa = (new \App\models\Empresa())->getPorId($idEmpresa) ?? [];
+            $info    = $buscar !== '' ? ['Búsqueda y filtros' => $buscar] : [];
+            (new \App\Services\ReportService())->exportToExcel(
+                'Solicitudes_Factura_Express', $headers, $data, 'Solicitudes', (string) ($empresa['nombre'] ?? ''), $info
+            );
+            exit;
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=utf-8');
+            }
+            echo json_encode(['ok' => false, 'error' => 'Error al generar el Excel: ' . $e->getMessage()]);
+            exit;
+        }
     }
 
     // ── AJAX: datos de solicitudes en JSON (para el panel móvil) ──────────────

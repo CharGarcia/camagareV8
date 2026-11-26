@@ -19,17 +19,63 @@ class FacturaExpressQrRepository extends BaseRepository
 
     public function getListadoPlantillas(int $idEmpresa, string $buscar, int $page, int $perPage, string $ordenCol, string $ordenDir): array
     {
-        $colsValidas = ['nombre', 'activo', 'requiere_aprobacion', 'created_at'];
-        if (!in_array($ordenCol, $colsValidas, true)) $ordenCol = 'created_at';
-        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+        // Conteos por plantilla (los usan el SELECT, el orden y los filtros).
+        $sqlItems      = "(SELECT COUNT(*) FROM factura_express_items
+                           WHERE id_plantilla = p.id AND eliminado = false AND activo = true)";
+        $sqlSolic      = "(SELECT COUNT(*) FROM factura_express_solicitudes
+                           WHERE id_plantilla = p.id AND eliminado = false)";
+        $sqlPendientes = "(SELECT COUNT(*) FROM factura_express_solicitudes
+                           WHERE id_plantilla = p.id AND estado = 'pendiente' AND eliminado = false)";
+
+        // Whitelist del ORDER BY (clave data-sort → expresión SQL).
+        $mapaOrden = [
+            'created_at'          => 'p.created_at',
+            'nombre'              => 'p.nombre',
+            'descripcion'         => 'p.descripcion',
+            'activo'              => 'p.activo',
+            'requiere_aprobacion' => 'p.requiere_aprobacion',
+            'total_items'         => $sqlItems,
+            'solicitudes'         => $sqlPendientes . ' * 100000 + ' . $sqlSolic,
+        ];
+        $ordenExpr = $mapaOrden[$ordenCol] ?? 'p.created_at';
+        $ordenDir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
         $where  = 'WHERE p.id_empresa = :id_empresa AND p.eliminado = false';
         $params = [':id_empresa' => $idEmpresa];
 
-        if ($buscar !== '') {
-            $where .= ' AND (p.nombre ILIKE :buscar OR p.descripcion ILIKE :buscar)';
-            $params[':buscar'] = "%{$buscar}%";
+        // Buscador estándar (§9): texto libre + filtros clave:valor del modal de filtros.
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                'p.nombre',
+                'p.descripcion',
+            ], $parsed['texto_libre'], $params, 'fexqr_b');
+            if ($cond !== '') {
+                $where .= ' AND ' . $cond;
+            }
         }
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'nombre'      => 'p.nombre',
+                'descripcion' => 'p.descripcion',
+            ],
+            'exacto' => [
+                'estado'     => "CASE WHEN COALESCE(p.activo, false) THEN 'activo' ELSE 'inactivo' END",
+                'aprobacion' => "CASE WHEN COALESCE(p.requiere_aprobacion, false) THEN 'si' ELSE 'no' END",
+                'pendientes' => "CASE WHEN {$sqlPendientes} > 0 THEN 'si' ELSE 'no' END",
+                'id_punto'   => 'p.id_punto_emision',
+                'forma_pago' => 'p.forma_pago',
+                'usuario'    => 'p.created_by',
+            ],
+            'fecha' => [
+                'registro'   => 'p.created_at',
+                'created_at' => 'p.created_at',
+            ],
+            'numerico' => [
+                'items'       => $sqlItems,
+                'solicitudes' => $sqlSolic,
+            ],
+        ]);
 
         $stCount = $this->db->prepare("SELECT COUNT(*) FROM factura_express_plantillas p $where");
         $stCount->execute($params);
@@ -37,18 +83,17 @@ class FacturaExpressQrRepository extends BaseRepository
 
         $rows = [];
         if ($total > 0) {
-            $offset = ($page - 1) * $perPage;
+            // perPage <= 0 = todas las filas (exportación a PDF/Excel).
+            $offset = max(0, ($page - 1) * $perPage);
+            $limite = $perPage > 0 ? "LIMIT " . (int) $perPage . " OFFSET " . (int) $offset : "";
             $sql = "SELECT p.*,
-                           (SELECT COUNT(*) FROM factura_express_items
-                            WHERE id_plantilla = p.id AND eliminado = false AND activo = true) AS total_items,
-                           (SELECT COUNT(*) FROM factura_express_solicitudes
-                            WHERE id_plantilla = p.id AND eliminado = false) AS total_solicitudes,
-                           (SELECT COUNT(*) FROM factura_express_solicitudes
-                            WHERE id_plantilla = p.id AND estado = 'pendiente' AND eliminado = false) AS solicitudes_pendientes
+                           {$sqlItems} AS total_items,
+                           {$sqlSolic} AS total_solicitudes,
+                           {$sqlPendientes} AS solicitudes_pendientes
                     FROM factura_express_plantillas p
                     $where
-                    ORDER BY p.{$ordenCol} {$ordenDir}, p.id DESC
-                    LIMIT $perPage OFFSET $offset";
+                    ORDER BY {$ordenExpr} {$ordenDir}, p.id DESC
+                    {$limite}";
             $st = $this->db->prepare($sql);
             $st->execute($params);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -253,9 +298,18 @@ class FacturaExpressQrRepository extends BaseRepository
 
     public function getListadoSolicitudes(int $idEmpresa, string $buscar, string $estadoFiltro, int $page, int $perPage, string $ordenCol, string $ordenDir, ?int $idPlantilla = null): array
     {
-        $colsValidas = ['nombre_cliente', 'identificacion', 'estado', 'monto_total', 'created_at'];
-        if (!in_array($ordenCol, $colsValidas, true)) $ordenCol = 'created_at';
-        $ordenDir = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
+        // Whitelist del ORDER BY (clave data-sort → expresión SQL).
+        $mapaOrden = [
+            'created_at'       => 's.created_at',
+            'nombre_cliente'   => 's.nombre_cliente',
+            'identificacion'   => 's.identificacion',
+            'correo_cliente'   => 's.correo_cliente',
+            'nombre_plantilla' => 'p.nombre',
+            'monto_total'      => 's.monto_total',
+            'estado'           => 's.estado',
+        ];
+        $ordenExpr = $mapaOrden[$ordenCol] ?? 's.created_at';
+        $ordenDir  = strtoupper($ordenDir) === 'ASC' ? 'ASC' : 'DESC';
 
         $where  = 'WHERE s.id_empresa = :id_empresa AND s.eliminado = false';
         $params = [':id_empresa' => $idEmpresa];
@@ -264,28 +318,70 @@ class FacturaExpressQrRepository extends BaseRepository
             $where .= ' AND s.id_plantilla = :id_plantilla';
             $params[':id_plantilla'] = $idPlantilla;
         }
+        // Filtro de estado por parámetro aparte (lo usa el panel móvil con sus chips).
+        // En escritorio el estado viaja dentro de $buscar como estado:valor.
         if ($estadoFiltro !== '' && $estadoFiltro !== 'todos') {
             $where .= ' AND s.estado = :estado';
             $params[':estado'] = $estadoFiltro;
         }
-        if ($buscar !== '') {
-            $where .= ' AND (s.nombre_cliente ILIKE :buscar OR s.identificacion ILIKE :buscar OR s.correo_cliente ILIKE :buscar)';
-            $params[':buscar'] = "%{$buscar}%";
-        }
 
-        $stCount = $this->db->prepare("SELECT COUNT(*) FROM factura_express_solicitudes s $where");
+        // Buscador estándar (§9): texto libre + filtros clave:valor del modal de filtros.
+        $parsed = \App\Helpers\FiltrosBusqueda::parsear($buscar);
+        if ($parsed['texto_libre'] !== '') {
+            $cond = \App\Helpers\FiltrosBusqueda::condicionTexto([
+                's.nombre_cliente',
+                's.identificacion',
+                's.correo_cliente',
+                'p.nombre',
+            ], $parsed['texto_libre'], $params, 'fexsol_b');
+            if ($cond !== '') {
+                $where .= ' AND ' . $cond;
+            }
+        }
+        \App\Helpers\FiltrosBusqueda::aplicarFiltros($where, $params, $parsed['filtros'], [
+            'texto' => [
+                'cliente'        => 's.nombre_cliente',
+                'nombre'         => 's.nombre_cliente',
+                'identificacion' => 's.identificacion',
+                'ruc'            => 's.identificacion',
+                'correo'         => 's.correo_cliente',
+                'email'          => 's.correo_cliente',
+                'telefono'       => 's.telefono_cliente',
+                'plantilla'      => 'p.nombre',
+            ],
+            'exacto' => [
+                'estado' => 's.estado',
+            ],
+            'fecha' => [
+                'fecha'      => 's.created_at',
+                'created_at' => 's.created_at',
+            ],
+            'numerico' => [
+                'monto' => 's.monto_total',
+            ],
+        ]);
+
+        $stCount = $this->db->prepare(
+            "SELECT COUNT(*) FROM factura_express_solicitudes s
+             LEFT JOIN factura_express_plantillas p ON p.id = s.id_plantilla
+             $where"
+        );
         $stCount->execute($params);
         $total = (int) $stCount->fetchColumn();
 
         $rows = [];
         if ($total > 0) {
-            $offset = ($page - 1) * $perPage;
-            $sql = "SELECT s.*, p.nombre AS nombre_plantilla, p.id_punto_emision AS plantilla_id_punto
+            // perPage <= 0 = todas las filas (exportación a PDF/Excel).
+            $offset = max(0, ($page - 1) * $perPage);
+            $limite = $perPage > 0 ? "LIMIT " . (int) $perPage . " OFFSET " . (int) $offset : "";
+            $sql = "SELECT s.*, p.nombre AS nombre_plantilla, p.id_punto_emision AS plantilla_id_punto,
+                           ua.nombre AS aprobado_por_nombre
                     FROM factura_express_solicitudes s
                     LEFT JOIN factura_express_plantillas p ON p.id = s.id_plantilla
+                    LEFT JOIN usuarios ua ON ua.id = s.aprobado_por
                     $where
-                    ORDER BY s.{$ordenCol} {$ordenDir}, s.id DESC
-                    LIMIT $perPage OFFSET $offset";
+                    ORDER BY {$ordenExpr} {$ordenDir}, s.id DESC
+                    {$limite}";
             $st = $this->db->prepare($sql);
             $st->execute($params);
             $rows = $st->fetchAll(PDO::FETCH_ASSOC);
@@ -407,6 +503,12 @@ class FacturaExpressQrRepository extends BaseRepository
     // ═══════════════════════════════════════════════════════
     // CATÁLOGOS / CONFIGURACIÓN (para edición de ítems)
     // ═══════════════════════════════════════════════════════
+
+    /** Catálogo global de formas de pago SRI como [codigo => nombre] (incluye inactivas, para nombrar las ya usadas). */
+    public function getFormasPagoSriMapa(): array
+    {
+        return $this->db->query("SELECT codigo, nombre FROM formas_pago_sri")->fetchAll(PDO::FETCH_KEY_PAIR);
+    }
 
     public function getTarifasIva(): array
     {

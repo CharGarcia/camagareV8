@@ -25,17 +25,9 @@ $perPage    = $perPage    ?? 20;
 $ordenCol   = $ordenCol   ?? 'created_at';
 $ordenDir   = $ordenDir   ?? 'DESC';
 $buscar     = $buscar     ?? '';
-$estadoFiltro = $estadoFiltro ?? 'pendiente';
 $from = $total > 0 ? (($page - 1) * $perPage) + 1 : 0;
 $to   = $total > 0 ? min($page * $perPage, $total) : 0;
 
-$estadosOpc = [
-    'pendiente' => ['label' => 'Pendientes', 'color' => 'warning'],
-    'aprobada'  => ['label' => 'Aprobadas',  'color' => 'info'],
-    'rechazada' => ['label' => 'Rechazadas', 'color' => 'danger'],
-    'facturada' => ['label' => 'Facturadas', 'color' => 'success'],
-    ''          => ['label' => 'Todas',      'color' => 'secondary'],
-];
 $estadoClases = ['pendiente' => 'warning', 'aprobada' => 'info', 'rechazada' => 'danger', 'facturada' => 'success'];
 
 $tarifasIva    = $tarifasIva    ?? [];
@@ -46,15 +38,6 @@ $decimalesPrec = $decimalesPrec ?? 2;
     .fexsol-scroll thead th { position: sticky; top: 0; z-index: 1; background: #f8f9fa; box-shadow: 0 1px 0 #dee2e6; }
     .fexsol-row { cursor: pointer; }
     .fexsol-row:hover { background: rgba(0,0,0,.04); }
-
-    /* Responsive: en móvil los filtros, buscador y exportación se apilan y no se desbordan */
-    @media (max-width: 575.98px) {
-        .fexsol-toolbar { width: 100%; }
-        .fexsol-toolbar > * { width: 100%; }
-        .fexsol-toolbar .btn-group { flex-wrap: wrap; row-gap: .25rem; }
-        .fexsol-toolbar .input-group { width: 100% !important; }
-        .fexsol-toolbar .fexsol-estado-btn { flex: 1 1 auto; }
-    }
 
     /* ── Tabla de ítems editable (mismo diseño que Facturas de Venta) ── */
     .table-detalle th {
@@ -89,40 +72,59 @@ $decimalesPrec = $decimalesPrec ?? 2;
 <div class="d-none d-md-block">
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
     <h5 class="mb-0 fw-bold"><i class="bi bi-bell text-warning me-2"></i><?= htmlspecialchars($titulo) ?></h5>
-    <a href="<?= rtrim($base, '/') ?>/modulos/factura-express-config" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-qr-code me-1"></i>Configuración QR
-    </a>
 </div>
 
 <div class="card cmg-table-card w-100 border-0 shadow-sm rounded-3">
     <div class="card-header bg-white py-2 px-3 border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-        <!-- Filtros de estado + buscador + exportación -->
-        <div class="d-flex align-items-center gap-2 flex-wrap fexsol-toolbar">
-            <!-- Filtros de estado -->
-            <div class="btn-group btn-group-sm flex-wrap">
-                <?php foreach ($estadosOpc as $key => $opc): ?>
-                    <button type="button"
-                        class="btn fexsol-estado-btn <?= $estadoFiltro === $key ? 'btn-' . $opc['color'] : 'btn-outline-' . $opc['color'] ?>"
-                        data-estado="<?= $key ?>" data-color="<?= $opc['color'] ?>"
-                        onclick="fexsolFiltrarEstado('<?= $key ?>')">
-                        <?= $opc['label'] ?>
-                    </button>
-                <?php endforeach; ?>
-            </div>
+        <!-- Buscador (FiltrosModal) + columnas y exportación -->
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <?php
+            // Buscador estándar (FiltrosModal), igual que Proveedores: texto libre sobre
+            // cliente / identificación / correo / plantilla + botón embudo con los filtros
+            // (el estado pendiente/aprobada/rechazada/facturada vive aquí, ya no en botones)
+            // y chips de los activos. Las claves deben existir en los mapas de
+            // FacturaExpressQrRepository::getListadoSolicitudes().
+            $tS = 'Solicitud';
+            $filtrosSolicitudes = [
+                ['tab' => $tS, 'key' => 'estado', 'label' => 'Estado', 'icon' => 'bi-flag', 'type' => 'select', 'grupo' => 'Solicitud', 'col' => 4, 'options' => [
+                    ['v' => 'pendiente', 'l' => 'Pendiente'],
+                    ['v' => 'aprobada',  'l' => 'Aprobada'],
+                    ['v' => 'rechazada', 'l' => 'Rechazada'],
+                    ['v' => 'facturada', 'l' => 'Facturada'],
+                ]],
+                ['tab' => $tS, 'key' => 'plantilla', 'label' => 'Plantilla', 'icon' => 'bi-qr-code',  'type' => 'text',         'grupo' => 'Solicitud', 'col' => 4],
+                ['tab' => $tS, 'key' => 'monto',     'label' => 'Monto',     'icon' => 'bi-cash',     'type' => 'number_range', 'grupo' => 'Solicitud', 'col' => 4],
+                ['tab' => $tS, 'key' => 'fecha',     'label' => 'Fecha de solicitud', 'icon' => 'bi-calendar-event', 'type' => 'date_range', 'grupo' => 'Solicitud', 'col' => 12, 'atajos' => true],
+                ['tab' => $tS, 'key' => 'cliente',        'label' => 'Cliente',        'icon' => 'bi-person',    'type' => 'text', 'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tS, 'key' => 'identificacion', 'label' => 'Identificación', 'icon' => 'bi-card-text', 'type' => 'text', 'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tS, 'key' => 'correo',         'label' => 'Correo',         'icon' => 'bi-envelope',  'type' => 'text', 'grupo' => 'Cliente', 'col' => 3],
+                ['tab' => $tS, 'key' => 'telefono',       'label' => 'Teléfono',       'icon' => 'bi-telephone', 'type' => 'text', 'grupo' => 'Cliente', 'col' => 3],
+            ];
+            ?>
+            <link rel="stylesheet" href="<?= rtrim(BASE_URL, '/') ?>/css/components/filtros_modal.css?v=<?= asset_ver('/css/components/filtros_modal.css') ?>">
+            <script src="<?= rtrim(BASE_URL, '/') ?>/js/components/filtros_modal.js?v=<?= asset_ver('/js/components/filtros_modal.js') ?>"></script>
+            <div id="fmBuscadorFEXSOL"></div>
+            <input type="hidden" id="fexsolBuscar" value="<?= htmlspecialchars($buscar) ?>">
+            <script>
+                document.addEventListener('DOMContentLoaded', () => {
+                    if (!window.FiltrosModal) return;
+                    new FiltrosModal({
+                        containerId: 'fmBuscadorFEXSOL',
+                        hiddenInputId: 'fexsolBuscar',
+                        placeholder: 'Buscar solicitud...',
+                        titulo: 'Filtros de solicitudes',
+                        inputWidth: 360,
+                        extraId: 'fmExtraFEXSOL',   // columnas + PDF + Excel, pegados al final del grupo
+                        fields: <?= json_encode($filtrosSolicitudes, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS) ?>,
+                        loadingTarget: '#fexsolTbody',
+                        onApply: () => window.fexsolCambiarPagina && window.fexsolCambiarPagina(1),
+                    }).init();
+                });
+            </script>
 
-            <!-- Buscador -->
-            <div class="input-group input-group-sm" style="width:280px">
-                <span class="input-group-text bg-white border-end-0 text-muted"><i class="bi bi-search"></i></span>
-                <input type="text" id="fexsolBuscar" class="form-control border-start-0 ps-0 shadow-none border"
-                       placeholder="Buscar solicitud..." value="<?= htmlspecialchars($buscar) ?>" autocomplete="off">
-                <?php if ($buscar !== ''): ?>
-                    <a href="<?= $urlBase ?>" class="btn border border-start-0 text-muted" title="Limpiar"><i class="bi bi-x-lg"></i></a>
-                <?php endif; ?>
-            </div>
-
-            <!-- Columnas + exportación -->
-            <div class="btn-group btn-group-sm">
+            <?php // FiltrosModal (extraId) mueve estos botones dentro del input-group del buscador; si el JS no corre, quedan aquí. ?>
+            <div id="fmExtraFEXSOL" class="btn-group btn-group-sm">
                 <?php
                 $columnasTabla = [
                     'created_at'     => 'Fecha',
@@ -137,14 +139,14 @@ $decimalesPrec = $decimalesPrec ?? 2;
                 <?= \App\Helpers\PreferenciasHelper::renderDropdownColumnas($columnasTabla, $vistaConfig ?? [], $rutaModulo) ?>
 
                 <a id="fexsolBtnPdf"
-                   href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&estado=<?= urlencode($estadoFiltro) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                   href="<?= $urlBase ?>/export-pdf?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-danger" title="Descargar PDF">
-                    <i class="bi bi-file-earmark-pdf"></i> PDF
+                    <i class="bi bi-file-earmark-pdf"></i><span class="d-none d-md-inline"> PDF</span>
                 </a>
                 <a id="fexsolBtnExcel"
-                   href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&estado=<?= urlencode($estadoFiltro) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
+                   href="<?= $urlBase ?>/export-excel?b=<?= urlencode($buscar) ?>&sort=<?= urlencode($ordenCol) ?>&dir=<?= urlencode($ordenDir) ?>"
                    class="btn btn-outline-success" title="Descargar Excel">
-                    <i class="bi bi-file-earmark-spreadsheet"></i> Excel
+                    <i class="bi bi-file-earmark-spreadsheet"></i><span class="d-none d-md-inline"> Excel</span>
                 </a>
             </div>
         </div>
@@ -177,7 +179,7 @@ $decimalesPrec = $decimalesPrec ?? 2;
                     <?php if (empty($rows)): ?>
                         <tr><td colspan="7" class="text-center py-5 text-muted">
                             <i class="bi bi-bell fs-3 d-block mb-2 opacity-25"></i>
-                            No hay solicitudes<?= $estadoFiltro ? ' con estado "' . htmlspecialchars($estadoFiltro) . '"' : '' ?>.
+                            No hay solicitudes con los filtros aplicados.
                         </td></tr>
                     <?php else: ?>
                         <?php foreach ($rows as $r):
@@ -363,27 +365,15 @@ $decimalesPrec = $decimalesPrec ?? 2;
     const DEC_PRECIO      = <?= (int) $decimalesPrec ?>;
     window.currentSort  = '<?= $ordenCol ?>';
     window.currentDir   = '<?= $ordenDir ?>';
-    let currentEstado = '<?= htmlspecialchars($estadoFiltro) ?>';
-    let timer;
-
     window.fexsolCambiarPagina = p => fexsolBuscar(p);
 
-    window.fexsolFiltrarEstado = function(estado) {
-        currentEstado = estado;
-        // Resaltar el botón de filtro activo
-        document.querySelectorAll('.fexsol-estado-btn').forEach(b => {
-            const color  = b.dataset.color;
-            const activo = b.dataset.estado === estado;
-            b.classList.toggle('btn-' + color, activo);
-            b.classList.toggle('btn-outline-' + color, !activo);
-        });
-        fexsolBuscar(1);
-    };
-
+    // El estado (pendiente, aprobada…) y el resto de filtros viajan dentro de `b`
+    // (estado:pendiente cliente:… texto libre), armado por FiltrosModal.
     async function fexsolBuscar(page = 1) {
         const b    = document.getElementById('fexsolBuscar').value.trim();
         const tbody = document.getElementById('fexsolTbody');
-        const uri  = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&estado=${encodeURIComponent(currentEstado)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        const uri  = `${urlBase}/searchAjax?b=${encodeURIComponent(b)}&page=${page}&sort=${window.currentSort}&dir=${window.currentDir}`;
+        tbody.classList.add('fm-cargando-target');
         try {
             const r = await fetch(uri, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
             if (!r.ok) {
@@ -415,13 +405,10 @@ $decimalesPrec = $decimalesPrec ?? 2;
         } catch(e) {
             console.error(e);
             tbody.innerHTML = `<tr><td colspan="7" class="text-center py-4 text-danger"><i class="bi bi-exclamation-triangle me-1"></i>Error de conexión al cargar el listado.</td></tr>`;
+        } finally {
+            tbody.classList.remove('fm-cargando-target');
         }
     }
-
-    document.getElementById('fexsolBuscar').addEventListener('input', () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => fexsolBuscar(1), 400);
-    });
 
     window.CMG_initSort('factura_express_solicitudes', (col, dir) => {
         window.currentSort = col;
