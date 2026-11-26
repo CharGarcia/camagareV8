@@ -2304,6 +2304,13 @@ class SriEnvioService
             );
         }
 
+        // Documento de sustento incompleto (tipo elegido sin número o sin fecha):
+        // el SRI lo devuelve con un error de fecha poco claro. Se avisa antes.
+        $errorSustento = \App\Rules\modulos\GuiaRemisionRules::errorDocSustento($cabecera);
+        if ($errorSustento !== null) {
+            throw new \RuntimeException('No se puede enviar al SRI: ' . $errorSustento . ' Corrija la guía y vuelva a enviarla.');
+        }
+
         $detalles      = $repo->getDetalles($idGuia);
         $infoAdicional = $repo->getInfoAdicional($idGuia);
 

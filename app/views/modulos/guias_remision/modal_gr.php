@@ -117,12 +117,15 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                                 <i class="bi bi-cloud-check me-1"></i> SRI
                             </button>
                         </li>
+                        <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
+                        <?= \App\Helpers\InformacionRegistro::boton('gr', 'fw-medium py-2 border-0') ?>
                     </ul>
                     <div class="ms-auto pb-1">
                         <?php
                         $pestanasGR = [
                             'tab-gr-sri-btn' => 'SRI',
                         ];
+                        $pestanasGR += \App\Helpers\InformacionRegistro::pestanaConfigurable('gr');
                         echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasGR, $vistaConfig ?? [], $rutaModulo);
                         ?>
                     </div>
@@ -164,7 +167,7 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                                 <!-- <div class="row g-2 mb-2 align-items-end"> -->
                                 <div class="col-md-2">
                                     <label class="form-label">Tipo doc. sustento <?= \App\Helpers\PreferenciasHelper::renderEstrellaFavorito($rutaModulo, 'gr-cod-doc-sustento', 'cod_doc_sustento') ?></label>
-                                    <select id="gr-cod-doc-sustento" class="form-select form-select-sm">
+                                    <select id="gr-cod-doc-sustento" class="form-select form-select-sm" onchange="GR_toggleSustento(true)">
                                         <option value="">- Sin documento sustento -</option>
                                         <option value="01" selected>01 - Factura</option>
                                         <option value="03">03 - Liquidación de compra de bienes y prestación de servicios</option>
@@ -175,7 +178,7 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                                     </select>
                                 </div>
                                 <div class="col-md-2 position-relative">
-                                    <label class="form-label">Número documento</label>
+                                    <label class="form-label">Número documento <span class="text-danger gr-req-sustento">*</span></label>
                                     <input type="text" id="gr-num-doc-sustento" class="form-control form-control-sm"
                                         maxlength="17" placeholder="000-000-000000000" autocomplete="off"
                                         oninput="GR_buscarFacturaSustento(this.value)">
@@ -183,7 +186,7 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                                         style="display:none;max-height:200px;overflow-y:auto;top:100%;left:0;right:0;z-index:2000"></div>
                                 </div>
                                 <div class="col-md-2">
-                                    <label class="form-label">Fecha doc. sustento</label>
+                                    <label class="form-label">Fecha doc. sustento <span class="text-danger gr-req-sustento">*</span></label>
                                     <input type="date" id="gr-fecha-doc-sustento" class="form-control form-control-sm">
                                 </div>
                                 <!-- Autorización del documento de sustento: se completa sola al
@@ -454,6 +457,8 @@ $grPermCrearTransportista = \App\Helpers\Permisos::puedeCrear('modulos/transport
                             </div>
                         </div>
                     </div><!-- /gr-tab-sri -->
+
+                    <?= \App\Helpers\InformacionRegistro::panel('gr', 'modulos/guias_remision', 'gr-id') ?>
 
                 </div><!-- /tab-content -->
             </div><!-- /modal-body -->

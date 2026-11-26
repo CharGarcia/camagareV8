@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/guias_remision
 tipo: modulo
 visibilidad: todos
-etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, error 45, secuencial registrado
-version: 1.19
+etiquetas: guia de remision, secuencial ya existe, secuencial repetido, guardada con otro numero, guias, traslado, transporte, envio, placa, transportista, sri, mercaderia en transito, ride, pdf, imprimir guia, guia desde transferencia, traslado entre bodegas, traslado entre establecimientos, buscar guia, buscador, filtros, filtrar guias, buscar por producto, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, aviso, avisos, novedad sri, documentos con novedad, devuelto, no autorizado, pendientes de enviar, borrador, borradores, guia eliminada, restaurar guia, recuperar guia eliminada, estado:eliminada, numero saltado, se salto un numero, error 45, secuencial registrado, sin documento de sustento, numero de documento de sustento, fecha invalida, fecha del documento de sustento, mensajes del sri, historial de envios, informacion, quien creo, quien modifico, auditoria
+version: 1.20
 orden: 55
 estado: activo
 ---
@@ -97,6 +97,18 @@ además se cargan el cliente, las direcciones y los productos de esa factura.
 Si escribe el número a mano, indique también la **fecha doc. sustento**: el SRI
 la exige en el XML y es la que aparece en el RIDE junto al número.
 
+### Con o sin documento de sustento
+
+| Tipo doc. sustento | Qué pide el sistema |
+|--------------------|---------------------|
+| Un tipo elegido (Factura, Liquidación, Nota de crédito…) | **Número documento** (formato `000-000-000000000`) y **Fecha doc. sustento** obligatorios (llevan asterisco rojo). La fecha no puede ser posterior a la fecha de salida. |
+| **- Sin documento sustento -** | Nada: número y fecha se bloquean y se vacían, y la guía viaja al SRI sin datos de sustento. |
+
+Antes, una guía con tipo *Factura* (el valor que trae una guía nueva) pero sin
+número se guardaba igual y el SRI la devolvía con un error de **fecha
+inválida**. Ahora no deja guardarla, y si una guía antigua quedó así, el botón
+**Enviar al SRI** avisa qué falta antes de enviarla.
+
 ## Fechas de la guía
 
 Deben ir en orden: **emisión → salida → llegada**. La fecha de salida no puede
@@ -128,6 +140,7 @@ siguiente día hábil), igual que en las facturas de venta.
 | Placa del vehículo | Obligatoria |
 | Fecha de emisión | Obligatoria |
 | Fecha de inicio de transporte | Obligatoria |
+| Número y fecha del documento de sustento | Obligatorios si se eligió un tipo de documento de sustento |
 
 ## El PDF de la guía (RIDE)
 
@@ -298,6 +311,26 @@ borrador** con su mismo número; el listado se actualiza solo. Qué tener en cue
   SRI o quedaron NO AUTORIZADAS: su número queda libre y la siguiente guía lo toma).
 - La restauración queda en el registro de auditoría (acción *RESTAURAR*).
 
+## Pestaña SRI: mensajes del SRI
+
+El **Historial de envíos** muestra cada intento con su fecha y hora
+(`dd-mm-aaaa hh:mm:ss`), el ambiente (**PRUEBAS** o **PRODUCCIÓN**) y el
+resultado (*Enviando*, *Recibida*, *Devuelta*, *Autorizado*, *No autorizado*,
+*En proceso*). Cuando el SRI rechaza la guía se listan **todos sus errores** con
+el código, el mensaje y la **información adicional**, que es donde el SRI
+explica la causa real (por ejemplo, qué fecha o qué campo no acepta). La misma
+lista sale en el aviso que aparece al pulsar **Enviar al SRI**, y el historial se
+actualiza solo después de cada intento.
+
+## Pestaña Información
+
+Visible solo para **administradores y superadministradores** (niveles 2 y 3).
+Muestra, en modo de solo lectura, quién creó y quién modificó la guía (con fecha
+y hora) y la línea de tiempo de sus acciones (crear, modificar, anular,
+eliminar). Se puede ocultar por usuario desde el selector de pestañas del modal.
+Como la guía no mueve inventario, no tiene sección de movimientos de stock.
+Detalle en la guía *Pestaña Información*.
+
 ## La guía no mueve inventario
 
 Emitir una guía **no descuenta stock**: solo ampara el traslado. El movimiento de
@@ -320,6 +353,9 @@ traslado entre bodegas).
 - **El SRI responde "error en la estructura de la clave de acceso"**: la clave
   dejó de corresponder con los datos de la guía. Al enviar se recalcula sola;
   si el error persiste, revise que la fecha de inicio de transporte sea válida.
+- **"Ingrese el número del documento de sustento o elija «Sin documento sustento»"**:
+  eligió un tipo de documento de sustento pero no escribió su número. Complételo
+  (con su fecha) o cambie el tipo a *Sin documento sustento*.
 - **El stock no bajó al emitir la guía**: es correcto, la guía no mueve
   inventario.
 
@@ -333,6 +369,8 @@ cargados. Solo queda completar el **destinatario**, el **transportista** y la
 **placa**, y emitirla como cualquier otra guía.
 
 ## Historial de cambios
+
+- **1.20** — **Documento de sustento**: si se elige un tipo, el número y la fecha son obligatorios; con *Sin documento sustento* no se piden y no viajan al SRI (antes la guía se enviaba con el tipo y sin número, y el SRI la devolvía por fecha inválida). La **pestaña SRI** muestra ahora el detalle completo de cada error del SRI (código, mensaje e información adicional), el ambiente y la fecha y hora correctas (antes salía «Invalid Date»). Nueva **pestaña Información** (niveles 2 y 3).
 
 - **1.19** — En el listado, la columna que muestra el estado ante el SRI (borrador, autorizado, anulado…) se llama ahora **Estado SRI** (antes solo «Estado»), igual en el selector de columnas, el filtro y las exportaciones a PDF y Excel, para no confundirla con el estado de pago o de correo.
 - **1.18** — Se quitó el aviso del triángulo amarillo junto al Secuencial (números omitidos): su consulta hacía lento el sistema. Los documentos eliminados se siguen viendo y restaurando desde el listado con `estado:eliminada`.

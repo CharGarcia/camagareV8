@@ -42,6 +42,10 @@ class GuiaRemisionRules
         if (strtotime($data['fecha_fin_transporte']) < strtotime($data['fecha_inicio_transporte'])) {
             throw new \InvalidArgumentException('La fecha de fin de transporte no puede ser anterior a la fecha de inicio.');
         }
+        $errorSustento = self::errorDocSustento($data);
+        if ($errorSustento !== null) {
+            throw new \InvalidArgumentException($errorSustento);
+        }
         if (empty(trim($data['direccion_partida'] ?? ''))) {
             throw new \InvalidArgumentException('Ingrese la dirección de partida.');
         }
@@ -80,6 +84,40 @@ class GuiaRemisionRules
         if ($errores) {
             throw new \InvalidArgumentException(implode(' ', $errores));
         }
+    }
+
+    /**
+     * Documento de sustento: si se eligió un tipo (factura, liquidación, NC…),
+     * el número y la fecha de ese documento son obligatorios — el SRI rechaza la
+     * guía con un error de fecha cuando llega <codDocSustento> sin su número ni su
+     * fecha. Con "Sin documento de sustento" (tipo vacío) no se pide nada y esos
+     * datos no viajan en el XML. La usa también el envío al SRI, para que un
+     * borrador guardado antes de esta regla avise lo mismo en vez del error del SRI.
+     *
+     * @return string|null Mensaje del primer error, o null si está correcto.
+     */
+    public static function errorDocSustento(array $data): ?string
+    {
+        $cod = trim((string) ($data['cod_doc_sustento'] ?? ''));
+        if ($cod === '') {
+            return null;
+        }
+        $num = trim((string) ($data['num_doc_sustento'] ?? ''));
+        if ($num === '') {
+            return 'Ingrese el número del documento de sustento o elija «Sin documento sustento» en el tipo.';
+        }
+        if (!preg_match('/^\d{3}-\d{3}-\d{9}$/', $num)) {
+            return 'El número del documento de sustento debe tener el formato 000-000-000000000.';
+        }
+        $fecha = trim((string) ($data['fecha_emision_doc_sustento'] ?? ''));
+        if ($fecha === '' || strtotime($fecha) === false) {
+            return 'Ingrese la fecha del documento de sustento.';
+        }
+        $inicio = trim((string) ($data['fecha_inicio_transporte'] ?? ''));
+        if ($inicio !== '' && strtotime(substr($fecha, 0, 10)) > strtotime(substr($inicio, 0, 10))) {
+            return 'La fecha del documento de sustento no puede ser posterior a la fecha de inicio de transporte.';
+        }
+        return null;
     }
 
     public function validarAdicionales(array $adicionales): void

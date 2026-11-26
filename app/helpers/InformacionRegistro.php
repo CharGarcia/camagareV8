@@ -128,6 +128,11 @@ class InformacionRegistro
             'tabla'  => 'proveedores',
             'nombre' => 'el proveedor',
         ],
+        // La guía no mueve stock: sin 'kardex'.
+        'modulos/guias_remision' => [
+            'tabla'  => 'guias_remision_cabecera',
+            'nombre' => 'la guía de remisión',
+        ],
         'modulos/liquidacion_compra' => [
             'tabla'  => 'liquidaciones_cabecera',
             'nombre' => 'la liquidación',

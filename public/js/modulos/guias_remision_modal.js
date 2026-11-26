@@ -361,7 +361,49 @@
         }
         const modalEl = document.getElementById('modalGuiaRemision');
         if (modalEl) modalEl.classList.toggle('gr-solo-lectura', !esBorrador);
+        window.GR_toggleSustento(false);
     };
+
+    /**
+     * Documento de sustento: con un tipo elegido, número y fecha son obligatorios
+     * (asterisco); con "Sin documento sustento" se bloquean y no se piden. Con
+     * `limpiar` (el usuario cambió el tipo a "sin sustento") se vacían número,
+     * fecha y autorización. Misma regla en el servidor:
+     * GuiaRemisionRules::errorDocSustento().
+     */
+    window.GR_toggleSustento = function (limpiar) {
+        const sel = document.getElementById('gr-cod-doc-sustento');
+        if (!sel) return;
+        const sinSustento = sel.value === '';
+        const editable = !sel.disabled;
+        ['gr-num-doc-sustento', 'gr-fecha-doc-sustento'].forEach(id => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (editable) el.disabled = sinSustento;
+            if (sinSustento && limpiar) el.value = '';
+        });
+        if (sinSustento && limpiar) {
+            const aut = document.getElementById('gr-num-aut-doc-sustento');
+            if (aut) aut.value = '';
+            const dd = document.getElementById('gr-dropdown-factura');
+            if (dd) dd.style.display = 'none';
+        }
+        document.querySelectorAll('.gr-req-sustento').forEach(s => s.classList.toggle('d-none', sinSustento));
+    };
+
+    /** Mensaje de error del documento de sustento, o '' si está correcto. */
+    function grErrorSustento() {
+        const cod   = document.getElementById('gr-cod-doc-sustento')?.value || '';
+        if (cod === '') return '';
+        const num   = (document.getElementById('gr-num-doc-sustento')?.value || '').trim();
+        const fecha = document.getElementById('gr-fecha-doc-sustento')?.value || '';
+        const ini   = document.getElementById('gr-fecha-inicio')?.value || '';
+        if (num === '') return 'Ingrese el número del documento de sustento o elija «Sin documento sustento» en el tipo.';
+        if (!/^\d{3}-\d{3}-\d{9}$/.test(num)) return 'El número del documento de sustento debe tener el formato 000-000-000000000.';
+        if (fecha === '') return 'Ingrese la fecha del documento de sustento.';
+        if (ini && fecha > ini) return 'La fecha del documento de sustento no puede ser posterior a la fecha de inicio de transporte.';
+        return '';
+    }
 
     /**
      * Mantiene el orden lógico del traslado: emisión → salida → llegada.
@@ -882,6 +924,12 @@
             adicionales:                     window.GR_recolectarAdicionales(),
         };
 
+        const errSustento = grErrorSustento();
+        if (errSustento) {
+            Swal.fire({ icon: 'warning', title: 'Documento de sustento', text: errSustento, target: document.getElementById('modalGuiaRemision') });
+            return;
+        }
+
         const btn = document.getElementById('btn-gr-guardar');
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando...'; }
 
@@ -1068,15 +1116,20 @@
                 if (modalEl) bootstrap.Modal.getInstance(modalEl).hide();
                 Swal.fire({ icon: 'success', title: 'Autorizado', text: 'Comprobante autorizado por el SRI.', timer: 2500, showConfirmButton: false });
             } else {
-                const errores = d.errores && d.errores.length
-                    ? '<ul class="text-start mt-2 mb-0 ps-3">' + d.errores.map(e => `<li>${e.mensaje || JSON.stringify(e)}</li>`).join('') + '</ul>'
-                    : '';
+                // Código, mensaje e información adicional de cada error: la causa
+                // real suele venir en la información adicional del SRI.
+                const errores = grListaErroresSri(d.errores, '0.85rem');
+                const enProceso = d.estado === 'en_procesamiento';
                 Swal.fire({
-                    icon: 'error',
-                    title: 'No autorizado',
-                    html: `<div>${d.mensaje || 'Error al enviar al SRI.'}</div>${errores}`,
+                    icon: enProceso ? 'info' : 'error',
+                    title: enProceso ? 'En procesamiento' : 'No autorizado',
+                    html: `<div>${grEsc(d.mensaje || 'Error al enviar al SRI.')}</div>${errores}`,
                     confirmButtonColor: '#d33',
+                    target: document.getElementById('modalGuiaRemision'),
                 });
+                // El intento queda en el historial de la pestaña SRI: refrescarlo.
+                window.GR_cargarHistorialSri(idActual);
+                if (typeof window.GR_cargar === 'function') window.GR_cargar(window.GR_page || 1);
             }
         })
         .catch(() => {
@@ -1134,22 +1187,81 @@
     window.GR_exportarXml = function () { if (idActual) CMG_descargar(urlBaseGR + '/exportar-xml-ajax?id=' + idActual); };
     window.GR_exportarExcel = function () { if (idActual) CMG_descargar(urlBaseGR + '/exportar-excel-ajax?id=' + idActual); };
 
+    /** Escapa texto que viene del SRI antes de pintarlo como HTML. */
+    function grEsc(v) {
+        return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    /** "2026-11-26 10:05:03.123" → "26-11-2026 10:05:03" (formato del sistema). */
+    function grFechaHora(v) {
+        const m = String(v || '').match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})/);
+        return m ? `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${m[6]}` : grEsc(v);
+    }
+
+    /**
+     * Lista de errores/advertencias del SRI (detalle_json del log o `errores` de
+     * la respuesta del envío): código, mensaje y la información adicional, que es
+     * donde el SRI explica la causa real. Descarta las entradas vacías.
+     */
+    function grListaErroresSri(errs, tamano) {
+        if (!Array.isArray(errs)) return '';
+        const items = errs.filter(e => e && (e.mensaje || e.info || e.id));
+        if (!items.length) return '';
+        return `<ul class="mb-0 ps-3 mt-1 text-start" style="font-size:${tamano || '0.7rem'};">` + items.map(e => {
+            const cod  = e.id ? `<strong>[${grEsc(e.id)}]</strong> ` : '';
+            const tipo = e.tipo && e.tipo !== 'ERROR' ? ` <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25">${grEsc(e.tipo)}</span>` : '';
+            const info = e.info ? `<br><em class="text-muted">${grEsc(e.info)}</em>` : '';
+            return `<li>${cod}${grEsc(e.mensaje || '')}${tipo}${info}</li>`;
+        }).join('') + '</ul>';
+    }
+
     window.GR_cargarHistorialSri = function (id) {
+        const tbody = document.getElementById('gr-sri-tbody-historial');
+        if (!tbody || !id) return;
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center py-2 text-muted small"><span class="spinner-border spinner-border-sm me-1"></span>Cargando...</td></tr>';
+
+        const accionMap = {
+            'enviando':         ['primary', 'bi-cloud-arrow-up',   'Enviando'],
+            'recibida':         ['info',    'bi-check-circle',     'Recibida'],
+            'devuelta':         ['danger',  'bi-x-circle',         'Devuelta'],
+            'autorizado':       ['success', 'bi-patch-check-fill', 'Autorizado'],
+            'no_autorizado':    ['danger',  'bi-patch-minus',      'No autorizado'],
+            'en_procesamiento': ['warning', 'bi-hourglass-split',  'En proceso'],
+            'error':            ['danger',  'bi-exclamation-triangle', 'Error'],
+        };
+
         fetch(urlBaseGR + '/get-historial-sri-ajax?id=' + id)
             .then(r => r.json())
             .then(d => {
-                const tbody = document.getElementById('gr-sri-tbody-historial');
-                if (!tbody) return;
                 if (!d.ok || !d.data.length) {
                     tbody.innerHTML = '<tr><td colspan="4" class="text-center py-3 text-muted">Sin historial de envíos.</td></tr>';
                     return;
                 }
-                tbody.innerHTML = d.data.map(l => `<tr>
-                    <td class="ps-2">${l.created_at ? new Date(l.created_at).toLocaleString('es-EC') : ''}</td>
-                    <td>${l.ambiente||''}</td>
-                    <td>${l.accion||''} / ${l.estado_sri||''}</td>
-                    <td>${l.mensaje||''}</td>
-                </tr>`).join('');
+                tbody.innerHTML = d.data.map(l => {
+                    const [color, icon, lbl] = accionMap[l.accion] ?? ['secondary', 'bi-question-circle', grEsc(l.accion || '')];
+                    const amb = String(l.tipo_ambiente ?? l.ambiente ?? '');
+                    const ambLbl = amb === '2'
+                        ? '<span class="badge bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25" style="font-size:0.65rem;">PRODUCCIÓN</span>'
+                        : (amb === '1' ? '<span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25" style="font-size:0.65rem;">PRUEBAS</span>' : '');
+
+                    let detalle = grEsc(l.mensaje || '');
+                    if (l.detalle_json) {
+                        try { detalle += grListaErroresSri(JSON.parse(l.detalle_json)); } catch (e) {}
+                    }
+                    if (l.numero_autorizacion && l.accion === 'autorizado') {
+                        detalle += `<div class="font-monospace mt-1" style="font-size:0.65rem;word-break:break-all;">${grEsc(l.numero_autorizacion)}</div>`;
+                    }
+
+                    return `<tr>
+                        <td class="ps-2 py-1 text-nowrap" style="font-size:0.72rem;">${grFechaHora(l.created_at)}</td>
+                        <td class="py-1">${ambLbl}</td>
+                        <td class="py-1"><span class="badge bg-${color} bg-opacity-10 text-${color} border border-${color} border-opacity-25" style="font-size:0.65rem;"><i class="bi ${icon} me-1"></i>${lbl}</span></td>
+                        <td class="py-1" style="font-size:0.72rem;">${detalle}</td>
+                    </tr>`;
+                }).join('');
+            })
+            .catch(() => {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-center py-2 text-danger small">Error al cargar el historial.</td></tr>';
             });
     };
 
@@ -1261,7 +1373,7 @@
         document.getElementById('gr-partida').value = data.direccion_partida || '';
         document.getElementById('gr-destino').value = data.direccion_destino || '';
         document.getElementById('gr-ruta').value = data.ruta || '';
-        document.getElementById('gr-cod-doc-sustento').value = data.cod_doc_sustento || '01';
+        document.getElementById('gr-cod-doc-sustento').value = data.cod_doc_sustento ?? '01';
         document.getElementById('gr-num-doc-sustento').value = data.num_doc_sustento || '';
         document.getElementById('gr-fecha-doc-sustento').value = data.fecha_emision_doc_sustento || '';
         document.getElementById('gr-num-aut-doc-sustento').value = data.num_autorizacion_doc_sustento || '';
@@ -1273,6 +1385,7 @@
         (data.adicionales || []).forEach(ad => window.GR_agregarAdicionalLinea(ad));
         window.GR_asegurarLineaAdicional();
         window.GR_actualizarNumeracion();
+        window.GR_toggleSustento(false);
     };
 
     window.GR_registrarAutoGuardado = function () {

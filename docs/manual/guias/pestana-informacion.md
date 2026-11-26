@@ -5,7 +5,7 @@ categoria: Primeros pasos
 tipo: guia
 visibilidad: todos
 etiquetas: información, informacion, pestaña información, quién creó, quien creo, quién modificó, quien modifico, quién lo hizo, historial, historial de cambios, auditoría, auditoria, fecha y hora, última edición, ultima edicion, movimientos de inventario, kardex del documento, anulado por, solo administradores, nivel 2, nivel 3, no veo la pestaña
-version: 1.7
+version: 1.8
 orden: 36
 estado: activo
 ---
@@ -49,6 +49,7 @@ de cuenta salen con su nombre (por ejemplo *Forma de pago predeterminada: (vací
   Débito**, **Proformas** y **Retenciones de Ventas**.
 - **Compras**, **Liquidaciones de Compra** y **Retenciones de Compras**.
 - **Ingresos** y **Egresos** (sin movimientos de inventario: no mueven stock).
+- **Guías de Remisión** (sin movimientos de inventario: la guía no mueve stock).
 - **Clientes**.
 - **Proveedores**.
 - **Productos** (sin movimientos de inventario: esos se consultan en el kardex del producto).
@@ -78,6 +79,7 @@ La pestaña se irá agregando a los demás módulos; en todos se llama
 
 ## Historial de cambios
 
+- **1.8** — Se agrega a Guías de Remisión.
 - **1.7** — Se agrega a Órdenes y Fórmulas de producción.
 - **1.6** — Se agrega a Ingresos y Egresos. Pedidos pasa a usar esta misma pestaña (antes tenía una propia). Se retira el aviso «Este último cambio no quedó detallado en el historial»: cuando no hay detalle, la última edición muestra solo quién y cuándo.
 - **1.5** — Los cambios muestran el **nombre** en lugar del código interno en forma de pago y de cobro, concepto de ingreso y egreso, retenciones, sustento tributario, banco, provincia, ciudad, tipo de identificación y tipo de cuenta. Los campos tienen además etiquetas más claras (*Forma de pago predeterminada*, *Retención de renta*…).

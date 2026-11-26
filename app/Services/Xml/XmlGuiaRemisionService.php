@@ -129,18 +129,20 @@ class XmlGuiaRemisionService
         if (!empty($cab['ruta'])) {
             $this->txt($dom, $destinatario, 'ruta', $cab['ruta']);
         }
+        // Documento de sustento: el bloque va completo o no va. Sin tipo
+        // ("Sin documento de sustento") no se envía ningún dato suelto.
         if (!empty($cab['cod_doc_sustento'])) {
             $this->txt($dom, $destinatario, 'codDocSustento', $cab['cod_doc_sustento']);
-        }
-        if (!empty($cab['num_doc_sustento'])) {
-            $this->txt($dom, $destinatario, 'numDocSustento', $cab['num_doc_sustento']);
-        }
-        if (!empty($cab['num_autorizacion_doc_sustento'])) {
-            $this->txt($dom, $destinatario, 'numAutDocSustento', $cab['num_autorizacion_doc_sustento']);
-        }
-        if (!empty($cab['fecha_emision_doc_sustento'])) {
-            $this->txt($dom, $destinatario, 'fechaEmisionDocSustento',
-                date('d/m/Y', strtotime($cab['fecha_emision_doc_sustento'])));
+            if (!empty($cab['num_doc_sustento'])) {
+                $this->txt($dom, $destinatario, 'numDocSustento', $cab['num_doc_sustento']);
+            }
+            if (!empty($cab['num_autorizacion_doc_sustento'])) {
+                $this->txt($dom, $destinatario, 'numAutDocSustento', $cab['num_autorizacion_doc_sustento']);
+            }
+            if (!empty($cab['fecha_emision_doc_sustento'])) {
+                $this->txt($dom, $destinatario, 'fechaEmisionDocSustento',
+                    date('d/m/Y', strtotime($cab['fecha_emision_doc_sustento'])));
+            }
         }
 
         // Detalles de productos

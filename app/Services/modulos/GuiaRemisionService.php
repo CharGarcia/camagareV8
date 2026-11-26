@@ -339,6 +339,13 @@ class GuiaRemisionService
         $data['num_doc_sustento']             = trim($data['num_doc_sustento'] ?? '') ?: null;
         $data['num_autorizacion_doc_sustento']= trim($data['num_autorizacion_doc_sustento'] ?? '') ?: null;
         $data['fecha_emision_doc_sustento']   = trim($data['fecha_emision_doc_sustento'] ?? '') ?: null;
+        // "Sin documento de sustento": no se guarda número, fecha ni autorización
+        // sueltos (el XML no lleva el bloque de sustento).
+        if ($data['cod_doc_sustento'] === null) {
+            $data['num_doc_sustento']              = null;
+            $data['num_autorizacion_doc_sustento'] = null;
+            $data['fecha_emision_doc_sustento']    = null;
+        }
         $data['doc_aduanero_unico']           = trim($data['doc_aduanero_unico'] ?? '') ?: null;
         $data['cod_establecimiento_destino']  = trim($data['cod_establecimiento_destino'] ?? '') ?: null;
 
