@@ -72,9 +72,8 @@ class FacturaExpressSolicitudesController extends BaseModuloController
         $prefsVista = \App\Helpers\PreferenciasHelper::getPreferenciasVista(self::RUTA_MODULO);
 
         // El estado se filtra desde el modal de filtros (estado:valor dentro de b).
-        // Al entrar sin búsqueda se muestran las pendientes, como antes; el chip
-        // "Estado: Pendiente" se puede quitar para ver todas.
-        $buscar   = isset($_GET['b']) ? trim((string) $_GET['b']) : 'estado:pendiente';
+        // Al entrar sin búsqueda se muestran todas las solicitudes.
+        $buscar   = trim((string) ($_GET['b'] ?? ''));
         $estado   = trim($_GET['estado'] ?? '');
         $page     = max(1, (int) ($_GET['page'] ?? 1));
         $ordenCol = trim($_GET['sort'] ?? $prefsVista['__ordenCol__'] ?? 'created_at');

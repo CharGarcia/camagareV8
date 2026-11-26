@@ -56,12 +56,11 @@ se facturan solas al llegar y aparecen ya como **Facturada**.
 
 ## El listado
 
-Al entrar se muestran las solicitudes **Pendientes**: el buscador trae puesto
-el filtro *Estado: Pendiente* (se ve como una etiqueta junto al campo de
-búsqueda). Para ver otro estado pulse el botón de **Filtros** (embudo) y elija
+Al entrar se muestran **todas** las solicitudes, de la más reciente a la más
+antigua. Para ver solo un estado pulse el botón de **Filtros** (embudo) y elija
 **Pendiente**, **Aprobada**, **Rechazada** o **Facturada** en *Estado*; para
-ver **todas**, quite la etiqueta del estado con su **×** o deje *Estado* en
-*Todos*.
+volver a ver todas, quite la etiqueta del estado con su **×** o deje *Estado*
+en *Todos*.
 
 | Columna | Qué muestra |
 |---------|-------------|
@@ -242,4 +241,4 @@ tienen permisos aparte, en [Configuración QR](modulos/factura-express-config).
 ## Historial de cambios
 
 - **1.0** — Versión inicial del manual.
-- **1.1** — El filtro de estado (Pendiente, Aprobada, Rechazada, Facturada) pasa a la ventana de **Filtros**, con nuevos filtros por plantilla, monto, fecha y datos del cliente. Se quitó el botón de Configuración QR de esta pantalla (las plantillas se administran en su propio módulo). Los botones **PDF** y **Excel** ya descargan el listado con los filtros aplicados. El detalle de una solicitud procesada muestra quién la procesó.
+- **1.1** — El filtro de estado (Pendiente, Aprobada, Rechazada, Facturada) pasa a la ventana de **Filtros** y al entrar se ven todas las solicitudes (ya no solo las pendientes), con nuevos filtros por plantilla, monto, fecha y datos del cliente. Se quitó el botón de Configuración QR de esta pantalla (las plantillas se administran en su propio módulo). Los botones **PDF** y **Excel** ya descargan el listado con los filtros aplicados. El detalle de una solicitud procesada muestra quién la procesó.
