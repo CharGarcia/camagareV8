@@ -24,32 +24,46 @@
                     <input type="hidden" name="punto_emision" id="retv_punto_emision">
                     <input type="hidden" name="secuencial" id="retv_secuencial">
 
-                    <!-- Barra de Acciones -->
+                    <!-- Barra de Acciones Superior (mismo estándar que Facturas de Venta / Compras:
+                         botones btn-sm px-2 solo con ícono Bootstrap fs-6 y title) -->
                     <div class="px-3 py-2 bg-light border-bottom d-flex gap-1 align-items-center flex-wrap">
                         <?php if ($perm['crear'] ?? false): ?>
-                            <button type="button" class="btn btn-outline-primary btn-sm px-2" onclick="window.abrirModalCrearCliente()" title="Registrar nuevo cliente">
-                                <i class="fa-solid fa-user-plus"></i>
+                            <button type="button" class="btn btn-outline-success btn-sm px-2" onclick="window.abrirModalCrearCliente()" title="Registrar nuevo cliente">
+                                <i class="bi bi-person-plus fs-6"></i>
                             </button>
                         <?php endif; ?>
                         <button type="button" id="retv-btn-pdf"
                                 class="btn btn-outline-danger btn-sm px-2 d-none"
                                 onclick="window.RETV_descargarPdf()"
                                 title="Descargar PDF">
-                            <i class="fa-solid fa-file-pdf me-1"></i> PDF
+                            <i class="bi bi-file-earmark-pdf fs-6"></i>
                         </button>
                         <button type="button" id="retv-btn-descargar-xml"
-                                class="btn btn-outline-success btn-sm px-2 d-none"
+                                class="btn btn-outline-secondary btn-sm px-2 d-none"
                                 onclick="window.RETV_descargarXml()"
-                                title="Descargar XML">
-                            <i class="fa-solid fa-file-code me-1"></i> XML
+                                title="Descargar XML del documento electrónico">
+                            <i class="bi bi-file-earmark-code fs-6"></i>
                         </button>
                         <button type="button" id="retv-btn-excel"
                                 class="btn btn-outline-success btn-sm px-2 d-none"
                                 onclick="window.RETV_exportarExcel()"
                                 title="Descargar Excel">
-                            <i class="fa-solid fa-file-excel me-1"></i> Excel
+                            <i class="bi bi-file-earmark-excel fs-6"></i>
+                        </button>
+                        <!-- Reasignar a otro establecimiento del mismo RUC (solo si el RUC tiene varios). -->
+                        <button type="button" id="retv-btn-reasignar-est"
+                                class="btn btn-outline-primary btn-sm px-2 d-none"
+                                onclick="window.RETV_reasignarEstablecimiento()"
+                                title="Reasignar esta retención a otro establecimiento">
+                            <i class="bi bi-shop fs-6"></i>
                         </button>
                         <div class="ms-auto" id="retv_estado_badge"></div>
+                    </div>
+
+                    <!-- Aviso: el RUC tiene varios establecimientos (reasignación individual / masiva) -->
+                    <div id="retv-reasignar-est-aviso" class="alert alert-info d-flex align-items-center gap-2 py-1 px-3 mb-0 rounded-0 border-0 border-bottom d-none">
+                        <i class="bi bi-shop"></i>
+                        <span class="small" id="retv-reasignar-est-aviso-texto"></span>
                     </div>
 
                     <!-- Pestañas -->
@@ -217,7 +231,7 @@
                 <div>
                     <?php if ($perm['eliminar'] ?? false): ?>
                         <button type="button" id="retv-btn-eliminar" class="btn btn-outline-danger btn-sm px-3 d-none" onclick="window.RETV_eliminar()">
-                            <i class="fa-solid fa-trash me-1"></i> Eliminar
+                            <i class="bi bi-trash3 me-1"></i> Eliminar
                         </button>
                     <?php endif; ?>
                 </div>

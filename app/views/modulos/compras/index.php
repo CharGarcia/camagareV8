@@ -481,6 +481,7 @@ $to         = $to         ?? 0;
 <script src="<?= $base ?>/js/modulos/unidades_medida_modal.js?v=<?= asset_ver('/js/modulos/unidades_medida_modal.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
 <script src="<?= $base ?>/js/components/detalle_columnas.js?v=<?= asset_ver('/js/components/detalle_columnas.js') ?>"></script>
+<script src="<?= $base ?>/js/components/reasignar_establecimiento_doc.js?v=<?= asset_ver('/js/components/reasignar_establecimiento_doc.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/compras.js?v=<?= asset_ver('/js/modulos/compras.js') ?>"></script>
 <script src="<?= $base ?>/js/modulos/retenciones_compras.js?v=<?= asset_ver('/js/modulos/retenciones_compras.js') ?>"></script>
 

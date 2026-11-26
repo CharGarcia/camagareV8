@@ -14,6 +14,16 @@
 
     const BASE = window.RETV_rutaBase || (typeof BASE_URL !== 'undefined' ? BASE_URL : '') + '/modulos/retenciones_ventas';
 
+    // Reasignar a otro establecimiento del mismo RUC (pieza común CMG_ReasignarEst,
+    // components/reasignar_establecimiento_doc.js). Se actualiza en toggleBotones().
+    let retvReasigEst = { id: 0, idEst: 0 }; // retención abierta
+    window.RETV_reasignarEstablecimiento = () => {
+        window.CMG_ReasignarEst?.abrir({
+            cfg: window.RETV_REASIGNAR_EST, id: retvReasigEst.id, idEst: retvReasigEst.idEst,
+            urlModulo: BASE, doc: 'retención'
+        });
+    };
+
     // ── Init ─────────────────────────────────────────────────────────────────────
 
     // Cargar comprobantes autorizados de inmediato
@@ -849,6 +859,15 @@
         // Botón Excel: disponible para cualquier retención ya guardada.
         const btnExcel = document.getElementById('retv-btn-excel');
         if (btnExcel) btnExcel.classList.toggle('d-none', !tieneId);
+
+        // Reasignar a otro establecimiento del mismo RUC (botón + aviso). Disponible
+        // también en las electrónicas: no cambia el número, solo la atribución.
+        retvReasigEst = { id: tieneId ? (Number(cab.id) || 0) : 0, idEst: Number(cab.id_establecimiento) || 0 };
+        window.CMG_ReasignarEst?.actualizar({
+            cfg: window.RETV_REASIGNAR_EST, id: retvReasigEst.id, idEst: retvReasigEst.idEst,
+            btnId: 'retv-btn-reasignar-est', avisoId: 'retv-reasignar-est-aviso',
+            textoId: 'retv-reasignar-est-aviso-texto', doc: 'retención'
+        });
 
         // Campos del encabezado
         const camposHeader = [

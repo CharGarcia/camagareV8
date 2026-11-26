@@ -5,8 +5,8 @@ categoria: Configuración
 ruta_modulo: modulos/reasignar-establecimiento
 tipo: modulo
 visibilidad: todos
-etiquetas: reasignar establecimiento, cambiar sucursal, establecimiento de compras, atribución, migración, importación, corregir establecimiento, mover documentos de sucursal, reasignar una sola compra, boton reasignar en la compra
-version: 1.1
+etiquetas: reasignar establecimiento, cambiar sucursal, establecimiento de compras, atribución, migración, importación, corregir establecimiento, mover documentos de sucursal, reasignar una sola compra, boton reasignar en la compra, reasignar una sola retencion, boton reasignar en la retencion
+version: 1.2
 orden: 0
 estado: activo
 ---
@@ -41,9 +41,10 @@ módulo lo indica y no hay nada que reasignar.
 4. Marca los documentos a mover (o usa *Seleccionar todos*).
 5. Elige el **establecimiento destino** y presiona **Reasignar seleccionados**.
 
-Para mover **una sola compra** no hace falta entrar aquí: en la ventana de la
-compra (módulo [Compras](compras)) está el botón **Reasignar establecimiento**,
-que usa las mismas reglas y el permiso de este módulo.
+Para mover **un solo documento** no hace falta entrar aquí: en la ventana de la
+compra (módulo [Compras](compras)) y de la retención (módulo
+[Retenciones de venta](retenciones-ventas)) está el botón **Reasignar
+establecimiento**, que usa las mismas reglas y el permiso de este módulo.
 
 ## Campos del formulario
 
@@ -91,6 +92,7 @@ que usa las mismas reglas y el permiso de este módulo.
 
 ## Historial de cambios
 
+- **1.2** — El mismo aviso y botón aparecen en la ventana de cada retención de venta.
 - **1.1** — La ventana de cada compra muestra un aviso que remite a este módulo para las reasignaciones masivas y un botón para reasignar esa compra (mismas reglas y permiso de este módulo).
 - **1.0** — Versión inicial: reasignación en lote de compras (incl. NC/ND de compra) y
   retenciones de venta, con filtros, vista previa por establecimiento y auditoría.

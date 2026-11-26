@@ -279,10 +279,14 @@ include_once dirname(__DIR__) . '/clientes/modal_cliente.php';
 <script>
     window.RETV_rutaBase = '<?= $urlBase ?>';
     window.RETV_perm = <?= json_encode($perm) ?>;
+    // Establecimientos del mismo RUC (null si el RUC tiene uno solo): botón y aviso de
+    // reasignación del modal (ver CMG_ReasignarEst en components/reasignar_establecimiento_doc.js).
+    window.RETV_REASIGNAR_EST = <?= json_encode($reasignarEst ?? null, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     // Estado inicial de ordenamiento (desde la preferencia persistida en el servidor)
     window.RETV_ordenCol = '<?= $ordenCol ?>';
     window.RETV_ordenDir = '<?= $ordenDir ?>';
 </script>
 <script src="<?= rtrim($base, '/') ?>/js/modulos/clientes_modal.js?v=<?= asset_ver('/js/modulos/clientes_modal.js') ?>" defer></script>
 <script src="<?= rtrim($base, "/") ?>/js/modulos/asiento_contable_tab.js?v=<?= asset_ver('/js/modulos/asiento_contable_tab.js') ?>"></script>
+<script src="<?= rtrim($base, "/") ?>/js/components/reasignar_establecimiento_doc.js?v=<?= asset_ver('/js/components/reasignar_establecimiento_doc.js') ?>" defer></script>
 <script src="<?= rtrim($base, "/") ?>/js/modulos/retenciones_ventas.js?v=<?= asset_ver('/js/modulos/retenciones_ventas.js') ?>" defer></script>

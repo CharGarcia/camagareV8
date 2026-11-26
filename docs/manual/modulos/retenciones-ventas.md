@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/retenciones_ventas
 tipo: modulo
 visibilidad: todos
-etiquetas: retencion de venta, eliminar retencion, retencion anulada en el sri, emitida por error, no volver a descargar, claves a no registrar, documentos para no descargar, otro establecimiento, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora
-version: 1.19
+etiquetas: retencion de venta, eliminar retencion, retencion anulada en el sri, emitida por error, no volver a descargar, claves a no registrar, documentos para no descargar, otro establecimiento, retenciones recibidas, cliente retiene, credito tributario, periodo fiscal, cobro, buscar retencion, buscador, filtros, filtrar retenciones, documento sustento, codigo de retencion, filtro de fechas, chips, aparecen documentos que no busque, resultados que no corresponden, la busqueda trae otros documentos, imprimir, impresora, reasignar establecimiento, cambiar sucursal de la retencion, retencion en otro establecimiento, mismo ruc varios establecimientos
+version: 1.20
 orden: 40
 estado: activo
 ---
@@ -132,6 +132,33 @@ fiscal, el detalle de las líneas retenidas (documento sustento, código,
 concepto, base imponible, porcentaje y valor) y los totales de renta, IVA, ISD
 y total retenido. Ambos botones solo aparecen cuando la retención ya se guardó.
 
+## Reasignar la retención a otro establecimiento del mismo RUC
+
+Cuando el RUC tiene **más de un establecimiento** (en esta empresa o en otras
+empresas registradas con el mismo RUC), al abrir una retención guardada aparece:
+
+- Un **aviso azul** bajo la barra de botones que dice en qué establecimiento está
+  la retención, cuántos establecimientos tiene el RUC y que las **reasignaciones
+  masivas** se hacen en **Documentos › Reasignar establecimientos**.
+- El botón **Reasignar establecimiento** (ícono de tienda), junto al botón Excel.
+
+Al presionarlo se elige el **establecimiento destino** (agrupado por empresa si
+el RUC tiene varias) y se confirma. El número de la retención no cambia; solo a
+qué establecimiento queda atribuida. Si el destino es de **otra empresa** del
+mismo RUC, la retención pasa a esa empresa y deja de verse en el listado de esta.
+
+- Si la retención tiene **asiento contable**, el sistema lo avisa y pide marcar
+  *Sí, anular y reasignar*: el asiento se anula y hay que volver a generarlo en
+  el destino.
+- No se puede mover a otra empresa que **ya tenga una retención con el mismo
+  número**.
+- Funciona también con las retenciones electrónicas.
+- Requiere permiso de **modificar** en Retenciones de venta y en **Documentos ›
+  Reasignar establecimientos**. Sin ese permiso solo se ve el aviso.
+
+Para mover muchas retenciones a la vez use el módulo
+[Reasignar establecimiento](reasignar-establecimiento).
+
 ## Qué pasa al eliminar una retención
 
 Eliminar una retención **anula también su asiento contable**, en el mismo paso.
@@ -196,6 +223,7 @@ cerrado.
 
 ## Historial de cambios
 
+- **1.20** — Ventana de la retención: si el RUC tiene varios establecimientos, un **aviso** lo indica (y remite a *Documentos › Reasignar establecimientos* para las reasignaciones masivas) y el botón **Reasignar establecimiento** mueve la retención abierta a otro establecimiento del mismo RUC. Ver *Reasignar la retención a otro establecimiento del mismo RUC*. Los botones de la barra superior (nuevo cliente, PDF, XML, Excel) pasan a ser solo ícono, del mismo tamaño y estilo que en Compras y Facturas de Venta; al dejar el puntero encima se ve su nombre.
 - **1.19** — Al guardar una retención sobre una factura que ya estaba cobrada o tiene nota de crédito, si la factura queda cobrada de más aparece el aviso **Saldo a favor del cliente** con el valor. Es informativo: la retención se guarda igual. Las retenciones que llegan por Descargas SRI no muestran el aviso; la factura queda marcada *Saldo a favor* en su listado. Ver *Saldo a favor del cliente* en [Facturas de Venta](factura-venta.md).
 - **1.18** — La pestaña de Descargas SRI donde quedan las retenciones eliminadas (antes *Documentos para no descargar*) ahora se llama **Claves a no registrar**; los avisos al eliminar usan el nombre nuevo.
 - **1.17** — Al **eliminar una retención electrónica** se pregunta el motivo: *anulada en el SRI o emitida por error* (no se vuelve a descargar en ningún establecimiento), *la voy a registrar en otro establecimiento* (no se vuelve a descargar solo en este) o *solo eliminar*. Las dos primeras la agregan a *Documentos para no descargar* de Descargas SRI. Si el período contable de la retención está cerrado, la eliminación se rechaza y no se agrega nada a la lista. Requiere `database/2026-11-15_documentos_ignorados_sri_alcance.sql`. Ver *Retención electrónica: que no se vuelva a descargar*.

@@ -10,6 +10,10 @@ use App\models\Empresa;
 
 class ComprasController extends BaseModuloController
 {
+    // Reasignar la compra a otro establecimiento del mismo RUC desde el modal
+    // (endpoints verificarReasignacionEstAjax / reasignarEstablecimientoAjax).
+    use \App\Traits\ReasignarEstablecimientoDocTrait;
+
     private ComprasService    $service;
     private ComprasRepository $repository;
 
@@ -29,13 +33,14 @@ class ComprasController extends BaseModuloController
      */
     private const TIPOS_COMPROBANTE_MODAL = ['01', '02', '08', '11', '12', '15', '16', '19', '20', '21'];
 
-    /** Módulo Documentos › Reasignar establecimientos: su permiso protege la reasignación desde el modal. */
-    private const RUTA_REASIGNAR_EST = 'modulos/reasignar-establecimiento';
-
     protected function getRutaModulo(): string
     {
         return 'modulos/compras';
     }
+
+    protected function tipoReasignarEst(): string { return 'compras'; }
+
+    protected function nombreDocReasignarEst(): string { return 'compra'; }
 
     public function __construct()
     {
@@ -85,89 +90,6 @@ class ComprasController extends BaseModuloController
         }
         if ($estado === ComprasService::ESTADO_RECHAZADA) {
             throw new \Exception('La compra fue rechazada y no puede procesarse.');
-        }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // REASIGNAR ESTABLECIMIENTO (una compra, desde el modal)
-    // Reutiliza ReasignarEstablecimientoService (mismo flujo que el módulo
-    // Documentos › Reasignar establecimientos, que sirve para hacerlo en lote).
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /** GET: vínculos de la compra (asiento, pagos, inventario, retención) para avisar antes de reasignar. */
-    public function verificarReasignacionEstAjax(): void
-    {
-        $this->requireLeer();
-        try {
-            $this->requirePermisoReasignarEst();
-            $idEmpresa = (int) $_SESSION['id_empresa'];
-            $idCompra  = (int) ($_GET['id_compra'] ?? 0);
-            if ($idCompra <= 0) {
-                throw new \InvalidArgumentException('Compra no válida.');
-            }
-            $data = (new \App\Services\modulos\ReasignarEstablecimientoService())->verificarVinculos($idEmpresa, 'compras', [$idCompra]);
-            $this->json(['ok' => true, 'data' => $data]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'mensaje' => 'No se pudo revisar la compra.']);
-        }
-    }
-
-    /** POST: reasigna la compra al establecimiento destino (de esta empresa o de otra del mismo RUC). */
-    public function reasignarEstablecimientoAjax(): void
-    {
-        $this->requireActualizar();
-        try {
-            $this->requirePermisoReasignarEst();
-            $idEmpresa    = (int) $_SESSION['id_empresa'];
-            $idUsuario    = (int) $_SESSION['id_usuario'];
-            $idCompra     = (int) ($_POST['id_compra'] ?? 0);
-            $idEstDestino = (int) ($_POST['id_establecimiento_destino'] ?? 0);
-            $anular       = !empty($_POST['anular_vinculos']);
-            if ($idCompra <= 0 || $idEstDestino <= 0) {
-                throw new \InvalidArgumentException('Seleccione el establecimiento destino.');
-            }
-            // Registros propios (§6): sin acceso total solo puede mover las compras que creó.
-            $perm = $this->getPermisos();
-            $idUsuarioFiltro = empty($perm['todo']) ? $idUsuario : null;
-
-            $res = (new \App\Services\modulos\ReasignarEstablecimientoService())
-                ->reasignar($idEmpresa, 'compras', [$idCompra], $idEstDestino, $idUsuario, $idUsuarioFiltro, $anular);
-
-            if (empty($res['ok'])) {
-                $this->json(['ok' => false, 'mensaje' => $res['mensaje'] ?? 'No se pudo reasignar.']);
-                return;
-            }
-            if (($res['reasignados'] ?? 0) > 0) {
-                $this->json(['ok' => true, 'mensaje' => 'La compra se reasignó al establecimiento seleccionado.', 'anulados' => $res['anulados'] ?? []]);
-                return;
-            }
-            $mensaje = 'La compra no se reasignó.';
-            if (!empty($res['bloqueados_retencion'])) {
-                $mensaje = 'La compra tiene una retención emitida. Anule la retención desde su módulo y vuelva a intentar.';
-            } elseif (!empty($res['omitidos_con_vinculos'])) {
-                $mensaje = 'La compra tiene contabilidad, pagos o inventario: confirme que desea anularlos para reasignarla.';
-            } elseif (!empty($res['errores'])) {
-                $mensaje = 'No se pudo reasignar: ' . ($res['errores'][0]['mensaje'] ?? 'error desconocido.');
-            } else {
-                $mensaje = 'La compra ya está en ese establecimiento o no tiene permiso para modificarla.';
-            }
-            $this->json(['ok' => false, 'mensaje' => $mensaje]);
-        } catch (\InvalidArgumentException $e) {
-            $this->json(['ok' => false, 'mensaje' => $e->getMessage()]);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            $this->json(['ok' => false, 'mensaje' => 'No se pudo reasignar la compra.']);
-        }
-    }
-
-    /** La reasignación exige permiso de modificar en Documentos › Reasignar establecimientos. */
-    private function requirePermisoReasignarEst(): void
-    {
-        if (!\App\Helpers\Permisos::puedeActualizar(self::RUTA_REASIGNAR_EST)) {
-            throw new \InvalidArgumentException('No tiene permiso para reasignar establecimientos (Documentos › Reasignar establecimientos).');
         }
     }
 
@@ -332,16 +254,8 @@ class ComprasController extends BaseModuloController
         $usuariosFiltro  = $this->repository->getUsuariosConCompras($idEmpresa);
         $sustentosFiltro = $this->repository->getSustentosUsados($idEmpresa);
 
-        // Reasignar establecimiento desde el modal: solo si el RUC tiene más de un
-        // establecimiento (de esta empresa o de otras del mismo grupo RUC). La acción
-        // reutiliza el módulo Documentos › Reasignar establecimientos y exige su permiso.
-        $estGrupoRuc = (new \App\Services\modulos\ReasignarEstablecimientoService())->establecimientosGrupoRuc($idEmpresa);
-        $reasignarEst = count($estGrupoRuc) > 1 ? [
-            'establecimientos' => $estGrupoRuc,
-            'id_empresa'       => $idEmpresa,
-            'puede'            => !empty($perm['actualizar']) && \App\Helpers\Permisos::puedeActualizar(self::RUTA_REASIGNAR_EST),
-            'puede_ver_modulo' => \App\Helpers\Permisos::puedeVer(self::RUTA_REASIGNAR_EST),
-        ] : null;
+        // Botón/aviso de reasignar establecimiento (null si el RUC tiene uno solo).
+        $reasignarEst = $this->datosReasignarEst($idEmpresa, $perm);
 
         $this->viewWithLayout('layouts.main', 'modulos/compras/index', [
             'titulo'             => 'Compras',

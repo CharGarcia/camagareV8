@@ -11,6 +11,10 @@ use App\models\Empresa;
 
 class RetencionesVentasController extends BaseModuloController
 {
+    // Reasignar la retención a otro establecimiento del mismo RUC desde el modal
+    // (endpoints verificarReasignacionEstAjax / reasignarEstablecimientoAjax).
+    use \App\Traits\ReasignarEstablecimientoDocTrait;
+
     private RetencionVentaService    $service;
     private RetencionVentaRepository $repository;
 
@@ -18,6 +22,10 @@ class RetencionesVentasController extends BaseModuloController
     {
         return 'modulos/retenciones_ventas';
     }
+
+    protected function tipoReasignarEst(): string { return 'retenciones_venta'; }
+
+    protected function nombreDocReasignarEst(): string { return 'retención'; }
 
     public function __construct()
     {
@@ -93,6 +101,8 @@ class RetencionesVentasController extends BaseModuloController
             'puntos'      => $puntos,
             'seriesFiltro' => $seriesFiltro,
             'usuariosFiltro' => $usuariosFiltro,
+            // Botón/aviso de reasignar establecimiento (null si el RUC tiene uno solo).
+            'reasignarEst' => $this->datosReasignarEst($idEmpresa, $perm),
             'fullWidth'   => true,
         ]);
     }
