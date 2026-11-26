@@ -6,7 +6,7 @@ ruta_modulo: modulos/reasignar-establecimiento
 tipo: modulo
 visibilidad: todos
 etiquetas: reasignar establecimiento, cambiar sucursal, establecimiento de compras, atribución, migración, importación, corregir establecimiento, mover documentos de sucursal, reasignar una sola compra, boton reasignar en la compra, reasignar una sola retencion, boton reasignar en la retencion
-version: 1.2
+version: 1.4
 orden: 0
 estado: activo
 ---
@@ -69,6 +69,14 @@ establecimiento**, que usa las mismas reglas y el permiso de este módulo.
   **No modifica el número del documento** ni su autorización.
 - **No hay cascada**: pagos y contabilidad no guardan establecimiento (no se tocan);
   las **retenciones de compra** y el **inventario** se dejan intactos a propósito.
+- Una **retención de venta atada a una factura de venta** no se reasigna: la que se
+  registró desde la factura o la que cita en sus líneas el número de una factura
+  vigente de la empresa (las electrónicas del SRI). Esa retención abona el saldo de la
+  factura y moverla la separaría de ella. En el lote se omite y se informa cuántas
+  quedaron bloqueadas.
+- Lo mismo con una **nota de crédito de compra atada a la factura que modifica**
+  (su documento modificado es una factura vigente del mismo proveedor): no se
+  reasigna, porque descuenta del saldo de esa factura.
 - Es **reversible**: basta volver a reasignar al establecimiento anterior.
 - Cada cambio se registra en la **auditoría** del sistema (`log_sistema`).
 - Las **compras migradas** nacen atribuidas a la matriz; con este módulo se mueven
@@ -92,6 +100,8 @@ establecimiento**, que usa las mismas reglas y el permiso de este módulo.
 
 ## Historial de cambios
 
+- **1.4** — Las notas de crédito de compra atadas a la factura que modifican tampoco se pueden reasignar.
+- **1.3** — Las retenciones de venta atadas a una factura de venta (registradas desde la factura o que citan su número) ya no se pueden reasignar, ni en lote ni desde la ventana de la retención.
 - **1.2** — El mismo aviso y botón aparecen en la ventana de cada retención de venta.
 - **1.1** — La ventana de cada compra muestra un aviso que remite a este módulo para las reasignaciones masivas y un botón para reasignar esa compra (mismas reglas y permiso de este módulo).
 - **1.0** — Versión inicial: reasignación en lote de compras (incl. NC/ND de compra) y

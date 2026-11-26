@@ -669,6 +669,12 @@ class ComprasController extends BaseModuloController
             // Total de notas de crédito que modifican esta compra (para el saldo/pagos).
             $compra['total_nc'] = $this->repository->getTotalNotasCredito($id, $idEmpresa);
 
+            // Nota de crédito atada a la factura que modifica → el modal no ofrece
+            // reasignar establecimiento (solo se consulta para las NC, tipo 04).
+            $compra['bloqueo_reasignar_est'] = ($compra['tipo_comprobante'] ?? '') === '04'
+                ? $this->bloqueoReasignarEst($id, $idEmpresa)
+                : null;
+
             echo json_encode(['ok' => true, 'data' => $compra]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);

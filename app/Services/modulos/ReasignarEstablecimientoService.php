@@ -98,7 +98,10 @@ class ReasignarEstablecimientoService
      * Vínculos de UN documento con otros módulos. `bloqueado_retencion` (solo compras) nunca se
      * auto-anula; los demás sí, si el llamador confirma $anularVinculos.
      *
-     * @return array{id_asiento:?int, egresos:int[], detalle_ids_inventario:int[], bloqueado_retencion:bool}
+     * `bloqueado_factura`: el documento está atado a una factura (ver atadaAFactura()) — nunca
+     * se reasigna, para no separarlo de la factura cuyo saldo afecta.
+     *
+     * @return array{id_asiento:?int, egresos:int[], detalle_ids_inventario:int[], bloqueado_retencion:bool, bloqueado_factura:bool}
      */
     private function vinculosDeUnDocumento(int $idEmpresa, string $tipo, int $id): array
     {
@@ -115,30 +118,69 @@ class ReasignarEstablecimientoService
             $detalleIdsInventario = $this->repo->detalleIdsConInventario($id, $idEmpresa);
             $bloqueadoRetencion = $this->retencionCompraRepo()->existeRetencionParaCompra($id, $idEmpresa);
         }
+        $bloqueadoFactura = $this->atadaAFactura($idEmpresa, $tipo, $id);
 
         return [
             'id_asiento'             => $idAsiento,
             'egresos'                => $egresos,
             'detalle_ids_inventario' => $detalleIdsInventario,
             'bloqueado_retencion'    => $bloqueadoRetencion,
+            'bloqueado_factura'      => $bloqueadoFactura,
         ];
+    }
+
+    /**
+     * Motivo por el que un documento NUNCA se puede reasignar (no depende de anular nada), o null.
+     * Consulta liviana para decidir al abrir el modal del documento si se ofrece el botón.
+     */
+    public function motivoBloqueoFijo(int $idEmpresa, string $tipo, int $id): ?string
+    {
+        return $this->atadaAFactura($idEmpresa, $tipo, $id) ? self::textoBloqueoFactura($tipo) : null;
+    }
+
+    /**
+     * ¿El documento está atado a una factura y por eso no se reasigna?
+     *   - Retención de venta que sustenta una factura de venta (registrada desde ella o que cita su número).
+     *   - Nota de crédito de compra (tipo 04) que modifica una factura de compra vigente.
+     * Moverlo lo separaría de la factura cuyo saldo afecta.
+     */
+    private function atadaAFactura(int $idEmpresa, string $tipo, int $id): bool
+    {
+        return match ($tipo) {
+            'retenciones_venta' => $this->repo->retencionVentaAtadaAFactura($id, $idEmpresa),
+            'compras'           => $this->repo->ncCompraAtadaAFactura($id, $idEmpresa),
+            default             => false,
+        };
+    }
+
+    /** Motivo que se muestra cuando atadaAFactura() bloquea el documento. */
+    public static function textoBloqueoFactura(string $tipo): string
+    {
+        return $tipo === 'compras'
+            ? 'Está atada a la factura de compra que modifica, por eso no se puede pasar a otro establecimiento.'
+            : 'Está atada a una factura de venta, por eso no se puede pasar a otro establecimiento.';
     }
 
     /**
      * Resumen de vínculos de un lote de documentos, para el aviso previo (antes de reasignar).
      *
-     * @return array{con_asiento:int, con_egresos:int, con_inventario:int, bloqueados_retencion:int[]}
+     * @return array{con_asiento:int, con_egresos:int, con_inventario:int, bloqueados_retencion:int[], bloqueados_factura:int[]}
      */
     public function verificarVinculos(int $idEmpresa, string $tipo, array $ids): array
     {
+        $out = ['con_asiento' => 0, 'con_egresos' => 0, 'con_inventario' => 0, 'bloqueados_retencion' => [], 'bloqueados_factura' => []];
         if (!in_array($tipo, ReasignarEstablecimientoRepository::tiposValidos(), true)) {
-            return ['con_asiento' => 0, 'con_egresos' => 0, 'con_inventario' => 0, 'bloqueados_retencion' => []];
+            return $out;
         }
         $ids = array_values(array_filter(array_map('intval', $ids), fn($v) => $v > 0));
 
-        $out = ['con_asiento' => 0, 'con_egresos' => 0, 'con_inventario' => 0, 'bloqueados_retencion' => []];
         foreach ($ids as $id) {
             $v = $this->vinculosDeUnDocumento($idEmpresa, $tipo, $id);
+            if ($v['bloqueado_factura']) {
+                // Bloqueado: no se reasigna, así que sus demás vínculos no cuentan para el aviso.
+                $out['bloqueados_factura'][] = $id;
+                continue;
+            }
             if ($v['id_asiento'] !== null) { $out['con_asiento']++; }
             if (!empty($v['egresos'])) { $out['con_egresos']++; }
             if (!empty($v['detalle_ids_inventario'])) { $out['con_inventario']++; }
@@ -179,6 +221,7 @@ class ReasignarEstablecimientoService
 
         $reasignados = 0;
         $bloqueadosRetencion = [];
+        $bloqueadosFactura = [];
         $bloqueadosColision = [];
         $omitidosConVinculos = [];
         $anulados = ['asientos' => 0, 'egresos' => 0, 'inventario' => 0];
@@ -203,6 +246,10 @@ class ReasignarEstablecimientoService
             }
 
             $vinc = $this->vinculosDeUnDocumento($idEmpresa, $tipo, $id);
+            if ($vinc['bloqueado_factura']) {
+                $bloqueadosFactura[] = $id;
+                continue;
+            }
             if ($vinc['bloqueado_retencion']) {
                 $bloqueadosRetencion[] = $id;
                 continue;
@@ -258,6 +305,7 @@ class ReasignarEstablecimientoService
 
         $mensaje = "Se reasignaron {$reasignados} documento(s) al establecimiento destino.";
         if ($bloqueadosRetencion) { $mensaje .= ' ' . count($bloqueadosRetencion) . ' bloqueado(s) por tener retención de compra asociada.'; }
+        if ($bloqueadosFactura) { $mensaje .= ' ' . count($bloqueadosFactura) . ' bloqueado(s) por estar atado(s) a una factura.'; }
         if ($bloqueadosColision) { $mensaje .= ' ' . count($bloqueadosColision) . ' bloqueado(s) porque la empresa destino ya tiene un documento con ese mismo número.'; }
         if ($omitidosConVinculos) { $mensaje .= ' ' . count($omitidosConVinculos) . ' omitido(s) por tener contabilidad/pagos/inventario (confirme "Anular y reasignar").'; }
         if ($errores) { $mensaje .= ' ' . count($errores) . ' con error.'; }
@@ -266,6 +314,7 @@ class ReasignarEstablecimientoService
             'ok'                    => true,
             'reasignados'           => $reasignados,
             'bloqueados_retencion'  => $bloqueadosRetencion,
+            'bloqueados_factura'    => $bloqueadosFactura,
             'bloqueados_colision'   => $bloqueadosColision,
             'omitidos_con_vinculos' => $omitidosConVinculos,
             'anulados'              => $anulados,

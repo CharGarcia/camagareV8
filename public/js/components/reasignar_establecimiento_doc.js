@@ -21,19 +21,25 @@
     const variasEmpresas = cfg => new Set(cfg.establecimientos.map(e => Number(e.id_empresa))).size > 1;
     const base = () => (typeof BASE_URL !== 'undefined' ? BASE_URL : (window.BASE_URL || ''));
 
-    function actualizar({ cfg, id, idEst, btnId, avisoId, textoId, doc }) {
+    function actualizar({ cfg, id, idEst, btnId, avisoId, textoId, doc, bloqueo = null }) {
         const btn   = document.getElementById(btnId);
         const aviso = document.getElementById(avisoId);
         const texto = document.getElementById(textoId);
         const guardado = Number(id) > 0;
         const mostrar = !!(cfg && Array.isArray(cfg.establecimientos) && cfg.establecimientos.length > 1 && guardado);
-        if (btn)   btn.classList.toggle('d-none', !(mostrar && cfg.puede));
+        // `bloqueo`: motivo por el que este documento nunca se reasigna (p. ej. retención
+        // atada a una factura): sin botón, y el aviso explica el motivo.
+        if (btn)   btn.classList.toggle('d-none', !(mostrar && cfg.puede && !bloqueo));
         if (aviso) aviso.classList.toggle('d-none', !mostrar);
         if (!mostrar || !texto) return;
 
         const ests = cfg.establecimientos;
         const actual = ests.find(e => Number(e.id) === Number(idEst));
         const actualTxt = actual ? `<strong>${esc(etiqueta(actual, variasEmpresas(cfg)))}</strong>` : '<strong>sin establecimiento</strong>';
+        if (bloqueo) {
+            texto.innerHTML = `Esta ${esc(doc)} está en el establecimiento ${actualTxt}. ${esc(bloqueo)}`;
+            return;
+        }
         const modulo = cfg.puede_ver_modulo
             ? `<a href="${base()}/modulos/reasignar-establecimiento" target="_blank" class="alert-link">Documentos › Reasignar establecimientos</a>`
             : '<strong>Documentos › Reasignar establecimientos</strong>';
@@ -58,6 +64,10 @@
             vinc = j.data || {};
         } catch (e) {
             Swal.fire('Error de conexión', 'No se pudo contactar al servidor.', 'error');
+            return;
+        }
+        if ((vinc.bloqueados_factura || []).length) {
+            Swal.fire('No se puede reasignar', `Esta ${doc} está atada a una factura: no se puede pasar a otro establecimiento.`, 'warning');
             return;
         }
         if ((vinc.bloqueados_retencion || []).length) {

@@ -6,7 +6,7 @@ ruta_modulo: modulos/compras
 tipo: modulo
 visibilidad: todos
 etiquetas: compras, compra, eliminar nota de credito de compra, nota de credito anulada, eliminar compra, eliminar factura electronica, se vuelve a descargar, no volver a descargar, claves a no registrar, documentos para no descargar, factura anulada en el sri, emitida por error, mover a otro establecimiento, reasignar establecimiento, cambiar sucursal de la compra, compra en otro establecimiento, mismo ruc varios establecimientos, factura de compra, detalle de items, descripcion completa, descripcion cortada, no se ve el codigo, buscar compra, buscador, aparecen compras que no busque, resultados que no corresponden, la busqueda trae otras compras, buscar por numero de autorizacion, filtros, filtrar compras, buscar por producto comprado, filtro de fechas, saldo pendiente, estado de pago, chips, ordenar por dos columnas, ordenar por proveedor y fecha, asiento contable, editar asiento, pestaña asiento, proveedor, xml, sri, entrada de mercaderia, vincular producto, retencion, orden de compra, vincular orden, pedido a proveedor, comparar pedido vs facturado, entrega parcial, recibido parcial, cerrar orden, sustento tributario, codigo de sustento, autorizacion, fecha de caducidad, ats, persona natural, obligada a llevar contabilidad, tipo de contribuyente, registro manual, compra fisica, pagar la compra, pestaña pagos, pagar todas las compras del proveedor, pagar varias facturas, compras pendientes de pago, misma forma de pago, pago masivo, saldo pendiente, valores de terceros, otros conceptos, valores adicionales, bomberos, tasa de basura, recoleccion de basura, planilla de luz, planilla de agua, servicios basicos, informacion adicional, info adicional, nombre muy largo, limite de caracteres, value too long, no se pudo guardar la compra, imprimir, impresora, retencion antes de la factura, enlazar retencion, pdf en dos hojas, segunda hoja casi vacia, totales en otra pagina, el pdf corta la pagina, hoja de mas, asiento no cuadra, el asiento no se genera, asiento manual, registrar asiento a mano, importe total no es subtotal mas iva, supera el maximo de ajuste, xml inconsistente, iva de cabecera distinto al de las lineas, seguro campesino, generar contabilidad, centro de costo, proyecto, centro de costo por factura, proyecto por factura, dos facturas mismo proveedor distinto proyecto, otros rubros de terceros, tasa de pernoctacion, tasa turistica, hotel, hospedaje, rubro dentro del total, iva inflado en el listado, nota de credito de compra, devolucion al proveedor, restar inventario, salida de inventario por nota de credito, procesar salidas, adicional, columna adicional, detalle adicional, det. adicional, informacion adicional del item, detallesAdicionales, dato extra por linea, conceptos de retencion sugeridos, retencion predeterminada del proveedor, datos del proveedor, direccion del proveedor, telefono del proveedor, correo del proveedor, editar proveedor desde la compra, corregir proveedor, abrir ficha del proveedor, direccion cortada, correo cortado, de donde sale el valor del asiento, desglose del asiento, a que corresponde cada valor, que lineas forman la cuenta, detalle de la cuenta por pagar
-version: 2.55
+version: 2.56
 orden: 20
 estado: activo
 ---
@@ -571,6 +571,12 @@ listado de esta.
   generarlos en el destino.
 - Si tiene una **retención emitida**, no se puede reasignar: primero anule la
   retención desde su módulo.
+- Una **nota de crédito de compra atada a la factura que modifica** (su
+  *documento modificado* es una factura vigente del mismo proveedor) no se puede
+  reasignar: no aparece el botón y el aviso explica el motivo, porque la nota
+  descuenta del saldo de esa factura.
+- Las notas de crédito y de débito de compra se abren en esta misma ventana, así
+  que el aviso y el botón también aparecen en ellas (con su nombre).
 - El botón también está disponible en compras migradas o de solo lectura.
 - Requiere permiso de **modificar** en Compras y en **Documentos › Reasignar
   establecimientos**. Sin ese permiso solo se ve el aviso.
@@ -1009,6 +1015,7 @@ aprobaciones pasa, así que no se paga dos veces.
 
 ## Historial de cambios
 
+- **2.56** — Una **nota de crédito de compra atada a la factura que modifica** ya no se puede pasar a otro establecimiento (ni desde su ventana ni en *Documentos › Reasignar establecimientos*). Ver *Reasignar la compra a otro establecimiento del mismo RUC*.
 - **2.55** — Ventana de la compra: si el RUC tiene varios establecimientos, un **aviso** lo indica (y remite a *Documentos › Reasignar establecimientos* para las reasignaciones masivas) y el botón **Reasignar establecimiento** mueve la compra abierta a otro establecimiento del mismo RUC. Ver *Reasignar la compra a otro establecimiento del mismo RUC*.
 - **2.54** — Pestaña **Pagos**: después de registrar un pago, si el proveedor tiene más compras con saldo, el sistema ofrece **pagarlas con la misma forma de pago** (un egreso por compra). Ver *Pagar las demás compras del proveedor con la misma forma de pago*. Además, botones **Hoy / Documento** para elegir la fecha del egreso, recordados por usuario.
 - **2.53** — En la pestaña **Asiento contable**, el ícono **ⓘ** de cada línea muestra **de qué líneas de la compra sale ese valor** (cuenta por pagar, gasto, inventario, IVA). Ver *¿De dónde sale cada valor del asiento?*.

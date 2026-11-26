@@ -291,6 +291,8 @@
             calcTotales();
 
             setTitulo(`Retención ${cab.establecimiento}-${cab.punto_emision}-${cab.secuencial}`, false);
+            // Atada a una factura de venta → sin botón de reasignar establecimiento.
+            cab.bloqueo_reasignar_est = resp.bloqueo_reasignar_est || null;
             toggleBotones(true, cab);
 
             // Mostrar/ocultar botón XML según si el registro tiene XML almacenado
@@ -866,7 +868,8 @@
         window.CMG_ReasignarEst?.actualizar({
             cfg: window.RETV_REASIGNAR_EST, id: retvReasigEst.id, idEst: retvReasigEst.idEst,
             btnId: 'retv-btn-reasignar-est', avisoId: 'retv-reasignar-est-aviso',
-            textoId: 'retv-reasignar-est-aviso-texto', doc: 'retención'
+            textoId: 'retv-reasignar-est-aviso-texto', doc: 'retención',
+            bloqueo: tieneId ? (cab.bloqueo_reasignar_est || null) : null
         });
 
         // Campos del encabezado

@@ -114,12 +114,17 @@
             if (rv.ok) vinc = rv.data;
         } catch (e) { /* sin verificación: se continúa igual, el backend igual protege */ }
 
-        const hayBloqueados = vinc.bloqueados_retencion.length > 0;
+        const bloqFactura = vinc.bloqueados_factura || [];
+        const hayBloqueados = vinc.bloqueados_retencion.length > 0 || bloqFactura.length > 0;
         const hayVinculos = vinc.con_asiento > 0 || vinc.con_egresos > 0 || vinc.con_inventario > 0;
 
         let avisoHtml = '';
-        if (hayBloqueados) {
+        if (bloqFactura.length) {
             avisoHtml += '<div class="alert alert-secondary text-start small mt-2 mb-0">' +
+                '<b><i class="bi bi-lock me-1"></i>' + bloqFactura.length + ' documento(s)</b> están atados a una factura (retención que la sustenta o nota de crédito que la modifica) y no se pueden pasar a otro establecimiento; se omitirán.</div>';
+        }
+        if (vinc.bloqueados_retencion.length > 0) {
+            avisoHtml +='<div class="alert alert-secondary text-start small mt-2 mb-0">' +
                 '<b><i class="bi bi-lock me-1"></i>' + vinc.bloqueados_retencion.length + ' documento(s)</b> tienen una retención de compra asociada y no se pueden reasignar. ' +
                 'Anule la retención primero desde su propio módulo.</div>';
         }
@@ -177,6 +182,7 @@
             if (!res.ok) { Swal.fire('Error', res.mensaje || 'No se pudo reasignar.', 'error'); return; }
             const tuvoProblemas = (res.omitidos_con_vinculos && res.omitidos_con_vinculos.length) ||
                                    (res.bloqueados_retencion && res.bloqueados_retencion.length) ||
+                                   (res.bloqueados_factura && res.bloqueados_factura.length) ||
                                    (res.bloqueados_colision && res.bloqueados_colision.length) ||
                                    (res.errores && res.errores.length);
             Swal.fire({ icon: tuvoProblemas ? 'info' : 'success', title: tuvoProblemas ? 'Reasignación parcial' : 'Listo', text: res.mensaje });

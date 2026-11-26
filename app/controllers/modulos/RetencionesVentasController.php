@@ -251,7 +251,9 @@ class RetencionesVentasController extends BaseModuloController
             }
 
             $lineas = $this->repository->getDetalle($id);
-            echo json_encode(['ok' => true, 'cabecera' => $cabecera, 'lineas' => $lineas]);
+            // Atada a una factura de venta → el modal no ofrece reasignar establecimiento.
+            $bloqueoReasignar = $this->bloqueoReasignarEst($id, $idEmpresa);
+            echo json_encode(['ok' => true, 'cabecera' => $cabecera, 'lineas' => $lineas, 'bloqueo_reasignar_est' => $bloqueoReasignar]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

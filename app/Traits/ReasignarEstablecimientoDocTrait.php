@@ -44,6 +44,16 @@ trait ReasignarEstablecimientoDocTrait
         ];
     }
 
+    /**
+     * ¿El documento NO se puede reasignar por estar atado a otro (p. ej. retención de venta
+     * atada a una factura)? Para ocultar el botón al abrir el modal. Devuelve el motivo o null.
+     */
+    protected function bloqueoReasignarEst(int $id, int $idEmpresa): ?string
+    {
+        if ($id <= 0) { return null; }
+        return (new ReasignarEstablecimientoService())->motivoBloqueoFijo($idEmpresa, $this->tipoReasignarEst(), $id);
+    }
+
     /** GET ?id=: vínculos del documento (asiento, pagos, inventario, retención) para avisar antes de reasignar. */
     public function verificarReasignacionEstAjax(): void
     {
@@ -93,7 +103,9 @@ trait ReasignarEstablecimientoDocTrait
             if (($res['reasignados'] ?? 0) > 0) {
                 $this->json(['ok' => true, 'mensaje' => 'Se reasignó la ' . $doc . ' al establecimiento seleccionado.', 'anulados' => $res['anulados'] ?? []]);
             }
-            if (!empty($res['bloqueados_retencion'])) {
+            if (!empty($res['bloqueados_factura'])) {
+                $mensaje = ReasignarEstablecimientoService::textoBloqueoFactura($this->tipoReasignarEst());
+            } elseif (!empty($res['bloqueados_retencion'])) {
                 $mensaje = 'La ' . $doc . ' tiene una retención emitida. Anule la retención desde su módulo y vuelva a intentar.';
             } elseif (!empty($res['bloqueados_colision'])) {
                 $mensaje = 'La empresa destino ya tiene un documento con este mismo número; no se puede mover allá.';

@@ -562,21 +562,26 @@ function mcAplicarEstadoAprobacion(d) {
 // public/js/components/reasignar_establecimiento_doc.js. La reasignación en lote
 // vive en Documentos › Reasignar establecimientos.
 // ─────────────────────────────────────────────────────────────────────────────
-let mcReasigEstCompra = { id: 0, idEst: 0 }; // compra abierta
+let mcReasigEstCompra = { id: 0, idEst: 0, doc: 'compra' }; // documento abierto
 
 function mcActualizarReasignarEst(d) {
-    mcReasigEstCompra = { id: Number(d?.id) || 0, idEst: Number(d?.id_establecimiento) || 0 };
+    // Nombre según el tipo de comprobante (las NC/ND de compra se abren en este mismo modal).
+    const tipo = String(d?.tipo_comprobante || '');
+    const doc = tipo === '04' ? 'nota de crédito' : (tipo === '05' ? 'nota de débito' : 'compra');
+    mcReasigEstCompra = { id: Number(d?.id) || 0, idEst: Number(d?.id_establecimiento) || 0, doc };
     if (!window.CMG_ReasignarEst) return;
     window.CMG_ReasignarEst.actualizar({
         cfg: window.MC_REASIGNAR_EST, id: mcReasigEstCompra.id, idEst: mcReasigEstCompra.idEst,
-        btnId: 'mcBtnReasignarEst', avisoId: 'mcReasignarEstAviso', textoId: 'mcReasignarEstAvisoTexto', doc: 'compra'
+        btnId: 'mcBtnReasignarEst', avisoId: 'mcReasignarEstAviso', textoId: 'mcReasignarEstAvisoTexto', doc,
+        // NC atada a la factura que modifica: sin botón, el aviso explica el motivo.
+        bloqueo: d?.bloqueo_reasignar_est || null
     });
 }
 
 function mcReasignarEstablecimiento() {
     window.CMG_ReasignarEst?.abrir({
         cfg: window.MC_REASIGNAR_EST, id: mcReasigEstCompra.id, idEst: mcReasigEstCompra.idEst,
-        urlModulo: `${BASE_URL}/modulos/compras`, doc: 'compra'
+        urlModulo: `${BASE_URL}/modulos/compras`, doc: mcReasigEstCompra.doc
     });
 }
 

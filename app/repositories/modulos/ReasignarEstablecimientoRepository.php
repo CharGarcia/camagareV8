@@ -276,6 +276,67 @@ class ReasignarEstablecimientoRepository extends BaseRepository
         return array_map('intval', array_column($st->fetchAll(PDO::FETCH_ASSOC), 'id'));
     }
 
+    /**
+     * ¿La retención de venta está atada a una factura de venta vigente? Mismo doble vínculo que
+     * el saldo de la factura (App\Helpers\AbonosVentaSql::cteRetenidoPorFactura()):
+     *   - `id_venta`: registrada desde la factura;
+     *   - `num_doc_sustento` de alguna línea = número (normalizado) de una factura de la empresa
+     *     (retenciones electrónicas recibidas del SRI).
+     * Una retención así abona el saldo de esa factura; moverla de establecimiento (o de empresa)
+     * la separaría de la factura que sustenta, por eso no se reasigna.
+     */
+    public function retencionVentaAtadaAFactura(int $idRetencion, int $idEmpresa): bool
+    {
+        $numVc  = \App\Helpers\AbonosVentaSql::numFactura('vc');
+        $numSus = \App\Helpers\AbonosVentaSql::normalizar('rd.num_doc_sustento');
+        $st = $this->db->prepare(
+            "SELECT 1
+               FROM retencion_venta_cabecera r
+              WHERE r.id = :id AND r.id_empresa = :e AND r.eliminado = false
+                AND (
+                    EXISTS (SELECT 1 FROM ventas_cabecera v
+                             WHERE v.id = r.id_venta AND v.id_empresa = r.id_empresa AND v.eliminado = false)
+                 OR EXISTS (SELECT 1
+                              FROM retencion_venta_detalle rd
+                              JOIN ventas_cabecera vc
+                                   ON vc.id_empresa = r.id_empresa
+                                  AND vc.eliminado  = false
+                                  AND {$numVc} = {$numSus}
+                             WHERE rd.id_retencion = r.id
+                               AND COALESCE(rd.num_doc_sustento, '') <> '')
+                )
+              LIMIT 1"
+        );
+        $st->execute([':id' => $idRetencion, ':e' => $idEmpresa]);
+        return $st->fetchColumn() !== false;
+    }
+
+    /**
+     * ¿La compra es una nota de crédito (tipo 04) atada a la factura de compra que modifica?
+     * Mismo vínculo que usa Compras (saldo de la factura y pestaña Documento Relacionado,
+     * ComprasRepository::getDocumentosRelacionados()): documento_modificado = número de una
+     * factura vigente del mismo proveedor y empresa. Moverla la separaría de esa factura.
+     */
+    public function ncCompraAtadaAFactura(int $idCompra, int $idEmpresa): bool
+    {
+        $st = $this->db->prepare(
+            "SELECT 1
+               FROM compras_cabecera nc
+               JOIN compras_cabecera f
+                    ON f.id_empresa   = nc.id_empresa
+                   AND f.id_proveedor = nc.id_proveedor
+                   AND f.eliminado    = false
+                   AND f.tipo_comprobante NOT IN ('04', '05')
+                   AND CONCAT(f.establecimiento_prov, '-', f.punto_emision_prov, '-', f.secuencial_prov) = nc.documento_modificado
+              WHERE nc.id = :id AND nc.id_empresa = :e AND nc.eliminado = false
+                AND nc.tipo_comprobante = '04'
+                AND COALESCE(nc.documento_modificado, '') <> ''
+              LIMIT 1"
+        );
+        $st->execute([':id' => $idCompra, ':e' => $idEmpresa]);
+        return $st->fetchColumn() !== false;
+    }
+
     // ── helpers ──
 
     private function armarWhere(int $idEmpresa, string $tipo, array $filtros, ?int $idUsuarioFiltro): array
