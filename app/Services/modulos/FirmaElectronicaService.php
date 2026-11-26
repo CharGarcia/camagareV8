@@ -2308,7 +2308,7 @@ TXT;
         $out = ['correo' => null, 'whatsapp' => null];
         $url = null;
         $urlRenovacion = function () use (&$url, $firma, $idUsuario): string {
-            return $url ??= $this->enlaceRenovacion($firma, $idUsuario);
+            return $url ??= $this->enlaceAvisoVencimiento($firma, $idUsuario);
         };
 
         // Correo
@@ -2434,13 +2434,35 @@ TXT;
     }
 
     /**
-     * Enlace personal de renovación: una solicitud nueva con los datos y los documentos del
-     * titular ya cargados (el cliente revisa, cambia lo que haga falta y paga). Se crea una
-     * vez y se reutiliza en los avisos siguientes mientras siga en curso.
+     * Enlace del aviso de vencimiento: el portal de la firma que vence (el mismo enlace
+     * personal del titular). El aviso NO crea la renovación: el cliente la pide con
+     * «Solicitar una nueva firma» en ese portal (nuevaSolicitudDesdePortal), que le copia
+     * sus datos y documentos. Antes se creaba aquí una solicitud en borrador por cada aviso,
+     * aunque el cliente no fuera a renovar. Si la firma nació en el sistema y no tiene
+     * enlace, se le crea uno (solo el enlace, no otra firma).
      */
-    public function enlaceRenovacion(array $firma, ?int $idUsuario = null): string
+    public function enlaceAvisoVencimiento(array $firma, ?int $idUsuario = null): string
     {
-        return self::urlPortal($this->crearRenovacion($firma, $idUsuario)['token']);
+        $idEmpresa = (int) $firma['id_empresa'];
+        $owner = $idUsuario ?: ((int) ($firma['created_by'] ?? 0) ?: (int) $this->getConfigModulo($idEmpresa)['id_usuario_responsable']);
+        $db = Database::getConnection();
+        $managed = !$db->inTransaction();
+        if ($managed) {
+            $db->beginTransaction();
+        }
+        try {
+            $sol = $this->asegurarSolicitudDeFirma($firma, $owner, (string) ($firma['correo'] ?? ''),
+                self::normalizarTelefono((string) ($firma['telefono'] ?? '')), '');
+            if ($managed) {
+                $db->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($managed && $db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+        return self::urlPortal((string) $sol['token']);
     }
 
     /**

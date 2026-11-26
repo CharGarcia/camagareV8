@@ -6,7 +6,7 @@ ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
 etiquetas: firma electronica, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, cambiar vendedor de la firma, filtrar por vendedor, firmas por vendedor, firmas sin vendedor, quitar vendedor, asignar vendedor, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, datos del representante legal, datos equivocados, puso sus datos en vez del representante, contador lleno la solicitud, confirmar representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.27
+version: 3.28
 orden: 20
 estado: activo
 ---
@@ -442,11 +442,12 @@ firma va a vencer, para que la renueve a tiempo con usted.
 - **Una sola vez**: cada aviso (etapa y canal) sale una sola vez, aunque el
   proceso corra varias veces. Si un día el servidor no lo ejecutó, al siguiente
   sale el aviso de la etapa que corresponde ese día, no uno atrasado.
-- **Enlace de renovación**: cada aviso lleva un enlace personal que abre el
-  formulario con los datos del cliente ya llenos, el mismo tipo de firma y sus
-  **documentos ya cargados** (ver *Nueva solicitud con los datos y documentos del
-  cliente*); el cliente revisa, cambia lo que haga falta y paga. Esa solicitud
-  aparece en el listado como una firma nueva en *Borrador*.
+- **Enlace del aviso**: cada aviso lleva el enlace personal de la **firma que
+  vence** (el mismo que el cliente ya tenía). El aviso **no crea ninguna
+  solicitud**: el cliente ve el estado de su firma y, si quiere renovarla, pulsa
+  **Solicitar una nueva firma**. Recién entonces se crea la solicitud nueva con sus
+  datos y **documentos ya cargados** (ver *Nueva solicitud con los datos y
+  documentos del cliente*) y aparece en el listado como una firma en *Borrador*.
 - **WhatsApp**: necesita la plantilla rápida **Renovación Firma Electrónica**
   (`renovacion_firma_electronica`) aprobada en Meta. Con la versión de 3
   variables lleva el enlace; una plantilla aprobada de 2 variables sigue
@@ -491,7 +492,7 @@ el cobro y el trámite en Uanataca; todo eso empieza de cero.
   archivo que la anterior. Si el cliente reemplaza un documento, el archivo viejo
   se borra del servidor apenas ninguna solicitud lo usa; mientras la firma anterior
   lo tenga, se conserva (es lo que se envió a Uanataca en su momento).
-- Lo mismo pasa con el **enlace de renovación** de los avisos de vencimiento.
+- Lo mismo pasa cuando el cliente la pide desde el enlace de los avisos de vencimiento.
 
 **El cliente también puede pedirla solo, con su mismo enlace.** Cuando su firma está
 *Emitida* o *Cancelada*, al abrir el enlace que ya tenía ve el botón **Solicitar una
@@ -827,6 +828,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.28** — Los **avisos de vencimiento** ya no crean una solicitud de renovación en *Borrador* por cada firma avisada: el enlace del aviso abre el portal de la firma que vence y la renovación se crea solo si el cliente pulsa **Solicitar una nueva firma**.
 - **3.27** — El **PDF** del listado incluye la columna **Vendedor** (el Excel ya la tenía).
 - **3.26** — Filtro **Vendedor** en la ventana de filtros del listado (incluye *Sin vendedor*), con el mismo criterio que la columna Vendedor; se aplica también al PDF y al Excel.
 - **3.25** — El **Vendedor** de la ficha se puede cambiar en cualquier estado (también aprobada o emitida): se guarda al elegirlo, con confirmación, y si la firma tiene factura activa también cambia el vendedor de la factura.
