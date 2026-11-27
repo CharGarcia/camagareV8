@@ -374,18 +374,9 @@
         _setTxt('factDireccion', direccion);
     }
 
-    function actualizarBtnGenerarFactura() {
-        const btn = document.getElementById('btnGenerarFactura');
-        if (!btn) return;
-        const idFirma = document.getElementById('firma_id_modal')?.value;
-        const opt     = selectProducto?.options[selectProducto.selectedIndex];
-        const tieneProducto = opt && opt.value !== '';
-        const puedeFacturar = !_facturaEstado || _facturaElim || _facturaEstado === 'anulado';
-        btn.disabled = !(idFirma && tieneProducto && puedeFacturar);
-        btn.title = (_facturaEstado && !_facturaElim && _facturaEstado !== 'anulado')
-            ? 'Ya existe una factura activa (estado: ' + _facturaEstado + ')'
-            : '';
-    }
+    // La factura ya no se genera con un botón propio: sale de la pestaña Trámite (cobro, a
+    // crédito o regalía). Se conserva la función porque varios puntos del modal la invocan.
+    function actualizarBtnGenerarFactura() {}
 
     function ucFirst(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : ''; }
 
@@ -700,45 +691,6 @@
         el?.addEventListener('change', () => { if (!chkMismosDatos?.checked) actualizarResumenFactura(); });
     });
 
-    window.generarFacturaDesdeFirma = async function () {
-        const idFirma = document.getElementById('firma_id_modal')?.value;
-        if (!idFirma) { mostrarAlerta('Guarda la firma antes de generar la factura.', 'warning'); return; }
-
-
-        const btn     = document.getElementById('btnGenerarFactura');
-        const spinner = document.getElementById('factSpinner');
-        if (btn)     { btn.disabled = true; }
-        if (spinner) spinner.classList.remove('d-none');
-        mostrarCargando('Generando la factura…', 'Esto puede tardar unos segundos; no cierre la ventana.');
-
-        try {
-            const fd = new FormData();
-            fd.append('id_firma', idFirma);
-            const resp = await fetch(`${urlBase}/generarFacturaDesdeFirma`, { method: 'POST', body: fd });
-            const json = await resp.json();
-            cerrarCargando();
-
-            if (json.ok) {
-                _facturaEstado = json.factura_estado || 'borrador';
-                _facturaElim   = false;
-                mostrarInfoFactura(json);
-                actualizarBtnGenerarFactura();
-                aplicarBloqueoFirma();
-                mostrarAlerta('Factura generada correctamente. El pago y los datos de facturación quedan fijos; los datos del titular y el tipo de firma se pueden corregir hasta que se emita.', 'success');
-                setTimeout(() => { if (window.fetchSearchFirmas) window.fetchSearchFirmas(); }, 1500);
-            } else {
-                mostrarAlerta(json.error || 'Error al generar la factura.', 'danger');
-                if (btn) btn.disabled = false;
-            }
-        } catch (e) {
-            mostrarAlerta('Error de conexión.', 'danger');
-            if (btn) btn.disabled = false;
-        } finally {
-            if (spinner) spinner.classList.add('d-none');
-            cerrarCargando(); // por si la respuesta no trajo mensaje
-        }
-    };
-
     // ── Provincia → Ciudad ─────────────────────────────────────
     const selectProv   = document.getElementById('firma_cod_prov');
     const selectCiudad = document.getElementById('firma_cod_ciudad');
@@ -879,8 +831,6 @@
         ajustarFactTipoId('cedula');
         mostrarInfoFactura(null);
         actualizarResumenFactura();
-        const btnFact = document.getElementById('btnGenerarFactura');
-        if (btnFact) btnFact.disabled = true;
 
         // Pestañas facturación y trámite: deshabilitar hasta guardar
         document.getElementById('tab-firma-fact-btn')?.classList.add('disabled');
@@ -1492,9 +1442,9 @@
             }
             return { quien: 'Cliente o usted', color: adelantado ? 'danger' : 'warning', texto: adelantado
                 + (t.estado_pago === 'rechazado' ? 'El comprobante fue rechazado. ' : 'Falta el pago. ')
-                + 'El cliente paga desde su enlace (tarjeta o comprobante). Si usted ya recibió el dinero, en la pestaña Trámite elija la forma de cobro y pulse «Aprobar y facturar»: se genera la factura y el trámite pasa a «Por registrar». Si la firma es una regalía, use «Sin cobro (regalía)».', tab: TRAMITE };
+                + 'El cliente paga desde su enlace (tarjeta o comprobante). Si usted ya recibió el dinero, en la pestaña Trámite elija la forma de cobro y pulse «Aprobar y facturar»: se genera la factura y el trámite pasa a «Por registrar». Si la firma es a crédito o una regalía, elija «A crédito» o «Regalía» en ese mismo selector.', tab: TRAMITE };
         }
-        if (!t.id_ingreso && !t.es_cortesia) {
+        if (!t.id_ingreso && !t.es_cortesia && !t.es_credito) {
             return { quien: 'Usted', color: 'danger', texto: 'El pago figura «Confirmado» porque se marcó a mano, pero no se generó el cobro en Ingresos. En la pestaña Trámite elija la forma de cobro y regístrelo (si ya lo registró en el módulo Ingresos, no lo repita).', tab: TRAMITE };
         }
         if (t.estado === 'pendiente') {
@@ -1634,7 +1584,9 @@
         let acciones = '';
 
         // Pago "Confirmado" sin cobro: el Estado Pago se marcó a mano y no existe el ingreso.
+        // También es el caso de una firma a crédito: factura emitida, cobro pendiente.
         const sinCobro = pagoOk && !t.id_ingreso && !t.es_cortesia;
+        const aCredito = sinCobro && !!t.es_credito;
         const conFacturaActiva = !!t.id_factura && !t.factura_eliminada && ['borrador', 'autorizado'].includes(t.factura_estado);
 
         // Paso 1: documentos del titular. Mientras falten, no se ofrece registrar el pago.
@@ -1651,9 +1603,10 @@
         }
         if (puede && (['pendiente', 'en_revision', 'rechazado'].includes(t.estado_pago) || sinCobro) && !['cancelada', 'borrador'].includes(t.estado)) {
             acciones += `
-            <div class="border rounded-3 p-2 mb-2 ${t.estado_pago === 'en_revision' ? 'border-info bg-info bg-opacity-10' : (sinCobro ? 'border-danger bg-danger bg-opacity-10' : '')}">
-                <div class="fw-semibold mb-1"><i class="bi bi-cash-coin me-1"></i>${t.estado_pago === 'en_revision' ? 'Revisar comprobante de pago' : (sinCobro ? 'Falta registrar el cobro' : 'Registrar pago recibido')}</div>
-                ${sinCobro ? `<div class="small text-dark mb-1">El pago figura «Confirmado» porque se marcó a mano, pero no se generó el cobro en Ingresos${conFacturaActiva ? '' : ' ni la factura'}. Regístrelo aquí. <b>Si ya registró el cobro de esta factura en el módulo Ingresos, no lo registre otra vez.</b></div>` : ''}
+            <div class="border rounded-3 p-2 mb-2 ${t.estado_pago === 'en_revision' ? 'border-info bg-info bg-opacity-10' : (aCredito ? 'border-warning bg-warning bg-opacity-10' : (sinCobro ? 'border-danger bg-danger bg-opacity-10' : ''))}">
+                <div class="fw-semibold mb-1"><i class="bi bi-cash-coin me-1"></i>${t.estado_pago === 'en_revision' ? 'Revisar comprobante de pago' : (aCredito ? 'Firma a crédito: cobro pendiente' : (sinCobro ? 'Falta registrar el cobro' : 'Registrar pago recibido'))}</div>
+                ${aCredito ? `<div class="small text-dark mb-1">La factura ${esc(t.factura_numero || '')} está por cobrar y el trámite sigue su curso. Cuando el cliente pague, elija la cuenta y registre el cobro aquí. <b>Si ya lo registró en el módulo Ingresos, no lo registre otra vez.</b></div>` : ''}
+                ${sinCobro && !aCredito ? `<div class="small text-dark mb-1">El pago figura «Confirmado» porque se marcó a mano, pero no se generó el cobro en Ingresos${conFacturaActiva ? '' : ' ni la factura'}. Regístrelo aquí. <b>Si ya registró el cobro de esta factura en el módulo Ingresos, no lo registre otra vez.</b></div>` : ''}
                 ${comprobante ? `<div class="mb-1"><a href="${comprobante.url}" target="_blank"><i class="bi bi-receipt me-1"></i>Ver comprobante: ${esc(comprobante.nombre)}</a></div>` : ''}
                 ${t.uanataca_api ? `<div class="mb-1 d-flex align-items-center gap-1">
                     <i class="bi bi-wallet2 text-primary"></i><span class="text-muted">Saldo en Uanataca:</span>
@@ -1662,14 +1615,20 @@
                 </div>` : ''}
                 <div class="d-flex flex-wrap gap-2 align-items-end">
                     <div><label class="form-label small mb-0">Cuenta / forma de cobro</label>
-                        <select class="form-select form-select-sm" id="trFormaCobro" style="width:220px;"><option value="">— Elegir —</option>${formas}</select></div>
-                    <div><label class="form-label small mb-0">Referencia</label>
+                        <select class="form-select form-select-sm" id="trFormaCobro" style="width:240px;"><option value="">— Elegir —</option>${formas}${aCredito ? '' : `<optgroup label="Sin cobro ahora">
+                            <option value="__credito">A crédito (se cobra después)</option>
+                            ${conFacturaActiva ? '' : '<option value="__cortesia">Regalía (100 % de descuento)</option>'}
+                        </optgroup>`}</select></div>
+                    <div id="trReferenciaWrap"><label class="form-label small mb-0">Referencia</label>
                         <input type="text" class="form-control form-control-sm" id="trReferencia" style="width:160px;" placeholder="N.º de transferencia"></div>
-                    <button type="button" class="btn btn-success btn-sm" data-tr="aprobar"><i class="bi bi-check2-circle me-1"></i>${conFacturaActiva ? 'Registrar cobro' : 'Aprobar y facturar'}</button>
+                    <button type="button" class="btn btn-success btn-sm" data-tr="aprobar" id="trBtnAprobar"><i class="bi bi-check2-circle me-1"></i><span id="trBtnAprobarTxt">${conFacturaActiva ? 'Registrar cobro' : 'Aprobar y facturar'}</span></button>
                     ${t.estado_pago === 'en_revision' ? '<button type="button" class="btn btn-outline-danger btn-sm" data-tr="rechazar"><i class="bi bi-x-circle me-1"></i>Rechazar</button>' : ''}
-                    ${!conFacturaActiva ? '<button type="button" class="btn btn-outline-secondary btn-sm" data-tr="cortesia" title="No se cobra: factura con 100 % de descuento"><i class="bi bi-gift me-1"></i>Sin cobro (regalía)</button>' : ''}
                 </div>
-                <div class="form-text small">${conFacturaActiva ? `Registra el cobro de la factura ${esc(t.factura_numero || '')} que ya existe; no crea otra factura.` : 'Genera la factura (serie configurada), la envía al SRI y registra el cobro.'}</div>
+                <div class="form-text small" id="trAyudaCobro"
+                    data-cobro="${esc(conFacturaActiva ? `Registra el cobro de la factura ${t.factura_numero || ''} que ya existe; no crea otra factura.` : 'Genera la factura (serie configurada), la envía al SRI y registra el cobro.')}"
+                    data-credito="${esc(conFacturaActiva ? `A crédito: usa la factura ${t.factura_numero || ''} que ya existe (no crea otra), la envía al SRI si sigue en borrador y la deja por cobrar.` : 'A crédito: genera la factura por su valor normal, la envía al SRI y la deja por cobrar. No registra ningún cobro.')}"
+                    data-cortesia="Regalía: genera la factura con 100 % de descuento (total $0.00) y la envía al SRI. No registra ningún cobro."
+                    data-txt-cobro="${conFacturaActiva ? 'Registrar cobro' : 'Aprobar y facturar'}">${conFacturaActiva ? `Registra el cobro de la factura ${esc(t.factura_numero || '')} que ya existe; no crea otra factura.` : 'Genera la factura (serie configurada), la envía al SRI y registra el cobro.'}</div>
             </div>`;
         }
         if (puede && pagoOk && !correoOk) {
@@ -1795,7 +1754,7 @@
             <div class="col-lg-5">
                 <div class="mb-2"><span class="text-muted">Estado:</span> <b>${esc(t.estado_label)}</b>${t.total !== null ? ` · <span class="text-muted">Total:</span> <b>$${Number(t.total).toFixed(2)}</b>` : ''}</div>
                 ${paso(t.estado !== 'borrador', t.estado === 'borrador', 'Datos y documentos del cliente', t.estado === 'borrador' ? 'El cliente aún no envía sus documentos.' : '')}
-                ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${t.es_cortesia ? 'Regalía (sin cobro)' : esc(t.tipo_pago || '')}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
+                ${paso(pagoOk, !pagoOk && t.estado === 'pendiente', 'Pago', pagoOk ? `${t.es_cortesia ? 'Regalía (sin cobro)' : (t.es_credito ? 'A crédito (por cobrar)' : esc(t.tipo_pago || ''))}${t.factura_numero ? ' · Factura ' + esc(t.factura_numero) + ' (' + esc(t.factura_estado || '') + ')' : ''}` : (t.estado_pago === 'en_revision' ? 'Comprobante en revisión' : (t.estado_pago === 'rechazado' ? 'Rechazado: ' + esc(t.pago_motivo_rechazo || '') : 'Pendiente')))}
                 ${!correoRequerido && !correoOk ? paso(pagoOk, false, 'Correo confirmado', 'No se exige (configuración del módulo).') : paso(correoOk, pagoOk && !correoOk, 'Correo confirmado', correoOk ? `${esc(t.correo)} · ${esc(t.correo_confirmado_at)}` : (t.correo_enviado_at ? `Factura enviada a ${esc(t.correo)} el ${esc(t.correo_enviado_at)}; esperando confirmación.` : esc(t.correo || '')))}
                 ${paso(registrada, t.estado === 'por_registrar', 'Registrada en Uanataca', registrada ? `${t.uanataca_referencia ? 'Ref. ' + esc(t.uanataca_referencia) + ' · ' : ''}${esc(t.uanataca_registrada_at || '')}` : 'Use la pestaña Uanataca para copiar los datos.')}
                 ${paso(['aprobada', 'emitida'].includes(t.estado), t.estado === 'en_proceso', 'Aprobada por Uanataca', t.estado === 'en_proceso' ? 'Aún no: en espera de la aprobación de Uanataca.' : '')}
@@ -1934,6 +1893,19 @@
         }
     };
 
+    // Selector de cobro: con «A crédito» o «Regalía» no hay referencia, y el botón y la ayuda
+    // dicen lo que realmente va a pasar.
+    document.getElementById('tramiteContenido')?.addEventListener('change', (ev) => {
+        if (ev.target.id !== 'trFormaCobro') return;
+        const v = ev.target.value;
+        const modo = v === '__credito' ? 'credito' : (v === '__cortesia' ? 'cortesia' : 'cobro');
+        const ayuda = document.getElementById('trAyudaCobro');
+        const txt = document.getElementById('trBtnAprobarTxt');
+        if (ayuda) ayuda.textContent = ayuda.dataset[modo] || '';
+        if (txt) txt.textContent = modo === 'credito' ? 'Registrar a crédito' : (modo === 'cortesia' ? 'Registrar regalía' : (ayuda?.dataset.txtCobro || 'Aprobar y facturar'));
+        document.getElementById('trReferenciaWrap')?.classList.toggle('d-none', modo !== 'cobro');
+    });
+
     let _tramiteEnCurso = false;
     document.getElementById('tramiteContenido')?.addEventListener('click', async (ev) => {
         const btn = ev.target.closest('[data-tr]');
@@ -1947,8 +1919,21 @@
         try {
             if (accion === 'aprobar') {
                 const forma = document.getElementById('trFormaCobro')?.value;
-                if (!forma) { mostrarAlerta('Elija la cuenta o forma de cobro donde llegó el pago.', 'warning'); return; }
+                if (!forma) { mostrarAlerta('Elija la cuenta o forma de cobro donde llegó el pago (o «A crédito» / «Regalía»).', 'warning'); return; }
                 const yaFacturada = !!_tramite?.id_factura && !_tramite.factura_eliminada && ['borrador', 'autorizado'].includes(_tramite.factura_estado);
+                if (forma === '__credito') {
+                    if (await confirmar(yaFacturada
+                        ? 'La firma queda a crédito con la factura que ya existe (no se crea otra): se envía al SRI si sigue en borrador y queda por cobrar. No se registra ningún cobro.'
+                        : 'Se generará la factura por su valor normal, se enviará al SRI y quedará por cobrar. No se registra ningún cobro.', 'Sí, a crédito')) {
+                        await postTramite('registrarCreditoAjax', null, ['Registrando a crédito…', 'Generando la factura y enviándola al SRI. No cierre la ventana.']);
+                    }
+                    return;
+                }
+                if (forma === '__cortesia') {
+                    const motivo = await pedirTexto('Firma sin cobro (regalía)', 'Motivo de la regalía. Se emite la factura con 100 % de descuento (total $0.00), se envía al SRI y no se registra ningún cobro.');
+                    if (motivo) await postTramite('registrarCortesiaAjax', { motivo }, ['Registrando la regalía…', 'Generando la factura con 100 % de descuento y enviándola al SRI. No cierre la ventana.']);
+                    return;
+                }
                 if (!(await confirmar(yaFacturada
                     ? 'Se registrará el cobro de la factura que ya existe (no se crea otra). Si ya lo registró en el módulo Ingresos, cancele.'
                     : 'Se generará la factura, se enviará al SRI y se registrará el cobro.'))) return;
@@ -1974,9 +1959,6 @@
                 if (await confirmar('El trámite vuelve al paso que corresponde a lo realmente hecho (documentos y pago). No borra documentos, pagos ni facturas.', 'Sí, corregir')) {
                     await postTramite('accionTramiteAjax', { accion: 'recalcular' });
                 }
-            } else if (accion === 'cortesia') {
-                const motivo = await pedirTexto('Firma sin cobro (regalía)', 'Motivo de la regalía. Se emite la factura con 100 % de descuento (total $0.00), se envía al SRI y no se registra ningún cobro.');
-                if (motivo) await postTramite('registrarCortesiaAjax', { motivo }, ['Registrando la regalía…', 'Generando la factura con 100 % de descuento y enviándola al SRI. No cierre la ventana.']);
             } else if (accion === 'aviso_vencimiento') {
                 if (await confirmar('Se enviará al cliente el aviso de vencimiento con el enlace para renovar (correo y, si hay plantilla aprobada, WhatsApp).', 'Sí, enviar')) {
                     await postTramite('avisoVencimientoAjax', null, ['Enviando el aviso…', 'Correo y, si hay plantilla aprobada, WhatsApp.']);

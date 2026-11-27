@@ -558,28 +558,6 @@ class FirmasElectronicasController extends BaseModuloController
         }
     }
 
-    // ── Generar Factura desde Firma ───────────────────────────
-
-    public function generarFacturaDesdeFirma(): void
-    {
-        $this->requireCrear();
-        header('Content-Type: application/json; charset=utf-8');
-
-        $idFirma   = (int) ($_POST['id_firma'] ?? 0);
-        $idEmpresa = (int) $_SESSION['id_empresa'];
-        $idUsuario = (int) $_SESSION['id_usuario'];
-
-        try {
-            if ($idFirma <= 0) throw new \Exception('ID de firma no válido.');
-            $res = $this->service->generarFacturaBorrador($idFirma, $idEmpresa, $idUsuario);
-            echo json_encode(['ok' => true, 'msg' => 'Factura generada correctamente.', 'url' => BASE_URL . '/modulos/factura-venta'] + $res);
-        } catch (\Throwable $e) {
-            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
-            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
-        }
-        exit;
-    }
-
     // ── Trámite (pago, Uanataca, historial) ───────────────────
 
     public function getTramiteAjax(): void
@@ -596,6 +574,8 @@ class FirmasElectronicasController extends BaseModuloController
                 'tipo_pago'           => $f['tipo_pago'],
                 'es_cortesia'         => ($f['tipo_pago'] ?? '') === \App\Rules\modulos\FirmaElectronicaRules::TIPO_PAGO_CORTESIA,
                 // Documentos obligatorios que faltan: habilitan «Confirmar documentos» y las pestañas de pago.
+                // A crédito: factura emitida y todavía sin cobro (al cobrarla deja de serlo).
+                'es_credito'          => ($f['tipo_pago'] ?? '') === \App\Rules\modulos\FirmaElectronicaRules::TIPO_PAGO_CREDITO && empty($f['id_ingreso']),
                 'docs_faltantes'      => $this->service->documentosFaltantes($f),
                 'origen'              => $f['origen'] ?? 'interno',
                 'total'               => $d['total'],
@@ -703,6 +683,20 @@ class FirmasElectronicasController extends BaseModuloController
                 (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario'], (string) ($_POST['motivo'] ?? '')
             );
             return ['msg' => 'Regalía registrada: se generó la factura ' . $r['numero'] . ' con 100 % de descuento, sin cobro.'];
+        });
+    }
+
+    /** Firma a crédito: factura por su valor (la existente o una nueva), sin ingreso. */
+    public function registrarCreditoAjax(): void
+    {
+        $this->requireActualizar();
+        $this->responderJson(function () {
+            $r = $this->service->registrarCredito(
+                (int) ($_POST['id'] ?? 0), (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']
+            );
+            return ['msg' => 'Firma registrada a crédito: '
+                . ($r['factura_nueva'] ? 'se generó la factura ' . $r['numero'] : 'se usó la factura ' . $r['numero'] . ' que ya existía; no se creó otra')
+                . '. Queda por cobrar.'];
         });
     }
 

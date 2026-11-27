@@ -15,6 +15,8 @@ class FirmaElectronicaRules
     public const ESTADOS_PAGO = ['pendiente', 'en_revision', 'confirmado', 'rechazado'];
     /** Firma sin cobro (regalía): factura con 100 % de descuento y sin ingreso. */
     public const TIPO_PAGO_CORTESIA = 'cortesia';
+    /** Firma a crédito: factura por su valor normal, sin ingreso; queda por cobrar. */
+    public const TIPO_PAGO_CREDITO = 'credito';
 
     /** Estados en que el cliente todavía puede corregir sus datos y documentos desde el portal. */
     public const ESTADOS_EDITABLES_PORTAL = ['borrador', 'pendiente', 'observada'];
@@ -79,7 +81,7 @@ class FirmaElectronicaRules
         }
 
         $tipoPago = trim($data['tipo_pago'] ?? '');
-        if ($tipoPago !== '' && !in_array($tipoPago, ['transferencia', 'tarjeta', 'payphone', self::TIPO_PAGO_CORTESIA], true)) {
+        if ($tipoPago !== '' && !in_array($tipoPago, ['transferencia', 'tarjeta', 'payphone', self::TIPO_PAGO_CORTESIA, self::TIPO_PAGO_CREDITO], true)) {
             $errores[] = 'El tipo de pago no es válido.';
         }
 

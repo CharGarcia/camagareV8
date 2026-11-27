@@ -5,8 +5,8 @@ categoria: Ventas
 ruta_modulo: modulos/firmas_electronicas
 tipo: modulo
 visibilidad: admin
-etiquetas: firma electronica, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, cambiar vendedor de la firma, filtrar por vendedor, firmas por vendedor, firmas sin vendedor, quitar vendedor, asignar vendedor, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, datos del representante legal, datos equivocados, puso sus datos en vez del representante, contador lleno la solicitud, confirmar representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
-version: 3.28
+etiquetas: firma electronica, firma a credito, vender firma a credito, solicitud sin pago, factura por cobrar, cobrar despues, regalia, columna terminos, acepto terminos, ver si el cliente acepto, firma duplicada, solicitud repetida, firma vigente, ya existe una firma emitida, cliente con firma vigente, terminos y condiciones, proteccion de datos personales, lopdp, consentimiento del cliente, aceptar terminos, politica de privacidad, tratamiento de datos, casilla de aceptacion, solicitud cancelada por uanataca, anular solicitud en uanataca, celular equivocado, telefono incorrecto, reabrir para reenviar, reenviar a uanataca, solicitud rechazada, regalia, firma sin cobro, cortesia, firma gratis, 100 por ciento de descuento, siguiente paso del tramite, pestañas deshabilitadas, confirmar documentos, estado del tramite no cambia, reabrir solicitud cancelada, comision por firma, vendedor de la firma, cambiar vendedor de la firma, filtrar por vendedor, firmas por vendedor, firmas sin vendedor, quitar vendedor, asignar vendedor, qr por vendedor, enlace por vendedor, negocio que vendio la firma, donde se genero la firma, boton renovar, renovar firma antes de que venza, nueva solicitud con estos datos, volver a pedir firma, reutilizar documentos, segunda firma del mismo cliente, solicitar una nueva firma, mismo enlace, firma para persona natural, firma para representante legal, tipo de persona de la firma, vender firmas, aviso de vencimiento al cliente, recordatorio de renovacion, renovar firma del cliente, firma por vencer, enlace de renovacion, api uanataca, uanacreditos, creditos uanataca, precompra, distribuidor uanataca, miembro de empresa, representante legal, datos del representante legal, datos equivocados, puso sus datos en vez del representante, contador lleno la solicitud, confirmar representante legal, solicitud de firma, tramite de firma, uanataca, enlace para el cliente, formulario de firma, link de firma, whatsapp, pagar firma, payphone, transferencia, comprobante de pago, confirmar correo, factura de la firma, registrar en uanataca, firma emitida, observada, corregir solicitud, enlace fijo, qr de firma, imprimir qr, cartel con qr, codigo qr, editar solicitud el cliente, corregir datos desde el enlace, certificado, p12, caducada, por caducar, renovar firma, firma invalida, xades, anf, security data, buscar firma, filtros, firmas por facturar
+version: 3.29
 orden: 20
 estado: activo
 ---
@@ -153,7 +153,7 @@ Uanataca**).
 | Estado | Qué hace avanzar el trámite | Pasa a |
 |--------|-----------------------------|--------|
 | Borrador | Subir los documentos obligatorios y **Confirmar documentos** (pestaña Trámite), o que el cliente los envíe desde su enlace | Pendiente de pago |
-| Pendiente de pago | El cliente paga desde su enlace; o usted, en Trámite, pulsa **Aprobar y facturar** (factura y cobro) o **Sin cobro (regalía)** | Por registrar |
+| Pendiente de pago | El cliente paga desde su enlace; o usted, en Trámite, pulsa **Aprobar y facturar** (factura y cobro), o elige **A crédito** o **Regalía** en el selector de cobro | Por registrar |
 | Por registrar | **Enviar a Uanataca** (API) o **Ya la registré en Uanataca** (manual), en la pestaña Trámite | En trámite |
 | En trámite | Uanataca valida al cliente y aprueba (con la API se actualiza solo) | Aprobada |
 | Aprobada / En trámite | **Marcar emitida** con la fecha de vencimiento (con la API se actualiza solo) | Emitida |
@@ -173,7 +173,7 @@ al pasar el cursor por una pestaña apagada se ve qué falta.
 |------|----------|-------------|
 | 1. Datos | Llene los datos del titular y pulse **Guardar**. La firma nace en *Borrador* | **Documentos** y **Trámite** |
 | 2. Documentos | Suba cédula (frente y posterior) y selfie; para representante legal, además RUC, constitución, nombramiento y aceptación. Luego, en Trámite, **Confirmar documentos** | **Pago** y **Facturación** |
-| 3. Pago | En Trámite: **Aprobar y facturar** (elija la forma de cobro) o **Sin cobro (regalía)** | **Uanataca** |
+| 3. Pago | En Trámite: elija la forma de cobro y **Aprobar y facturar**; o en ese mismo selector **A crédito** / **Regalía** | **Uanataca** |
 | 4. Uanataca | **Enviar a Uanataca** o **Ya la registré en Uanataca** | — |
 | 5. Emisión | **Marcar emitida** (con la API se actualiza solo) | — |
 
@@ -183,7 +183,9 @@ ofrece registrar el pago.
 ### Firma sin cobro (regalía)
 
 Cuando la firma se obsequia, en la pestaña Trámite, recuadro *Registrar pago
-recibido*, pulse **Sin cobro (regalía)** y escriba el motivo. El sistema:
+recibido*, elija **Regalía (100 % de descuento)** en el selector *Cuenta / forma
+de cobro* (grupo *Sin cobro ahora*), pulse **Registrar regalía** y escriba el
+motivo. El sistema:
 
 - emite la **factura con el 100 % de descuento** (se ve el precio de la firma y el
   descuento total; subtotal, IVA y total en $0.00) y la envía al SRI;
@@ -195,6 +197,31 @@ recibido*, pulse **Sin cobro (regalía)** y escriba el motivo. El sistema:
 No está disponible si la firma ya tiene una factura por su valor normal (anúlela
 primero) o un cobro registrado. El cliente recibe el correo con la factura para
 confirmar su correo, con el texto de que la firma no tiene costo.
+
+### Firma a crédito (se cobra después)
+
+Cuando el cliente pagará más adelante pero la solicitud debe salir ya, en la
+pestaña Trámite, recuadro *Registrar pago recibido*, elija **A crédito (se cobra
+después)** en el selector *Cuenta / forma de cobro* (grupo *Sin cobro ahora*) y
+pulse **Registrar a crédito**. El sistema:
+
+- **genera la factura por su valor normal** y la envía al SRI. Si la firma **ya
+  tiene una factura activa** (borrador o autorizada) usa esa misma y **no crea
+  otra**; si estaba en borrador, la envía al SRI;
+- **no registra ningún cobro** en Ingresos: la factura queda con saldo en
+  Cuentas por Cobrar;
+- deja el pago como *Confirmado* (forma de pago *A crédito*) y el trámite pasa a
+  *Por registrar*, así que ya se puede **Enviar a Uanataca** (con el envío
+  automático activo, sale sola);
+- envía al cliente el correo con la factura para que confirme su correo.
+
+Mientras no se cobre, Trámite muestra el recuadro amarillo **Firma a crédito:
+cobro pendiente**. Cuando el cliente pague, elija ahí la cuenta, la referencia y
+pulse **Registrar cobro**: se crea el ingreso contra esa misma factura. Si el
+cobro ya se registró en el módulo **Ingresos**, no lo repita.
+
+No está disponible si la firma ya tiene un cobro registrado o es una regalía.
+Desde su enlace el cliente ve el pago como registrado: no se le pide pagar.
 
 ### Corregir un estado que no corresponde
 
@@ -212,7 +239,8 @@ no hay cobro en Ingresos ni factura. La pestaña Trámite muestra en rojo el
 recuadro **Falta registrar el cobro**: elija la forma de cobro, la referencia y
 pulse **Registrar cobro** (si la firma ya tiene factura, se cobra esa misma; no
 se crea otra) o **Aprobar y facturar** (si aún no tiene factura). Si en realidad
-fue un obsequio, use **Sin cobro (regalía)**.
+fue un obsequio o una venta a crédito, elija **Regalía** o **A crédito** en el
+selector de cobro.
 
 Si el cobro de esa factura ya se registró directamente en el módulo **Ingresos**,
 no lo registre otra vez desde aquí: quedaría duplicado.
@@ -828,6 +856,7 @@ archivo, y volver a cargar la firma no lo soluciona.
 
 ## Historial de cambios
 
+- **3.29** — **Firma a crédito**: el selector *Cuenta / forma de cobro* de la pestaña Trámite incluye **A crédito** y **Regalía** (antes la regalía era un botón aparte). A crédito genera la factura por su valor y la deja por cobrar —o usa la que ya existe, sin crear otra— y el trámite sigue hacia Uanataca; el cobro se registra después en el mismo recuadro. Se retiró el botón **Generar Factura de Venta** de la pestaña Facturación: la factura sale siempre de la pestaña Trámite.
 - **3.28** — Los **avisos de vencimiento** ya no crean una solicitud de renovación en *Borrador* por cada firma avisada: el enlace del aviso abre el portal de la firma que vence y la renovación se crea solo si el cliente pulsa **Solicitar una nueva firma**.
 - **3.27** — El **PDF** del listado incluye la columna **Vendedor** (el Excel ya la tenía).
 - **3.26** — Filtro **Vendedor** en la ventana de filtros del listado (incluye *Sin vendedor*), con el mismo criterio que la columna Vendedor; se aplica también al PDF y al Excel.

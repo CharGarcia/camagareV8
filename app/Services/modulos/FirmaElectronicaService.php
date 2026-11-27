@@ -1594,8 +1594,8 @@ TXT;
         if (!$firma) {
             throw new Exception('Firma no encontrada.');
         }
-        // "Confirmado" sin cobro = el Estado Pago se marcó a mano en la ficha: eso no genera el
-        // ingreso (ni la factura), así que aquí todavía se puede registrar.
+        // "Confirmado" sin cobro = firma a crédito (factura por cobrar) o Estado Pago marcado a
+        // mano en la ficha: no existe el ingreso, así que aquí todavía se puede registrar.
         $sinCobro = $firma['estado_pago'] === 'confirmado' && empty($firma['id_ingreso'])
             && ($firma['tipo_pago'] ?? '') !== FirmaElectronicaRules::TIPO_PAGO_CORTESIA;
         if (!$sinCobro && !in_array((string) $firma['estado_pago'], ['pendiente', 'en_revision', 'rechazado'], true)) {
@@ -1685,6 +1685,81 @@ TXT;
         $this->emitirFacturaYConfirmar($idFirma, $idEmpresa);
 
         return ['id_factura' => $idFactura, 'numero' => $numFact];
+    }
+
+    /**
+     * Firma a crédito: la factura sale por su valor normal y queda por cobrar (sin ingreso);
+     * el pago se da por confirmado para que el trámite continúe. Si la firma ya tiene una
+     * factura activa se usa esa: nunca se crea una segunda. El cobro se registra después con
+     * aprobarPago(), contra esa misma factura.
+     */
+    public function registrarCredito(int $idFirma, int $idEmpresa, int $idUsuario): array
+    {
+        $db = Database::getConnection();
+        $db->beginTransaction();
+        $facturaData = null;
+        try {
+            $this->repository->lockFirma($idFirma);
+            $firma = $this->repository->findById($idFirma, $idEmpresa);
+            if (!$firma) {
+                throw new Exception('Firma no encontrada.');
+            }
+            if (!empty($firma['id_ingreso'])) {
+                throw new Exception('Esta firma ya tiene un cobro registrado: no puede pasar a crédito.');
+            }
+            if ($firma['estado_pago'] === 'confirmado') {
+                $tipo = (string) ($firma['tipo_pago'] ?? '');
+                if ($tipo === FirmaElectronicaRules::TIPO_PAGO_CREDITO) {
+                    throw new Exception('Esta firma ya está registrada a crédito.');
+                }
+                if ($tipo === FirmaElectronicaRules::TIPO_PAGO_CORTESIA) {
+                    throw new Exception('Esta firma ya está registrada como regalía.');
+                }
+            }
+            $this->exigirListaParaPago($firma);
+
+            // Con factura activa (borrador o autorizada) se usa esa; solo sin factura se genera.
+            $idFactura = $this->facturaActiva($firma);
+            $creoFactura = false;
+            if (!$idFactura) {
+                [$idFactura, $facturaData] = $this->crearFactura($firma, $idUsuario, '01');
+                $creoFactura = true;
+            }
+            $nuevoEstado = $firma['estado'] === 'pendiente' ? 'por_registrar' : (string) $firma['estado'];
+            $estimada = empty($firma['fecha_caducidad'])
+                ? $this->caducidadEstimada((int) $firma['id_producto'], $idEmpresa)
+                : null;
+            $this->repository->actualizarTramite($idFirma, $idEmpresa, ($estimada ? ['fecha_caducidad' => $estimada] : []) + [
+                'estado_pago' => 'confirmado', 'tipo_pago' => FirmaElectronicaRules::TIPO_PAGO_CREDITO, 'estado' => $nuevoEstado,
+                'id_factura' => $idFactura, 'pago_motivo_rechazo' => null,
+                'pago_revisado_by' => $idUsuario, 'pago_revisado_at' => date('Y-m-d H:i:s'),
+            ], $idUsuario);
+
+            $numFact = $this->numeroFactura($idFactura, $idEmpresa);
+            $this->repository->crearEvento($idEmpresa, $idFirma, 'credito', 'Firma a crédito',
+                'Factura ' . $numFact . ($creoFactura ? ' generada' : ' (ya existía)') . ': queda por cobrar', false, $idUsuario);
+            $this->logService->registrar($idUsuario, $idEmpresa, 'registrar_credito', 'firmas_electronicas', $idFirma,
+                ['estado_pago' => $firma['estado_pago'], 'tipo_pago' => $firma['tipo_pago'] ?? null, 'estado' => $firma['estado']],
+                ['estado_pago' => 'confirmado', 'tipo_pago' => FirmaElectronicaRules::TIPO_PAGO_CREDITO, 'estado' => $nuevoEstado,
+                 'id_factura' => $idFactura, 'factura_nueva' => $creoFactura]);
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            throw $e;
+        }
+
+        if ($creoFactura) {
+            try {
+                $this->facturaService()->generarYGuardarXml($idFactura, $facturaData['empresa_config'] ?? []);
+            } catch (\Throwable $e) {
+                error_log('[Firmas] XML de la factura #' . $idFactura . ': ' . $e->getMessage());
+            }
+        }
+        $this->emitirFacturaYConfirmar($idFirma, $idEmpresa);
+
+        return ['id_factura' => $idFactura, 'numero' => $numFact, 'factura_nueva' => $creoFactura];
     }
 
     public function rechazarPago(int $idFirma, int $idEmpresa, int $idUsuario, string $motivo): void
@@ -1810,50 +1885,6 @@ TXT;
         return ['id_factura' => $idFactura, 'id_ingreso' => $idIngreso, 'ya_existia' => false];
     }
 
-    /**
-     * Factura en borrador desde el botón del modal (sin cobro). La crea igual que el flujo
-     * de pago: serie de la configuración, IVA del Service.
-     */
-    public function generarFacturaBorrador(int $idFirma, int $idEmpresa, int $idUsuario): array
-    {
-        $db = Database::getConnection();
-        $db->beginTransaction();
-        try {
-            $this->repository->lockFirma($idFirma);
-            $firma = $this->repository->findById($idFirma, $idEmpresa);
-            if (!$firma) {
-                throw new Exception('Firma no encontrada.');
-            }
-            if ($this->facturaActiva($firma)) {
-                throw new Exception('Ya existe una factura activa para esta firma. No se puede generar otra.');
-            }
-            [$idFactura, $facturaData] = $this->crearFactura($firma, $idUsuario, '01');
-            $this->repository->actualizarTramite($idFirma, $idEmpresa, ['id_factura' => $idFactura], $idUsuario);
-            $this->repository->crearEvento($idEmpresa, $idFirma, 'factura', 'Factura ' . $this->numeroFactura($idFactura, $idEmpresa) . ' generada (borrador)', null, false, $idUsuario);
-            $this->logService->registrar($idUsuario, $idEmpresa, 'generar_factura', 'firmas_electronicas', $idFirma, null, ['id_factura' => $idFactura]);
-            $db->commit();
-        } catch (\Throwable $e) {
-            if ($db->inTransaction()) {
-                $db->rollBack();
-            }
-            throw $e;
-        }
-        try {
-            $this->facturaService()->generarYGuardarXml($idFactura, $facturaData['empresa_config'] ?? []);
-        } catch (\Throwable $e) {
-            error_log('[Firmas] XML de la factura #' . $idFactura . ': ' . $e->getMessage());
-        }
-        $f = $this->facturaService()->getPorId($idFactura, $idEmpresa) ?? [];
-        return [
-            'id_factura'              => $idFactura,
-            'factura_estado'          => $f['estado'] ?? 'borrador',
-            'factura_establecimiento' => $f['establecimiento'] ?? '',
-            'factura_punto_emision'   => $f['punto_emision'] ?? '',
-            'factura_secuencial'      => $f['secuencial'] ?? '',
-            'factura_importe_total'   => (float) ($f['importe_total'] ?? 0),
-        ];
-    }
-
     /** Envía la factura al SRI (si sigue en borrador) y, autorizada, el correo de confirmación. */
     public function emitirFacturaYConfirmar(int $idFirma, int $idEmpresa): void
     {
@@ -1925,8 +1956,10 @@ TXT;
         $cuerpo = '<p>Hola ' . self::h($nombre) . ':</p>'
             . (($firma['tipo_pago'] ?? '') === FirmaElectronicaRules::TIPO_PAGO_CORTESIA
                 ? '<p>Tu <b>firma electrónica</b> no tiene costo. Adjuntamos tu factura <b>' . self::h($numero) . '</b> con el 100 % de descuento.</p>'
-                : '<p>Recibimos el pago de tu <b>firma electrónica</b>. Adjuntamos tu factura <b>' . self::h($numero) . '</b> por <b>$'
-                    . number_format((float) $f['importe_total'], 2) . '</b>.</p>')
+                : ((($firma['tipo_pago'] ?? '') === FirmaElectronicaRules::TIPO_PAGO_CREDITO && empty($firma['id_ingreso'])
+                    ? '<p>Registramos tu solicitud de <b>firma electrónica</b>. Adjuntamos tu factura <b>'
+                    : '<p>Recibimos el pago de tu <b>firma electrónica</b>. Adjuntamos tu factura <b>')
+                    . self::h($numero) . '</b> por <b>$' . number_format((float) $f['importe_total'], 2) . '</b>.</p>'))
             . '<p>A este mismo correo te llegará la activación de tu firma, por eso necesitamos que confirmes que es tuyo:</p>'
             . '<p style="text-align:center;margin:24px 0;"><a href="' . self::h($urlConf) . '" '
             . 'style="background:#16a34a;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:600;">'

@@ -437,8 +437,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                         <option value="transferencia">Transferencia Bancaria</option>
                                         <option value="payphone">Tarjeta (Payphone)</option>
                                         <option value="tarjeta">Tarjeta (datáfono)</option>
-                                        <!-- La deja la acción «Sin cobro (regalía)» de Trámite; no se elige a mano. -->
+                                        <!-- Las deja el selector de cobro de Trámite (Regalía / A crédito); no se eligen a mano. -->
                                         <option value="cortesia" disabled>Sin cobro (regalía)</option>
+                                        <option value="credito" disabled>A crédito</option>
                                     </select>
                                 </div>
 
@@ -778,15 +779,9 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosPestanasOcultas($vistaConfigF
                                     </div>
                                 </div>
 
-                                <!-- Botón generar factura -->
-                                <div class="col-12 d-flex align-items-center gap-3 flex-wrap">
-                                    <button type="button" class="btn btn-success btn-sm px-4 shadow-sm"
-                                        id="btnGenerarFactura" onclick="generarFacturaDesdeFirma()" disabled>
-                                        <i class="bi bi-receipt me-1"></i>Generar Factura de Venta
-                                    </button>
-                                    <span id="factSpinner" class="d-none text-muted small">
-                                        <span class="spinner-border spinner-border-sm me-1"></span>Generando factura…
-                                    </span>
+                                <!-- La factura se genera desde la pestaña Trámite (cobro, a crédito o regalía). -->
+                                <div class="col-12 text-muted small">
+                                    <i class="bi bi-info-circle me-1"></i>La factura se genera en la pestaña <b>Trámite</b>, al registrar el pago, el crédito o la regalía.
                                 </div>
 
                             </div>
