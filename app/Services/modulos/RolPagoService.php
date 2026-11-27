@@ -535,6 +535,12 @@ class RolPagoService
                     continue;
                 }
 
+                // Cómo se pagaba cada beneficio al generar: queda en la línea del rol para que un
+                // cambio posterior en la pestaña Laboral no altere este mes (provisiones y asiento).
+                $calc['decimo_tercero_modo'] = (string) ($emp['decimo_tercero'] ?? '');
+                $calc['decimo_cuarto_modo']  = (string) ($emp['decimo_cuarto'] ?? '');
+                $calc['fondos_reserva_modo'] = (string) ($emp['fondos_reserva'] ?? '');
+
                 $filasDetalle[] = ['id_empleado' => $idEmp, 'calc' => $calc];
             }
 

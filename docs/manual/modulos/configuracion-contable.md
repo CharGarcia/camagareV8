@@ -5,8 +5,8 @@ categoria: Contabilidad
 ruta_modulo: modulos/configuracion-contable
 tipo: modulo
 visibilidad: admin
-etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario, iva al gasto, iva en compras al gasto, iva no deducible, cuenta de gasto en el iva, iva como costo, centro de costo en el buscador, proyecto en el buscador, ver centro de costo de la cuenta, produccion, cuentas de produccion, productos en proceso, materia prima, producto terminado, mano de obra aplicada, costos indirectos aplicados, merma anormal, orden de produccion, asignar categoria, asignar marca, producto sin categoria, producto sin marca
-version: 1.43
+etiquetas: configuracion contable, cuentas por documento, asiento automatico, parametrizacion, ventas, compras, cierre, tipo de produccion, bien, servicio, filtro por año, periodo, listado de proveedores, listado de clientes, cobros y pagos, ingresos y egresos, forma de pago, cuenta bancaria, efectivo, misma cuenta en los dos bloques, formas hermanas, cheques y transferencias, mismo banco, numero de cuenta, nomina, rol de pagos, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, cuentas opcionales, fondos de reserva pagados en rol, decimo mensualizado, fondos de reserva por pagar iess, planilla iess, ingresos no gravados, costo de ventas, costo de venta, inventario, asiento sin costo, no sale el costo, cuenta de iva del cliente, reglas por cliente, buscar proveedor, buscar cliente, buscar ficha, filtrar fichas, muchos proveedores, cuentas faltantes, modulos que contabilizan, apagar asientos, no generar asientos, no contabilizar, desactivar contabilidad, interruptor, consignaciones sin asiento, aviso de asientos pendientes, asientos pendientes en el balance, proveedores sin cuentas, clientes sin cuentas, productos sin cuentas, pendientes de configurar, retenciones en venta, retenciones en compra, retencion de renta, no aparecen las retenciones, codigo de retencion, catalogo de retenciones sri, codigo ats, codigo del anexo, retencion mal asignada, codigo de retencion no existe, en que documento esta el error, retencion con codigo invalido, sugerencias, sugerir cuentas, proveedores que compran lo mismo, copiar cuentas de otro proveedor, misma cuenta para varios proveedores, gasolineras, proveedores parecidos, subtotal de compras, cuenta de gasto del proveedor, mostrar las demas cuentas, ver todas las cuentas, tipo de asiento no aparece, falta tipo de asiento en el selector, modulo apagado, personalizar asiento contable, tabla de proveedores, detalle de compras, cuenta de subtotal por proveedor, recibos de venta, copiar configuracion de facturas, recibos con otras cuentas, recibo sin asiento, igualar recibos y facturas, ajustes de inventario, asiento de ajustes, sobrante de inventario, faltante de inventario, merma, perdida de inventario, baja de inventario, iva al gasto, iva en compras al gasto, iva no deducible, cuenta de gasto en el iva, iva como costo, centro de costo en el buscador, proyecto en el buscador, ver centro de costo de la cuenta, produccion, cuentas de produccion, productos en proceso, materia prima, producto terminado, mano de obra aplicada, costos indirectos aplicados, merma anormal, orden de produccion, asignar categoria, asignar marca, producto sin categoria, producto sin marca
+version: 1.44
 orden: 5
 estado: activo
 ---
@@ -466,6 +466,29 @@ Los tres son **opcionales**: si se dejan vacíos, la cuota se contabiliza en
 configuran en General y también en las **Reglas por Empleado**, donde la cuenta
 del empleado manda sobre la General.
 
+## Nómina: fondos de reserva y décimos según cómo se pagan
+
+Cuatro conceptos **opcionales** separan los beneficios según la forma de pago
+elegida en la pestaña *Laboral* de cada empleado:
+
+| Concepto | Lado | Se usa para | Sin cuenta, usa |
+|----------|------|-------------|-----------------|
+| **Fondos de Reserva pagados en rol** | Debe | Fondos de reserva *En Rol Mensual* (o *a partir del año*, ya cumplido) | Gasto Fondos de Reserva → Ingresos No Gravados |
+| **Décimo Tercero mensualizado** | Debe | Décimo tercero *Mensualiza* | Gasto Décimo Tercero → Ingresos No Gravados |
+| **Décimo Cuarto mensualizado** | Debe | Décimo cuarto *Mensualiza* | Gasto Décimo Cuarto → Ingresos No Gravados |
+| **Fondos de Reserva por Pagar IESS** | Haber | Provisión de fondos de reserva por *Planilla IESS* | Fondos de Reserva por Pagar |
+
+Antes, lo pagado en el rol iba a **Ingresos No Gravados**. Ahora, aunque no
+configure nada nuevo, va al **Gasto** de su beneficio si ese concepto tiene
+cuenta; solo cae en Ingresos No Gravados si tampoco la tiene. Así ningún rol deja
+de contabilizarse por estos conceptos.
+
+Las **Reglas por Empleado** también se editan desde la pestaña **Contable** de la
+ficha del empleado, que muestra solo los conceptos que corresponden a su forma de
+pago. Si un empleado tiene cuenta propia en un concepto de respaldo (por ejemplo,
+su propio *Gasto Fondos de Reserva*), esa cuenta se usa antes que la General del
+concepto opcional. Detalle en *Roles de pago → Asiento contable del rol mensual*.
+
 ## Ajustes de Inventario: sobrantes y faltantes
 
 El tipo **Ajustes de Inventario** da las cuentas del asiento que genera cada ajuste
@@ -640,6 +663,7 @@ retención, cuentas eliminadas) se configura aquí.
 
 ## Historial de cambios
 
+- **1.44** — Nómina incorpora cuatro conceptos opcionales según la forma de pago de los beneficios: *Fondos de Reserva pagados en rol*, *Décimo Tercero mensualizado*, *Décimo Cuarto mensualizado* y *Fondos de Reserva por Pagar IESS*. Lo pagado en el rol deja de ir a *Ingresos No Gravados* cuando el gasto del beneficio tiene cuenta. Las reglas por empleado también se editan desde la pestaña **Contable** de la ficha del empleado.
 - **1.43** — El aviso de asientos pendientes ya no trae el enlace **Configurar** a esta pantalla: las cuentas que faltan
   se asignan en el propio aviso, en la pestaña de cada tipo de asiento. Lo que el aviso no puede asignar se configura aquí.
 - **1.42** — En el aviso de productos sin categoría o marca, cada producto tiene **Asignar categoría** / **Asignar marca** para cambiarla ahí mismo, sin abrir Productos.

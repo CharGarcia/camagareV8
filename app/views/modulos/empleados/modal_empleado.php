@@ -37,6 +37,20 @@ $vacacionesEmpleado = [
     'puede_eliminar'   => !empty($permVacEmp['eliminar']),
     'meses'            => \App\models\CatalogoNovedades::MESES,
 ];
+
+// 4. Pestaña Contable: las cuentas del asiento del rol de ESTE empleado (reglas por empleado de
+// Configuración Contable, tipo 'nomina'). Se rige por los permisos de Configuración Contable (sus
+// endpoints lo validan igual) y solo aparece si la empresa contabiliza Roles de Pago: a una empresa
+// sin contabilidad no le aporta nada.
+$empVerContable = false;
+if (\App\Helpers\Permisos::puedeVer('modulos/configuracion-contable')) {
+    try {
+        $empVerContable = \App\Services\modulos\ContabilidadInterruptorService::crear()
+            ->contabiliza((int) ($_SESSION['id_empresa'] ?? 0), 'roles_pago');
+    } catch (\Throwable $e) {
+        $empVerContable = true; // sin la tabla del interruptor, todo contabiliza
+    }
+}
 ?>
 <style>
     /* Ancho del modal: un poco más angosto que modal-xl, pero suficiente para las pestañas */
@@ -214,6 +228,11 @@ $vacacionesEmpleado = [
                             <li class="nav-item">
                                 <a class="nav-link py-2 small" id="tab-credenciales-btn" data-bs-toggle="tab" href="#tab-credenciales" role="tab" onclick="window.empCredCargar && window.empCredCargar()"><i class="bi bi-person-vcard me-1"></i>Credenciales</a>
                             </li>
+                            <?php if ($empVerContable): ?>
+                            <li class="nav-item">
+                                <a class="nav-link py-2 small" id="tab-contable-btn" data-bs-toggle="tab" data-bs-target="#tab-contable" href="#tab-contable" role="tab" title="Cuentas contables del asiento del rol de este empleado"><i class="bi bi-journal-bookmark me-1"></i>Contable</a>
+                            </li>
+                            <?php endif; ?>
                             <?php // Pestaña Información (pieza común, solo niveles 2 y 3): ver App\Helpers\InformacionRegistro. ?>
                             <?= \App\Helpers\InformacionRegistro::boton('emp', 'py-2 small') ?>
                         </ul>
@@ -230,6 +249,9 @@ $vacacionesEmpleado = [
                                 $pestanasConfigEmp['tab-vacaciones-btn'] = 'Vacaciones';
                             }
                             $pestanasConfigEmp['tab-rubros-btn'] = 'Rubros Fijos';
+                            if ($empVerContable) {
+                                $pestanasConfigEmp['tab-contable-btn'] = 'Contable';
+                            }
                             $pestanasConfigEmp += \App\Helpers\InformacionRegistro::pestanaConfigurable('emp');
                             echo \App\Helpers\PreferenciasHelper::renderDropdownPestanas($pestanasConfigEmp, $vistaConfigEmp ?? [], 'empleados');
                             ?>
@@ -805,6 +827,37 @@ $vacacionesEmpleado = [
                                 </div>
                             </div>
                         </div>
+
+                        <?php if ($empVerContable): ?>
+                            <?php
+                            // Pestaña CONTABLE: reglas por empleado de Configuración Contable (componente
+                            // compartido con clientes y proveedores), con el selector General/Personalizado
+                            // y solo los conceptos que aplican a lo elegido en la pestaña Laboral.
+                            $fichaContable = [
+                                'panel'           => 'tab-contable',
+                                'tipo_referencia' => 'empleado',
+                                'id_input'        => 'emp_id',
+                                'nombre_input'    => 'emp_nombres_apellidos',
+                                'modal'           => 'modalEmpleado',
+                                'evento'          => 'empleadoGuardado',
+                                'entidad'         => 'el empleado',
+                                'modo_asiento'    => true,
+                                'tipos'           => ['nomina' => 'Nómina (rol de pagos mensual)'],
+                                'nomina'          => \App\Helpers\NominaConceptos::paraJs(),
+                                'opciones'        => [
+                                    'fr'   => 'emp_fondos_reserva',
+                                    'dt'   => 'emp_decimo_tercero',
+                                    'dc'   => 'emp_decimo_cuarto',
+                                    'iess' => 'emp_aporta_iess',
+                                ],
+                                'ayuda'           => 'Cuentas del asiento del <b>rol mensual</b> de este empleado. Solo se muestran los conceptos que '
+                                    . 'corresponden a lo elegido en la pestaña <b>Laboral</b> (Fondos de Reserva, Décimos, Aporta al IESS). '
+                                    . 'En <b>Personalizado</b>, cada cuenta se guarda al elegirla y al vaciar el campo se quita; lo que quede vacío '
+                                    . 'usa la cuenta que se muestra en gris. Los cambios rigen para los roles que se contabilicen desde ahora.',
+                            ];
+                            include MVC_APP . '/views/partials/ficha_contable.php';
+                            ?>
+                        <?php endif; ?>
 
                     </div>
                 </div>

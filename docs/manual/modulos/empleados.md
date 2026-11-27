@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
-etiquetas: empleados, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora, pestaña informacion, quien creo el empleado, quien modifico el empleado, historial de cambios del empleado, pdf de empleados, listado de empleados pdf, exportar empleados, descargar empleados, buscar empleado, buscador, filtros, filtrar empleados, empleados inactivos, empleados por cargo, empleados por departamento, empleados por sueldo, chips
-version: 1.16
+etiquetas: empleados, pestaña contable, cuentas contables del empleado, asiento personalizado, asiento general, cuenta propia del empleado, fondos de reserva, decimo tercero, decimo cuarto, mensualiza, acumula, planilla iess, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora, pestaña informacion, quien creo el empleado, quien modifico el empleado, historial de cambios del empleado, pdf de empleados, listado de empleados pdf, exportar empleados, descargar empleados, buscar empleado, buscador, filtros, filtrar empleados, empleados inactivos, empleados por cargo, empleados por departamento, empleados por sueldo, chips
+version: 1.17
 orden: 10
 estado: activo
 ---
@@ -146,6 +146,61 @@ Ambos campos salen en el PDF de la ficha y se pueden cargar con la plantilla del
 botón *Importar* del módulo (columnas **PARTICIPA_UTILIDADES** y
 **PORCENTAJE_DISCAPACIDAD** al final, opcionales). El Importador desde Excel de
 Configuración crea los empleados con *Participa = Sí* y sin discapacidad.
+
+## Cómo se pagan fondos de reserva y décimos
+
+En la pestaña **Laboral**, **Fondos de Reserva** (*No se paga*, *En Rol
+Mensual*, *Se paga a partir del año*, *Planilla IESS*), **Décimo Tercero** y
+**Décimo Cuarto** (*Acumula*, *Mensualiza*, *No recibe*) deciden si el beneficio
+se paga cada mes en el rol o se provisiona, y también **a qué cuentas va en el
+asiento del rol** (ver *Roles de pago → Fondos de reserva y décimos según cómo se
+pagan*).
+
+Cambiar estas opciones rige para los roles que se generen desde ese momento: los
+roles ya generados guardan la forma de pago con la que se calcularon. Si el rol
+del mes todavía no está pagado, al guardar el sistema avisa y lo vuelve a
+generar.
+
+## Pestaña Contable: cuentas del asiento del rol
+
+La pestaña **Contable** muestra a qué cuentas va el rol mensual de este empleado
+y permite asignarle cuentas propias. Aparece solo si:
+
+- usted puede **ver** *Configuración Contable* (los permisos son los de ese
+  módulo, no los de Empleados), y
+- la empresa **contabiliza Roles de Pago** (*Configuración Contable → Módulos
+  que contabilizan*).
+
+Arriba se elige el **Asiento contable**:
+
+- **General** (por defecto): se ven, en solo lectura, las cuentas que usará cada
+  concepto según la configuración General.
+- **Personalizado**: cada cuenta que elija queda como propia del empleado y se
+  guarda al elegirla (para quitarla, vacíe el campo). Lo que deje vacío sigue
+  usando la cuenta que se muestra en gris. **Copiar cuentas de General** copia
+  como propias las de la General que aún no tenga. Para elegir cuentas hace falta
+  permiso de *crear* en Configuración Contable.
+- Volver a **General** quita todas las cuentas propias del empleado (pide
+  confirmación y permiso de *eliminar*).
+
+Solo aparecen los conceptos que corresponden a lo elegido en la pestaña
+**Laboral**, y la lista cambia en cuanto se cambia una opción. Por ejemplo, con
+Fondos de Reserva *En Rol Mensual* sale *Fondos de Reserva pagados en rol*; con
+*Planilla IESS*, *Gasto Fondos de Reserva* y *Fondos de Reserva por Pagar IESS*;
+con un décimo en *Acumula*, su gasto y su pasivo. Una cuenta propia de un
+concepto que ya no aplica no se borra: se muestra atenuada con la marca **no se
+usa**, por si la opción vuelve.
+
+En un concepto vacío, el texto en gris dice qué cuenta se usará: *General: …*, o
+*Usa «Gasto Fondos de Reserva» (General): …* cuando el concepto es opcional y no
+tiene cuenta, o *Usa la cuenta propia de «…»* cuando el empleado tiene propia en
+el concepto de respaldo.
+
+Es la misma configuración que *Configuración Contable → Nómina → Reglas por
+Empleado*: lo que se cambia en un lado se ve en el otro. Los cambios rigen para
+los roles que se contabilicen desde ese momento. Si algún empleado tiene cuentas
+propias, el rol puede pasar a generar un asiento por empleado; eso se decide en
+*Configuración de Empresa → Roles de Pago*.
 
 ## Ficha en PDF y Excel
 
@@ -336,8 +391,15 @@ producción**: es un catálogo maestro, siempre el mismo.
   la pestaña *Credenciales* y reenvíe el enlace. Los QR generados antes de esta
   corrección guardaban una dirección incompleta (sin el dominio) y ningún lector
   podía abrirla.
+- **No veo la pestaña Contable**: su usuario no puede ver Configuración
+  Contable, o la empresa no contabiliza Roles de Pago.
+- **No puedo elegir cuentas en la pestaña Contable**: está en *General*; pulse
+  *Personalizado*. Si el botón está apagado, le falta el permiso de crear en
+  Configuración Contable.
 
 ## Historial de cambios
+
+- **1.17** — Nueva pestaña **Contable**: cuentas del asiento del rol del empleado, con el selector *General / Personalizado* y solo los conceptos que corresponden a su forma de pago de fondos de reserva, décimos y aporte al IESS. Cambiar esas opciones en la pestaña Laboral ya no altera los roles generados antes.
 
 - **1.16** — El listado usa el mismo buscador que Proveedores: búsqueda libre por palabras en más columnas y botón **embudo** con filtros por estado, sexo, cargo, departamento, región, sueldo, beneficios, banco, fecha de registro y más, que quedan como chips en el cuadro. El Excel respeta los filtros y el orden de la pantalla. El botón **PDF** del listado, que antes no generaba nada, descarga ahora el listado con las columnas visibles, un resumen y totales.
 - **1.15** — El **Estado** de la ficha pasa a ser un interruptor (*Activo*), igual que en Productos, Clientes, Proveedores y Vendedores; la estrella de favorito sigue funcionando. Al guardar aparece el aviso *Guardando / Actualizando empleado...* mientras el servidor responde.

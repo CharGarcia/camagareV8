@@ -465,18 +465,68 @@ class RolPagoRepository extends BaseRepository
 
     public function insertDetalle(int $idRol, int $idEmpresa, int $idEmpleado, array $t): int
     {
+        $conModo = $this->tieneModalidades();
         $sql = "INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base,
-                    total_ingresos, total_egresos, aporte_iess, aporte_patronal, retencion_renta, neto)
-                VALUES (:r, :emp, :e, :dias, :sb, :ti, :te, :ap, :app, :ir, :neto)";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+                    total_ingresos, total_egresos, aporte_iess, aporte_patronal, retencion_renta, neto"
+                    . ($conModo ? ', ' . implode(', ', self::COLS_MODALIDAD) : '') . ")
+                VALUES (:r, :emp, :e, :dias, :sb, :ti, :te, :ap, :app, :ir, :neto"
+                    . ($conModo ? ', :dtm, :dcm, :frm' : '') . ")";
+        $params = [
             ':r' => $idRol, ':emp' => $idEmpresa, ':e' => $idEmpleado,
             ':dias' => $t['dias_trabajados'], ':sb' => $t['sueldo_base'],
             ':ti' => $t['total_ingresos'], ':te' => $t['total_egresos'],
             ':ap' => $t['aporte_iess'], ':app' => $t['aporte_patronal'],
             ':ir' => $t['retencion_renta'] ?? 0, ':neto' => $t['neto'],
-        ]);
+        ];
+        if ($conModo) {
+            $params += $this->paramsModalidad($t, '');
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
         return $this->lastInsertId();
+    }
+
+    /**
+     * Cómo se pagó cada beneficio en ESTA línea del rol (columna de rol_detalle => clave del cálculo).
+     * Se guardan al generar el rol para que cambiar después la pestaña Laboral del empleado no
+     * altere las provisiones ni el asiento de los roles ya generados. Sin el SQL
+     * database/2026-11-27_nomina_modalidades_cuentas.sql no se escriben y se lee la ficha actual,
+     * como antes.
+     */
+    private const COLS_MODALIDAD = ['decimo_tercero_modo', 'decimo_cuarto_modo', 'fondos_reserva_modo'];
+
+    /** ¿Existen en rol_detalle las columnas de modalidad? */
+    private function tieneModalidades(): bool
+    {
+        return $this->columnaExiste('rol_detalle', 'fondos_reserva_modo');
+    }
+
+    /** Parámetros :dtm/:dcm/:frm (con sufijo) a partir del cálculo; vacío → NULL (usa la ficha). */
+    private function paramsModalidad(array $t, string $sufijo): array
+    {
+        $v = static function ($x): ?string {
+            $x = trim((string) ($x ?? ''));
+            return $x === '' ? null : substr($x, 0, 20);
+        };
+        return [
+            ":dtm{$sufijo}" => $v($t['decimo_tercero_modo'] ?? null),
+            ":dcm{$sufijo}" => $v($t['decimo_cuarto_modo'] ?? null),
+            ":frm{$sufijo}" => $v($t['fondos_reserva_modo'] ?? null),
+        ];
+    }
+
+    /**
+     * Columnas decimo_tercero / decimo_cuarto / fondos_reserva de una línea del rol: lo guardado en
+     * la línea (cómo se pagó ese mes) y, para las líneas anteriores al SQL, la ficha del empleado.
+     */
+    private function colsModalidadLinea(): string
+    {
+        if ($this->tieneModalidades()) {
+            return "COALESCE(d.decimo_tercero_modo, e.decimo_tercero) AS decimo_tercero,
+                    COALESCE(d.decimo_cuarto_modo, e.decimo_cuarto) AS decimo_cuarto,
+                    COALESCE(d.fondos_reserva_modo, e.fondos_reserva) AS fondos_reserva";
+        }
+        return 'e.decimo_tercero, e.decimo_cuarto, e.fondos_reserva';
     }
 
     public function insertRubro(int $idDetalle, int $idEmpresa, array $r): void
@@ -520,18 +570,24 @@ class RolPagoRepository extends BaseRepository
     /** Actualiza en el sitio (mismo id) los totales calculados de una línea ya existente. */
     public function updateDetalle(int $idDetalle, array $t): void
     {
+        $conModo = $this->tieneModalidades();
         $sql = "UPDATE rol_detalle SET
                     dias_trabajados = :dias, sueldo_base = :sb,
                     total_ingresos = :ti, total_egresos = :te,
-                    aporte_iess = :ap, aporte_patronal = :app, retencion_renta = :ir, neto = :neto
+                    aporte_iess = :ap, aporte_patronal = :app, retencion_renta = :ir, neto = :neto"
+                    . ($conModo ? ', decimo_tercero_modo = :dtm, decimo_cuarto_modo = :dcm, fondos_reserva_modo = :frm' : '') . "
                 WHERE id = :id";
-        $st = $this->db->prepare($sql);
-        $st->execute([
+        $params = [
             ':dias' => $t['dias_trabajados'], ':sb' => $t['sueldo_base'],
             ':ti' => $t['total_ingresos'], ':te' => $t['total_egresos'],
             ':ap' => $t['aporte_iess'], ':app' => $t['aporte_patronal'],
             ':ir' => $t['retencion_renta'] ?? 0, ':neto' => $t['neto'], ':id' => $idDetalle,
-        ]);
+        ];
+        if ($conModo) {
+            $params += $this->paramsModalidad($t, '');
+        }
+        $st = $this->db->prepare($sql);
+        $st->execute($params);
     }
 
     /** Reemplaza los rubros de una línea ya existente (borra e inserta los nuevos). */
@@ -972,13 +1028,18 @@ class RolPagoRepository extends BaseRepository
     public function insertDetalleMasivo(int $idRol, int $idEmpresa, array $filas): array
     {
         $map = [];
+        $conModo = $this->tieneModalidades();
         foreach (array_chunk($filas, 500) as $chunk) {
             $vals = [];
             $params = [];
             $i = 0;
             foreach ($chunk as $f) {
                 $t = $f['calc'];
-                $vals[] = "(:r{$i}, :emp{$i}, :e{$i}, :dias{$i}, :sb{$i}, :ti{$i}, :te{$i}, :ap{$i}, :app{$i}, :ir{$i}, :neto{$i})";
+                $vals[] = "(:r{$i}, :emp{$i}, :e{$i}, :dias{$i}, :sb{$i}, :ti{$i}, :te{$i}, :ap{$i}, :app{$i}, :ir{$i}, :neto{$i}"
+                        . ($conModo ? ", :dtm{$i}, :dcm{$i}, :frm{$i}" : '') . ')';
+                if ($conModo) {
+                    $params += $this->paramsModalidad($t, (string) $i);
+                }
                 $params[":r{$i}"] = $idRol;
                 $params[":emp{$i}"] = $idEmpresa;
                 $params[":e{$i}"] = $f['id_empleado'];
@@ -993,7 +1054,8 @@ class RolPagoRepository extends BaseRepository
                 $i++;
             }
             $sql = "INSERT INTO rol_detalle (id_rol, id_empresa, id_empleado, dias_trabajados, sueldo_base,
-                        total_ingresos, total_egresos, aporte_iess, aporte_patronal, retencion_renta, neto)
+                        total_ingresos, total_egresos, aporte_iess, aporte_patronal, retencion_renta, neto"
+                        . ($conModo ? ', ' . implode(', ', self::COLS_MODALIDAD) : '') . ")
                     VALUES " . implode(', ', $vals) . " RETURNING id, id_empleado";
             $st = $this->db->prepare($sql);
             $st->execute($params);
@@ -1157,7 +1219,7 @@ class RolPagoRepository extends BaseRepository
     public function getDetalleCompleto(int $idRol, int $idEmpresa): array
     {
         $sql = "SELECT d.*, e.nombres_apellidos, e.identificacion, e.email, e.cargo,
-                       e.decimo_tercero, e.decimo_cuarto, e.fondos_reserva
+                       {$this->colsModalidadLinea()}
                 FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado
                 WHERE d.id_rol = :r AND d.id_empresa = :emp
                 ORDER BY e.nombres_apellidos";
@@ -1189,7 +1251,7 @@ class RolPagoRepository extends BaseRepository
     public function getLinea(int $idDetalle, int $idEmpresa): ?array
     {
         $sql = "SELECT d.*, e.nombres_apellidos, e.identificacion, e.email, e.cargo,
-                       e.decimo_tercero, e.decimo_cuarto, e.fondos_reserva
+                       {$this->colsModalidadLinea()}
                 FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado
                 WHERE d.id = :d AND d.id_empresa = :emp";
         $st = $this->db->prepare($sql);
@@ -1213,7 +1275,7 @@ class RolPagoRepository extends BaseRepository
     public function getLineaPorEmpleado(int $idRol, int $idEmpleado, int $idEmpresa): ?array
     {
         $sql = "SELECT d.*, e.nombres_apellidos, e.identificacion, e.email, e.cargo,
-                       e.decimo_tercero, e.decimo_cuarto, e.fondos_reserva
+                       {$this->colsModalidadLinea()}
                 FROM rol_detalle d JOIN empleados e ON e.id = d.id_empleado
                 WHERE d.id_rol = :r AND d.id_empleado = :emp2 AND d.id_empresa = :emp";
         $st = $this->db->prepare($sql);

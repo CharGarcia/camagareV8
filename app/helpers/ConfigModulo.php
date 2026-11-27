@@ -73,6 +73,24 @@ final class ConfigModulo
                 ],
             ],
         ],
+        'modulos/roles-pago' => [
+            'titulo'      => 'Roles de Pago',
+            'icono'       => 'bi-cash-coin',
+            'descripcion' => 'Cómo se contabiliza el rol mensual. «Automático» es el comportamiento de siempre: un solo asiento para todos los empleados, salvo que alguno tenga cuentas propias (pestaña Contable del empleado o Configuración Contable), y entonces un asiento por cada empleado. «Uno general» suma todo en un asiento aunque haya cuentas propias (cada cuenta propia queda en su propia línea). «Uno por empleado» genera siempre un asiento por empleado. El cambio rige para los roles que se contabilicen desde ahora.',
+            'opciones'    => [
+                // Lo lee RolAsientoService::modoAsientoEmpresa().
+                'modo_asiento' => [
+                    'tipo'     => 'select',
+                    'etiqueta' => 'Asiento contable del rol mensual',
+                    'def'      => 'automatico',
+                    'valores'  => [
+                        'automatico'   => 'Automático (como siempre)',
+                        'general'      => 'Uno general para todos los empleados',
+                        'por_empleado' => 'Uno por cada empleado',
+                    ],
+                ],
+            ],
+        ],
     ];
 
     /** Definición del módulo, o null si no es personalizable. */

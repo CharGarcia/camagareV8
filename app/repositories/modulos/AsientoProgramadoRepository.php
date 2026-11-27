@@ -313,6 +313,12 @@ class AsientoProgramadoRepository extends BaseRepository
         'PRESTAMOQUIROGRAFARIONOMINA' => 'DESCUENTOSNOMINA',
         'PRESTAMOHIPOTECARIONOMINA'   => 'DESCUENTOSNOMINA',
         'PRESTAMOEMPRESANOMINA'       => 'DESCUENTOSNOMINA',
+        // Conceptos por forma de pago del beneficio (App\Helpers\NominaConceptos, que tiene la
+        // cadena completa): sin cuenta, caen al concepto de siempre.
+        \App\Helpers\NominaConceptos::FONDOS_ROL        => 'GASTOFONDOSRESERVANOMINA',
+        \App\Helpers\NominaConceptos::DECIMO13_ROL      => 'GASTODECIMOTERCERONOMINA',
+        \App\Helpers\NominaConceptos::DECIMO14_ROL      => 'GASTODECIMOCUARTONOMINA',
+        \App\Helpers\NominaConceptos::FONDOS_IESS_PAGAR => 'FONDOSRESERVAPORPAGARNOMINA',
     ];
 
     /**

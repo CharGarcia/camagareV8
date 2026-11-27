@@ -15,6 +15,16 @@
  *
  * Cada panel [data-ficha-contable] es independiente (una página puede tener la ficha de proveedor
  * y la de cliente a la vez); su configuración viaja en data-* (ver el partial).
+ *
+ * Opciones del empleado (todas opt-in por data-*; sin ellas el componente se comporta como siempre):
+ * - data-modo-asiento: selector «Asiento: General | Personalizado». En General todo es solo lectura
+ *   (se ve qué cuenta usará cada concepto); Personalizado habilita elegir cuentas propias; volver a
+ *   General quita todas las propias (con confirmación). Está en Personalizado si tiene alguna propia.
+ * - data-nomina (App\Helpers\NominaConceptos::paraJs) + data-opciones ({fr,dt,dc,iess} => id del
+ *   <select> de la ficha): solo se muestran los conceptos que aplican a lo elegido en la pestaña
+ *   Laboral (se repinta al cambiarlo); una cuenta propia de un concepto que ya no aplica se muestra
+ *   marcada «no se usa»; y el marcador de un concepto vacío dice qué cuenta se usará siguiendo la
+ *   cadena de respaldo, en el mismo orden que RolAsientoService::cuentaCadena().
  */
 (function (window, document) {
     'use strict';
@@ -41,6 +51,11 @@
     async function getJson(url, opciones) {
         const r = await fetch(url, opciones);
         return r.json();
+    }
+
+    function leerJson(texto) {
+        if (!texto) return null;
+        try { return JSON.parse(texto); } catch (e) { console.error(e); return null; }
     }
 
     /** ¿El concepto es una tarifa de IVA? (no tiene id_asiento_tipo propio: se cruza por tarifa). */
@@ -83,11 +98,62 @@
         let idRecienGuardado = ''; // id de la ficha recién creada, mientras el input aún no lo tiene
         let debounceTimer = null;
         let expandida = false;     // «Mostrar las demás cuentas» desplegado (se reinicia al cambiar de ficha)
+        let personalizando = false; // modo «Personalizado» (solo con data-modo-asiento)
+
+        const modoAsiento = cfg.modoAsiento === '1';
+        const nomina = leerJson(cfg.nomina);          // {cadenas, aplica} o null
+        const fuentes = leerJson(cfg.opciones) || {}; // {fr|dt|dc|iess: id del select}
 
         const idEntidad = () => (document.getElementById(cfg.idInput)?.value || '').trim() || idRecienGuardado;
         const tipoAsiento = () => q('tipo')?.value || '';
         const puedeCrear = () => cfg.puedeCrear === '1';
         const puedeEliminar = () => cfg.puedeEliminar === '1';
+        // Se pueden elegir cuentas: permiso y, con selector de modo, estar en Personalizado.
+        const editable = () => puedeCrear() && (!modoAsiento || personalizando);
+
+        /** Opciones actuales de la ficha (pestaña Laboral del empleado). */
+        function opcionesActuales() {
+            const o = {};
+            Object.entries(fuentes).forEach(([clave, id]) => {
+                const el = document.getElementById(id);
+                o[clave] = el ? String(el.value || '') : '';
+            });
+            return o;
+        }
+
+        /** ¿El concepto aplica con lo elegido en la ficha? Mismo criterio que NominaConceptos::aplica(). */
+        function aplica(c) {
+            if (!nomina || !nomina.aplica) return true;
+            const regla = nomina.aplica[c.codigo];
+            if (regla == null) return true;
+            if (regla === 'nunca') return false;
+            const o = opcionesActuales();
+            return Object.entries(regla).every(([clave, valores]) => !o[clave] || valores.includes(o[clave]));
+        }
+
+        /** Conceptos que se pintan: los que aplican y los que tienen cuenta propia aunque ya no apliquen. */
+        const visibles = () => conceptos.filter(c => aplica(c) || propiaDe(c));
+
+        /**
+         * Qué cuenta se usará para un concepto sin cuenta propia, siguiendo su cadena de respaldo:
+         * primero una cuenta propia en otro eslabón, después la General del primero que la tenga
+         * (RolAsientoService::cuentaCadena). null = ninguna.
+         */
+        function cuentaEfectiva(c) {
+            const cadena = (nomina && nomina.cadenas && nomina.cadenas[c.codigo]) || [c.codigo];
+            const porCodigo = {};
+            conceptos.forEach(x => { porCodigo[x.codigo] = x; });
+            for (const cod of cadena) {
+                const x = porCodigo[cod];
+                const p = x && propiaDe(x);
+                if (p) return { texto: `${p.cuenta_codigo} - ${p.cuenta_nombre}`, de: x, propia: true };
+            }
+            for (const cod of cadena) {
+                const x = porCodigo[cod];
+                if (x && x.id_cuenta) return { texto: `${x.cuenta_codigo} - ${x.cuenta_nombre || ''}`, de: x, propia: false };
+            }
+            return null;
+        }
 
         function propiaDe(c) {
             if (parseInt(c.id_asiento_tipo, 10) > 0) {
@@ -113,7 +179,7 @@
 
             const clave = `${id}|${tipoAsiento()}`;
             if (!forzar && clave === cargadoPara) return;
-            if (clave !== cargadoPara) expandida = false;
+            if (clave !== cargadoPara) { expandida = false; personalizando = false; }
             cargadoPara = clave;
 
             const cuerpo = q('cuerpo');
@@ -133,6 +199,8 @@
                 conceptos = (resConf.data || []).filter(esConceptoValido);
                 // Defensa: quedarse solo con las reglas de esta entidad.
                 reglas = (resReglas.data || []).filter(r => String(r.id_referencia) === String(id));
+                // Con cuentas propias, la ficha está en Personalizado.
+                if (reglas.length) personalizando = true;
                 pintar();
             } catch (e) {
                 console.error(e);
@@ -141,11 +209,37 @@
             }
         }
 
+        /**
+         * Sin cuenta propia: qué pasa hoy con ese concepto. Con data-nomina se sigue la cadena de
+         * respaldo; si no, lo cubre la General, un respaldo o nadie (como siempre).
+         */
+        function marcadorDe(c) {
+            if (nomina) {
+                const ef = cuentaEfectiva(c);
+                if (!ef) return 'sin cuenta';
+                if (ef.de === c) return `General: ${ef.texto}`;
+                return ef.propia
+                    ? `Usa la cuenta propia de «${ef.de.concepto}»: ${ef.texto}`
+                    : `Usa «${ef.de.concepto}» (General): ${ef.texto}`;
+            }
+            return c.cuenta_codigo
+                ? `General: ${c.cuenta_codigo} - ${c.cuenta_nombre || ''}`
+                : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
+        }
+
+        /** ¿El concepto no tiene cuenta en ningún lado? (se pinta en rojo y cuenta como faltante) */
+        function faltaDe(c) {
+            if (propiaDe(c)) return false;
+            if (nomina) return !cuentaEfectiva(c);
+            return !c.id_cuenta && !c.respaldo_concepto;
+        }
+
         function pintar() {
             const cuerpo = q('cuerpo');
-            const editable = puedeCrear();
+            const puedeEditar = editable();
+            const lista = visibles();
 
-            if (!conceptos.length) {
+            if (!lista.length) {
                 cuerpo.innerHTML = '<div class="text-center text-muted small py-4">Este tipo de asiento no tiene conceptos configurables.</div>';
                 pintarEstado();
                 return;
@@ -154,9 +248,8 @@
             // Vista resumida: solo el concepto principal del tipo de asiento (Subtotal de ventas o
             // de compras), más los que ya tienen cuenta propia o no tienen cuenta en ningún lado.
             const principales = CONCEPTOS_PRINCIPALES[tipoAsiento()] || null;
-            const faltaDe = (c) => !propiaDe(c) && !c.id_cuenta && !c.respaldo_concepto;
             const esExtra = (c) => !!principales && !principales.includes(c.codigo) && !propiaDe(c) && !faltaDe(c);
-            const extras = conceptos.filter(esExtra).length;
+            const extras = lista.filter(esExtra).length;
             const compacta = extras > 0 && !expandida;
 
             const linea = (c) => {
@@ -164,14 +257,17 @@
                 const key = esConceptoIva(c) ? `iva_${c.id_referencia}` : c.id_asiento_tipo;
                 const inputId = `${prefijo}_${key}`;
                 const valor = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
-                // Sin cuenta propia: qué pasa hoy con ese concepto (lo cubre la General, un respaldo o nadie).
-                const marcador = c.cuenta_codigo
-                    ? `General: ${c.cuenta_codigo} - ${c.cuenta_nombre || ''}`
-                    : (c.respaldo_concepto ? `usa ${c.respaldo_concepto}` : 'sin cuenta');
-                const falta = !propia && !c.id_cuenta && !c.respaldo_concepto;
+                const marcador = marcadorDe(c);
+                const falta = faltaDe(c);
+                // Cuenta propia de un concepto que ya no aplica con las opciones de la ficha: se
+                // conserva (por si la opción vuelve), pero se avisa que el asiento no la usa.
+                const inactiva = !!propia && !aplica(c);
+                const etiquetaInactiva = inactiva
+                    ? ' <span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25" title="No se usa con las opciones actuales de la pestaña Laboral. Se conserva por si la opción vuelve.">no se usa</span>'
+                    : '';
                 return `
-                <div class="d-flex align-items-center gap-1 border-bottom py-1${esExtra(c) ? ' cc-extra' : ''}">
-                    <span class="small text-truncate${falta ? ' text-danger' : ''}" style="flex:0 0 40%;" title="${esc(c.detalle || c.concepto)}">${esc(c.concepto)}</span>
+                <div class="d-flex align-items-center gap-1 border-bottom py-1${esExtra(c) ? ' cc-extra' : ''}${inactiva ? ' opacity-50' : ''}">
+                    <span class="small text-truncate${falta ? ' text-danger' : ''}" style="flex:0 0 40%;" title="${esc(c.detalle || c.concepto)}">${esc(c.concepto)}${etiquetaInactiva}</span>
                     <div class="position-relative flex-grow-1">
                         <input type="text" class="form-control form-control-sm py-0 bg-white text-dark${falta ? ' border-danger' : ''}"
                                style="height:26px; font-size:.78rem;" id="${inputId}" value="${esc(valor)}"
@@ -181,11 +277,11 @@
                                data-tarifa-iva="${esConceptoIva(c) ? esc(c.id_referencia) : ''}"
                                data-tipo-cuenta="${esc(c.tipo_cuenta || '')}"
                                data-regla="${propia ? esc(propia.id) : ''}"
-                               ${editable ? '' : 'readonly'}>
+                               ${puedeEditar ? '' : 'readonly'}>
                         <div class="list-group position-absolute w-100 shadow-sm bg-white border rounded"
                              data-fctb-sug="1" style="display:none; z-index:2200; max-height:180px; overflow-y:auto;"></div>
                     </div>
-                    <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${propia && puedeEliminar() ? '' : ' invisible'}"
+                    <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${propia && puedeEliminar() && (!modoAsiento || personalizando) ? '' : ' invisible'}"
                             data-fctb-quitar="${propia ? esc(propia.id) : ''}" title="Quitar esta cuenta">
                         <i class="bi bi-trash small"></i>
                     </button>
@@ -193,16 +289,26 @@
             };
 
             const esDebe = (c) => String(c.debe_haber || 'debe').toLowerCase() === 'debe';
-            const colClase = (lista) => !extras ? '' : (lista.length && lista.every(esExtra) ? 'cc-col-extra' : 'cc-col-principal');
-            const columna = (titulo, fondo, color, icono, lista) => `
-                <div class="col-md-6 ${colClase(lista)}">
+            const colClase = (l) => !extras ? '' : (l.length && l.every(esExtra) ? 'cc-col-extra' : 'cc-col-principal');
+            const columna = (titulo, fondo, color, icono, l) => `
+                <div class="col-md-6 ${colClase(l)}">
                     <div class="border rounded-3 h-100">
                         <div class="fw-bold small px-3 py-2 d-flex align-items-center gap-2" style="background:${fondo}; color:${color}; border-top-left-radius:.45rem; border-top-right-radius:.45rem;">
                             <i class="bi ${icono}"></i> ${titulo}
                         </div>
-                        <div class="px-2">${lista.map(linea).join('') || '<div class="small text-muted py-1">—</div>'}</div>
+                        <div class="px-2">${l.map(linea).join('') || '<div class="small text-muted py-1">—</div>'}</div>
                     </div>
                 </div>`;
+
+            let pie = '';
+            if (modoAsiento && !personalizando) {
+                pie = '<div class="small text-muted mt-2"><i class="bi bi-diagram-3 me-1"></i>Asiento <b>General</b>: se usan las cuentas de la configuración General según las opciones de la pestaña Laboral.'
+                    + (puedeCrear() ? ' Elija <b>Personalizado</b> para asignar cuentas propias.' : '') + '</div>';
+            } else if (!puedeCrear()) {
+                pie = '<div class="small text-muted mt-2"><i class="bi bi-lock me-1"></i>Solo lectura: no tiene permiso para crear en Configuración Contable.</div>';
+            } else if (modoAsiento) {
+                pie = '<div class="small text-muted mt-2"><i class="bi bi-person-gear me-1"></i>Asiento <b>Personalizado</b>: lo que deje vacío sigue usando la cuenta que se muestra en gris.</div>';
+            }
 
             cuerpo.classList.toggle('cc-compacta', compacta);
             const textoExtras = compacta
@@ -210,11 +316,11 @@
                 : '<i class="bi bi-chevron-up me-1"></i>Ocultar las demás cuentas';
             cuerpo.innerHTML = `
                 <div class="row g-3">
-                    ${columna('Debe', '#E6F1FB', '#0C447C', 'bi-arrow-down-right', conceptos.filter(esDebe))}
-                    ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right', conceptos.filter(c => !esDebe(c)))}
+                    ${columna('Debe', '#E6F1FB', '#0C447C', 'bi-arrow-down-right', lista.filter(esDebe))}
+                    ${columna('Haber', '#FAEEDA', '#633806', 'bi-arrow-up-right', lista.filter(c => !esDebe(c)))}
                 </div>
                 ${extras ? `<button type="button" class="btn btn-link btn-sm p-0 mt-2 text-decoration-none" style="font-size:.78rem;" data-fctb-extras="1">${textoExtras}</button>` : ''}
-                ${editable ? '' : '<div class="small text-muted mt-2"><i class="bi bi-lock me-1"></i>Solo lectura: no tiene permiso para crear en Configuración Contable.</div>'}`;
+                ${pie}`;
 
             pintarEstado();
         }
@@ -222,9 +328,9 @@
         /** Resumen de la cabecera y estado de los botones. */
         function pintarEstado() {
             const propias = reglas.length;
-            const faltan = conceptos.filter(c => !c.id_cuenta && !propiaDe(c) && !c.respaldo_concepto).length;
+            const faltan = visibles().filter(c => aplica(c) && faltaDe(c)).length;
             let html = `<span class="badge bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25">${propias} cuenta(s) propia(s)</span>`;
-            if (!propias) {
+            if (!propias && !modoAsiento) {
                 html += '<span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25" title="Sin cuentas propias: se contabiliza con la General y el reparto por producto/categoría/marca">usa General</span>';
             }
             if (conceptos.length) {
@@ -235,11 +341,28 @@
             const estado = q('estado');
             if (estado) estado.innerHTML = html;
 
-            q('copiar')?.classList.toggle('d-none', !puedeCrear());
+            q('copiar')?.classList.toggle('d-none', !editable());
             const btnQuitar = q('quitar');
             if (btnQuitar) {
                 btnQuitar.classList.toggle('d-none', !puedeEliminar());
                 btnQuitar.disabled = !propias;
+            }
+
+            if (modoAsiento) {
+                const marcar = (b, activo) => {
+                    if (!b) return;
+                    b.classList.toggle('btn-secondary', activo);
+                    b.classList.toggle('active', activo);
+                    b.classList.toggle('btn-outline-secondary', !activo);
+                };
+                const bGen = q('modo-general');
+                const bPer = q('modo-personalizado');
+                marcar(bGen, !personalizando);
+                marcar(bPer, personalizando);
+                // Pasar a Personalizado pide permiso de crear; volver a General con cuentas
+                // propias las quita, así que pide permiso de eliminar.
+                if (bPer) bPer.disabled = !puedeCrear() && !personalizando;
+                if (bGen) bGen.disabled = personalizando && propias > 0 && !puedeEliminar();
             }
         }
 
@@ -277,7 +400,8 @@
         }
 
         async function copiarDeGeneral() {
-            const aplicables = conceptos.filter(c => c.id_cuenta && !propiaDe(c));
+            // Solo los conceptos que aplican con las opciones de la ficha (todos, sin data-nomina).
+            const aplicables = conceptos.filter(c => c.id_cuenta && !propiaDe(c) && aplica(c));
             if (!aplicables.length) {
                 toast('info', 'No hay cuentas de General que copiar (o ya las tiene todas).');
                 return;
@@ -319,8 +443,24 @@
                 const res = await getJson(`${cfg.urlContable}/eliminarReglasEntidadAjax`, { method: 'POST', body: fd });
                 if (!res.ok) { error(res.error || res.message); return; }
                 toast('success', res.msg || 'Configuración quitada.');
+                personalizando = false;
                 cargar(true);
             } catch (e) { console.error(e); error('Error de conexión.'); }
+        }
+
+        /** Selector «Asiento: General | Personalizado» (data-modo-asiento). */
+        function elegirPersonalizado() {
+            if (personalizando || !puedeCrear()) return;
+            personalizando = true;
+            pintar();
+        }
+
+        function elegirGeneral() {
+            if (!personalizando) return;
+            // Con cuentas propias, volver a General es quitarlas todas (pide confirmación).
+            if (reglas.length) { quitarTodo(); return; }
+            personalizando = false;
+            pintar();
         }
 
         const sugDe = (input) => input.parentElement.querySelector('[data-fctb-sug]');
@@ -367,6 +507,16 @@
         q('tipo')?.addEventListener('change', () => cargar(true));
         q('copiar')?.addEventListener('click', copiarDeGeneral);
         q('quitar')?.addEventListener('click', quitarTodo);
+        q('modo-personalizado')?.addEventListener('click', elegirPersonalizado);
+        q('modo-general')?.addEventListener('click', elegirGeneral);
+
+        // Cambiar una opción de la ficha (Fondos de Reserva, Décimos, IESS) cambia qué conceptos
+        // aplican: se repinta con lo ya cargado, sin volver a pedirlo al servidor.
+        Object.values(fuentes).forEach(id => {
+            document.getElementById(id)?.addEventListener('change', () => {
+                if (conceptos.length) pintar();
+            });
+        });
 
         // Delegación: los inputs se repintan en cada carga.
         panel.addEventListener('input', (e) => {
@@ -421,16 +571,24 @@
             idRecienGuardado = '';
             conceptos = [];
             reglas = [];
+            personalizando = false;
             q('cuerpo').innerHTML = '';
         });
 
         // El evento sale ANTES de que la ficha escriba el id nuevo en su input: se toma del detalle.
+        // Se escucha en document (cliente/proveedor) y en window (el empleado lo emite ahí); un
+        // mismo evento que llegue por las dos vías se atiende una sola vez.
         if (cfg.evento) {
-            document.addEventListener(cfg.evento, (e) => {
+            let ultimo = null;
+            const alGuardar = (e) => {
+                if (e === ultimo) return;
+                ultimo = e;
                 cargadoPara = '';
                 idRecienGuardado = String(e.detail?.id || '');
                 if (panel.classList.contains('active')) cargar(true);
-            });
+            };
+            document.addEventListener(cfg.evento, alGuardar);
+            window.addEventListener(cfg.evento, alGuardar);
         }
 
         return { recargar: () => cargar(true) };

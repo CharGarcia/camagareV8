@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
-etiquetas: novedades, novedad, cambiar a por pagar, cambiar a ya pagado, marcar como pagado, todos los empleados, observacion por empleado, registro masivo, novedades para todos, varios empleados, cuadricula, tabla de novedades, ya pagado, por pagar, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips, quincena, quincena ya pagada, quincena por pagar, adelanto de quincena, quincena repetida, ya tiene quincenas, valor quincena, concepto repetido, novedad repetida, doble descuento
-version: 1.17
+etiquetas: novedades, novedad, prestamo empresa, prestar dinero, prestamo a empleado, tabla de cuotas, amortizacion, cuotas ya cobradas, eliminar prestamo, eliminar todas las cuotas, interes, cambiar a por pagar, cambiar a ya pagado, marcar como pagado, todos los empleados, observacion por empleado, registro masivo, novedades para todos, varios empleados, cuadricula, tabla de novedades, ya pagado, por pagar, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips, quincena, quincena ya pagada, quincena por pagar, adelanto de quincena, quincena repetida, ya tiene quincenas, valor quincena, concepto repetido, novedad repetida, doble descuento
+version: 1.18
 orden: 20
 estado: activo
 ---
@@ -104,8 +104,60 @@ valor) o su ficha tiene **valor quincena**, se pide confirmación con la lista d
 casos, igual que al registrar de a una. Pulsar **Guardar** dos veces, o volver a
 pulsarlo después de un error de conexión, no registra el lote dos veces.
 
-> Los préstamos empresa en **varias cuotas** se siguen cargando con la plantilla
-> Excel (columna *N° DE CUOTAS*); aquí se registra la cuota del mes.
+> Para un préstamo empresa en **varias cuotas** use **Préstamo empresa** (abajo)
+> o la plantilla Excel (columna *N° DE CUOTAS*); aquí se registra la cuota del mes.
+
+## Préstamo empresa con tabla de cuotas
+
+Al crear con **Nuevo**, elija **Préstamo empresa** (junto a *Todos los
+empleados*) para registrar un préstamo de la empresa a un empleado y que el
+sistema arme sus cuotas:
+
+1. Busque y elija el **empleado**.
+2. Escriba el **monto a prestar** y el **N° de cuotas** (de 1 a 120).
+3. Elija el **mes y año de la primera cuota** y a qué pago **afecta** (rol de
+   pagos, quincena o semanal).
+4. Elija el **desembolso**:
+   - **Por desembolsar**: el dinero se entrega con un egreso en
+     *Egresos → Nómina*, como siempre; el préstamo aparece ahí como
+     **PRÉSTAMO** del empleado por el monto. Las cuotas se descuentan en el rol
+     cuando el préstamo ya está desembolsado. El sistema **no** crea el egreso:
+     lo registra usted.
+   - **Ya fue entregado**: se entregó fuera del sistema; el rol descuenta las
+     cuotas directo, sin egreso.
+5. Revise la **tabla de cuotas**: una por mes, con el mes en que se cobra y su
+   valor. El monto se reparte en partes iguales y la **última cuota** absorbe
+   los centavos de diferencia (1.000 en 3 cuotas: 333,33 · 333,33 · 333,34).
+6. Si el préstamo empezó antes de usar el sistema, marque **¿Ya cobrada?** en
+   las cuotas que ya se descontaron. Esas cuotas quedan anotadas en el préstamo
+   pero **no** se crean como novedad (no se vuelven a descontar). Con alguna
+   cuota cobrada, el desembolso queda en *Ya fue entregado*.
+7. Pulse **Guardar**.
+
+Cada cuota por cobrar queda en el listado como una novedad **Préstamo Empresa**
+del mes que le toca, con la observación «Préstamo Empresa N° X - Cuota k/n».
+Al abrir una de ellas, el modal muestra a qué préstamo pertenece.
+
+No se puede crear una cuota en un mes cuyo rol ya está pagado. Si el empleado
+ya tiene cuotas de Préstamo Empresa en esos meses, se pide confirmación (se le
+descontarán las dos). Pulsar **Guardar** dos veces, o reintentar después de un
+error de conexión, no registra el préstamo dos veces.
+
+> Los campos de **interés** ya están previstos en el préstamo, pero por ahora
+> todo préstamo se registra sin interés.
+
+### Eliminar un préstamo completo
+
+Al **eliminar** una cuota de un préstamo que tiene más cuotas, el sistema
+pregunta si desea **eliminar todas las cuotas de ese préstamo** o **solo esa
+cuota**. Sirve cuando el préstamo se registró por error o el empleado ya no lo
+quiere. Se elimina todo junto (o nada) y solo si el préstamo **no está pagado**:
+
+- ninguna de sus cuotas está en un **rol ya pagado**, y
+- no tiene un **egreso de desembolso** registrado (anúlelo primero si hace falta).
+
+Si no se puede eliminar completo, el aviso dice por qué y solo ofrece eliminar
+esa cuota (si ella misma lo permite).
 
 ## El valor depende del tipo
 
@@ -498,6 +550,8 @@ filtrado.
   anteriores se eliminan novedad por novedad desde el listado.
 
 ## Historial de cambios
+
+- **1.18** — Al crear con **Nuevo** se puede elegir **Préstamo empresa**: empleado, monto, N° de cuotas y mes de la primera cuota; el sistema muestra la tabla de cuotas con los meses a cobrar, permite marcar las ya cobradas y si el préstamo ya fue entregado o se desembolsa por egreso (el egreso lo registra el usuario en Egresos → Nómina). Al eliminar una cuota de un préstamo se ofrece eliminar todas sus cuotas, si el préstamo no está pagado. Campos de interés previstos (por ahora en 0).
 
 - **1.17** — Descuento automático por saldo en contra: lo registra el rol mensual cuando un empleado sale en contra, en el mes siguiente, y solo se puede mover de mes o cambiar su observación.
 

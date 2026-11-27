@@ -13,6 +13,7 @@ use App\Services\modulos\NovedadService;
 use App\Services\modulos\NovedadImportService;
 use App\Services\modulos\NovedadCargaService;
 use App\Services\modulos\NovedadPlantillaService;
+use App\Services\modulos\PrestamoEmpleadoService;
 use App\models\CatalogoNovedades;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
@@ -272,6 +273,71 @@ class NovedadesController extends BaseModuloController
                     : ($n === 1 ? 'Se registró 1 novedad.' : "Se registraron {$n} novedades.");
                 echo json_encode(['ok' => true, 'msg' => $msg, 'creadas' => $n, 'ya_registrado' => !empty($res['ya_registrado'])]);
             }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /**
+     * Modo «Préstamo empresa» del modal Nuevo: registra el préstamo con su tabla de cuotas
+     * (una novedad tipo 9 por cuota por cobrar). No crea egresos: el desembolso se registra
+     * en Egresos → Nómina, como siempre. `cobradas` llega como JSON (números de cuota).
+     */
+    public function storePrestamo(): void
+    {
+        $this->requireCrear();
+        header('Content-Type: application/json');
+
+        $cobradas = json_decode((string) ($_POST['cobradas'] ?? '[]'), true);
+        $datos = [
+            'id_empleado' => (int) ($_POST['id_empleado'] ?? 0),
+            'fecha'       => trim($_POST['fecha'] ?? ''),
+            'monto'       => (float) ($_POST['monto'] ?? 0),
+            'num_cuotas'  => (int) ($_POST['num_cuotas'] ?? 0),
+            'mes_inicio'  => (int) ($_POST['periodo_mes'] ?? 0),
+            'anio_inicio' => (int) ($_POST['periodo_anio'] ?? 0),
+            'aplica_en'   => trim($_POST['aplica_en'] ?? 'rol'),
+            'desembolso'  => trim($_POST['desembolso'] ?? ''),
+            'observacion' => trim($_POST['observacion'] ?? ''),
+            'cobradas'    => is_array($cobradas) ? array_map('intval', $cobradas) : [],
+        ];
+
+        try {
+            $res = PrestamoEmpleadoService::crear()->registrar(
+                $datos,
+                (int) $_SESSION['id_empresa'],
+                (int) $_SESSION['id_usuario'],
+                !empty($_POST['confirmar_avisos']),
+                (string) ($_POST['token_guardado'] ?? '')
+            );
+            if (!empty($res['requiere_confirmacion'])) {
+                echo json_encode(['ok' => false, 'requiere_confirmacion' => true, 'avisos' => $res['avisos']]);
+                exit;
+            }
+            $msg = !empty($res['ya_registrado'])
+                ? 'Este préstamo ya estaba registrado; no se creó otro.'
+                : 'Préstamo N° ' . $res['id'] . ' registrado: ' . $res['creadas'] . ($res['creadas'] === 1 ? ' cuota por cobrar.' : ' cuotas por cobrar.');
+            echo json_encode(['ok' => true, 'msg' => $msg] + $res);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            echo json_encode(['ok' => false, 'error' => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    /** Elimina un Préstamo Empresa completo (todas sus cuotas), si no está pagado. */
+    public function eliminarPrestamo(): void
+    {
+        $this->requireEliminar();
+        header('Content-Type: application/json');
+
+        $id = (int) ($_POST['id_prestamo'] ?? 0);
+        try {
+            if ($id <= 0) throw new \Exception('Préstamo no válido.');
+            $n = PrestamoEmpleadoService::crear()->eliminar($id, (int) $_SESSION['id_empresa'], (int) $_SESSION['id_usuario']);
+            echo json_encode(['ok' => true, 'msg' => 'Préstamo eliminado: ' . $n . ($n === 1 ? ' cuota eliminada.' : ' cuotas eliminadas.')]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'error' => $e->getMessage()]);

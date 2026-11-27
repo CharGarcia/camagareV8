@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, recibos, recibo para firmar, firma del empleado, neto cero, sin valor a pagar, imprimir recibos, empleado en contra, descuento automatico, cuenta por cobrar empleado, saldo en contra mes siguiente, sale en contra, neto negativo, valor negativo, saldo en contra, debe a la empresa, mover prestamo al siguiente mes, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula, quincena en novedades, empleado omitido en la quincena, falta un empleado en la quincena, quincena cargada por excel
-version: 1.26
+etiquetas: rol de pago, fondos de reserva en rol, fondos de reserva planilla iess, fondos de reserva por pagar iess, decimo mensualizado, decimo acumulado, ingresos no gravados, gasto fondos de reserva, cuentas propias del empleado, asiento por empleado, un asiento general, asiento automatico, cambie la forma de pago, recibos, recibo para firmar, firma del empleado, neto cero, sin valor a pagar, imprimir recibos, empleado en contra, descuento automatico, cuenta por cobrar empleado, saldo en contra mes siguiente, sale en contra, neto negativo, valor negativo, saldo en contra, debe a la empresa, mover prestamo al siguiente mes, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula, quincena en novedades, empleado omitido en la quincena, falta un empleado en la quincena, quincena cargada por excel
+version: 1.27
 orden: 30
 estado: activo
 ---
@@ -352,6 +352,62 @@ dentro de *Descuentos aplicados en quincenas/semanas del mes*).
 Cambiar la configuración no modifica los asientos ya generados: las cuentas
 nuevas se usan en los roles que se contabilicen desde ese momento.
 
+### Fondos de reserva y décimos según cómo se pagan
+
+El **gasto** de un beneficio va siempre a su cuenta de gasto, se pague como se
+pague; lo que cambia según la forma de pago (pestaña **Laboral** del empleado)
+es la **contrapartida**:
+
+| Forma de pago en la ficha | Debe | Haber |
+|---------------------------|------|-------|
+| Fondos de Reserva *En Rol Mensual* | Fondos de Reserva pagados en rol | Sueldos por Pagar (va en el líquido) |
+| Fondos de Reserva *Planilla IESS* | Gasto Fondos de Reserva | Fondos de Reserva por Pagar IESS |
+| Fondos de Reserva *a partir del año* | Antes del año: Gasto Fondos de Reserva · Después: Fondos de Reserva pagados en rol | Antes: Fondos de Reserva por Pagar · Después: Sueldos por Pagar |
+| Décimo *Mensualiza* | Décimo Tercero / Cuarto mensualizado | Sueldos por Pagar (va en el líquido) |
+| Décimo *Acumula* | Gasto Décimo Tercero / Cuarto | Décimo Tercero / Cuarto por Pagar |
+
+Los conceptos **Fondos de Reserva pagados en rol**, **Décimo Tercero
+mensualizado**, **Décimo Cuarto mensualizado** y **Fondos de Reserva por Pagar
+IESS** son **opcionales**. Si no tienen cuenta, el valor va a la cuenta del
+concepto de siempre:
+
+- *pagados en rol* y *mensualizados* → **Gasto** del beneficio y, si tampoco
+  tiene cuenta, **Ingresos No Gravados** (donde iban antes).
+- *Fondos de Reserva por Pagar IESS* → **Fondos de Reserva por Pagar**.
+
+Así el gasto de fondos de reserva y de décimos de la empresa se ve completo en
+su cuenta, sin quedar escondido en *Ingresos No Gravados*, y cada pasivo se
+cancela con su propio pago (al IESS, en el rol o en el módulo del décimo).
+
+**Cada rol guarda cómo se pagaba cada beneficio al generarse.** Cambiar después
+la pestaña Laboral del empleado no altera las provisiones ni el asiento de los
+roles ya generados; rige para los roles que se generen desde ese momento.
+
+### Cuentas propias del empleado
+
+Un empleado puede tener sus propias cuentas desde la pestaña **Contable** de su
+ficha (o en *Configuración Contable → Nómina → Reglas por Empleado*, que es lo
+mismo). Para cada línea, el asiento toma:
+
+1. la **cuenta propia** del empleado (también la de un concepto de respaldo: si
+   el empleado tiene su propio *Gasto Fondos de Reserva*, ahí van sus fondos de
+   reserva pagados en rol);
+2. si no tiene, la cuenta **General** del concepto o, si no la hay, la de su
+   respaldo.
+
+### Un asiento general o uno por empleado
+
+En *Configuración de Empresa → Roles de Pago → Asiento contable del rol mensual*
+se elige cómo se arma el asiento:
+
+- **Automático (como siempre)**: un solo asiento para todos, salvo que algún
+  empleado tenga cuentas propias; en ese caso, un asiento por cada empleado.
+- **Uno general para todos los empleados**: un solo asiento sumado por cuenta,
+  aunque haya cuentas propias (cada cuenta propia queda en su propia línea).
+- **Uno por cada empleado**: siempre un asiento por empleado.
+
+El cambio rige para los roles que se contabilicen desde ese momento.
+
 ### El asiento tiene que cuadrar con el rol
 
 Antes de guardar, el sistema comprueba que el asiento refleje el rol, no solo que
@@ -506,8 +562,19 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 - **La cuota de un préstamo sigue saliendo en Descuentos**: su concepto no tiene
   cuenta en Configuración Contable → Nómina, o la cuota se descontó en una
   quincena o semana en lugar del rol mensual.
+- **Los fondos de reserva pagados en el rol salen en Ingresos No Gravados**: ni
+  *Fondos de Reserva pagados en rol* ni *Gasto Fondos de Reserva* tienen cuenta.
+  Asigne una a cualquiera de los dos (igual con los décimos mensualizados).
+- **Cambié la forma de pago del empleado y el rol de este mes no cambió**: el rol
+  guarda la forma de pago con la que se generó. Vuelva a generarlo (botón
+  **Generar**) si todavía no está pagado.
+- **Ahora sale un asiento por cada empleado**: algún empleado tiene cuentas
+  propias y la empresa está en *Automático*. Elija *Uno general para todos* en
+  Configuración de Empresa → Roles de Pago.
 
 ## Historial de cambios
+
+- **1.27** — Fondos de reserva y décimos se contabilizan **según cómo se pagan**: lo pagado en el rol va a los conceptos nuevos *Fondos de Reserva pagados en rol* y *Décimo Tercero/Cuarto mensualizado* (sin cuenta, al Gasto del beneficio; antes iba a *Ingresos No Gravados*) y la provisión de fondos de reserva por *Planilla IESS* va a *Fondos de Reserva por Pagar IESS*. Cada rol guarda la forma de pago de cada beneficio: cambiar después la ficha del empleado ya no altera los roles generados. La empresa elige si el asiento es **automático**, **uno general** o **uno por empleado**. Las cuentas propias del empleado se configuran en la nueva pestaña **Contable** de su ficha.
 
 - **1.26** — Estado **Sin valor a pagar** para el empleado con neto 0 (antes salía *Pago pendiente* para siempre). Nuevo **Recibo** para firmar («Recibí de … la cantidad de …», con monto en letras y texto propio para neto 0 o en contra): uno por uno con el botón de la pluma en la ficha del empleado, o todos a la vez con el botón **Recibos** del rol. El PDF del empleado aclara *«Sin valor a recibir en este rol»* o el saldo en contra y el mes en que se descuenta.
 

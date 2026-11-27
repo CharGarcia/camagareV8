@@ -1,11 +1,11 @@
 ---
 titulo: Personalización de módulos por empresa y por cliente
-resumen: En Configuración de Empresa, cada módulo personalizable tiene su pestaña con opciones para toda la empresa y, si la opción lo admite, valores propios para algunos clientes. Hoy: columnas del comprobante de Consignaciones.
+resumen: En Configuración de Empresa, cada módulo personalizable tiene su pestaña con opciones para toda la empresa y, si la opción lo admite, valores propios para algunos clientes. Hoy: columnas del comprobante de Consignaciones y asiento del rol de pagos.
 categoria: Configuración de empresa
 tipo: guia
 visibilidad: todos
-etiquetas: personalizar, personalizacion, personalizar modulo, opciones por cliente, configuracion por cliente, columnas por cliente, columnas del pdf, columnas del excel, ocultar columnas, mostrar caducidad, caducidad solo para algunos clientes, consignaciones, comprobante de consignacion, pestaña consignaciones, configuracion de empresa, valores por defecto
-version: 1.0
+etiquetas: personalizar, roles de pago, asiento del rol, un asiento por empleado, asiento general de nomina, personalizacion, personalizar modulo, opciones por cliente, configuracion por cliente, columnas por cliente, columnas del pdf, columnas del excel, ocultar columnas, mostrar caducidad, caducidad solo para algunos clientes, consignaciones, comprobante de consignacion, pestaña consignaciones, configuracion de empresa, valores por defecto
+version: 1.1
 orden: 38
 estado: activo
 ---
@@ -32,12 +32,18 @@ Hay dos niveles:
 | Módulo | Pestaña | Opción | Por cliente |
 |--------|---------|--------|-------------|
 | Consignaciones de Venta | Consignaciones | Columnas del detalle de productos en el PDF y el Excel del comprobante | Sí |
+| Roles de Pago | Roles de Pago | Asiento contable del rol mensual: automático, uno general o uno por empleado | No |
 
 En Consignaciones, las columnas posibles son Código, Descripción, Bodega, Lote,
 NUP, Caducidad, Cantidad, Retorno, Facturados y Acon. Descripción y Cantidad
 salen siempre. Por defecto salen todas menos Caducidad, que además solo se
 imprime en el PDF (el Excel no la lleva). El detalle está en el
 manual del módulo **Empresa**, sección *Pestaña Consignaciones*.
+
+En Roles de Pago, **Asiento contable del rol mensual** decide si el rol se
+contabiliza en un solo asiento o en uno por empleado (por defecto *Automático*,
+como siempre). El detalle está en el manual de **Roles de pago**, sección
+*Un asiento general o uno por empleado*.
 
 ## Cómo se usa
 
@@ -68,4 +74,5 @@ nuevo).
 
 ## Historial de cambios
 
+- **1.1** — Nueva pestaña **Roles de Pago**: cómo se arma el asiento del rol mensual (automático, uno general o uno por empleado).
 - **1.0** — Versión inicial: pestaña Consignaciones (columnas del comprobante por cliente).

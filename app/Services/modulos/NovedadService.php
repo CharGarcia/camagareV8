@@ -49,6 +49,10 @@ class NovedadService
         if ($data) {
             $data['bloqueada'] = $this->rolYaPagado($idEmpresa, $data['id_empleado'] ?? 0, $data['aplica_en'] ?? 'rol', $data['periodo_anio'] ?? 0, $data['periodo_mes'] ?? 0)
                 || $this->yaDesembolsada($idEmpresa, $data);
+            // Cuota de un Préstamo Empresa con tabla de cuotas: datos del préstamo para el modal.
+            $data['prestamo'] = (int) ($data['id_prestamo'] ?? 0) > 0
+                ? PrestamoEmpleadoService::crear()->resumen((int) $data['id_prestamo'], $idEmpresa)
+                : null;
         }
         return $data;
     }
@@ -398,6 +402,44 @@ class NovedadService
     }
 
     /**
+     * Crea UNA novedad dentro de la transacción que ya abrió el llamador (sin commit ni
+     * regenerar el rol): la usa el Préstamo Empresa con tabla de cuotas
+     * (PrestamoEmpleadoService), que crea todas las cuotas y su cabecera juntas. Mismas
+     * reglas, candados y auditoría que el alta normal. Devuelve el id y los datos ya
+     * normalizados (para que el llamador regenere los roles afectados).
+     */
+    public function crearEnTransaccion(array $data): array
+    {
+        $data = $this->normalizar($data, (int) $data['id_empresa']);
+        return ['id' => $this->crearInterno($data), 'data' => $data];
+    }
+
+    /**
+     * Lanza excepción si la novedad no se puede eliminar: descuento automático por saldo
+     * en contra, rol del período ya pagado, o Anticipo/cuota de Préstamo Empresa ya
+     * desembolsados. Lo usa también la eliminación de un préstamo completo, que revisa
+     * cada cuota antes de borrar ninguna.
+     */
+    public function validarEliminable(array $old): void
+    {
+        $idEmpresa = (int) ($old['id_empresa'] ?? 0);
+        $this->bloquearCambioSaldoContra($old, null);
+        $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
+        $this->bloquearSiYaDesembolsada($idEmpresa, $old);
+    }
+
+    /**
+     * Eliminación lógica + auditoría de UNA novedad dentro de la transacción del llamador
+     * (sin validar ni regenerar el rol: lo hace quien llama, ver validarEliminable()).
+     */
+    public function eliminarEnTransaccion(array $old, int $idUsuario): void
+    {
+        $idEmpresa = (int) $old['id_empresa'];
+        $this->repository->deleteLogic((int) $old['id'], $idEmpresa, $idUsuario);
+        $this->logService->registrar($idUsuario, $idEmpresa, 'ELIMINAR', 'novedades', (int) $old['id'], $old, null);
+    }
+
+    /**
      * Valida una novedad SIN escribir nada: mismas reglas y mismo candado de rol
      * pagado que crearInterno(). Devuelve el mensaje de error, o null si es válida.
      * Lo usa la importación para revisar el archivo entero antes de guardar.
@@ -471,12 +513,9 @@ class NovedadService
             throw new Exception('Novedad no encontrada.');
         }
 
-        // El descuento automático por saldo en contra lo maneja su rol de origen.
-        $this->bloquearCambioSaldoContra($old, null);
-        // No permitir eliminar una novedad que ya afecta a un rol pagado.
-        $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
-        // No permitir eliminar un Anticipo o cuota de Préstamo Empresa ya desembolsados.
-        $this->bloquearSiYaDesembolsada($idEmpresa, $old);
+        // Saldo en contra (lo maneja su rol de origen), rol del período ya pagado, o
+        // Anticipo / cuota de Préstamo Empresa ya desembolsados.
+        $this->validarEliminable($old);
 
         $this->repository->beginTransaction();
         try {
@@ -693,6 +732,13 @@ class NovedadService
         }
 
         try {
+            // Cuota de un préstamo registrado con tabla de cuotas: cuenta solo lo desembolsado
+            // que le corresponde a ESE préstamo (el egreso es por empleado; un préstamo anterior
+            // ya entregado no debe bloquear al nuevo).
+            if ($cod === '9' && (int) ($novedad['id_prestamo'] ?? 0) > 0) {
+                return (new \App\repositories\modulos\PrestamoEmpleadoRepository())
+                    ->desembolsadoDelPrestamo($idEmpresa, $idEmpleado, (int) $novedad['id_prestamo']) > 0.001;
+            }
             $rolRepo = new \App\repositories\modulos\RolPagoRepository();
             $monto = \App\models\CatalogoNovedades::esPagoPorEgreso($cod)
                 ? ($rolRepo->getAnticiposPagadosMasivo($idEmpresa, [$idNovedad])[$idNovedad] ?? 0.0)

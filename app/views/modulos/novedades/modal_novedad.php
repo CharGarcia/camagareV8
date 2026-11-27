@@ -12,6 +12,17 @@ $mesActual  = (int) date('n');
     /* Modo del modal Nuevo: "Un empleado" (formulario de siempre) o "Todos los empleados" (cuadrícula). */
     #modalNovedad.nov-modo-todos .nov-solo-uno { display: none !important; }
     #modalNovedad:not(.nov-modo-todos) .nov-solo-todos { display: none !important; }
+    /* Modo "Préstamo empresa": empleado + monto/cuotas + tabla de cuotas. */
+    #modalNovedad.nov-modo-prestamo .nov-solo-uno:not(.nov-tambien-prestamo),
+    #modalNovedad.nov-modo-prestamo .nov-no-prestamo { display: none !important; }
+    #modalNovedad:not(.nov-modo-prestamo) .nov-solo-prestamo { display: none !important; }
+    #nov_tabla_prestamo { font-size: .78rem; }
+    #nov_tabla_prestamo thead th, #nov_tabla_prestamo tfoot td { position: sticky; background: #f8f9fa; z-index: 1; font-weight: 600; }
+    #nov_tabla_prestamo thead th { top: 0; }
+    #nov_tabla_prestamo tfoot td { bottom: 0; }
+    #nov_tabla_prestamo tr.nov-cuota-cobrada td { color: #6c757d; text-decoration: line-through; }
+    #nov_tabla_prestamo tr.nov-cuota-cobrada td.nov-cuota-check { text-decoration: none; }
+    .nov-prestamo-tabla { max-height: 260px; overflow: auto; }
     /* El <form> va entre .modal-content y .modal-body: sin esto el modal-dialog-scrollable de
        Bootstrap no limita el alto del body, el contenido se recorta y la rueda no desplaza. */
     #formNovedad { display: flex; flex-direction: column; min-height: 0; max-height: 100%; }
@@ -70,11 +81,19 @@ $mesActual  = (int) date('n');
                             <label class="btn btn-outline-primary" for="nov_modo_uno"><i class="bi bi-person me-1"></i>Un empleado</label>
                             <input type="radio" class="btn-check" name="nov_modo" id="nov_modo_todos" value="todos" autocomplete="off">
                             <label class="btn btn-outline-primary" for="nov_modo_todos"><i class="bi bi-people me-1"></i>Todos los empleados</label>
+                            <input type="radio" class="btn-check" name="nov_modo" id="nov_modo_prestamo" value="prestamo" autocomplete="off">
+                            <label class="btn btn-outline-primary" for="nov_modo_prestamo"><i class="bi bi-cash-coin me-1"></i>Préstamo empresa</label>
                         </div>
                         <span class="small text-muted nov-solo-todos">Escriba el valor solo en las novedades que correspondan a cada empleado: las celdas vacías o en 0 no crean nada. La observación de cada empleado vale para todas sus novedades; vacía, se guarda «Tipo - Mes Año».</span>
+                        <span class="small text-muted nov-solo-prestamo">Registra el préstamo y crea una cuota de Préstamo Empresa por mes, que se descuenta en el rol.</span>
+                    </div>
+                    <!-- Al editar una cuota de un préstamo registrado con tabla de cuotas -->
+                    <div id="nov_prestamo_info" class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-3 d-none">
+                        <i class="bi bi-cash-coin"></i>
+                        <span class="small" id="nov_prestamo_info_texto"></span>
                     </div>
                     <div class="row g-3">
-                        <div class="col-md-8 position-relative nov-solo-uno">
+                        <div class="col-md-8 position-relative nov-solo-uno nov-tambien-prestamo">
                             <label class="form-label mb-1 small fw-bold text-muted">Empleado *</label>
                             <input type="hidden" name="id_empleado" id="nov_id_empleado" value="">
                             <div class="input-group input-group-sm">
@@ -140,7 +159,7 @@ $mesActual  = (int) date('n');
                             <input type="date" class="form-control form-control-sm shadow-none" name="fecha" id="nov_fecha" value="<?= date('Y-m-d') ?>">
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label mb-1 small fw-bold text-muted">Mes del Rol *</label>
+                            <label class="form-label mb-1 small fw-bold text-muted"><span class="nov-no-prestamo">Mes del Rol *</span><span class="nov-solo-prestamo">Mes 1.ª cuota *</span></label>
                             <select class="form-select form-select-sm shadow-none" name="periodo_mes" id="nov_periodo_mes">
                                 <?php foreach ($meses as $num => $nombre): ?>
                                     <option value="<?= $num ?>" <?= $num === $mesActual ? 'selected' : '' ?>><?= htmlspecialchars($nombre) ?></option>
@@ -148,7 +167,7 @@ $mesActual  = (int) date('n');
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <label class="form-label mb-1 small fw-bold text-muted">Año del Rol *</label>
+                            <label class="form-label mb-1 small fw-bold text-muted"><span class="nov-no-prestamo">Año del Rol *</span><span class="nov-solo-prestamo">Año 1.ª cuota *</span></label>
                             <input type="number" class="form-control form-control-sm shadow-none" name="periodo_anio" id="nov_periodo_anio" value="<?= $anioActual ?>" min="2000" max="2100">
                         </div>
                         <div class="col-md-3">
@@ -161,8 +180,61 @@ $mesActual  = (int) date('n');
                             <div class="form-text small mt-1 d-none" id="nov_aplica_aviso">Este tipo solo afecta al rol mensual.</div>
                         </div>
 
+                        <!-- Préstamo empresa: monto, cuotas, desembolso y tabla de cuotas -->
+                        <div class="col-12 nov-solo-prestamo">
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <label class="form-label mb-1 small fw-bold text-muted" for="nov_pre_monto">Monto a prestar ($) *</label>
+                                    <input type="number" step="0.01" min="0" class="form-control form-control-sm shadow-none fw-bold" id="nov_pre_monto" placeholder="0.00">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label mb-1 small fw-bold text-muted" for="nov_pre_cuotas">N° de cuotas *</label>
+                                    <input type="number" step="1" min="1" max="120" class="form-control form-control-sm shadow-none" id="nov_pre_cuotas" placeholder="1">
+                                </div>
+                                <div class="col-md-5">
+                                    <label class="form-label mb-1 small fw-bold text-muted" for="nov_pre_desembolso">Desembolso *</label>
+                                    <select class="form-select form-select-sm shadow-none" id="nov_pre_desembolso">
+                                        <option value="por_desembolsar">Por desembolsar (egreso en Egresos → Nómina)</option>
+                                        <option value="entregado">Ya fue entregado</option>
+                                    </select>
+                                    <div class="form-text small mt-1" id="nov_pre_desembolso_ayuda">Las cuotas se descuentan en el rol cuando el préstamo esté desembolsado por egreso.</div>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mt-3 mb-1">
+                                <span class="small fw-bold text-muted">Cuotas</span>
+                                <span class="small text-muted">Marque «Ya cobrada» solo en las cuotas que ya se descontaron antes de registrar el préstamo en el sistema: no se vuelven a descontar.</span>
+                            </div>
+                            <div class="nov-prestamo-tabla border rounded">
+                                <table class="table table-sm table-bordered table-hover mb-0 align-middle" id="nov_tabla_prestamo">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th class="text-center" style="width:60px;">#</th>
+                                            <th>Mes a cobrar</th>
+                                            <th class="text-end" style="width:130px;">Valor</th>
+                                            <th class="text-center" style="width:110px;">¿Ya cobrada?</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td colspan="4" class="text-center text-muted py-3">Escriba el monto y el número de cuotas.</td></tr>
+                                    </tbody>
+                                    <tfoot class="table-light">
+                                        <tr>
+                                            <td colspan="2">Total del préstamo</td>
+                                            <td class="text-end" id="nov_pre_total">0.00</td>
+                                            <td></td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="2">Por cobrar en el rol</td>
+                                            <td class="text-end" id="nov_pre_por_cobrar">0.00</td>
+                                            <td class="text-center small" id="nov_pre_por_cobrar_n"></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
                         <!-- En "Todos los empleados" la observación va por empleado (columna de la cuadrícula). -->
-                        <div class="col-12 nov-solo-uno">
+                        <div class="col-12 nov-solo-uno nov-tambien-prestamo">
                             <label class="form-label mb-1 small fw-bold text-muted">Observación</label>
                             <textarea class="form-control form-control-sm shadow-none" name="observacion" id="nov_observacion" rows="2"></textarea>
                         </div>

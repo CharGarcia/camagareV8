@@ -11,6 +11,7 @@ use App\Rules\modulos\AsientoContableRules;
 use App\Services\LogSistemaService;
 use App\models\CatalogoNovedades;
 use App\models\CatalogoRol;
+use App\Helpers\NominaConceptos;
 use Exception;
 
 /**
@@ -67,8 +68,11 @@ class RolAsientoService
      *                            (novedad 10, que llega como ingreso negativo: ver RolCalculoService).
      *   - horas_extra:           origen='novedad', codigo 4/5/6 (nocturna/suplementaria/extraordinaria).
      *   - ingresos_gravados:     resto de ingresos con aporta_iess=true (rubro_fijo, vacaciones).
-     *   - ingresos_no_gravados:  resto de ingresos con aporta_iess=false (otros ingresos, rubro_fijo,
-     *                            fondos de reserva, décimo 3°/4° mensualizado).
+     *   - ingresos_no_gravados:  resto de ingresos con aporta_iess=false (otros ingresos, rubro_fijo).
+     *   - fondos_rol / decimo13_rol / decimo14_rol: fondos de reserva y décimos pagados en el rol
+     *                            (origen 'fondos' / 'decimo'). Van a su concepto por forma de pago
+     *                            (App\Helpers\NominaConceptos), que sin cuenta cae al Gasto del
+     *                            beneficio y, si tampoco hay, a Ingresos No Gravados (donde iban antes).
      *   - anticipos:             novedad codigo 3 (Anticipo) y 15 (Quincena) + "Neteo semanas/quincenas del mes"
      *                            (lo ya pagado en quincena/semana, ver AsientoBuilderService::
      *                            sumaRolNoMensualPorEgreso — misma cuenta ANTICIPOSDESCUENTOSNOMINA).
@@ -89,6 +93,7 @@ class RolAsientoService
             'sueldo_base' => 0.0, 'horas_extra' => 0.0,
             'ingresos_gravados' => 0.0, 'ingresos_no_gravados' => 0.0,
             'anticipos' => 0.0, 'descuentos' => 0.0, 'saldo_contra' => 0.0,
+            'fondos_rol' => 0.0, 'decimo13_rol' => 0.0, 'decimo14_rol' => 0.0,
             'prestamos' => array_fill_keys(array_keys(self::PRESTAMOS), 0.0),
         ];
         foreach ($rubros as $r) {
@@ -104,6 +109,12 @@ class RolAsientoService
                     $grp['sueldo_base'] += $valor;
                 } elseif ($origen === 'novedad' && in_array($codigo, ['4', '5', '6'], true)) {
                     $grp['horas_extra'] += $valor;
+                } elseif ($origen === 'fondos') {
+                    $grp['fondos_rol'] += $valor;
+                } elseif ($origen === 'decimo' && stripos($concepto, 'cuarto') !== false) {
+                    $grp['decimo14_rol'] += $valor;
+                } elseif ($origen === 'decimo') {
+                    $grp['decimo13_rol'] += $valor;
                 } elseif ($aportaIess) {
                     $grp['ingresos_gravados'] += $valor;
                 } else {
@@ -175,6 +186,113 @@ class RolAsientoService
         return 'DESCUENTOSNOMINA';
     }
 
+    /**
+     * Cuenta de un concepto recorriendo su cadena de respaldo (App\Helpers\NominaConceptos): primero
+     * la cuenta PROPIA del empleado en cualquier eslabón —lo personalizado manda— y, si no tiene
+     * ninguna, la GENERAL del primer eslabón que la tenga. Un concepto sin cadena se resuelve como
+     * siempre: propia del empleado > General.
+     *
+     * @param array $ctas  código => regla General (getReglasGeneralesPorConcepto)
+     * @param array $empOv id_asiento_tipo => id_cuenta, o => ['id_cuenta','codigo','nombre']
+     * @return array{id:int, codigo:string, nombre:string}|null
+     */
+    private function cuentaCadena(string $codigo, array $ctas, array $empOv): ?array
+    {
+        $cadena = NominaConceptos::cadena($codigo);
+        foreach ($cadena as $c) {
+            $regla = $ctas[$c] ?? null;
+            $ov = $regla ? ($empOv[(int) $regla['id_asiento_tipo']] ?? null) : null;
+            $id = is_array($ov) ? (int) ($ov['id_cuenta'] ?? 0) : (int) ($ov ?? 0);
+            if ($id > 0) {
+                return ['id' => $id, 'codigo' => (string) ($ov['codigo'] ?? ''), 'nombre' => (string) ($ov['nombre'] ?? '')];
+            }
+        }
+        foreach ($cadena as $c) {
+            $regla = $ctas[$c] ?? null;
+            if ($regla && (int) ($regla['id_cuenta'] ?? 0) > 0) {
+                return ['id' => (int) $regla['id_cuenta'], 'codigo' => (string) ($regla['cuenta_codigo'] ?? ''), 'nombre' => (string) ($regla['cuenta_nombre'] ?? '')];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Líneas del asiento (todavía sin cuenta) de UNA línea del rol, en el orden en que se muestran.
+     * La comparten contabilizar() (asiento real) y asientoEmpleado() (vista previa del rol), para que
+     * lo que se ve sea lo que se contabiliza.
+     *
+     * @param array $ovIds id_asiento_tipo => id_cuenta propia del empleado
+     * @return array{lineas: array<int, array{codigo:string, lado:string, valor:float, concepto:string}>, prov_incluidas: float, en_contra: float}
+     */
+    private function lineasDeEmpleado(array $lin, array $salario, array $ctas, array $ovIds): array
+    {
+        $provis = (new RolProvisionService())->calcularProvisiones($lin, $salario);
+        $grp    = $this->devolverPrestamosSinCuenta($this->clasificarRubros($lin['rubros'] ?? []), $ctas, $ovIds);
+        $codSaldoContra = $this->codigoSaldoContra($ctas, $ovIds);
+        $neto     = round((float) $lin['neto'], 2);
+        $enContra = $neto < 0 ? -$neto : 0.0;
+        // Fondos de reserva que la empresa paga directo al IESS (planilla): su pasivo es con el IESS.
+        $frPlanilla = (string) ($lin['fondos_reserva'] ?? '') === 'planilla';
+
+        $provIncl = array_values(array_filter($provis, fn($p) => !empty($p['incluir']) && $p['valor'] > 0));
+        $provIncluidas = 0.0;
+        foreach ($provIncl as $p) {
+            $provIncluidas += round((float) $p['valor'], 2);
+        }
+
+        $l = [];
+        $add = function (string $codigo, string $lado, float $valor, string $concepto) use (&$l): void {
+            $l[] = ['codigo' => $codigo, 'lado' => $lado, 'valor' => $valor, 'concepto' => $concepto];
+        };
+
+        $add('GASTOSUELDOSNOMINA', 'debe', $grp['sueldo_base'], 'Gasto Sueldos y Salarios');
+        $add('GASTOHORASEXTRASNOMINA', 'debe', $grp['horas_extra'], 'Gasto Horas Extras');
+        $add('INGRESOSGRAVADOSNOMINA', 'debe', $grp['ingresos_gravados'], 'Ingresos Gravados');
+        $add('INGRESOSNOGRAVADOSNOMINA', 'debe', $grp['ingresos_no_gravados'], 'Ingresos No Gravados');
+        $add(NominaConceptos::FONDOS_ROL, 'debe', $grp['fondos_rol'], 'Fondos de Reserva pagados en rol');
+        $add(NominaConceptos::DECIMO13_ROL, 'debe', $grp['decimo13_rol'], 'Décimo Tercero mensualizado');
+        $add(NominaConceptos::DECIMO14_ROL, 'debe', $grp['decimo14_rol'], 'Décimo Cuarto mensualizado');
+        $add('GASTOAPORTEPATRONALNOMINA', 'debe', (float) $lin['aporte_patronal'], 'Gasto Aporte Patronal IESS');
+        foreach ($provIncl as $p) {
+            $add(self::PROV_MAP[$p['concepto']][0] ?? '', 'debe', (float) $p['valor'], 'Gasto ' . $p['concepto']);
+        }
+        $add($codSaldoContra, 'debe', $enContra, 'Saldo en contra del empleado');
+
+        $add('IESSPORPAGARNOMINA', 'haber', (float) $lin['aporte_iess'] + (float) $lin['aporte_patronal'], 'IESS por Pagar');
+        foreach ($provIncl as $p) {
+            if ($p['concepto'] === 'Fondos de Reserva' && $frPlanilla) {
+                $add(NominaConceptos::FONDOS_IESS_PAGAR, 'haber', (float) $p['valor'], 'Fondos de Reserva por Pagar IESS');
+            } else {
+                $add(self::PROV_MAP[$p['concepto']][1] ?? '', 'haber', (float) $p['valor'], $p['concepto'] . ' por Pagar');
+            }
+        }
+        $add('ANTICIPOSDESCUENTOSNOMINA', 'haber', $grp['anticipos'], 'Anticipos');
+        foreach (self::PRESTAMOS as $cod => [$codigo, $concepto]) {
+            $add($codigo, 'haber', $grp['prestamos'][$cod], $concepto);
+        }
+        $add('DESCUENTOSNOMINA', 'haber', $grp['descuentos'], 'Descuentos');
+        $add($codSaldoContra, 'haber', $grp['saldo_contra'], 'Saldo en contra del rol anterior');
+        // Base DEVENGADO: el rol se contabiliza al calcularse, no al pagarse — el líquido a pagar
+        // todavía no salió de Bancos, así que se reconoce como pasivo (Sueldos por Pagar). El egreso
+        // que efectivamente paga el rol (Generar egresos de nómina) cancela esta misma cuenta contra
+        // Bancos — ver AsientoBuilderService::generarAsientoEgreso().
+        $add('SUELDOSPORPAGARNOMINA', 'haber', $neto, 'Sueldos por Pagar');
+
+        return ['lineas' => $l, 'prov_incluidas' => $provIncluidas, 'en_contra' => $enContra];
+    }
+
+    /**
+     * Cómo se arma el asiento del rol: 'general' (uno solo, sumado por cuenta), 'por_empleado' (uno
+     * por cada empleado) o 'automatico' (como siempre: por empleado en cuanto UN empleado del rol
+     * tiene una cuenta propia). Se elige por empresa en Configuración de Empresa → Roles de Pago
+     * (App\Helpers\ConfigModulo); sin elegir, 'automatico'.
+     */
+    public static function modoAsientoEmpresa(int $idEmpresa): string
+    {
+        $modo = (string) (ConfigModuloService::crear()->valor($idEmpresa, 'modulos/roles-pago', 'modo_asiento') ?? 'automatico');
+        return in_array($modo, ['general', 'por_empleado'], true) ? $modo : 'automatico';
+    }
+
     public function __construct(RolPagoRepository $repo, LogSistemaService $log)
     {
         $this->repo = $repo;
@@ -233,7 +351,6 @@ class RolAsientoService
                 . implode(', ', $lista) . $extra . (count($enContra) === 1 ? ' tiene' : ' tienen') . ' valor a pagar en contra. Revise el rol: puede pasar préstamos o descuentos al mes siguiente en Novedades.');
         }
         $salario = $this->repo->getSalario((int) $cab['periodo_anio']);
-        $prov = new RolProvisionService();
 
         // ── Agregación ───────────────────────────────────────────────────────
         // Cuentas generales por concepto (código => regla con id_asiento_tipo, id_cuenta).
@@ -247,29 +364,34 @@ class RolAsientoService
         $ref = 'Rol ' . $mes . ' ' . $cab['periodo_anio'];
         $faltan = [];
 
-        // Resuelve la cuenta de un concepto: override por empleado > cuenta general.
+        // Resuelve la cuenta de un concepto con su cadena de respaldo (propia del empleado >
+        // General, ver cuentaCadena()). Si nada de la cadena tiene cuenta, se pide configurar el
+        // concepto de siempre, no el opcional nuevo.
         $cuentaDe = function (string $codigo, array $empOv) use ($ctas, &$faltan): ?int {
-            $regla = $ctas[$codigo] ?? null;
-            if (!$regla) { $faltan[$codigo] = $codigo; return null; }
-            $at = (int) $regla['id_asiento_tipo'];
-            $idCuenta = ((int) ($empOv[$at] ?? 0)) ?: ((int) ($regla['id_cuenta'] ?? 0));
-            if ($idCuenta <= 0) { $faltan[$codigo] = $regla['concepto']; return null; }
-            return $idCuenta;
+            $cuenta = $this->cuentaCadena($codigo, $ctas, $empOv);
+            if ($cuenta !== null) {
+                return $cuenta['id'];
+            }
+            $obligatorio = NominaConceptos::conceptoObligatorio($codigo);
+            $faltan[$obligatorio] = $ctas[$obligatorio]['concepto'] ?? $obligatorio;
+            return null;
         };
 
         // ── Modo del rol: GENERAL (un solo asiento combinado) vs POR EMPLEADO (uno
         // independiente por cada uno) ────────────────────────────────────────────
-        // Se detecta automáticamente: basta que UN empleado del rol tenga una cuenta propia
-        // configurada (override en Configuración Contable, tipo_referencia='empleado') para que
-        // TODO el rol pase a modo por-empleado — así se puede reportar el gasto por centro de
-        // costo/departamento sin mezclarlo con quienes siguen la cuenta general.
+        // Lo decide la empresa (modoAsientoEmpresa). En 'automatico' (sin elegir, el de siempre)
+        // basta que UN empleado del rol tenga una cuenta propia configurada (override en
+        // Configuración Contable o en la pestaña Contable del empleado) para que TODO el rol pase
+        // a modo por-empleado. En 'general' las cuentas propias se respetan igual: cada una queda
+        // en su propia línea del asiento combinado (agruparPorCuenta suma por cuenta).
+        $modoEmpresa = self::modoAsientoEmpresa($idEmpresa);
         $overridesPorEmpleado = [];
-        $modoPorEmpleado = false;
+        $modoPorEmpleado = $modoEmpresa === 'por_empleado';
         foreach ($detalle as $lin) {
             $idEmp = (int) $lin['id_empleado'];
             $ov = $progRepo->getReglasEmpleado($idEmpresa, $idEmp);
             $overridesPorEmpleado[$idEmp] = $ov;
-            if (!empty($ov)) {
+            if (!empty($ov) && $modoEmpresa === 'automatico') {
                 $modoPorEmpleado = true;
             }
         }
@@ -306,58 +428,19 @@ class RolAsientoService
             $nombre = (string) $lin['nombres_apellidos'];
             $nombresPorEmpleado[$idEmp] = $nombre;
             $empOv  = $overridesPorEmpleado[$idEmp];
-            $provis = $prov->calcularProvisiones($lin, $salario);
-            $grp    = $this->devolverPrestamosSinCuenta($this->clasificarRubros($lin['rubros'] ?? []), $ctas, $empOv);
-
-            $provIncluidas = 0.0;
-            foreach ($provis as $p) {
-                if (!empty($p['incluir']) && $p['valor'] > 0) {
-                    $provIncluidas += round((float) $p['valor'], 2);
-                }
-            }
-            $neto = round((float) $lin['neto'], 2);
-            // En contra: lo que el empleado queda debiendo (cuenta por cobrar, al Debe).
-            $enContraEmp = $neto < 0 ? -$neto : 0.0;
-            $codSaldoContra = $this->codigoSaldoContra($ctas, $empOv);
+            $arm    = $this->lineasDeEmpleado($lin, $salario, $ctas, $empOv);
+            $neto   = round((float) $lin['neto'], 2);
             $esperadoPorEmpleado[$idEmp] = [
                 // Debe = todo lo ganado + aporte patronal + provisiones del mes (+ saldo en contra).
-                'debe' => round(round((float) $lin['total_ingresos'], 2) + round((float) $lin['aporte_patronal'], 2) + $provIncluidas + $enContraEmp, 2),
+                'debe' => round(round((float) $lin['total_ingresos'], 2) + round((float) $lin['aporte_patronal'], 2) + $arm['prov_incluidas'] + $arm['en_contra'], 2),
                 // Sueldos por Pagar = líquido a recibir del rol (0 si sale en contra).
                 'neto' => max(0.0, $neto),
                 // Neto del rol tal cual, para comparar la suma con el total de la cabecera.
                 'neto_rol' => $neto,
             ];
-
-            $push('GASTOSUELDOSNOMINA', 'debe', $grp['sueldo_base'], 'Gasto Sueldos y Salarios', $empOv, $idEmp, $nombre);
-            $push('GASTOHORASEXTRASNOMINA', 'debe', $grp['horas_extra'], 'Gasto Horas Extras', $empOv, $idEmp, $nombre);
-            $push('INGRESOSGRAVADOSNOMINA', 'debe', $grp['ingresos_gravados'], 'Ingresos Gravados', $empOv, $idEmp, $nombre);
-            $push('INGRESOSNOGRAVADOSNOMINA', 'debe', $grp['ingresos_no_gravados'], 'Ingresos No Gravados', $empOv, $idEmp, $nombre);
-            $push('GASTOAPORTEPATRONALNOMINA', 'debe', (float) $lin['aporte_patronal'], 'Gasto Aporte Patronal IESS', $empOv, $idEmp, $nombre);
-            foreach ($provis as $p) {
-                if (!empty($p['incluir']) && $p['valor'] > 0) {
-                    $push(self::PROV_MAP[$p['concepto']][0] ?? '', 'debe', (float) $p['valor'], 'Gasto ' . $p['concepto'], $empOv, $idEmp, $nombre);
-                }
+            foreach ($arm['lineas'] as $l) {
+                $push($l['codigo'], $l['lado'], (float) $l['valor'], $l['concepto'], $empOv, $idEmp, $nombre);
             }
-            $push($codSaldoContra, 'debe', $enContraEmp, 'Saldo en contra del empleado', $empOv, $idEmp, $nombre);
-
-            $push('IESSPORPAGARNOMINA', 'haber', (float) $lin['aporte_iess'] + (float) $lin['aporte_patronal'], 'IESS por Pagar', $empOv, $idEmp, $nombre);
-            foreach ($provis as $p) {
-                if (!empty($p['incluir']) && $p['valor'] > 0) {
-                    $push(self::PROV_MAP[$p['concepto']][1] ?? '', 'haber', (float) $p['valor'], $p['concepto'] . ' por Pagar', $empOv, $idEmp, $nombre);
-                }
-            }
-            $push('ANTICIPOSDESCUENTOSNOMINA', 'haber', $grp['anticipos'], 'Anticipos', $empOv, $idEmp, $nombre);
-            foreach (self::PRESTAMOS as $cod => [$codigo, $concepto]) {
-                $push($codigo, 'haber', $grp['prestamos'][$cod], $concepto, $empOv, $idEmp, $nombre);
-            }
-            $push('DESCUENTOSNOMINA', 'haber', $grp['descuentos'], 'Descuentos', $empOv, $idEmp, $nombre);
-            $push($codSaldoContra, 'haber', $grp['saldo_contra'], 'Saldo en contra del rol anterior', $empOv, $idEmp, $nombre);
-            // Base DEVENGADO: el rol se contabiliza al calcularse, no al pagarse — el
-            // líquido a pagar todavía no salió de Bancos, así que se reconoce como
-            // pasivo (Sueldos por Pagar), no como salida de caja. El egreso que
-            // efectivamente paga el rol (Generar egresos de nómina) cancela esta misma
-            // cuenta contra Bancos — ver AsientoBuilderService::generarAsientoEgreso().
-            $push('SUELDOSPORPAGARNOMINA', 'haber', (float) $lin['neto'], 'Sueldos por Pagar', $empOv, $idEmp, $nombre);
         }
 
         if (!empty($faltan)) {
@@ -631,8 +714,9 @@ class RolAsientoService
     }
 
     /**
-     * Asiento contable de UN empleado con las cuentas reales resueltas
-     * (override por empleado > cuenta general). Formato para mostrar en la UI.
+     * Asiento contable de UN empleado con las cuentas reales resueltas (propia del empleado >
+     * General, con la cadena de respaldo de App\Helpers\NominaConceptos). Formato para mostrar en
+     * la UI. Usa las mismas líneas que contabilizar() (lineasDeEmpleado).
      */
     public function asientoEmpleado(array $lin, int $idEmpresa, array $salario): array
     {
@@ -640,49 +724,22 @@ class RolAsientoService
         $ctas = [];
         foreach ($progRepo->getReglasGeneralesPorConcepto($idEmpresa, 'nomina') as $r) $ctas[$r['codigo']] = $r;
         $empOv = $progRepo->getReglasEmpleadoConCuenta($idEmpresa, (int) $lin['id_empleado']);
-
-        $cuenta = function (string $codigo) use ($ctas, $empOv): array {
-            $regla = $ctas[$codigo] ?? null;
-            $at = $regla ? (int) $regla['id_asiento_tipo'] : 0;
-            if ($at && isset($empOv[$at])) return ['codigo' => $empOv[$at]['codigo'], 'nombre' => $empOv[$at]['nombre']];
-            if ($regla && !empty($regla['id_cuenta'])) return ['codigo' => $regla['cuenta_codigo'], 'nombre' => $regla['cuenta_nombre']];
-            return ['codigo' => '', 'nombre' => '(cuenta no configurada)'];
-        };
-        $mk = function (string $codigo, string $concepto, float $valor) use ($cuenta): ?array {
-            $valor = round($valor, 2);
-            if ($valor <= 0) return null;
-            $c = $cuenta($codigo);
-            return ['cuenta_codigo' => $c['codigo'], 'cuenta_nombre' => $c['nombre'], 'concepto' => $concepto, 'valor' => $valor];
-        };
-
-        $prov = (new RolProvisionService())->calcularProvisiones($lin, $salario);
         $ovIds = array_map(fn (array $o): int => $o['id_cuenta'], $empOv);
-        $grp  = $this->devolverPrestamosSinCuenta($this->clasificarRubros($lin['rubros'] ?? []), $ctas, $ovIds);
-        $codSaldoContra = $this->codigoSaldoContra($ctas, $ovIds);
-        $neto = round((float) $lin['neto'], 2);
+
         $debe = [];
         $haber = [];
-
-        $debe[] = $mk('GASTOSUELDOSNOMINA', 'Gasto Sueldos y Salarios', $grp['sueldo_base']);
-        $debe[] = $mk('GASTOHORASEXTRASNOMINA', 'Gasto Horas Extras', $grp['horas_extra']);
-        $debe[] = $mk('INGRESOSGRAVADOSNOMINA', 'Ingresos Gravados', $grp['ingresos_gravados']);
-        $debe[] = $mk('INGRESOSNOGRAVADOSNOMINA', 'Ingresos No Gravados', $grp['ingresos_no_gravados']);
-        $debe[] = $mk('GASTOAPORTEPATRONALNOMINA', 'Gasto Aporte Patronal IESS', (float) $lin['aporte_patronal']);
-        foreach ($prov as $p) if (!empty($p['incluir']) && $p['valor'] > 0) $debe[] = $mk(self::PROV_MAP[$p['concepto']][0] ?? '', 'Gasto ' . $p['concepto'], (float) $p['valor']);
-        $debe[] = $mk($codSaldoContra, 'Saldo en contra del empleado', $neto < 0 ? -$neto : 0.0);
-
-        $haber[] = $mk('IESSPORPAGARNOMINA', 'IESS por Pagar', (float) $lin['aporte_iess'] + (float) $lin['aporte_patronal']);
-        foreach ($prov as $p) if (!empty($p['incluir']) && $p['valor'] > 0) $haber[] = $mk(self::PROV_MAP[$p['concepto']][1] ?? '', $p['concepto'] . ' por Pagar', (float) $p['valor']);
-        $haber[] = $mk('ANTICIPOSDESCUENTOSNOMINA', 'Anticipos', $grp['anticipos']);
-        foreach (self::PRESTAMOS as $cod => [$codigo, $concepto]) {
-            $haber[] = $mk($codigo, $concepto, $grp['prestamos'][$cod]);
+        foreach ($this->lineasDeEmpleado($lin, $salario, $ctas, $ovIds)['lineas'] as $l) {
+            $valor = round((float) $l['valor'], 2);
+            if ($valor <= 0) continue;
+            $c = $this->cuentaCadena($l['codigo'], $ctas, $empOv);
+            $fila = [
+                'cuenta_codigo' => $c['codigo'] ?? '',
+                'cuenta_nombre' => $c !== null ? $c['nombre'] : '(cuenta no configurada)',
+                'concepto'      => $l['concepto'],
+                'valor'         => $valor,
+            ];
+            if ($l['lado'] === 'debe') $debe[] = $fila; else $haber[] = $fila;
         }
-        $haber[] = $mk('DESCUENTOSNOMINA', 'Descuentos', $grp['descuentos']);
-        $haber[] = $mk($codSaldoContra, 'Saldo en contra del rol anterior', $grp['saldo_contra']);
-        $haber[] = $mk('SUELDOSPORPAGARNOMINA', 'Sueldos por Pagar', $neto);
-
-        $debe = array_values(array_filter($debe));
-        $haber = array_values(array_filter($haber));
         $td = array_sum(array_map(fn($x) => $x['valor'], $debe));
         $th = array_sum(array_map(fn($x) => $x['valor'], $haber));
 
