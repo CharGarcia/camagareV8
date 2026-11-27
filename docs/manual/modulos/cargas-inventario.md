@@ -336,9 +336,11 @@ de la bodega **no** exige lote y la línea no indica uno, el sistema reparte la
 salida solo: primero saca las unidades del producto que no pertenecen a ningún
 lote y luego de los lotes con saldo, empezando por el de caducidad más próxima.
 En el Kardex queda un movimiento por cada lote del que salió. Basta con que
-alcance el stock total de la bodega. Si quiere que salga de un lote concreto,
-escríbalo en `numero_lote` **exactamente** como está en el kardex. Si la bodega
-**sí** exige lote, la fila debe traerlo (ver *Lote, caducidad y NUP obligatorios*).
+alcance el stock total de la bodega. Si la fila **sí** trae lote, sale primero de
+ese lote (escrito **exactamente** como está en el kardex) y, si el lote no tiene
+saldo suficiente o no existe, lo que falta se reparte de la misma forma. Si la
+bodega **sí** exige lote, la salida sale solo del lote indicado y, si no alcanza,
+la línea no se aplica (ver *Lote, caducidad y NUP obligatorios*).
 
 Al **abrir** una salida pendiente, las líneas que hoy no se pueden aplicar (sin stock o sin lote) aparecen con
 un triángulo amarillo y la explicación en la columna **Motivo**, y arriba de la
@@ -446,7 +448,7 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 - **Un error de los anteriores aparece recién al aprobar** (termina en *Elimine la carga y vuelva a importarla corregida*): la carga se importó antes de que existiera esa regla, o el producto empezó a manejar lotes después de importar el ajuste. Elimínela e impórtela de nuevo.
 - **"Para aprobar cargas de ajuste falta aplicar en la base de datos el script…"**: aviso para soporte técnico; falta una actualización de la base de datos.
 - **"Fila N: código - producto, bodega X, salida de C. Stock insuficiente en el lote 'L'. Disponible: D."** (o *Stock insuficiente en bodega*): al aplicar o aprobar la carga, esa línea pide sacar más de lo que hay. El mensaje indica la fila del Excel, el producto, la bodega y la cantidad, y lista todas las líneas en esa situación. Puede aprobar solo las líneas que sí tienen stock, ingresar primero el stock que falta, o eliminar la carga e importarla corregida (ver *Salidas sin stock* en *Aprobación*).
-- **"Stock insuficiente en el lote 'X'. Disponible: 0"** cuando el producto sí tiene stock: el lote está escrito distinto en el kardex (se compara exacto), el stock está en otra bodega o entró sin lote. Revise el Kardex del producto en esa bodega.
+- **"Stock insuficiente en el lote 'X'. Disponible: 0"** cuando el producto sí tiene stock (solo en bodegas que **exigen** lote; en las demás lo que falta en el lote sale de los otros lotes): el lote está escrito distinto en el kardex (se compara exacto), el stock está en otra bodega o entró sin lote. Revise el Kardex del producto en esa bodega.
 - **"Ninguna línea de la carga se puede aplicar (sin stock suficiente o sin lote)"**: todas las líneas de la salida piden más de lo disponible.
 - **Carga aprobada con líneas en X roja y motivo "No se aplicó…"**: se aprobó en parte; esas líneas no movieron el stock.
 - **La carga no afecta el stock**: puede estar pendiente de aprobación, o anulada.
@@ -489,7 +491,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
-- **2.6** — Cuando la configuración de facturación de la bodega **no** exige lote, ya no se pide lote a los productos que tienen stock por lotes: una **salida sin lote** se reparte sola (primero las unidades sin lote y luego los lotes por caducidad más próxima, un movimiento por lote) y un **ajuste sin lote** cuenta el total del producto en la bodega (el faltante sale con el mismo reparto; el sobrante entra sin lote). Desaparecen los mensajes *Falta el lote…* y *El producto tiene stock por lotes en esta bodega…*.
+- **2.6** — Cuando la configuración de facturación de la bodega **no** exige lote, ya no se pide lote a los productos que tienen stock por lotes: una **salida sin lote** se reparte sola (primero las unidades sin lote y luego los lotes por caducidad más próxima, un movimiento por lote) y un **ajuste sin lote** cuenta el total del producto en la bodega (el faltante sale con el mismo reparto; el sobrante entra sin lote). Desaparecen los mensajes *Falta el lote…* y *El producto tiene stock por lotes en esta bodega…*. Una salida **con** un lote sin saldo suficiente (o que no existe) ya no se rechaza con *Stock insuficiente en el lote*: sale lo que tenga ese lote y el resto se reparte igual; solo se rechaza si no alcanza el stock de la bodega.
 - **2.5** — **Lote, caducidad y NUP obligatorios según la configuración de facturación**: si el establecimiento de la bodega tiene activado *Lote obligatorio*, *Caducidad obligatoria* o *NUP obligatorio*, las filas deben traer ese dato (lote en todo movimiento; caducidad en entradas y ajustes; NUP en entradas y salidas, y con NUP obligatorio no se admiten ajustes). Se revisa al importar y al aprobar. Con los switches apagados esos datos siguen siendo opcionales. La hoja **Bodegas** de la plantilla indica qué exige cada bodega y la ventana de importación lo avisa.
 - **2.4** — Cuando una línea no se puede aplicar al inventario (p. ej. *Stock insuficiente en el lote*), el mensaje ahora dice **qué línea es**: fila del Excel, código y nombre del producto, bodega y cantidad. En las **salidas** se listan **todas** las líneas sin stock (no solo la primera), se marcan al abrir la carga pendiente y se puede **aprobar solo las que tienen stock**: las demás quedan en la carga como no aplicadas. Una **salida sin lote** de un producto con stock por lotes ya no se aplica: debe indicar el lote.
 - **2.3** — **Revisión antes de generar la carga**: al importar, el sistema revisa el archivo sin grabar nada y, si hay avisos, pregunta si se genera la carga. Las **bodegas que no existen** se pueden crear en ese momento (las que no se crean dejan sus filas sin cargar); las filas de **servicios** y, en entradas y salidas, las de **cantidad 0** ya no dejan la carga con error: no se cargan. El aviso final resume las bodegas creadas y las filas que no se cargaron. El motivo de cada línea con error conserva la fila real del Excel aunque se hayan omitido filas.

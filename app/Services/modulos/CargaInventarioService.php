@@ -931,7 +931,10 @@ class CargaInventarioService
                 if ($bloquear) {
                     $invRepo->lockStock($idProducto, $idBodega, $idEmpresa);
                 }
-                $bodega[$kb] = (float) $invRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
+                $bodega[$kb]  = (float) $invRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
+                // Se lee junto con la bodega, antes de que ninguna línea descuente: así la
+                // simulación de saldos por lote parte del mismo momento para todas las filas.
+                $reparto[$kb] = $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
             }
             if ($kl !== null && !array_key_exists($kl, $lotes)) {
                 $lotes[$kl] = (float) $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $lote);
@@ -942,13 +945,32 @@ class CargaInventarioService
                               . (isset($usado[$kb]) ? $descontadas : '') . '.';
                 continue; // la línea no sale: no descuenta
             }
-            // Sin lote (la configuración no lo exige: si lo exigiera, la línea no sería válida):
-            // sale de las unidades sin lote y luego de los lotes por caducidad más próxima, igual
-            // que al aplicarla (repartirSalidaSinLote). Se simula para que las filas siguientes
-            // de la misma carga vean los saldos por lote ya descontados.
-            if ($kl === null) {
-                $reparto[$kb] ??= $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
-                foreach (self::repartirSalidaSinLote($reparto[$kb], $cantidad) as [$loteParte, $cantParte]) {
+            // Con lote obligatorio la línea sale solo del lote indicado.
+            $loteLibre = !$this->obligatoriosBodega($idBodega, $idEmpresa)['lote'];
+            if ($kl !== null && !$loteLibre && $cantidad > $lotes[$kl] + 0.000001) {
+                $sinStock[$i] = "Stock insuficiente en el lote '" . mb_substr((string) $lote, 0, 60) . "'. Disponible: "
+                              . CargaInventarioRules::numero(max(0.0, $lotes[$kl]))
+                              . (isset($usado[$kl]) ? $descontadas : '') . '.';
+                continue;
+            }
+
+            // Primero lo que alcance del lote indicado; lo que falte (o todo, si la línea no trae
+            // lote) se reparte entre las unidades sin lote y los lotes por caducidad más próxima,
+            // igual que al aplicarla (partesSalida). Se simula para que las filas siguientes de
+            // la misma carga vean los saldos por lote ya descontados.
+            $deLote = 0.0;
+            if ($kl !== null) {
+                $deLote = min($cantidad, max(0.0, $lotes[$kl]));
+                $lotes[$kl] -= $deLote;
+                $usado[$kl]  = true;
+                $loteNorm = CargaInventarioRules::normalizarLote($lote);
+                if ($loteNorm !== null && isset($reparto[$kb][$loteNorm])) {
+                    $reparto[$kb][$loteNorm] -= $deLote;
+                }
+            }
+            $resto = $cantidad - $deLote;
+            if ($resto > 0.000001) {
+                foreach (self::repartirSalidaSinLote($reparto[$kb], $resto) as [$loteParte, $cantParte]) {
                     if ($loteParte === null) {
                         continue;
                     }
@@ -959,24 +981,9 @@ class CargaInventarioService
                     $lotes[$kp] -= $cantParte;
                     $usado[$kp]  = true;
                 }
-                $bodega[$kb] -= $cantidad;
-                $usado[$kb]   = true;
-                continue;
-            }
-            if ($cantidad > $lotes[$kl] + 0.000001) {
-                $sinStock[$i] = "Stock insuficiente en el lote '" . mb_substr((string) $lote, 0, 60) . "'. Disponible: "
-                              . CargaInventarioRules::numero(max(0.0, $lotes[$kl]))
-                              . (isset($usado[$kl]) ? $descontadas : '') . '.';
-                continue;
             }
             $bodega[$kb] -= $cantidad;
             $usado[$kb]   = true;
-            $lotes[$kl]  -= $cantidad;
-            $usado[$kl]   = true;
-            $loteNorm = CargaInventarioRules::normalizarLote($lote);
-            if (isset($reparto[$kb]) && $loteNorm !== null && isset($reparto[$kb][$loteNorm])) {
-                $reparto[$kb][$loteNorm] -= $cantidad;
-            }
         }
         return $sinStock;
     }
@@ -1014,14 +1021,30 @@ class CargaInventarioService
         $cantidad   = (float) $d['cantidad'];
         $lote       = $d['numero_lote'] ?: null;
 
-        // Salida sin lote (la configuración no lo exige): se reparte entre las unidades sin lote
-        // y los lotes por caducidad más próxima, un movimiento por lote, para que bajen los
-        // saldos de cada lote y no quede el grupo sin lote en negativo.
+        // Salida sin lote, o con un lote que no alcanza cuando la configuración no exige lote:
+        // lo que falta se reparte entre las unidades sin lote y los lotes por caducidad más
+        // próxima, un movimiento por lote, para que bajen los saldos de cada lote.
         $partes = [[$lote, $cantidad]];
-        if ($carga['tipo_movimiento'] === 'salida' && $lote === null) {
-            $this->inventarioService()->getRepository()->lockStock($idProducto, $idBodega, $idEmpresa);
-            $saldos = $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
-            $partes = self::repartirSalidaSinLote($saldos, $cantidad);
+        if ($carga['tipo_movimiento'] === 'salida'
+            && ($lote === null || !$this->obligatoriosBodega($idBodega, $idEmpresa)['lote'])) {
+            $invRepo = $this->inventarioService()->getRepository();
+            $invRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+            $partes = [];
+            $deLote = 0.0;
+            if ($lote !== null) {
+                $deLote = min($cantidad, max(0.0, (float) $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $lote)));
+                if ($deLote > 0.000001) {
+                    $partes[] = [$lote, $deLote];
+                }
+            }
+            if ($cantidad - $deLote > 0.000001) {
+                $saldos = $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
+                $loteNorm = CargaInventarioRules::normalizarLote($lote);
+                if ($loteNorm !== null && isset($saldos[$loteNorm])) {
+                    $saldos[$loteNorm] -= $deLote;
+                }
+                array_push($partes, ...self::repartirSalidaSinLote($saldos, $cantidad - $deLote));
+            }
         }
 
         $serieDesde = 0;
