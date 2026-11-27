@@ -377,8 +377,7 @@ class CargaInventarioService
                 $err = 'Falta la bodega.';
             } elseif ($esAjuste) {
                 $err = $this->rules->validarLineaAjuste($f['cantidad'] ?? null, $nup)
-                    ?? $this->errorObligatorios($tipoMovimiento, $idProd, $idBod, $idEmpresa, $lote, $caducidad, $nup)
-                    ?? ($lote === null ? $this->errorAjusteSinLote($idProd, $idBod, $idEmpresa) : null);
+                    ?? $this->errorObligatorios($tipoMovimiento, $idProd, $idBod, $idEmpresa, $lote, $caducidad, $nup);
             } elseif ($cant <= 0) {
                 $err = 'La cantidad debe ser mayor a cero.';
             } else {
@@ -537,8 +536,8 @@ class CargaInventarioService
      * de $crearBodegas se crean en la misma transacción.
      *
      * En una carga de AJUSTE la cantidad es lo contado (conteo físico): admite 0, no admite
-     * NUP, cada producto va una vez por bodega y lote, y si el producto tiene stock por lotes
-     * en la bodega hay que indicar el lote contado. La diferencia se calcula al aprobar.
+     * NUP y cada producto va una vez por bodega y lote. Sin lote (si la configuración no lo
+     * exige) se cuenta el total del producto en la bodega. La diferencia se calcula al aprobar.
      *
      * @param string[] $crearBodegas Nombres de bodegas del archivo que el usuario aceptó crear.
      */
@@ -943,18 +942,28 @@ class CargaInventarioService
                               . (isset($usado[$kb]) ? $descontadas : '') . '.';
                 continue; // la línea no sale: no descuenta
             }
-            // Sin lote en un producto con stock por lotes: el movimiento quedaría sin lote y los
-            // saldos por lote no bajarían. Solo pasa si alcanza con las unidades que no tienen lote.
+            // Sin lote (la configuración no lo exige: si lo exigiera, la línea no sería válida):
+            // sale de las unidades sin lote y luego de los lotes por caducidad más próxima, igual
+            // que al aplicarla (repartirSalidaSinLote). Se simula para que las filas siguientes
+            // de la misma carga vean los saldos por lote ya descontados.
             if ($kl === null) {
-                $reparto[$kb] ??= $this->lotesConStock($idProducto, $idBodega, $idEmpresa);
-                if ($reparto[$kb]['muestra'] !== null && $cantidad > $reparto[$kb]['sin_lote'] + 0.000001) {
-                    $sinStock[$i] = "Falta el lote: el producto tiene stock por lotes en esta bodega ({$reparto[$kb]['muestra']}). "
-                                  . 'Indique de qué lote sale, una línea por lote.';
-                    continue;
+                $reparto[$kb] ??= $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
+                foreach (self::repartirSalidaSinLote($reparto[$kb], $cantidad) as [$loteParte, $cantParte]) {
+                    if ($loteParte === null) {
+                        continue;
+                    }
+                    $kp = $kb . ':' . $loteParte;
+                    if (!array_key_exists($kp, $lotes)) {
+                        $lotes[$kp] = (float) $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $loteParte);
+                    }
+                    $lotes[$kp] -= $cantParte;
+                    $usado[$kp]  = true;
                 }
-                $reparto[$kb]['sin_lote'] -= $cantidad;
+                $bodega[$kb] -= $cantidad;
+                $usado[$kb]   = true;
+                continue;
             }
-            if ($kl !== null && $cantidad > $lotes[$kl] + 0.000001) {
+            if ($cantidad > $lotes[$kl] + 0.000001) {
                 $sinStock[$i] = "Stock insuficiente en el lote '" . mb_substr((string) $lote, 0, 60) . "'. Disponible: "
                               . CargaInventarioRules::numero(max(0.0, $lotes[$kl]))
                               . (isset($usado[$kl]) ? $descontadas : '') . '.';
@@ -962,9 +971,11 @@ class CargaInventarioService
             }
             $bodega[$kb] -= $cantidad;
             $usado[$kb]   = true;
-            if ($kl !== null) {
-                $lotes[$kl] -= $cantidad;
-                $usado[$kl]  = true;
+            $lotes[$kl]  -= $cantidad;
+            $usado[$kl]   = true;
+            $loteNorm = CargaInventarioRules::normalizarLote($lote);
+            if (isset($reparto[$kb]) && $loteNorm !== null && isset($reparto[$kb][$loteNorm])) {
+                $reparto[$kb][$loteNorm] -= $cantidad;
             }
         }
         return $sinStock;
@@ -998,22 +1009,52 @@ class CargaInventarioService
             throw new \InvalidArgumentException("Fila {$fila}: {$error}" . self::CORREGIR_E_IMPORTAR);
         }
 
-        $this->inventarioService()->ajusteManual([
-            'id_producto'     => (int) $d['id_producto'],
-            'id_bodega'       => (int) $d['id_bodega'],
-            'tipo_movimiento' => $carga['tipo_movimiento'],
-            'cantidad'        => (float) $d['cantidad'],
-            'costo_unitario'  => (float) $d['costo_unitario'],
-            'numero_lote'     => $d['numero_lote'] ?: null,
-            'fecha_caducidad' => $d['fecha_caducidad'] ?: null,
-            'nup'             => $series !== [] ? implode("\n", $series) : null,
-            // Con una sola serie, un movimiento por la cantidad completa (como ventas y compras);
-            // con varias, ajusteManual registra un movimiento de 1 por serie.
-            'is_individual'   => count($series) > 1 ? '1' : '0',
-            'observaciones'   => !empty($d['observacion']) ? $d['observacion'] : ('Carga de inventario #' . $carga['numero']),
-            'referencia_tipo' => 'carga_inventario',
-            'referencia_id'   => (int) $carga['id'],
-        ], $idEmpresa, $idUsuario);
+        $idProducto = (int) $d['id_producto'];
+        $idBodega   = (int) $d['id_bodega'];
+        $cantidad   = (float) $d['cantidad'];
+        $lote       = $d['numero_lote'] ?: null;
+
+        // Salida sin lote (la configuración no lo exige): se reparte entre las unidades sin lote
+        // y los lotes por caducidad más próxima, un movimiento por lote, para que bajen los
+        // saldos de cada lote y no quede el grupo sin lote en negativo.
+        $partes = [[$lote, $cantidad]];
+        if ($carga['tipo_movimiento'] === 'salida' && $lote === null) {
+            $this->inventarioService()->getRepository()->lockStock($idProducto, $idBodega, $idEmpresa);
+            $saldos = $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
+            $partes = self::repartirSalidaSinLote($saldos, $cantidad);
+        }
+
+        $serieDesde = 0;
+        foreach ($partes as $n => [$loteParte, $cantParte]) {
+            // Con varias series, cada parte se lleva tantas series como unidades (la última, el resto).
+            $seriesParte = $series;
+            if (count($series) > 1 && count($partes) > 1) {
+                $toma        = $n === count($partes) - 1 ? count($series) - $serieDesde : (int) round($cantParte);
+                $seriesParte = array_slice($series, $serieDesde, $toma);
+                $serieDesde += $toma;
+                if ($seriesParte === []) {
+                    continue;
+                }
+                $cantParte = (float) count($seriesParte);
+            }
+
+            $this->inventarioService()->ajusteManual([
+                'id_producto'     => $idProducto,
+                'id_bodega'       => $idBodega,
+                'tipo_movimiento' => $carga['tipo_movimiento'],
+                'cantidad'        => $cantParte,
+                'costo_unitario'  => (float) $d['costo_unitario'],
+                'numero_lote'     => $loteParte,
+                'fecha_caducidad' => $loteParte === $lote ? ($d['fecha_caducidad'] ?: null) : null,
+                'nup'             => $seriesParte !== [] ? implode("\n", $seriesParte) : null,
+                // Con una sola serie, un movimiento por la cantidad completa (como ventas y compras);
+                // con varias, ajusteManual registra un movimiento de 1 por serie.
+                'is_individual'   => count($seriesParte) > 1 ? '1' : '0',
+                'observaciones'   => !empty($d['observacion']) ? $d['observacion'] : ('Carga de inventario #' . $carga['numero']),
+                'referencia_tipo' => 'carga_inventario',
+                'referencia_id'   => (int) $carga['id'],
+            ], $idEmpresa, $idUsuario);
+        }
     }
 
     /**
@@ -1055,14 +1096,8 @@ class CargaInventarioService
         $invRepo    = $this->inventarioService()->getRepository();
 
         $invRepo->lockStock($idProducto, $idBodega, $idEmpresa);
-        if ($lote === null) {
-            $error = $this->errorAjusteSinLote($idProducto, $idBodega, $idEmpresa);
-            if ($error !== null) {
-                throw new \InvalidArgumentException("Fila {$fila}: {$error}" . self::CORREGIR_E_IMPORTAR);
-            }
-        }
 
-        $saldo      = $lote === null
+        $saldo     = $lote === null
             ? $invRepo->getStockActual($idProducto, $idBodega, $idEmpresa)
             : $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $lote);
         $diferencia = round($contado - $saldo, 6);
@@ -1091,57 +1126,86 @@ class CargaInventarioService
                 $obs .= ' · ' . $d['observacion'];
             }
 
-            $this->inventarioService()->ajusteManual([
-                'id_producto'     => $idProducto,
-                'id_bodega'       => $idBodega,
-                // Entrada o salida (no 'ajuste'): así el costo cuenta en el costo promedio.
-                'tipo_movimiento' => $entra ? 'entrada' : 'salida',
-                'cantidad'        => abs($diferencia),
-                'costo_unitario'  => $costo,
-                'numero_lote'     => $lote,
-                'fecha_caducidad' => $caducidad,
-                'observaciones'   => $obs,
-                'referencia_tipo' => 'carga_inventario',
-                'referencia_id'   => (int) $carga['id'],
-            ], $idEmpresa, $idUsuario);
+            // Conteo total (sin lote) que da faltante: sale de las unidades sin lote y luego de los
+            // lotes por caducidad más próxima, como una salida sin lote. El sobrante entra sin lote.
+            $partes = [[$lote, abs($diferencia)]];
+            if (!$entra && $lote === null) {
+                $saldos = $this->saldosParaReparto($idProducto, $idBodega, $idEmpresa);
+                $partes = self::repartirSalidaSinLote($saldos, abs($diferencia));
+            }
+
+            foreach ($partes as [$loteParte, $cantParte]) {
+                $this->inventarioService()->ajusteManual([
+                    'id_producto'     => $idProducto,
+                    'id_bodega'       => $idBodega,
+                    // Entrada o salida (no 'ajuste'): así el costo cuenta en el costo promedio.
+                    'tipo_movimiento' => $entra ? 'entrada' : 'salida',
+                    'cantidad'        => $cantParte,
+                    'costo_unitario'  => $costo,
+                    'numero_lote'     => $loteParte,
+                    'fecha_caducidad' => $caducidad,
+                    'observaciones'   => $obs,
+                    'referencia_tipo' => 'carga_inventario',
+                    'referencia_id'   => (int) $carga['id'],
+                ], $idEmpresa, $idUsuario);
+            }
         }
 
         $this->repo->registrarResultadoAjuste((int) $d['id'], $idEmpresa, $saldo, $diferencia);
     }
 
     /**
-     * Conteo sin lote de un producto que tiene stock repartido en lotes en la bodega: no se
-     * sabe de qué lote sale o a cuál entra la diferencia, así que hay que contar por lote.
+     * Saldo positivo de un producto en una bodega por lote ('' = unidades sin lote), en el orden
+     * en que se consume una salida que no indica lote: primero las unidades sin lote y luego los
+     * lotes por caducidad más próxima (orden de getLotesDisponibles).
+     *
+     * @return array<string, float>
      */
-    private function errorAjusteSinLote(int $idProducto, int $idBodega, int $idEmpresa): ?string
+    private function saldosParaReparto(int $idProducto, int $idBodega, int $idEmpresa): array
     {
-        $muestra = $this->lotesConStock($idProducto, $idBodega, $idEmpresa)['muestra'];
-        return $muestra === null
-            ? null
-            : "El producto tiene stock por lotes en esta bodega ({$muestra}): indique el lote que contó, una línea por lote.";
+        $sinLote = 0.0;
+        $lotes   = [];
+        foreach ($this->inventarioService()->getRepository()->getLotesDisponibles($idProducto, $idBodega, $idEmpresa) as $l) {
+            $nombre = CargaInventarioRules::normalizarLote($l['numero_lote'] ?? null);
+            $stock  = (float) ($l['stock_lote'] ?? 0);
+            if ($nombre === null || $nombre === 'sin_lote') {
+                $sinLote += $stock;
+            } else {
+                $lotes[$nombre] = ($lotes[$nombre] ?? 0.0) + $stock;
+            }
+        }
+        return ['' => $sinLote] + $lotes;
     }
 
     /**
-     * Cómo está repartido el stock de un producto en una bodega:
-     *  - muestra: hasta tres lotes con nombre que tienen stock ("L1, L2, L3…"), o null si no hay.
-     *  - sin_lote: unidades con stock que no pertenecen a ningún lote.
+     * Reparte una salida sin lote sobre los saldos de saldosParaReparto() (que descuenta, para
+     * las líneas siguientes). Lo que no cubren los saldos positivos —no debería pasar si alcanza
+     * el stock de la bodega— sale sin lote.
+     *
+     * @param array<string, float> $saldos
+     * @return list<array{0:?string, 1:float}> [lote o null, cantidad]
      */
-    private function lotesConStock(int $idProducto, int $idBodega, int $idEmpresa): array
+    private static function repartirSalidaSinLote(array &$saldos, float $cantidad): array
     {
-        $lotes   = [];
-        $sinLote = 0.0;
-        foreach ($this->inventarioService()->getRepository()->getLotesDisponibles($idProducto, $idBodega, $idEmpresa) as $l) {
-            $nombre = CargaInventarioRules::normalizarLote($l['numero_lote'] ?? null);
-            if ($nombre !== null && $nombre !== 'sin_lote') {
-                $lotes[] = mb_substr($nombre, 0, 30);
-            } else {
-                $sinLote += (float) ($l['stock_lote'] ?? 0);
+        $partes = [];
+        $resta  = $cantidad;
+        foreach ($saldos as $lote => $disponible) {
+            if ($resta <= 0.000001) {
+                break;
             }
+            if ($disponible <= 0.000001) {
+                continue;
+            }
+            $toma = min($disponible, $resta);
+            $partes[] = [$lote === '' ? null : (string) $lote, round($toma, 6)];
+            $saldos[$lote] -= $toma;
+            $resta -= $toma;
         }
-        return [
-            'muestra'  => $lotes === [] ? null : implode(', ', array_slice($lotes, 0, 3)) . (count($lotes) > 3 ? '…' : ''),
-            'sin_lote' => $sinLote,
-        ];
+        if ($resta > 0.000001 || $partes === []) {
+            $partes[] = [null, round(max($resta, 0.0), 6)];
+            $saldos[''] = ($saldos[''] ?? 0.0) - $resta;
+        }
+        return $partes;
     }
 
     /**

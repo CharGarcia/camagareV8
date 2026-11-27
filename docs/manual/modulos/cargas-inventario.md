@@ -6,7 +6,7 @@ ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
 etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion, crear bodega, bodega no existe, bodega inexistente, servicio, servicios, cantidad cero, cantidad 0, filas omitidas, filas no cargadas, revisar archivo, advertencias, resumen de importacion, stock insuficiente, sin stock, stock insuficiente en el lote, que producto no tiene stock, aprobar solo las que tienen stock, aprobacion parcial, aprobar en parte, lineas no aplicadas, no se aplico, lote obligatorio, exige lote, sin lote, numero de lote, configuracion de facturacion, caducidad obligatoria, fecha de caducidad, vencimiento, nup obligatorio, serie obligatoria
-version: 2.5
+version: 2.6
 orden: 25
 estado: activo
 ---
@@ -130,11 +130,12 @@ costo promedio.
 
 - La cantidad es obligatoria y puede ser **0** (no hay unidades). Una celda vacía
   no se toma como cero: es un error.
-- **Lotes**: si el producto tiene stock repartido en lotes en esa bodega, cada
-  línea debe indicar el lote contado y se ajusta el saldo de ese lote. Un lote que
-  no está en el archivo no se toca. Si el producto no tiene lotes, la línea sin
-  lote ajusta el total del producto en la bodega. Escribir *sin lote* en la
-  columna equivale a dejarla vacía.
+- **Lotes**: una línea con lote ajusta el saldo de ese lote; un lote que no está
+  en el archivo no se toca. Una línea **sin lote** ajusta el **total** del producto
+  en la bodega: si falta, la salida se reparte primero entre las unidades sin lote
+  y luego entre los lotes con saldo, por caducidad más próxima; si sobra, entra sin
+  lote. Si la configuración de facturación de la bodega exige lote, cada línea
+  debe traerlo. Escribir *sin lote* en la columna equivale a dejarla vacía.
 - Cada producto va **una sola vez** por bodega y lote, y se cuenta en total o por
   lotes, no de las dos formas en el mismo archivo.
 - **Sin NUP**: las series se registran con cargas de entrada o de salida.
@@ -330,13 +331,14 @@ lote de la línea. El sistema revisa **todas** las líneas y las informa juntas,
 cada una con su fila del Excel, código y nombre del producto, bodega, cantidad y
 lo disponible. Lo que sacan las filas anteriores de la misma carga ya se descuenta.
 
-**Salida sin lote de un producto con lotes.** Si el producto tiene stock repartido
-en lotes en esa bodega, la línea debe indicar **de qué lote sale** (una línea por
-lote). Sin lote, la salida quedaría registrada sin lote y los saldos por lote no
-bajarían, así que la línea no se aplica y su motivo es *Falta el lote: el producto
-tiene stock por lotes en esta bodega (…)*, con los lotes que tienen saldo. El lote
-se escribe **exactamente** como está en el kardex. Solo se acepta una salida sin
-lote cuando alcanza con las unidades del producto que no pertenecen a ningún lote.
+**Salida sin lote de un producto con lotes.** Si la configuración de facturación
+de la bodega **no** exige lote y la línea no indica uno, el sistema reparte la
+salida solo: primero saca las unidades del producto que no pertenecen a ningún
+lote y luego de los lotes con saldo, empezando por el de caducidad más próxima.
+En el Kardex queda un movimiento por cada lote del que salió. Basta con que
+alcance el stock total de la bodega. Si quiere que salga de un lote concreto,
+escríbalo en `numero_lote` **exactamente** como está en el kardex. Si la bodega
+**sí** exige lote, la fila debe traerlo (ver *Lote, caducidad y NUP obligatorios*).
 
 Al **abrir** una salida pendiente, las líneas que hoy no se pueden aplicar (sin stock o sin lote) aparecen con
 un triángulo amarillo y la explicación en la columna **Motivo**, y arriba de la
@@ -437,7 +439,6 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 - **"No tiene permiso para crear bodegas"**: pida el permiso de crear en el módulo Bodegas, o cree antes las bodegas.
 - **"La celda NUP trae N series y la cantidad es M"**: con varias series en la celda, la cantidad debe ser igual al número de series (ver *Series (NUP)*).
 - **"Falta la cantidad contada o no es un número"**: en un ajuste la cantidad es obligatoria; si no hay unidades, escriba 0.
-- **"El producto tiene stock por lotes en esta bodega (…): indique el lote que contó"**: en un ajuste, cuente ese producto por lote, una línea por lote.
 - **"Este producto ya se contó en la fila N…"**: en un ajuste cada producto va una vez por bodega y lote, en total o por lotes.
 - **"Una carga de ajuste no admite NUP"**: quite la serie o registre esas unidades con una carga de entrada o salida.
 - **"La configuración de facturación de esta bodega exige lote / fecha de caducidad / NUP"**: el establecimiento de la bodega tiene activado ese switch. Llene la columna `numero_lote`, `fecha_caducidad` o `nup` (ver *Lote, caducidad y NUP obligatorios según la configuración de facturación*).
@@ -445,9 +446,8 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 - **Un error de los anteriores aparece recién al aprobar** (termina en *Elimine la carga y vuelva a importarla corregida*): la carga se importó antes de que existiera esa regla, o el producto empezó a manejar lotes después de importar el ajuste. Elimínela e impórtela de nuevo.
 - **"Para aprobar cargas de ajuste falta aplicar en la base de datos el script…"**: aviso para soporte técnico; falta una actualización de la base de datos.
 - **"Fila N: código - producto, bodega X, salida de C. Stock insuficiente en el lote 'L'. Disponible: D."** (o *Stock insuficiente en bodega*): al aplicar o aprobar la carga, esa línea pide sacar más de lo que hay. El mensaje indica la fila del Excel, el producto, la bodega y la cantidad, y lista todas las líneas en esa situación. Puede aprobar solo las líneas que sí tienen stock, ingresar primero el stock que falta, o eliminar la carga e importarla corregida (ver *Salidas sin stock* en *Aprobación*).
-- **"Falta el lote: el producto tiene stock por lotes en esta bodega (…)"**: salida sin lote de un producto que maneja lotes. Escriba en `numero_lote` el lote del que sale, tal como aparece entre paréntesis o en el Kardex, una línea por lote.
 - **"Stock insuficiente en el lote 'X'. Disponible: 0"** cuando el producto sí tiene stock: el lote está escrito distinto en el kardex (se compara exacto), el stock está en otra bodega o entró sin lote. Revise el Kardex del producto en esa bodega.
-- **"Ninguna línea de la carga se puede aplicar (sin stock suficiente o sin lote)"**: todas las líneas de la salida piden más de lo disponible o les falta el lote.
+- **"Ninguna línea de la carga se puede aplicar (sin stock suficiente o sin lote)"**: todas las líneas de la salida piden más de lo disponible.
 - **Carga aprobada con líneas en X roja y motivo "No se aplicó…"**: se aprobó en parte; esas líneas no movieron el stock.
 - **La carga no afecta el stock**: puede estar pendiente de aprobación, o anulada.
 - **No aparece la observación de las líneas**: en las cargas importadas antes de la versión 1.6 con un archivo propio cuyo título de columna llevaba tilde o era plural (*Observación*, *Observaciones*), la observación de cada línea no se guardó y no se puede recuperar. Desde la 1.6 esos títulos se reconocen.
@@ -475,7 +475,6 @@ para corregir el archivo. Los motivos posibles son:
   | *La cantidad debe ser mayor a cero* | La celda es negativa o tiene texto (entradas y salidas) | Escriba una cantidad numérica mayor a cero |
   | *La celda NUP trae N series y la cantidad es M* | Varias series en la celda con otra cantidad | Ponga como cantidad el número de series, o una serie por línea |
   | *Falta la cantidad contada…* / *La cantidad contada no puede ser negativa* | Ajuste con la cantidad vacía, con texto o negativa | Escriba lo contado; 0 si no hay unidades |
-  | *El producto tiene stock por lotes en esta bodega…* | Ajuste sin lote de un producto que maneja lotes | Una línea por lote con lo contado de cada uno |
   | *Este producto ya se contó en la fila N…* | El mismo producto, bodega y lote dos veces, o contado en total y por lotes | Deje una sola forma y una sola línea |
   | *Una carga de ajuste no admite NUP* | Ajuste con series | Quite la serie o use una carga de entrada o salida |
   | *La configuración de facturación de esta bodega exige lote…* | Fila sin lote en una bodega con *Lote obligatorio* | Escriba el número de lote |
@@ -490,6 +489,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **2.6** — Cuando la configuración de facturación de la bodega **no** exige lote, ya no se pide lote a los productos que tienen stock por lotes: una **salida sin lote** se reparte sola (primero las unidades sin lote y luego los lotes por caducidad más próxima, un movimiento por lote) y un **ajuste sin lote** cuenta el total del producto en la bodega (el faltante sale con el mismo reparto; el sobrante entra sin lote). Desaparecen los mensajes *Falta el lote…* y *El producto tiene stock por lotes en esta bodega…*.
 - **2.5** — **Lote, caducidad y NUP obligatorios según la configuración de facturación**: si el establecimiento de la bodega tiene activado *Lote obligatorio*, *Caducidad obligatoria* o *NUP obligatorio*, las filas deben traer ese dato (lote en todo movimiento; caducidad en entradas y ajustes; NUP en entradas y salidas, y con NUP obligatorio no se admiten ajustes). Se revisa al importar y al aprobar. Con los switches apagados esos datos siguen siendo opcionales. La hoja **Bodegas** de la plantilla indica qué exige cada bodega y la ventana de importación lo avisa.
 - **2.4** — Cuando una línea no se puede aplicar al inventario (p. ej. *Stock insuficiente en el lote*), el mensaje ahora dice **qué línea es**: fila del Excel, código y nombre del producto, bodega y cantidad. En las **salidas** se listan **todas** las líneas sin stock (no solo la primera), se marcan al abrir la carga pendiente y se puede **aprobar solo las que tienen stock**: las demás quedan en la carga como no aplicadas. Una **salida sin lote** de un producto con stock por lotes ya no se aplica: debe indicar el lote.
 - **2.3** — **Revisión antes de generar la carga**: al importar, el sistema revisa el archivo sin grabar nada y, si hay avisos, pregunta si se genera la carga. Las **bodegas que no existen** se pueden crear en ese momento (las que no se crean dejan sus filas sin cargar); las filas de **servicios** y, en entradas y salidas, las de **cantidad 0** ya no dejan la carga con error: no se cargan. El aviso final resume las bodegas creadas y las filas que no se cargaron. El motivo de cada línea con error conserva la fila real del Excel aunque se hayan omitido filas.

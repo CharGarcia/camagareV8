@@ -302,7 +302,7 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                             <div class="form-text" style="font-size:0.72rem;">
                                 Formato <strong>Excel (.xlsx)</strong>. Columnas: <code>codigo_producto, bodega, cantidad, costo_unitario, numero_lote, fecha_caducidad, nup, observacion</code>.
                                 La plantilla incluye hojas <strong>Productos</strong> y <strong>Bodegas</strong> con los valores válidos de la empresa. El movimiento se aplica al inventario solo al aprobarse (si la empresa exige aprobación).
-                                <br><strong>Ajuste</strong>: conteo físico. La cantidad es lo contado (0 si no hay); al aprobar se registra solo la diferencia. Si el producto tiene lotes, una línea por lote; sin NUP.
+                                <br><strong>Ajuste</strong>: conteo físico. La cantidad es lo contado (0 si no hay); al aprobar se registra solo la diferencia. Con lote, una línea por lote; sin lote (si la bodega no exige lote) se cuenta el total del producto en la bodega; sin NUP.
                                 <br><strong>Antes de generar la carga</strong> se revisa el archivo: no se cargan los servicios ni, en entradas y salidas, las filas con cantidad 0; si una bodega no existe, puede crearla en ese momento.
                                 <br><strong>NUP</strong>: una serie con cualquier cantidad, o varias series (una por renglón de la celda) con cantidad igual al número de series.
                                 <?php
