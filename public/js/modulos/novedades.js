@@ -353,13 +353,21 @@
             const msg = n > 120 ? 'El máximo es 120 cuotas.' : 'Escriba el monto y el número de cuotas.';
             tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">${msg}</td></tr>`;
         } else {
+            // Solo se marca como ya cobrada una cuota del mes actual o anterior (el servidor
+            // aplica la misma regla): una de un mes futuro todavía no se ha descontado.
+            const hoy = new Date();
+            const actual = hoy.getFullYear() * 100 + (hoy.getMonth() + 1);
             tbody.innerHTML = cuotas.map(c => {
-                const chk = marcadas.has(c.numero);
+                const futura = c.anio * 100 + c.mes > actual;
+                const chk = !futura && marcadas.has(c.numero);
+                const attrs = futura
+                    ? 'disabled title="Cuota de un mes posterior al actual: todavía no puede estar cobrada"'
+                    : (chk ? 'checked' : '');
                 return `<tr class="${chk ? 'nov-cuota-cobrada' : ''}">
                             <td class="text-center">${c.numero}/${n}</td>
                             <td>${esc(nombreMes(c.mes))} ${c.anio}</td>
                             <td class="text-end">${fmt2(c.valor)}</td>
-                            <td class="text-center nov-cuota-check"><input type="checkbox" class="form-check-input nov-cuota-cobrada-chk" data-num="${c.numero}" ${chk ? 'checked' : ''} aria-label="Cuota ${c.numero} ya cobrada"></td>
+                            <td class="text-center nov-cuota-check"><input type="checkbox" class="form-check-input nov-cuota-cobrada-chk" data-num="${c.numero}" ${attrs} aria-label="Cuota ${c.numero} ya cobrada"></td>
                         </tr>`;
             }).join('');
         }
@@ -387,9 +395,11 @@
         // Casilla del encabezado: marcada si todas lo están, a medias (indeterminada) si solo algunas.
         const todas = document.getElementById('nov_pre_cobradas_todas');
         if (todas) {
-            todas.disabled = !cuotas.length;
-            todas.checked = cuotas.length > 0 && marcadas.size === cuotas.length;
-            todas.indeterminate = marcadas.size > 0 && marcadas.size < cuotas.length;
+            // Solo cuentan las cuotas que se pueden marcar (mes actual o anterior).
+            const marcables = document.querySelectorAll('#nov_tabla_prestamo tbody .nov-cuota-cobrada-chk:not(:disabled)').length;
+            todas.disabled = !marcables;
+            todas.checked = marcables > 0 && marcadas.size === marcables;
+            todas.indeterminate = marcadas.size > 0 && marcadas.size < marcables;
         }
         const total = cuotas.reduce((s, c) => s + c.valor, 0);
         const pendientes = cuotas.filter(c => !marcadas.has(c.numero));
@@ -435,7 +445,7 @@
         // Encabezado: marca o desmarca todas las cuotas de una vez.
         if (ev.target.id === 'nov_pre_cobradas_todas') {
             const marcar = ev.target.checked;
-            document.querySelectorAll('#nov_tabla_prestamo tbody .nov-cuota-cobrada-chk').forEach(c => {
+            document.querySelectorAll('#nov_tabla_prestamo tbody .nov-cuota-cobrada-chk:not(:disabled)').forEach(c => {
                 c.checked = marcar;
                 c.closest('tr')?.classList.toggle('nov-cuota-cobrada', marcar);
             });

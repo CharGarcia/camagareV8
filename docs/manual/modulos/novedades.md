@@ -131,7 +131,9 @@ sistema arme sus cuotas:
 6. Si el préstamo empezó antes de usar el sistema, marque **¿Ya cobrada?** en
    las cuotas que ya se descontaron. Esas cuotas quedan anotadas en el préstamo
    pero **no** se crean como novedad (no se vuelven a descontar). Con alguna
-   cuota cobrada, el desembolso queda en *Ya fue entregado*. Cada casilla se
+   cuota cobrada, el desembolso queda en *Ya fue entregado*. Solo se pueden
+   marcar las cuotas del **mes actual o anteriores**: las de meses futuros
+   todavía no se han descontado y su casilla aparece deshabilitada. Cada casilla se
    marca y desmarca con un clic; la casilla del encabezado **¿Ya cobrada?**
    marca o desmarca todas a la vez (queda a medias si solo hay algunas
    marcadas).
@@ -517,6 +519,9 @@ filtrado.
   imputó.
 - **"No existe un empleado con identificación ..."** al importar: la cédula o RUC
   de esa fila no coincide con ningún empleado activo de la empresa.
+- **"La cuota N (...) es de un mes posterior al actual"** al registrar un
+  préstamo: se marcó *¿Ya cobrada?* en una cuota de un mes futuro. Desmárquela:
+  esa cuota se descontará en el rol de su mes.
 - **"Fila N · Tipo: Ya está registrada para ... en ... con el mismo valor"**:
   esa persona ya tiene registrada esa misma novedad (tipo, mes y valor); lo más
   probable es que el archivo ya se haya subido. Borre el valor de esa celda o

@@ -58,9 +58,19 @@ class PrestamoEmpleadoRules
 
         // Cuotas marcadas como ya cobradas (antes del sistema).
         $cobradas = (array) ($d['cobradas'] ?? []);
+        // Solo puede estar ya cobrada una cuota de un mes igual o anterior al actual: una de un
+        // mes futuro todavía no se ha descontado (marcarla sería perdonarla sin que se note).
+        $actual = (int) date('Y') * 100 + (int) date('n');
         foreach ($cobradas as $k) {
             if ((int) $k < 1 || (int) $k > $n) {
                 throw new Exception('Hay una cuota marcada como cobrada que no existe en la tabla.');
+            }
+            $idx = ($mes - 1) + ((int) $k - 1);
+            $mesCuota = ($idx % 12) + 1;
+            $anioCuota = $anio + intdiv($idx, 12);
+            if ($anioCuota * 100 + $mesCuota > $actual) {
+                throw new Exception('La cuota ' . (int) $k . ' (' . (CatalogoNovedades::MESES[$mesCuota] ?? $mesCuota) . ' ' . $anioCuota
+                    . ') es de un mes posterior al actual: todavía no puede estar cobrada. Desmarque «¿Ya cobrada?» en esa cuota.');
             }
         }
         if (count(array_unique(array_map('intval', $cobradas))) >= $n) {
