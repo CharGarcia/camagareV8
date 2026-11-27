@@ -594,6 +594,7 @@
             $('rolemp_nombre').textContent = d.nombres_apellidos;
             $('rolemp_ident').textContent = d.identificacion;
             $('rolemp_pdf').onclick = () => CMG_pdfDocumento(`${urlModulo}/pdfEmpleado?det=${detActual}`);
+            $('rolemp_recibo').onclick = () => CMG_pdfDocumento(`${urlModulo}/reciboEmpleado?det=${detActual}`);
             $('rolemp_excel').onclick = () => {
                 const a = document.createElement('a');
                 a.href = `${urlModulo}/excelEmpleado?det=${detActual}`;
@@ -658,7 +659,7 @@
             html += sinEgreso
                 ? `<div class="text-muted text-center py-4"><i class="bi bi-pen fs-3 d-block mb-1"></i>
                     ${d.estado_pago === 'sin_valor' ? 'Este empleado no tiene valor a recibir en este rol' : 'Este empleado sale en contra en este rol'}:
-                    no se registra egreso. Imprima su <b>PDF</b> (arriba) o los <b>Recibos</b> del rol para que lo firme.</div>`
+                    no se registra egreso. Imprima su <b>Recibo</b> (botón con la pluma, arriba) o los <b>Recibos</b> del rol para que lo firme.</div>`
                 : `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
                 Aún no hay ningún egreso que pague este rol. Use <b>Generar egresos</b> en el rol o regístrelo en <b>Egresos → Nómina</b>.</div>`;
             box.innerHTML = html;

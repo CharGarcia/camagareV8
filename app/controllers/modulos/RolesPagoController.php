@@ -499,6 +499,27 @@ class RolesPagoController extends BaseModuloController
         exit;
     }
 
+    /** Recibo para firmar de un empleado del rol (también con neto 0 o en contra). */
+    public function reciboEmpleado(): void
+    {
+        $this->requireLeer();
+        $idDetalle = (int) ($_GET['det'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $dest = ($_GET['view'] ?? '') === '1' ? 'I' : 'D';
+        try {
+            $lin = $this->service->getLineaEmpleado($idDetalle, $idEmpresa, (int) $_SESSION['id_usuario']);
+            if (!$lin) throw new \Exception('Línea no encontrada.');
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            (new RolPagoPdfService())->generarReciboEmpleado($lin, $empresa, $dest);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => 'No se pudo generar el recibo: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function pdfEmpleado(): void
     {
         $this->requireLeer();

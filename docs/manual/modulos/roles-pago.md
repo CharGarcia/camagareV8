@@ -271,16 +271,28 @@ el rol pasa a *Pagado* cuando los demás quedan pagados. No congela su línea: s
 después el rol cambia (una novedad nueva), pasa solo a *Pago pendiente* o a *En
 contra*.
 
-Para que el empleado **firme un recibo** aunque no reciba dinero se usa el **PDF
-del rol**, que ya trae las firmas *Recibí conforme* y *Empleador*:
+Para que el empleado **firme un recibo**, también cuando no recibe dinero, hay un
+**Recibo** de una página, con el monto en letras y las firmas *Recibí conforme*
+(nombre y cédula del empleado) y *Empleador*. Su texto depende del neto:
 
-- **PDF** del empleado (en su ficha): con neto 0 dice *«Sin valor a recibir en este
-  rol»*; en contra, *«Saldo en contra del empleado: $ X, que se descontará en el
-  rol de …»*, así que al firmar reconoce ese descuento. El correo del rol lleva el
-  mismo PDF.
-- Botón **Recibos** (pie de la ventana del rol): un solo PDF con **una página por
-  empleado**, incluidos los de neto 0 y en contra, para imprimir y hacer firmar a
-  todos de una vez.
+| Neto | Lo que dice el recibo |
+|------|----------------------|
+| Mayor a 0 | *«Yo, … recibí de [empresa] la cantidad de $ X (SON: …) por concepto de mi rol …»* |
+| 0 | Declara haber recibido su rol con valor a recibir de $ 0.00, porque los descuentos compensaron sus ingresos. |
+| En contra | Declara haber recibido su rol y **reconoce el saldo a favor de la empresa** (en números y letras) y el rol en que se le descontará. |
+
+Debajo van el total de ingresos, el de descuentos, el neto y una línea para la
+fecha. Se imprime así:
+
+- **Uno por uno**: botón con la **pluma** (*Recibo para firmar*) en la ficha del
+  empleado, junto a PDF, Excel y Correo.
+- **Todos a la vez**: botón **Recibos** en el pie de la ventana del rol: un solo
+  PDF con una página por empleado.
+
+El **PDF** del rol del empleado (con el detalle de ingresos y egresos) también
+trae las firmas, y con neto 0 o en contra agrega una nota: *«Sin valor a recibir
+en este rol»* o *«Saldo en contra del empleado: $ X, que se descontará en el rol
+de …»*. El correo del rol lleva ese mismo PDF.
 
 ### Pestaña Pago: con qué egreso se pagó el rol
 
@@ -497,7 +509,7 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
 
 ## Historial de cambios
 
-- **1.26** — Estado **Sin valor a pagar** para el empleado con neto 0 (antes salía *Pago pendiente* para siempre). Botón **Recibos**: un PDF con una página por empleado para hacer firmar a todos, también a los de neto 0 o en contra. El PDF del empleado aclara *«Sin valor a recibir en este rol»* o el saldo en contra y el mes en que se descuenta.
+- **1.26** — Estado **Sin valor a pagar** para el empleado con neto 0 (antes salía *Pago pendiente* para siempre). Nuevo **Recibo** para firmar («Recibí de … la cantidad de …», con monto en letras y texto propio para neto 0 o en contra): uno por uno con el botón de la pluma en la ficha del empleado, o todos a la vez con el botón **Recibos** del rol. El PDF del empleado aclara *«Sin valor a recibir en este rol»* o el saldo en contra y el mes en que se descuenta.
 
 - **1.25** — Cuando un empleado sale en contra, el sistema registra solo un **Descuento** por ese valor en el mes siguiente (Novedades) y lo mantiene al día: se actualiza si el rol cambia y se elimina si el empleado deja de salir en contra o el rol se anula. El rol con empleados en contra ya se contabiliza: el saldo va a una cuenta por cobrar al empleado (concepto nuevo *Saldo en contra de empleados por cobrar*) que se cancela al descontarse el mes siguiente.
 

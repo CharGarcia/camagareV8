@@ -28,20 +28,109 @@ class RolPagoPdfService
     }
 
     /**
+     * Recibo para firmar de UN empleado (formato corto: «Recibí de … la cantidad de …»),
+     * con texto propio si no tiene valor a recibir o sale en contra.
+     *
+     * @param array $lin Línea con 'cabecera', 'nota_neto' y 'descuento_en' (RolPagoService::getLineaEmpleado).
+     */
+    public function generarReciboEmpleado(array $lin, array $empresa, string $dest = 'I')
+    {
+        $pdf = $this->nuevoPdfRecibo('Recibo de rol de pago - ' . ($lin['nombres_apellidos'] ?? ''));
+        $this->paginaRecibo($pdf, $lin, $empresa);
+        $arch = 'Recibo_Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado')) . '.pdf';
+        return $pdf->Output($arch, $dest);
+    }
+
+    /**
      * Recibos de todos los empleados del rol en un solo PDF (una página cada uno), para
      * imprimir y hacer firmar de una vez, incluidos los de neto 0 o en contra.
      *
-     * @param array $lineas Líneas con 'cabecera', 'rubros' y 'nota_neto' (RolPagoService::getRecibos).
+     * @param array $lineas Líneas con 'cabecera', 'nota_neto' y 'descuento_en' (RolPagoService::getRecibos).
      */
     public function generarRecibos(array $cab, array $lineas, array $empresa, string $dest = 'I')
     {
         $periodo = CatalogoRol::nombrePeriodo((string) ($cab['tipo_rol'] ?? ''), (int) ($cab['periodo_anio'] ?? 0), (int) ($cab['periodo_mes'] ?? 0), (int) ($cab['numero_periodo'] ?? 0));
         $pdf = $this->nuevoPdfRecibo('Recibos de rol de pago - ' . $periodo);
         foreach ($lineas as $lin) {
-            $this->paginaEmpleado($pdf, $lin, $empresa);
+            $this->paginaRecibo($pdf, $lin, $empresa);
         }
         $arch = 'Recibos_Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', $periodo) . '.pdf';
         return $pdf->Output($arch, $dest);
+    }
+
+    /**
+     * Una página de recibo: encabezado de la empresa, texto de lo recibido (con el monto en
+     * letras), resumen ingresos / descuentos / neto, fecha y firmas.
+     *   neto > 0  «Recibí de EMPRESA la cantidad de $ X (SON: …) por concepto de mi Rol …»
+     *   neto = 0  declara haber recibido su rol sin valor a recibir (todo se compensó).
+     *   neto < 0  declara el rol y reconoce el saldo a favor de la empresa y cuándo se descuenta.
+     */
+    private function paginaRecibo(TCPDF $pdf, array $lin, array $empresa): void
+    {
+        $cab = $lin['cabecera'] ?? [];
+        $periodo = CatalogoRol::nombrePeriodo((string) ($cab['tipo_rol'] ?? ''), (int) ($cab['periodo_anio'] ?? 0), (int) ($cab['periodo_mes'] ?? 0), (int) ($cab['numero_periodo'] ?? 0));
+        $tipo = CatalogoRol::nombreTipo((string) ($cab['tipo_rol'] ?? ''));
+        $h = fn($v) => htmlspecialchars((string) ($v ?? ''));
+        $m = fn($v) => number_format((float) $v, 2);
+
+        $pdf->AddPage();
+        $conLogo = $this->dibujarLogoSiExiste($pdf, $empresa, 14, 14, 46, 24);
+        $estilos = '<style>
+            .t { font-size:13px; font-weight:bold; }
+            .sub { font-size:8px; color:#555; }
+            table.g td { font-size:9px; padding:3px 5px; border:0.5px solid #ddd; }
+            .tot { font-weight:bold; background-color:#f8f9fa; }
+        </style>';
+        $pdf->writeHTML($estilos . $this->htmlEncabezadoEmpresa($empresa, 'RECIBO', $h($tipo . ' — ' . $periodo), $conLogo, 27), false, false, true, false, '');
+        if ($conLogo && $pdf->GetY() < 14 + 24 + 3) {
+            $pdf->SetY(14 + 24 + 3);
+        }
+
+        $empNom   = $h($empresa['razon_social'] ?? $empresa['nombre_comercial'] ?? $empresa['nombre'] ?? 'la empresa');
+        $nombre   = $h($lin['nombres_apellidos'] ?? '');
+        $cedula   = $h($lin['identificacion'] ?? '');
+        $neto     = round((float) ($lin['neto'] ?? 0), 2);
+        $concepto = 'mi ' . $h(mb_strtolower($tipo)) . ' de ' . $h($periodo);
+
+        if ($neto > 0) {
+            $texto = 'Yo, <b>' . $nombre . '</b>, con cédula N° ' . $cedula . ', recibí de <b>' . $empNom . '</b> la cantidad de <b>$ '
+                . $m($neto) . '</b> (SON: ' . $h($this->montoEnLetras($neto)) . ' DÓLARES), por concepto de ' . $concepto . '.';
+        } elseif ($neto == 0.0) {
+            $texto = 'Yo, <b>' . $nombre . '</b>, con cédula N° ' . $cedula . ', declaro haber recibido de <b>' . $empNom . '</b> '
+                . $concepto . ', cuyo valor a recibir es de <b>$ 0.00</b> (SON: CERO CON 00/100 DÓLARES), porque mis descuentos '
+                . 'compensaron en su totalidad mis ingresos.';
+        } else {
+            $en = trim((string) ($lin['descuento_en'] ?? ''));
+            $texto = 'Yo, <b>' . $nombre . '</b>, con cédula N° ' . $cedula . ', declaro haber recibido de <b>' . $empNom . '</b> '
+                . $concepto . ', en el que mis descuentos superan mis ingresos, y reconozco un saldo a favor de la empresa de <b>$ '
+                . $m(-$neto) . '</b> (SON: ' . $h($this->montoEnLetras(-$neto)) . ' DÓLARES), que se me descontará '
+                . ($en !== '' ? 'en el rol de ' . $h($en) : 'en mis próximas remuneraciones') . '.';
+        }
+
+        $html = $estilos . '<br><p style="font-size:10.5px; line-height:1.6; text-align:justify;">' . $texto . '</p><br>'
+            . '<table class="g" cellpadding="0">'
+            . '<tr><td width="70%">Total ingresos</td><td width="30%" align="right">$ ' . $m($lin['total_ingresos'] ?? 0) . '</td></tr>'
+            . '<tr><td width="70%">Total descuentos</td><td width="30%" align="right">$ ' . $m($lin['total_egresos'] ?? 0) . '</td></tr>'
+            . '<tr class="tot"><td width="70%">' . ($neto < 0 ? 'SALDO EN CONTRA' : 'NETO RECIBIDO') . '</td>'
+            . '<td width="30%" align="right">$ ' . $m($neto) . '</td></tr></table>'
+            . '<br><br><span style="font-size:9px;">Fecha: ______________________</span>';
+        $pdf->writeHTML($html, true, false, true, false, '');
+
+        $pdf->Ln(18);
+        $firmas = '<table cellpadding="0"><tr>'
+            . '<td width="45%" align="center" style="border-top:0.5px solid #333; font-size:8px;">Recibí conforme<br>' . $nombre . '<br>C.I. ' . $cedula . '</td>'
+            . '<td width="10%"></td>'
+            . '<td width="45%" align="center" style="border-top:0.5px solid #333; font-size:8px;">Empleador<br>' . $empNom . '</td></tr></table>';
+        $pdf->writeHTML($firmas, true, false, true, false, '');
+    }
+
+    /** Monto en letras ("SESENTA Y NUEVE CON 73/100"), igual que los comprobantes de egreso. */
+    private function montoEnLetras(float $monto): string
+    {
+        require_once \MVC_ROOT . '/app/validadores/numero_letras.php';
+        $txt = function_exists('num_letras') ? trim((string) num_letras(number_format($monto, 2, '.', ''))) : '';
+        $txt = preg_replace('/\s+/', ' ', $txt);
+        return ($txt === '' || str_starts_with($txt, 'CON ')) ? 'CERO ' . ltrim($txt) : $txt;
     }
 
     private function nuevoPdfRecibo(string $titulo): TCPDF

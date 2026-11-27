@@ -218,7 +218,7 @@ class RolPagoService
         $desc = ((float) $lin['neto'] < 0 && $lin['cabecera'])
             ? (new RolSaldoContraService($this->repo, $this->log))->descuentosDelRol((int) $lin['id_rol'], $idEmpresa)
             : [];
-        $lin['nota_neto'] = self::notaNetoRecibo($lin, $desc);
+        $lin = self::prepararRecibo($lin, $desc);
         return $lin;
     }
 
@@ -237,7 +237,7 @@ class RolPagoService
         $lineas = [];
         foreach ($rol['detalle'] as $lin) {
             $lin['cabecera'] = $cab;
-            $lin['nota_neto'] = self::notaNetoRecibo($lin, $desc);
+            $lin = self::prepararRecibo($lin, $desc);
             $lineas[] = $lin;
         }
         return ['cabecera' => $cab, 'lineas' => $lineas];
@@ -260,12 +260,28 @@ class RolPagoService
             return '';
         }
         $texto = 'Saldo en contra del empleado: $ ' . number_format(-$neto, 2);
-        $d = $descuentos[(int) ($lin['id_empleado'] ?? 0)] ?? null;
-        if ($d) {
-            $mes = \App\models\CatalogoNovedades::MESES[(int) $d['periodo_mes']] ?? $d['periodo_mes'];
-            $texto .= ', que se descontará en el rol de ' . $mes . ' ' . $d['periodo_anio'];
+        $en = self::mesDescuento($lin, $descuentos);
+        if ($en !== '') {
+            $texto .= ', que se descontará en el rol de ' . $en;
         }
         return $texto . '.';
+    }
+
+    /** "Agosto 2026": mes del descuento automático por saldo en contra del empleado, o ''. */
+    private static function mesDescuento(array $lin, array $descuentos): string
+    {
+        $d = $descuentos[(int) ($lin['id_empleado'] ?? 0)] ?? null;
+        if (!$d) return '';
+        $mes = \App\models\CatalogoNovedades::MESES[(int) $d['periodo_mes']] ?? $d['periodo_mes'];
+        return $mes . ' ' . $d['periodo_anio'];
+    }
+
+    /** Nota del PDF del rol + mes del descuento para el recibo (RolPagoPdfService::paginaRecibo). */
+    private static function prepararRecibo(array $lin, array $descuentos): array
+    {
+        $lin['nota_neto'] = self::notaNetoRecibo($lin, $descuentos);
+        $lin['descuento_en'] = round((float) ($lin['neto'] ?? 0), 2) < 0 ? self::mesDescuento($lin, $descuentos) : '';
+        return $lin;
     }
 
     /** Detalle completo de un empleado del rol: general (rubros) + provisiones + asiento. */
