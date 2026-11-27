@@ -488,7 +488,7 @@ class CargaInventarioRepository extends BaseRepository
     }
 
     /**
-     * Switches «lote / caducidad / NUP obligatorio» (empresa_establecimiento.obligatorio_lotes,
+     * Switches «lote / caducidad / NUP obligatorio» y «trabajar con stock positivo» (factura_solo_stock_positivo; empresa_establecimiento.obligatorio_lotes,
      * obligatorio_caducidad, obligatorio_nup) que rigen a una bodega: los del establecimiento
      * al que pertenece. Si la bodega no tiene establecimiento (o la base aún no tiene
      * bodegas.id_establecimiento), los de todos los establecimientos vigentes de la empresa:
@@ -500,7 +500,7 @@ class CargaInventarioRepository extends BaseRepository
     {
         if ($this->tieneColumnaEstablecimientoBodega()) {
             $st = $this->db->prepare(
-                "SELECT ee.obligatorio_lotes, ee.obligatorio_caducidad, ee.obligatorio_nup
+                "SELECT ee.obligatorio_lotes, ee.obligatorio_caducidad, ee.obligatorio_nup, ee.factura_solo_stock_positivo
                    FROM bodegas b
                    JOIN empresa_establecimiento ee
                      ON ee.id = b.id_establecimiento AND ee.id_empresa = b.id_empresa AND ee.eliminado = false
@@ -515,7 +515,7 @@ class CargaInventarioRepository extends BaseRepository
         }
 
         $st = $this->db->prepare(
-            "SELECT obligatorio_lotes, obligatorio_caducidad, obligatorio_nup
+            "SELECT obligatorio_lotes, obligatorio_caducidad, obligatorio_nup, factura_solo_stock_positivo
                FROM empresa_establecimiento
               WHERE id_empresa = :e AND eliminado = false"
         );

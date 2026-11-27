@@ -427,26 +427,28 @@ class CargaInventarioService
         ];
     }
 
-    /** @var array<int,array{lote:bool, caducidad:bool, nup:bool}> id_bodega => switches (una consulta por bodega y petición) */
+    /** @var array<int,array{lote:bool, caducidad:bool, nup:bool, stock_positivo:bool}> id_bodega => switches (una consulta por bodega y petición) */
     private array $cacheObligatorios = [];
 
     /**
-     * ¿Qué exige la configuración de facturación en esta bodega (lote, caducidad, NUP)? Manda
+     * ¿Qué exige la configuración de facturación en esta bodega (lote, caducidad, NUP, y si se trabaja
+     * con stock positivo)? Manda
      * el establecimiento al que pertenece la bodega (empresa_establecimiento.obligatorio_*).
      * Una bodega sin establecimiento exige cada dato si algún establecimiento de la empresa lo
      * exige: si no, sería la puerta para mover stock sin ese dato en una empresa que lo pide.
      * Los valores se leen con Booleano::es(): en la base llegan como texto 'true'/'false'.
      *
-     * @return array{lote:bool, caducidad:bool, nup:bool}
+     * @return array{lote:bool, caducidad:bool, nup:bool, stock_positivo:bool}
      */
     public function obligatoriosBodega(int $idBodega, int $idEmpresa): array
     {
-        $exige = ['lote' => false, 'caducidad' => false, 'nup' => false];
+        $exige = ['lote' => false, 'caducidad' => false, 'nup' => false, 'stock_positivo' => false];
         if ($idBodega <= 0) {
             return $exige;
         }
         if (!array_key_exists($idBodega, $this->cacheObligatorios)) {
-            $mapa = ['lote' => 'obligatorio_lotes', 'caducidad' => 'obligatorio_caducidad', 'nup' => 'obligatorio_nup'];
+            $mapa = ['lote' => 'obligatorio_lotes', 'caducidad' => 'obligatorio_caducidad', 'nup' => 'obligatorio_nup',
+                     'stock_positivo' => 'factura_solo_stock_positivo'];
             foreach ($this->repo->getObligatoriosBodega($idBodega, $idEmpresa)['filas'] as $fila) {
                 foreach ($mapa as $k => $col) {
                     $exige[$k] = $exige[$k] || Booleano::es($fila[$col] ?? false);
@@ -940,14 +942,18 @@ class CargaInventarioService
                 $lotes[$kl] = (float) $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $lote);
             }
 
-            if ($cantidad > $bodega[$kb] + 0.000001) {
+            // «¿Trabajar con stock positivo?» del establecimiento de la bodega: apagado, la salida
+            // se aplica aunque el saldo quede negativo (como en la facturación).
+            $config        = $this->obligatoriosBodega($idBodega, $idEmpresa);
+            $loteLibre     = !$config['lote'];
+            $stockPositivo = $config['stock_positivo'];
+            if ($stockPositivo && $cantidad > $bodega[$kb] + 0.000001) {
                 $sinStock[$i] = 'Stock insuficiente en la bodega. Disponible: ' . CargaInventarioRules::numero(max(0.0, $bodega[$kb]))
                               . (isset($usado[$kb]) ? $descontadas : '') . '.';
                 continue; // la línea no sale: no descuenta
             }
             // Con lote obligatorio la línea sale solo del lote indicado.
-            $loteLibre = !$this->obligatoriosBodega($idBodega, $idEmpresa)['lote'];
-            if ($kl !== null && !$loteLibre && $cantidad > $lotes[$kl] + 0.000001) {
+            if ($kl !== null && !$loteLibre && $stockPositivo && $cantidad > $lotes[$kl] + 0.000001) {
                 $sinStock[$i] = "Stock insuficiente en el lote '" . mb_substr((string) $lote, 0, 60) . "'. Disponible: "
                               . CargaInventarioRules::numero(max(0.0, $lotes[$kl]))
                               . (isset($usado[$kl]) ? $descontadas : '') . '.';
@@ -960,7 +966,7 @@ class CargaInventarioService
             // la misma carga vean los saldos por lote ya descontados.
             $deLote = 0.0;
             if ($kl !== null) {
-                $deLote = min($cantidad, max(0.0, $lotes[$kl]));
+                $deLote = $loteLibre ? min($cantidad, max(0.0, $lotes[$kl])) : $cantidad;
                 $lotes[$kl] -= $deLote;
                 $usado[$kl]  = true;
                 $loteNorm = CargaInventarioRules::normalizarLote($lote);
@@ -1076,6 +1082,8 @@ class CargaInventarioService
                 'observaciones'   => !empty($d['observacion']) ? $d['observacion'] : ('Carga de inventario #' . $carga['numero']),
                 'referencia_tipo' => 'carga_inventario',
                 'referencia_id'   => (int) $carga['id'],
+                // Establecimiento sin «¿Trabajar con stock positivo?»: la salida puede dejar saldo negativo.
+                'permitir_negativo' => !$this->obligatoriosBodega($idBodega, $idEmpresa)['stock_positivo'],
             ], $idEmpresa, $idUsuario);
         }
     }

@@ -649,7 +649,9 @@ class InventarioService
                 $costoUnit = $this->repo->getCostoPromedio($idProducto, $idBodega, $idEmpresa);
             }
 
-            if ($tipo === 'salida') {
+            // 'permitir_negativo': el llamador ya resolvió que el establecimiento no trabaja con
+            // stock positivo (p. ej. Cargas de Inventario); la salida puede dejar saldo negativo.
+            if ($tipo === 'salida' && empty($data['permitir_negativo'])) {
                 if ($totalQty > $stockActualTotal) {
                     throw new \Exception("Stock insuficiente en bodega. No se puede registrar una salida de {$totalQty} si solo hay {$stockActualTotal} unidades disponibles.");
                 }
