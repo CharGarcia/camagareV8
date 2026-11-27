@@ -198,6 +198,16 @@ class RolAsientoService
 
         $detalle = $this->repo->getDetalleCompleto($idRol, $idEmpresa);
         if (empty($detalle)) throw new Exception('El rol no tiene empleados.');
+        // Empleados en contra (neto negativo): el asiento no puede registrar un líquido a pagar
+        // negativo. Se avisa con nombre y valor para que se revise el rol (p. ej. pasar un
+        // préstamo o descuento al mes siguiente en Novedades) en vez del error genérico de cuadre.
+        $enContra = RolPagoService::empleadosEnContra($detalle);
+        if (!empty($enContra)) {
+            $lista = array_map(fn($e) => $e['empleado'] . ' (' . number_format($e['neto'], 2, ',', '.') . ')', array_slice($enContra, 0, 5));
+            $extra = count($enContra) > 5 ? ' y ' . (count($enContra) - 5) . ' más' : '';
+            throw new Exception('No se contabilizó: ' . (count($enContra) === 1 ? 'el empleado ' : 'los empleados ')
+                . implode(', ', $lista) . $extra . (count($enContra) === 1 ? ' tiene' : ' tienen') . ' valor a pagar en contra. Revise el rol: puede pasar préstamos o descuentos al mes siguiente en Novedades.');
+        }
         $salario = $this->repo->getSalario((int) $cab['periodo_anio']);
         $prov = new RolProvisionService();
 

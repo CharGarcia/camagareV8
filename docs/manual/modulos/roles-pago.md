@@ -5,8 +5,8 @@ categoria: Nómina
 ruta_modulo: modulos/roles-pago
 tipo: modulo
 visibilidad: todos
-etiquetas: rol de pago, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula, quincena en novedades, empleado omitido en la quincena, falta un empleado en la quincena, quincena cargada por excel
-version: 1.23
+etiquetas: rol de pago, empleado en contra, sale en contra, neto negativo, valor negativo, saldo en contra, debe a la empresa, mover prestamo al siguiente mes, roles, enviar rol por correo, correo del empleado, editar correo, varios correos, destinatario, avisos del rol, avisos tapan el modal, no se puede cerrar el rol, empleados sin periodo, pendientes de desembolso, nomina, sueldo, quincena, semanal, mensual, pago de empleados, descuentos, liquido a recibir, neteo, quincena sin pagar, quincena pendiente, no aparece el rol mensual en egresos, no puedo pagar el rol mensual, doble pago, pagar dos veces, anticipo sin pagar, prestamo sin desembolsar, no puedo desembolsar el prestamo, cuota perdida, cargar novedades por excel, por pagar, ya entregado, ingresos de quincena, bono en quincena, horas extra en quincena, observacion, observaciones, detalle de novedad, motivo del descuento, asiento contable, contabilizacion, cuentas de nomina, prestamo quirografario, prestamo hipotecario, prestamo empresa, prestamos iess, aporte iess, base del iess, con iess, sin iess, bonos, comisiones, horas extra, dias no laborados, faltas, dias laborados, sueldo ganado, fondos de reserva, decimo tercero, decimo cuarto, buscar rol de pago, buscador, filtros, filtrar roles, buscar empleado en el rol, buscar rubro, chips, ordenar, ordenamiento, ordenar por periodo, ordenar columnas, orden del listado, periodo mas reciente, imprimir, impresora, eliminar rol, anular rol, rol eliminado, nomina duplicada, nomina contabilizada dos veces, asiento duplicado, asiento general e individual, rol migrado, asiento migrado, cuadre del asiento, asiento no cuadra con el rol, gasto de nomina inflado, asiento sigue contabilizado, asiento de rol eliminado, pagado, pago pendiente, pago parcial, estado de pago, referencia del pago, egreso del rol, ver egreso, pdf del egreso, comprobante de egreso, con que se pago, como se pago, transferencia, cheque, pestaña pago, rol migrado incompleto, faltan empleados en el rol, empleados inactivos desaparecen, rol migrado cambio de valores, rol migrado se recalcula, quincena en novedades, empleado omitido en la quincena, falta un empleado en la quincena, quincena cargada por excel
+version: 1.24
 orden: 30
 estado: activo
 ---
@@ -145,6 +145,25 @@ en la columna *POR PAGAR / POR DESEMBOLSAR*. Las cargadas como *YA ENTREGADO /
 YA DESEMBOLSADO* ya se dan por pagadas: se descuentan sin pedir el egreso y no
 bloquean nada. Los préstamos quirografario e hipotecario no entran aquí: los
 desembolsa el IESS o el banco y se descuentan directo.
+
+### Empleados con valor a pagar en contra
+
+Un empleado sale **en contra** cuando sus descuentos (préstamos, descuentos,
+IESS, lo ya pagado en la quincena, etc.) superan lo que gana en el rol: su neto
+queda negativo y no hay nada que pagarle.
+
+- Al **generar** el rol aparece un aviso, y al **abrirlo** un aviso rojo
+  *«N empleado(s) con valor a pagar en contra — revisar»*, con el nombre de cada
+  uno, el valor en contra y los descuentos y cuotas de préstamo de Novedades que
+  lleva ese mes.
+- En la lista del rol su neto se ve en rojo y el estado de pago dice
+  **En contra** (no *Pago pendiente*).
+- El rol **no se puede contabilizar** mientras algún empleado siga en contra: el
+  mensaje dice quiénes son.
+
+Qué hacer: revise el rol del empleado y, si corresponde, pase el préstamo o el
+descuento al mes siguiente en **Novedades** (cambiando su período). El rol se
+recalcula solo y el aviso desaparece cuando el neto deja de ser negativo.
 
 ## De dónde salen las cifras
 
@@ -395,7 +414,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   1.13, eliminar un rol que se había regenerado dejaba su asiento vivo. Anule en
   *Contabilidad → Asientos Contables* los asientos de nómina (*NO-…*) de los roles
   eliminados; el del rol vigente se queda.
-- **"El asiento no cuadra con el rol de pagos, no se contabilizó: …"**: lo más común es un empleado con líquido negativo, un grupo de rubros que suma en negativo, o un rol cuyos totales no coinciden con sus rubros. Revise al empleado que nombra el mensaje y vuelva a generar el rol.
+- **"No se contabilizó: el empleado … tiene valor a pagar en contra …"**: su neto es negativo. Vea *Empleados con valor a pagar en contra*: pase un préstamo o descuento al mes siguiente en Novedades y vuelva a contabilizar.
+- **"El asiento no cuadra con el rol de pagos, no se contabilizó: …"**: lo más común es un grupo de rubros que suma en negativo, o un rol cuyos totales no coinciden con sus rubros. Revise al empleado que nombra el mensaje y vuelva a generar el rol.
 - **"Este rol se migró del sistema anterior …"** / **"La nómina de … ya está contabilizada con asiento(s) migrado(s) …"**: ese mes ya tiene su asiento de nómina del sistema anterior; no hace falta contabilizarlo otra vez.
 - **"El rol quedaría con asientos duplicados …"**: el rol ya tiene otro asiento de nómina vivo. Anule el sobrante en *Contabilidad → Asientos Contables* y vuelva a contabilizar.
 - **Un mes migrado tiene la nómina dos veces (un asiento general y uno por empleado)**: hasta la versión 1.16 el sistema generaba asiento también a los roles migrados. El soporte técnico lo corrige con un script que conserva el asiento migrado y anula los generados.
@@ -433,6 +453,8 @@ módulo. Para regresar al orden de fábrica, ordene por *Período* de mayor a me
   quincena o semana en lugar del rol mensual.
 
 ## Historial de cambios
+
+- **1.24** — Aviso de **empleados con valor a pagar en contra** (neto negativo) al generar y al abrir el rol, con el valor y los préstamos/descuentos que se pueden pasar al mes siguiente. Esos empleados se ven con el neto en rojo y el estado **En contra**, y al contabilizar el mensaje los nombra en lugar del error genérico de cuadre.
 
 - **1.23** — El rol de QUINCENA omite a los empleados que ya tienen su quincena del mes registrada en Novedades (tipo *Quincena*) y lo avisa. Esa quincena se descuenta en el rol mensual como un anticipo y, en el asiento, va a la cuenta de Anticipos.
 

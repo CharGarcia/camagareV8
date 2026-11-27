@@ -20,12 +20,14 @@
     const PAGO = {
         pagado:    { c: 'success',   t: 'Pagado',         i: 'bi-check-circle-fill' },
         parcial:   { c: 'warning',   t: 'Pago parcial',   i: 'bi-hourglass-split' },
-        pendiente: { c: 'secondary', t: 'Pago pendiente', i: 'bi-cash-coin' }
+        pendiente: { c: 'secondary', t: 'Pago pendiente', i: 'bi-cash-coin' },
+        en_contra: { c: 'danger',    t: 'En contra',      i: 'bi-exclamation-octagon-fill' }
     };
     // Badge del estado de pago. En el listado del rol (clicable=true) abre la ficha del
     // empleado directo en la pestaña «Pago», donde se ven los egresos que lo pagaron.
     const pagoBadge = (d, clicable) => {
-        const p = PAGO[d.estado_pago] || PAGO.pendiente;
+        // Neto negativo: no hay nada que pagar, el empleado sale en contra (ver aviso del rol).
+        const p = (parseFloat(d.neto) || 0) < 0 ? PAGO.en_contra : (PAGO[d.estado_pago] || PAGO.pendiente);
         const pagado = money(d.pagado || 0);
         const saldo  = money(d.saldo != null ? d.saldo : d.neto);
         const title  = `Pagado ${pagado} · Saldo ${saldo}` + (clicable ? ' · Clic para ver el detalle del pago' : '');
@@ -120,7 +122,7 @@
                 renderVer(json.data);
                 modalVer()?.show();
                 window.dispatchEvent(new CustomEvent('rolGuardado'));
-                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || [], json.data.parciales_pendientes || [], json.data.quincena_en_novedades || []);
+                avisarPendientes(json.data.avisos || [], json.data.empleados_sin_periodo || [], json.data.parciales_pendientes || [], json.data.quincena_en_novedades || [], json.data.en_contra || []);
             } else {
                 Swal.fire({ icon: 'error', title: 'Atención', text: json.error || 'No se pudo generar.' });
             }
@@ -188,7 +190,7 @@
         rolActual = { id: rol.id, estado: rol.estado, tipo_rol: rol.tipo_rol };
         $('rolver_periodo').textContent = periodoTexto;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
-        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || [], rol.parciales_pendientes || [], rol.quincena_en_novedades || []);
+        renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || [], rol.parciales_pendientes || [], rol.quincena_en_novedades || [], rol.en_contra || []);
 
         const det = rol.detalle || [];
         if (!det.length) { $('rolver_lista').innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted">Sin empleados con conceptos.</td></tr>'; $('rolver_conteo').textContent = ''; return; }
@@ -199,7 +201,7 @@
                 <td class="ps-3"><b>${esc(d.nombres_apellidos)}</b> <span class="text-muted small">${esc(d.identificacion)}</span></td>
                 <td class="text-end text-success">${money(d.total_ingresos)}</td>
                 <td class="text-end text-danger">${money(d.total_egresos)}</td>
-                <td class="text-end fw-bold">${money(d.neto)}</td>
+                <td class="text-end fw-bold${(parseFloat(d.neto) || 0) < 0 ? ' text-danger' : ''}">${money(d.neto)}</td>
                 <td class="text-center pe-3" style="white-space:nowrap;">${pagoBadge(d, true)}</td></tr>`;
         });
         $('rolver_lista').innerHTML = rows;
@@ -209,11 +211,21 @@
     // "Quincena 1 10/2026 de Juan Pérez: $250.00" — semanas/quincenas sin pagar (rol mensual).
     const liParcial = p => `<li>${esc(p.empleado)} — <b>${p.tipo_rol === 'SEMANAL' ? 'Semana' : 'Quincena'} ${esc(p.numero_periodo || '')}</b>: ${money(p.saldo)}</li>`;
 
+    // Empleado en contra: "Juan Pérez — en contra -$45,20 (Préstamo Empresa $120,00; Descuento $30,00)".
+    // Se listan los descuentos/cuotas de préstamo de Novedades del rol: son los que se pueden pasar al mes siguiente.
+    const TEXTO_EN_CONTRA = `Sus descuentos superan lo que gana en este rol, así que el neto es negativo: no hay valor que pagarle
+        y el rol <b>no se podrá contabilizar</b> mientras siga así. Revise el rol y, si corresponde, pase préstamos o descuentos
+        al mes siguiente en <b>Novedades</b> (el rol se recalcula solo):`;
+    const liEnContra = e => {
+        const mov = (e.movibles || []).map(m => `${esc(m.concepto)} ${money(m.valor)}`).join('; ');
+        return `<li>${esc(e.empleado)} <span class="text-muted">${esc(e.identificacion || '')}</span> — en contra <b class="text-danger">${money(e.neto)}</b>${mov ? ` <span class="text-muted">(${mov})</span>` : ''}</li>`;
+    };
+
     // Avisos en acordeón (cerrados): (1) empleados activos NO incluidos por falta de período,
     // (2) anticipos/préstamos pendientes de desembolso (no se descuentan hasta pagarlos),
     // (3) solo mensual: semanas/quincenas del mes sin pagar (bloquean el pago del mensual).
     // Cerrados y con scroll propio para que, con muchos avisos, no tapen la tabla ni el footer.
-    function renderAvisos(avisos, sinPeriodo, parciales, quincenaNov) {
+    function renderAvisos(avisos, sinPeriodo, parciales, quincenaNov, enContra) {
         const box = $('rolver_avisos');
         if (!box) return;
         const item = (id, color, icono, titulo, cuerpo) => `
@@ -229,6 +241,11 @@
                 </div>
             </div>`;
         let html = '';
+        if (enContra && enContra.length) {
+            html += item('rolver_av_encontra', 'danger', 'bi-exclamation-octagon-fill',
+                `<b>${enContra.length} empleado(s) con valor a pagar en contra — revisar</b>`,
+                `${TEXTO_EN_CONTRA}<ul class="mb-0 mt-1">${enContra.map(liEnContra).join('')}</ul>`);
+        }
         if (sinPeriodo && sinPeriodo.length) {
             const liSp = sinPeriodo.map(e =>
                 `<li>${esc(e.nombres_apellidos)} <span class="text-muted">${esc(e.identificacion || '')}</span></li>`
@@ -265,14 +282,19 @@
     }
 
     // Aviso emergente al generar, si hay empleados sin período o novedades sin desembolsar.
-    function avisarPendientes(avisos, sinPeriodo, parciales, quincenaNov) {
+    function avisarPendientes(avisos, sinPeriodo, parciales, quincenaNov, enContra) {
+        const hayEnContra = enContra && enContra.length;
         const hayAvisos = avisos && avisos.length;
         const haySinPeriodo = sinPeriodo && sinPeriodo.length;
         const hayParciales = parciales && parciales.length;
         const hayQuincenaNov = quincenaNov && quincenaNov.length;
-        if (!hayAvisos && !haySinPeriodo && !hayParciales && !hayQuincenaNov) return;
+        if (!hayAvisos && !haySinPeriodo && !hayParciales && !hayQuincenaNov && !hayEnContra) return;
 
         let html = '';
+        if (hayEnContra) {
+            html += `<div class="mb-2"><b class="text-danger">${enContra.length} empleado(s) con valor a pagar en contra.</b> ${TEXTO_EN_CONTRA}
+                <ul class="mt-1 mb-0">${enContra.map(liEnContra).join('')}</ul></div>`;
+        }
         if (haySinPeriodo) {
             const liSp = sinPeriodo.map(e => `<li>${esc(e.nombres_apellidos)}</li>`).join('');
             html += `<div class="mb-2"><b>${sinPeriodo.length} empleado(s) activo(s) NO se incluyeron</b> en este rol porque no tienen un período registrado que cubra este mes:<ul class="mt-1 mb-0">${liSp}</ul></div>`;
@@ -574,7 +596,8 @@
     function renderPago(d) {
         const box = $('rolemp_pago_body');
         if (!box) return;
-        const p = PAGO[d.estado_pago] || PAGO.pendiente;
+        // Neto negativo: no hay nada que pagar, el empleado sale en contra (ver aviso del rol).
+        const p = (parseFloat(d.neto) || 0) < 0 ? PAGO.en_contra : (PAGO[d.estado_pago] || PAGO.pendiente);
         // Icono en la pestaña, sin texto: visto verde si está pagado, reloj ámbar si es
         // parcial, aspa roja si está pendiente (el detalle va en el title).
         const badgeTab = $('rolemp_pago_badge');

@@ -110,7 +110,40 @@ class RolPagoService
         $cab['quincena_en_novedades'] = $cab['tipo_rol'] === 'QUINCENA'
             ? array_values($this->repo->getEmpleadosConQuincenaNovedad($idEmpresa, (int) $cab['periodo_anio'], (int) $cab['periodo_mes']))
             : [];
+        // Aviso: empleados con valor a pagar EN CONTRA (neto negativo).
+        $cab['en_contra'] = self::empleadosEnContra($cab['detalle']);
         return $cab;
+    }
+
+    /**
+     * Empleados del rol cuyo neto quedó negativo (los egresos superan a los ingresos), con
+     * los descuentos y cuotas de préstamo de Novedades que llevan en este rol: son los que el
+     * usuario puede pasar a otro mes (Novedades) para que el empleado no salga en contra.
+     *
+     * @return array<int,array{id:int,empleado:string,identificacion:string,neto:float,movibles:array}>
+     */
+    public static function empleadosEnContra(array $detalle): array
+    {
+        $codsMovibles = ['2', '7', '8', '9']; // Descuento y cuotas de préstamo (quirografario, hipotecario, empresa)
+        $out = [];
+        foreach ($detalle as $d) {
+            $neto = round((float) ($d['neto'] ?? 0), 2);
+            if ($neto >= 0) continue;
+            $movibles = [];
+            foreach ($d['rubros'] ?? [] as $r) {
+                if (($r['tipo'] ?? '') !== 'egreso' || ($r['origen'] ?? '') !== 'novedad') continue;
+                if (!in_array((string) ($r['codigo'] ?? ''), $codsMovibles, true)) continue;
+                $movibles[] = ['concepto' => (string) $r['concepto'], 'valor' => round((float) $r['valor'], 2)];
+            }
+            $out[] = [
+                'id'             => (int) $d['id'],
+                'empleado'       => (string) ($d['nombres_apellidos'] ?? ''),
+                'identificacion' => (string) ($d['identificacion'] ?? ''),
+                'neto'           => $neto,
+                'movibles'       => $movibles,
+            ];
+        }
+        return $out;
     }
 
     /**
