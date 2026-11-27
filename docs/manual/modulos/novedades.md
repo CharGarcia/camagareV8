@@ -131,7 +131,10 @@ sistema arme sus cuotas:
 6. Si el préstamo empezó antes de usar el sistema, marque **¿Ya cobrada?** en
    las cuotas que ya se descontaron. Esas cuotas quedan anotadas en el préstamo
    pero **no** se crean como novedad (no se vuelven a descontar). Con alguna
-   cuota cobrada, el desembolso queda en *Ya fue entregado*.
+   cuota cobrada, el desembolso queda en *Ya fue entregado*. Cada casilla se
+   marca y desmarca con un clic; la casilla del encabezado **¿Ya cobrada?**
+   marca o desmarca todas a la vez (queda a medias si solo hay algunas
+   marcadas).
 7. Pulse **Guardar**.
 
 Cada cuota por cobrar queda en el listado como una novedad **Préstamo Empresa**

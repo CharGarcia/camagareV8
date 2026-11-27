@@ -6,7 +6,7 @@ ruta_modulo: modulos/empleados
 tipo: modulo
 visibilidad: todos
 etiquetas: empleados, pestaña contable, cuentas contables del empleado, asiento personalizado, asiento general, cuenta propia del empleado, fondos de reserva, decimo tercero, decimo cuarto, mensualiza, acumula, planilla iess, empleado, personal, trabajadores, nomina, ficha, cedula, sueldo, contratacion, credencial, qr personal, asistencia, marcar, rostro, reconocimiento facial, probar rostro, no me reconoce, vacaciones del empleado, periodos de vacaciones, saldo de vacaciones, vacaciones tomadas, vacaciones pagadas, empleados de otro sistema, horario, turno, asignar turno, punto de servicio, atrasos, tratamiento de atrasos, descuento por atrasos, solicitud de vacaciones, solicitar vacaciones, enviar solicitud por correo, aprobar vacaciones, detalle de vacaciones pdf, cedula falsa, cedula invalida, cedula incorrecta, ruc invalido, digito verificador, validar cedula, comprobar cedula, sueldo neto, cuanto gana, liquido a recibir, resumen de sueldo, imprimir, impresora, pestaña informacion, quien creo el empleado, quien modifico el empleado, historial de cambios del empleado, pdf de empleados, listado de empleados pdf, exportar empleados, descargar empleados, buscar empleado, buscador, filtros, filtrar empleados, empleados inactivos, empleados por cargo, empleados por departamento, empleados por sueldo, chips
-version: 1.17
+version: 1.18
 orden: 10
 estado: activo
 ---
@@ -173,8 +173,14 @@ y permite asignarle cuentas propias. Aparece solo si:
 
 Arriba se elige el **Asiento contable**:
 
-- **General** (por defecto): se ven, en solo lectura, las cuentas que usará cada
-  concepto según la configuración General.
+- **General** (por defecto): se ven las cuentas que usará cada concepto según la
+  configuración General de la empresa, y también se pueden **cambiar ahí mismo**.
+  Como esa cuenta es la de **todos los empleados**, antes de guardar el sistema
+  lo advierte y pide confirmar (*Sí, cambiar para todos*). La papelera quita la
+  cuenta General del concepto, también con confirmación; Retroceso solo limpia el
+  campo para escribir otra cuenta, no la quita. Es lo mismo que cambiarla en
+  *Configuración Contable → Nómina → General*, con los mismos permisos (*crear*
+  para cambiar, *eliminar* para quitar).
 - **Personalizado**: cada cuenta que elija queda como propia del empleado y se
   guarda al elegirla (para quitarla, vacíe el campo). Lo que deje vacío sigue
   usando la cuenta que se muestra en gris. **Copiar cuentas de General** copia
@@ -393,12 +399,12 @@ producción**: es un catálogo maestro, siempre el mismo.
   podía abrirla.
 - **No veo la pestaña Contable**: su usuario no puede ver Configuración
   Contable, o la empresa no contabiliza Roles de Pago.
-- **No puedo elegir cuentas en la pestaña Contable**: está en *General*; pulse
-  *Personalizado*. Si el botón está apagado, le falta el permiso de crear en
-  Configuración Contable.
+- **No puedo elegir cuentas en la pestaña Contable**: le falta el permiso de
+  crear en Configuración Contable.
 
 ## Historial de cambios
 
+- **1.18** — En la pestaña **Contable**, con el asiento en *General*, las cuentas se pueden cambiar ahí mismo: se cambia la cuenta General de la empresa (todos los empleados), con aviso y confirmación.
 - **1.17** — Nueva pestaña **Contable**: cuentas del asiento del rol del empleado, con el selector *General / Personalizado* y solo los conceptos que corresponden a su forma de pago de fondos de reserva, décimos y aporte al IESS. Cambiar esas opciones en la pestaña Laboral ya no altera los roles generados antes.
 
 - **1.16** — El listado usa el mismo buscador que Proveedores: búsqueda libre por palabras en más columnas y botón **embudo** con filtros por estado, sexo, cargo, departamento, región, sueldo, beneficios, banco, fecha de registro y más, que quedan como chips en el cuadro. El Excel respeta los filtros y el orden de la pantalla. El botón **PDF** del listado, que antes no generaba nada, descarga ahora el listado con las columnas visibles, un resumen y totales.

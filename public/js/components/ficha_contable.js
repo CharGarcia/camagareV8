@@ -109,7 +109,11 @@
         const puedeCrear = () => cfg.puedeCrear === '1';
         const puedeEliminar = () => cfg.puedeEliminar === '1';
         // Se pueden elegir cuentas: permiso y, con selector de modo, estar en Personalizado.
-        const editable = () => puedeCrear() && (!modoAsiento || personalizando);
+        // En General (data-modo-asiento) también se puede: ahí se edita la cuenta General de la
+        // empresa (para todos), con confirmación; mismo permiso que en Configuración Contable.
+        const editable = () => puedeCrear();
+        // ¿Lo que se elige ahora cambia la configuración General de la empresa?
+        const editaGeneral = () => modoAsiento && !personalizando;
 
         /** Opciones actuales de la ficha (pestaña Laboral del empleado). */
         function opcionesActuales() {
@@ -256,8 +260,14 @@
                 const propia = propiaDe(c);
                 const key = esConceptoIva(c) ? `iva_${c.id_referencia}` : c.id_asiento_tipo;
                 const inputId = `${prefijo}_${key}`;
-                const valor = propia ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}` : '';
+                // En General el campo muestra (y edita) la cuenta General del propio concepto; si
+                // no la tiene, el marcador en gris dice cuál se usará por respaldo.
+                const general = editaGeneral() && !esConceptoIva(c) && c.id_cuenta;
+                const valor = propia
+                    ? `${propia.cuenta_codigo} - ${propia.cuenta_nombre}`
+                    : (general ? `${c.cuenta_codigo} - ${c.cuenta_nombre || ''}` : '');
                 const marcador = marcadorDe(c);
+                const conPapelera = editaGeneral() ? !!general : !!propia;
                 const falta = faltaDe(c);
                 // Cuenta propia de un concepto que ya no aplica con las opciones de la ficha: se
                 // conserva (por si la opción vuelve), pero se avisa que el asiento no la usa.
@@ -277,12 +287,16 @@
                                data-tarifa-iva="${esConceptoIva(c) ? esc(c.id_referencia) : ''}"
                                data-tipo-cuenta="${esc(c.tipo_cuenta || '')}"
                                data-regla="${propia ? esc(propia.id) : ''}"
+                               data-general="${general ? '1' : ''}"
+                               data-concepto="${esc(c.concepto)}"
                                ${puedeEditar ? '' : 'readonly'}>
                         <div class="list-group position-absolute w-100 shadow-sm bg-white border rounded"
                              data-fctb-sug="1" style="display:none; z-index:2200; max-height:180px; overflow-y:auto;"></div>
                     </div>
-                    <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${propia && puedeEliminar() && (!modoAsiento || personalizando) ? '' : ' invisible'}"
-                            data-fctb-quitar="${propia ? esc(propia.id) : ''}" title="Quitar esta cuenta">
+                    <button type="button" class="btn btn-link text-danger p-0 border-0 lh-1${conPapelera && puedeEliminar() ? '' : ' invisible'}"
+                            data-fctb-quitar="${propia ? esc(propia.id) : ''}"
+                            data-fctb-quitar-general="${general ? esc(c.id_asiento_tipo) : ''}"
+                            title="${editaGeneral() ? 'Quitar la cuenta General de este concepto (para todos los empleados)' : 'Quitar esta cuenta'}">
                         <i class="bi bi-trash small"></i>
                     </button>
                 </div>`;
@@ -303,7 +317,10 @@
             let pie = '';
             if (modoAsiento && !personalizando) {
                 pie = '<div class="small text-muted mt-2"><i class="bi bi-diagram-3 me-1"></i>Asiento <b>General</b>: se usan las cuentas de la configuración General según las opciones de la pestaña Laboral.'
-                    + (puedeCrear() ? ' Elija <b>Personalizado</b> para asignar cuentas propias.' : '') + '</div>';
+                    + (puedeCrear()
+                        ? ' <span class="text-warning-emphasis"><i class="bi bi-exclamation-triangle me-1"></i>Cambiar una cuenta aquí cambia la configuración General de la empresa: afecta a <b>todos los empleados</b>.</span> Para cambiarla solo a este empleado, elija <b>Personalizado</b>.'
+                        : '<br><i class="bi bi-lock me-1"></i>Solo lectura: no tiene permiso para crear en Configuración Contable.')
+                    + '</div>';
             } else if (!puedeCrear()) {
                 pie = '<div class="small text-muted mt-2"><i class="bi bi-lock me-1"></i>Solo lectura: no tiene permiso para crear en Configuración Contable.</div>';
             } else if (modoAsiento) {
@@ -341,7 +358,8 @@
             const estado = q('estado');
             if (estado) estado.innerHTML = html;
 
-            q('copiar')?.classList.toggle('d-none', !editable());
+            // Copiar de General a cuentas propias solo tiene sentido en Personalizado.
+            q('copiar')?.classList.toggle('d-none', !editable() || editaGeneral());
             const btnQuitar = q('quitar');
             if (btnQuitar) {
                 btnQuitar.classList.toggle('d-none', !puedeEliminar());
@@ -377,7 +395,56 @@
             return fd;
         }
 
+        /** Confirmación antes de tocar la configuración General desde la ficha (afecta a todos). */
+        async function confirmarGeneral(accion, concepto) {
+            const texto = `${accion} la cuenta <b>General</b> de <b>${esc(concepto)}</b>.<br>`
+                + 'Afecta a <b>todos los empleados</b> que no tengan una cuenta propia en ese concepto, '
+                + 'en los roles que se contabilicen desde ahora. Para cambiarla solo a este empleado, use <b>Personalizado</b>.';
+            if (window.Swal) {
+                const conf = await Swal.fire({
+                    title: '¿Cambiar la configuración General?',
+                    html: texto,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Sí, cambiar para todos',
+                    cancelButtonText: 'Cancelar',
+                });
+                return conf.isConfirmed;
+            }
+            return confirm(`${accion} la cuenta General de ${concepto} (afecta a todos los empleados). ¿Continuar?`);
+        }
+
+        /** Modo General: guarda la cuenta General del concepto (mismo endpoint que Configuración Contable). */
+        async function guardarGeneral(input, idCuenta) {
+            if (!await confirmarGeneral('Se cambiará', input.dataset.concepto || '')) { pintar(); return; }
+            const fd = new FormData();
+            fd.append('id_asiento_tipo', String(input.dataset.asientoTipo || '0'));
+            fd.append('id_cuenta', idCuenta);
+            fd.append('tipo_asiento', tipoAsiento());
+            try {
+                const res = await getJson(`${cfg.urlContable}/guardarReglaGeneralAjax`, { method: 'POST', body: fd });
+                if (!res.ok) { error(res.error || res.message); pintar(); return; }
+                toast('success', 'Cuenta General guardada.');
+                cargar(true);
+            } catch (e) { console.error(e); error('Error de conexión al guardar la cuenta.'); pintar(); }
+        }
+
+        /** Modo General: quita la cuenta General del concepto (el concepto queda con su respaldo o sin cuenta). */
+        async function quitarGeneral(idAsientoTipo, concepto) {
+            if (!idAsientoTipo || !puedeEliminar()) { pintar(); return; }
+            if (!await confirmarGeneral('Se quitará', concepto)) { pintar(); return; }
+            const fd = new FormData();
+            fd.append('id_asiento_tipo', String(idAsientoTipo));
+            try {
+                const res = await getJson(`${cfg.urlContable}/eliminarReglaGeneralAjax`, { method: 'POST', body: fd });
+                if (!res.ok) { error(res.error || res.message); pintar(); return; }
+                toast('success', 'Cuenta General quitada.');
+                cargar(true);
+            } catch (e) { console.error(e); error('Error de conexión al quitar la cuenta.'); pintar(); }
+        }
+
         async function guardarCuenta(input, idCuenta) {
+            if (editaGeneral()) { guardarGeneral(input, idCuenta); return; }
             try {
                 const fd = formRegla(input.dataset.asientoTipo, idCuenta, input.dataset.tarifaIva);
                 const res = await getJson(`${cfg.urlContable}/guardarReglaDimensionAjax`, { method: 'POST', body: fd });
@@ -524,7 +591,9 @@
             if (!input || input.readOnly) return;
             if (input.value.trim() === '') {
                 sugDe(input).style.display = 'none';
-                if (input.dataset.regla && puedeEliminar()) quitarCuenta(input.dataset.regla);
+                // En General, vaciar el campo solo deja escribir otra cuenta: quitar la cuenta
+                // General (afecta a todos) se hace únicamente con la papelera, con confirmación.
+                if (!editaGeneral() && input.dataset.regla && puedeEliminar()) quitarCuenta(input.dataset.regla);
                 return;
             }
             buscarCuentas(input);
@@ -537,7 +606,14 @@
             if (e.key === 'Enter') { e.preventDefault(); return; }
             if (e.key === 'Escape') { sugDe(input).style.display = 'none'; return; }
             // Cuenta ya elegida: Retroceso/Suprimir la limpia de una vez (no letra por letra).
-            if ((e.key === 'Backspace' || e.key === 'Delete') && input.dataset.regla && !input.readOnly) {
+            // En General, la cuenta General elegida se limpia de una vez para escribir otra (sin quitarla).
+            if ((e.key === 'Backspace' || e.key === 'Delete') && editaGeneral() && input.dataset.general && !input.readOnly
+                && input.value === input.defaultValue) {
+                e.preventDefault();
+                input.value = '';
+                return;
+            }
+            if ((e.key === 'Backspace' || e.key === 'Delete') && !editaGeneral() && input.dataset.regla && !input.readOnly) {
                 e.preventDefault();
                 if (!puedeEliminar()) return;
                 input.value = '';
@@ -547,7 +623,12 @@
 
         panel.addEventListener('click', (e) => {
             const btn = e.target.closest('[data-fctb-quitar]');
-            if (btn && btn.dataset.fctbQuitar) quitarCuenta(btn.dataset.fctbQuitar);
+            if (btn && btn.dataset.fctbQuitarGeneral && editaGeneral()) {
+                const fila = btn.closest('.d-flex');
+                quitarGeneral(btn.dataset.fctbQuitarGeneral, fila?.querySelector('input[data-fctb-cuenta]')?.dataset.concepto || '');
+            } else if (btn && btn.dataset.fctbQuitar) {
+                quitarCuenta(btn.dataset.fctbQuitar);
+            }
             if (e.target.closest('[data-fctb-extras]')) {
                 expandida = !expandida;
                 pintar();

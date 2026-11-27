@@ -366,8 +366,31 @@
         actualizarTotalesPrestamo(cuotas);
     }
 
+    // Sin scroll vertical en el modal: la tabla de cuotas toma solo el alto que sobra en la
+    // ventana y es ella la que desplaza sus filas (el encabezado y los totales quedan fijos).
+    function ajustarAltoPrestamo() {
+        if (modoActual !== 'prestamo') return;
+        const cont = document.querySelector('#modalNovedad .nov-prestamo-tabla');
+        const body = document.querySelector('#formNovedad > .modal-body');
+        if (!cont || !body || !body.clientHeight) return; // modal aún oculto: se ajusta al mostrarse
+        cont.style.maxHeight = 'none';
+        const exceso = body.scrollHeight - body.clientHeight;
+        if (exceso > 0) {
+            cont.style.maxHeight = Math.max(120, cont.offsetHeight - exceso - 2) + 'px';
+        }
+    }
+    document.getElementById('modalNovedad')?.addEventListener('shown.bs.modal', ajustarAltoPrestamo);
+    window.addEventListener('resize', ajustarAltoPrestamo);
+
     function actualizarTotalesPrestamo(cuotas) {
         const marcadas = new Set(cuotasMarcadasCobradas());
+        // Casilla del encabezado: marcada si todas lo están, a medias (indeterminada) si solo algunas.
+        const todas = document.getElementById('nov_pre_cobradas_todas');
+        if (todas) {
+            todas.disabled = !cuotas.length;
+            todas.checked = cuotas.length > 0 && marcadas.size === cuotas.length;
+            todas.indeterminate = marcadas.size > 0 && marcadas.size < cuotas.length;
+        }
         const total = cuotas.reduce((s, c) => s + c.valor, 0);
         const pendientes = cuotas.filter(c => !marcadas.has(c.numero));
         const porCobrar = pendientes.reduce((s, c) => s + c.valor, 0);
@@ -395,6 +418,8 @@
                         : 'Las cuotas se descuentan en el rol cuando el préstamo esté desembolsado por egreso.');
             }
         }
+        // El texto de ayuda puede ocupar otra línea: reajustar el alto de la tabla.
+        ajustarAltoPrestamo();
     }
 
     ['nov_pre_monto', 'nov_pre_cuotas', 'nov_periodo_anio'].forEach(id => {
@@ -407,6 +432,16 @@
         actualizarTotalesPrestamo(calcularCuotasPrestamoActual());
     });
     document.getElementById('nov_tabla_prestamo')?.addEventListener('change', (ev) => {
+        // Encabezado: marca o desmarca todas las cuotas de una vez.
+        if (ev.target.id === 'nov_pre_cobradas_todas') {
+            const marcar = ev.target.checked;
+            document.querySelectorAll('#nov_tabla_prestamo tbody .nov-cuota-cobrada-chk').forEach(c => {
+                c.checked = marcar;
+                c.closest('tr')?.classList.toggle('nov-cuota-cobrada', marcar);
+            });
+            actualizarTotalesPrestamo(calcularCuotasPrestamoActual());
+            return;
+        }
         const chk = ev.target.closest('.nov-cuota-cobrada-chk');
         if (!chk) return;
         chk.closest('tr')?.classList.toggle('nov-cuota-cobrada', chk.checked);

@@ -22,6 +22,7 @@ $mesActual  = (int) date('n');
     #nov_tabla_prestamo tfoot td { bottom: 0; }
     #nov_tabla_prestamo tr.nov-cuota-cobrada td { color: #6c757d; text-decoration: line-through; }
     #nov_tabla_prestamo tr.nov-cuota-cobrada td.nov-cuota-check { text-decoration: none; }
+    /* El JS (ajustarAltoPrestamo) le da el alto que sobra en la ventana, para que el modal no haga scroll. */
     .nov-prestamo-tabla { max-height: 260px; overflow: auto; }
     /* El <form> va entre .modal-content y .modal-body: sin esto el modal-dialog-scrollable de
        Bootstrap no limita el alto del body, el contenido se recorta y la rueda no desplaza. */
@@ -211,7 +212,12 @@ $mesActual  = (int) date('n');
                                             <th class="text-center" style="width:60px;">#</th>
                                             <th>Mes a cobrar</th>
                                             <th class="text-end" style="width:130px;">Valor</th>
-                                            <th class="text-center" style="width:110px;">¿Ya cobrada?</th>
+                                            <th class="text-center" style="width:120px;">
+                                                <label class="d-inline-flex align-items-center gap-1 mb-0" title="Marcar o desmarcar todas las cuotas">
+                                                    <input type="checkbox" class="form-check-input mt-0" id="nov_pre_cobradas_todas" aria-label="Marcar o desmarcar todas las cuotas como ya cobradas">
+                                                    ¿Ya cobrada?
+                                                </label>
+                                            </th>
                                         </tr>
                                     </thead>
                                     <tbody>
