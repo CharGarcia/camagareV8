@@ -5,8 +5,8 @@ categoria: Configuración global
 ruta_modulo: config/migrar-mysql
 tipo: modulo
 visibilidad: superadmin
-etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano, detalle adicional del item, adicional por linea, det. adicional migrado, info adicional del producto en la factura, re-migrar retenciones, retenciones pendientes, retencion pendiente migrada, retencion no se descuenta
-version: 1.31
+etiquetas: migracion, migrar, sistema anterior, mysql, vendedor asignado, vendedor del cliente, clientes sin vendedor, vendedores migracion, asignacion de vendedor, migrar empresas, establecimientos migracion, ruc base, elegir establecimiento, fusionar establecimientos, cliente separado, serie, series, punto de emision, secuencial, numeracion, numero repetido, ingresos sin serie, egresos sin serie, pedidos sin serie, liquidacion pendiente de pago, liquidaciones de compra migradas, pagos migrados, egresos migrados, pago no aparece, cuentas por pagar migradas, compra pendiente de pago, compra pagada sale pendiente, pago no cruza, retencion en borrador, marcas, marca del producto, productos sin marca, catalogo de marcas, migrar marcas, cambios de productos migrados, cambio sin factura, factura del cambio, nup del cambio, recambio, registro de cambio, facturacion de consignacion migrada, unidad duplicada para devolver, iva inflado, iva multiplicado, iva x1000, asiento de compra mal, iva del asiento mayor, nota de credito compra asiento, contabilidad migrada, alumnos, migrar alumnos, estudiantes, campus, niveles, cursos, horarios, pension, servicios del alumno, descuento del alumno, alumnos activos, alumnos pasivos, representante del alumno, vehiculos, migrar vehiculos, placas, placa, chasis, chasis 123456789, año 2022, propietario privado, vehiculos faltantes, vehiculo sin orden, car wash migracion, cobros de recibos, recibo pendiente migrado, recibo sin abono, pago de recibo no cruza, recibos de venta migrados, saldo de recibo, liquidaciones 2020, liquidaciones antiguas pendientes, pagada en el sistema anterior, liquidacion sin pago migrada, egreso sin asiento, asiento no migrado, asiento contable faltante, desde, re-sincronizar contabilidad, registrado tarde, anulado en el sistema anterior, ingreso anulado con asiento, egreso anulado con asiento, asiento migrado vivo, asiento de documento anulado, categorias, categoria del producto, productos sin categoria, grupo de producto, grupo familiar, migrar categorias, suscripciones, facturas programadas, recibos programados, facturacion recurrente, migrar suscripciones, cobro periodico, nota de credito no aparece, nota de credito migrada en pruebas, ambiente de pruebas, saldo de inventario no paso, stock migrado incompleto, kardex migrado falta compra, egreso rol de pagos sin mes, ROL_PAGOS, quincena migrada, mes del rol en el egreso, roles de pago no se migran, roles omitidos, quincenas omitidas, empleado inactivo, empleados inactivos, empleado creado a mano, detalle adicional del item, adicional por linea, det. adicional migrado, info adicional del producto en la factura, re-migrar retenciones, retenciones pendientes, retencion pendiente migrada, retencion no se descuenta, factura pendiente pero cobrada, factura pagada sale pendiente, cobro migrado sin factura, ingreso no cruza con la factura, cuentas por cobrar migradas, re-enlazar cobros, cobro sin enlazar
+version: 1.32
 orden: 2
 estado: activo
 ---
@@ -215,6 +215,32 @@ que apunta al recibo. Al migrar **Cobros (ingresos)**, cada una de esas líneas 
   Cobros: quedan cerrados y ya no se editan (se pueden seguir cobrando, facturando
   o anulando). Los recibos que ya existían en el sistema y solo se vincularon no se
   tocan.
+
+## Facturas que aparecen pendientes aunque estaban cobradas
+
+Un cobro migrado solo descuenta el saldo de una factura (o recibo) cuando su
+línea queda **enlazada** a ese documento. El enlace se pierde si las **Facturas
+de venta** se eliminan y se vuelven a migrar **después** de los Cobros: la
+factura renace como un registro nuevo y el cobro, que sí existe y conserva el
+número de la factura, queda apuntando a nada. Resultado: la factura aparece
+pendiente en **Cuentas por cobrar** aunque en el sistema anterior esté pagada.
+
+- **Se corrige solo**: al terminar de migrar **Facturas de venta**, **Recibos de
+  venta** o **Cobros (ingresos)**, los cobros ya migrados que quedaron sin
+  documento se enlazan otra vez por el número (establecimiento-punto-secuencial).
+  El resultado lo informa: *cobro(s) ya migrado(s) se enlazaron a su factura o
+  recibo*. Basta volver a ejecutar cualquiera de las tres; no se duplica nada.
+- Solo se tocan cobros que trajo la migración, y solo el enlace: no cambian
+  valores, fechas, formas de cobro ni estados. Los cobros registrados en el
+  sistema nuevo nunca se modifican.
+- Si el número existe en más de un documento, se prefiere el del mismo ambiente
+  y luego el del mismo cliente; si sigue habiendo duda, la línea se deja sin
+  enlazar.
+- **Verificar migración** lista los que queden: *Cobros migrados sin enlazar a
+  su factura* (o *a su recibo*), con el número del ingreso y el del documento.
+- No confundir con una factura que tampoco tenía cobro en el sistema anterior,
+  ni con un cobro **anulado** en el sistema nuevo: en esos casos no hay nada que
+  enlazar.
 
 ## Vendedor asignado a cada cliente
 
@@ -718,6 +744,7 @@ Una retención en borrador todavía no está emitida, así que Egresos y Cuentas
 
 ## Historial de cambios
 
+- **1.32** — **Cobros sin enlazar**: al terminar de migrar Facturas de venta, Recibos de venta o Cobros, los cobros ya migrados que quedaron sin su factura o recibo (por re-migrar las facturas después de los cobros) se enlazan de nuevo por número, y **Verificar migración** avisa de los que queden. Nueva sección *Facturas que aparecen pendientes aunque estaban cobradas*.
 - **1.31** — Los avisos de credenciales distinguen si falta `parametros.xml`, si tiene un error de formato (con la línea) o qué etiqueta falta; antes un XML mal formado se informaba como «faltan las credenciales».
 - **1.30** — Las credenciales de la base MySQL anterior y del FTP de documentos ya no tienen valor por defecto en el código: se leen solo de `config/parametros.xml`. Nueva sección *Credenciales del sistema anterior*.
 - **1.29** — **Retenciones en compra**: al volver a ejecutarlas ya no se modifican las retenciones propias del sistema nuevo que la migración solo enlazó por número, ni se regresan a borrador las migradas pendientes que ya se enviaron o autorizaron desde el sistema nuevo. Nueva sección *Retenciones en compra: re-migrar y retenciones pendientes*.

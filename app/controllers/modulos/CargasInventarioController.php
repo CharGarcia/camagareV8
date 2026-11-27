@@ -458,7 +458,7 @@ class CargasInventarioController extends BaseModuloController
             $no  = (int) ($res['no_aplicadas'] ?? 0);
             $mensaje = $no > 0
                 ? 'Carga aprobada: se aplicaron ' . ((int) $res['lineas'] - $no) . ' de ' . (int) $res['lineas']
-                    . ' líneas. ' . ($no === 1 ? '1 línea no se aplicó' : "{$no} líneas no se aplicaron") . ' por falta de stock.'
+                    . ' líneas. ' . ($no === 1 ? '1 línea no se aplicó' : "{$no} líneas no se aplicaron") . ' (sin stock suficiente o sin lote): quedan en la carga con su motivo.'
                 : 'Carga aprobada y aplicada al inventario.';
             echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => $mensaje]);
         } catch (\Throwable $e) {

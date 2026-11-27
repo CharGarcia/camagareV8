@@ -719,7 +719,7 @@ class CargaInventarioService
                     throw new \RuntimeException($this->mensajeSinStock($carga, $detalle, $sinStock));
                 }
                 if ($sinStock !== [] && count($sinStock) === $totalLineas) {
-                    throw new \InvalidArgumentException('Ninguna línea de la carga tiene stock suficiente: no hay nada que aplicar.');
+                    throw new \InvalidArgumentException('Ninguna línea de la carga se puede aplicar (sin stock suficiente o sin lote): no hay nada que aprobar.');
                 }
                 // Aprobación parcial: la línea queda en la carga, con X roja y su motivo.
                 foreach ($sinStock as $i => $motivo) {
@@ -805,6 +805,7 @@ class CargaInventarioService
         $bodega      = []; // "producto:bodega"      => disponible
         $lotes       = []; // "producto:bodega:lote" => disponible
         $usado       = []; // claves de las que ya sacó una línea anterior
+        $reparto     = []; // "producto:bodega"      => lotes con stock y unidades sin lote
         $sinStock    = [];
         $descontadas = ' (descontadas las filas anteriores de esta carga)';
 
@@ -834,6 +835,17 @@ class CargaInventarioService
                               . (isset($usado[$kb]) ? $descontadas : '') . '.';
                 continue; // la línea no sale: no descuenta
             }
+            // Sin lote en un producto con stock por lotes: el movimiento quedaría sin lote y los
+            // saldos por lote no bajarían. Solo pasa si alcanza con las unidades que no tienen lote.
+            if ($kl === null) {
+                $reparto[$kb] ??= $this->lotesConStock($idProducto, $idBodega, $idEmpresa);
+                if ($reparto[$kb]['muestra'] !== null && $cantidad > $reparto[$kb]['sin_lote'] + 0.000001) {
+                    $sinStock[$i] = "Falta el lote: el producto tiene stock por lotes en esta bodega ({$reparto[$kb]['muestra']}). "
+                                  . 'Indique de qué lote sale, una línea por lote.';
+                    continue;
+                }
+                $reparto[$kb]['sin_lote'] -= $cantidad;
+            }
             if ($kl !== null && $cantidad > $lotes[$kl] + 0.000001) {
                 $sinStock[$i] = "Stock insuficiente en el lote '" . mb_substr((string) $lote, 0, 60) . "'. Disponible: "
                               . CargaInventarioRules::numero(max(0.0, $lotes[$kl]))
@@ -861,7 +873,7 @@ class CargaInventarioService
         if ($total === 1) {
             return $renglones[0];
         }
-        $mensaje = "{$total} de " . count($detalle) . " líneas no tienen stock suficiente:\n"
+        $mensaje = "{$total} de " . count($detalle) . " líneas no se pueden aplicar:\n"
                  . implode("\n", array_slice($renglones, 0, self::MAX_LINEAS_SIN_STOCK));
         if ($total > self::MAX_LINEAS_SIN_STOCK) {
             $mensaje .= "\n… y " . ($total - self::MAX_LINEAS_SIN_STOCK) . ' más.';
@@ -995,18 +1007,33 @@ class CargaInventarioService
      */
     private function errorAjusteSinLote(int $idProducto, int $idBodega, int $idEmpresa): ?string
     {
-        $lotes = [];
+        $muestra = $this->lotesConStock($idProducto, $idBodega, $idEmpresa)['muestra'];
+        return $muestra === null
+            ? null
+            : "El producto tiene stock por lotes en esta bodega ({$muestra}): indique el lote que contó, una línea por lote.";
+    }
+
+    /**
+     * Cómo está repartido el stock de un producto en una bodega:
+     *  - muestra: hasta tres lotes con nombre que tienen stock ("L1, L2, L3…"), o null si no hay.
+     *  - sin_lote: unidades con stock que no pertenecen a ningún lote.
+     */
+    private function lotesConStock(int $idProducto, int $idBodega, int $idEmpresa): array
+    {
+        $lotes   = [];
+        $sinLote = 0.0;
         foreach ($this->inventarioService()->getRepository()->getLotesDisponibles($idProducto, $idBodega, $idEmpresa) as $l) {
             $nombre = CargaInventarioRules::normalizarLote($l['numero_lote'] ?? null);
-            if ($nombre !== null) {
+            if ($nombre !== null && $nombre !== 'sin_lote') {
                 $lotes[] = mb_substr($nombre, 0, 30);
+            } else {
+                $sinLote += (float) ($l['stock_lote'] ?? 0);
             }
         }
-        if ($lotes === []) {
-            return null;
-        }
-        $muestra = implode(', ', array_slice($lotes, 0, 3)) . (count($lotes) > 3 ? '…' : '');
-        return "El producto tiene stock por lotes en esta bodega ({$muestra}): indique el lote que contó, una línea por lote.";
+        return [
+            'muestra'  => $lotes === [] ? null : implode(', ', array_slice($lotes, 0, 3)) . (count($lotes) > 3 ? '…' : ''),
+            'sin_lote' => $sinLote,
+        ];
     }
 
     /**

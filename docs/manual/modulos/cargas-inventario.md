@@ -305,21 +305,29 @@ lote de la línea. El sistema revisa **todas** las líneas y las informa juntas,
 cada una con su fila del Excel, código y nombre del producto, bodega, cantidad y
 lo disponible. Lo que sacan las filas anteriores de la misma carga ya se descuenta.
 
-Al **abrir** una salida pendiente, las líneas que hoy no tienen stock aparecen con
+**Salida sin lote de un producto con lotes.** Si el producto tiene stock repartido
+en lotes en esa bodega, la línea debe indicar **de qué lote sale** (una línea por
+lote). Sin lote, la salida quedaría registrada sin lote y los saldos por lote no
+bajarían, así que la línea no se aplica y su motivo es *Falta el lote: el producto
+tiene stock por lotes en esta bodega (…)*, con los lotes que tienen saldo. El lote
+se escribe **exactamente** como está en el kardex. Solo se acepta una salida sin
+lote cuando alcanza con las unidades del producto que no pertenecen a ningún lote.
+
+Al **abrir** una salida pendiente, las líneas que hoy no se pueden aplicar (sin stock o sin lote) aparecen con
 un triángulo amarillo y la explicación en la columna **Motivo**, y arriba de la
 tabla se indica cuántas son. Es el stock de ese momento: al aprobar se revisa de
 nuevo.
 
-Con líneas sin stock, el botón **Aprobar** ofrece **aprobar solo las que tienen
-stock**:
+Con líneas así, el botón **Aprobar** ofrece **aprobar solo las líneas aplicables**:
 
-- Las líneas con stock se aplican al inventario.
+- Las líneas que sí se pueden aplicar mueven el inventario.
 - Las demás **no se aplican** y quedan en la carga con X roja y el motivo
-  (*No se aplicó. Stock insuficiente…*), también en el PDF y el Excel de la carga.
-- La carga queda **aprobada**. Lo no aplicado ya no se aplica desde ella: cuando
-  haya stock, regístrelo en una carga nueva.
-- Si ninguna línea tiene stock, no hay nada que aprobar: ingrese primero el stock o
-  elimine la carga.
+  (*No se aplicó. Stock insuficiente…* o *No se aplicó. Falta el lote…*), también
+  en el PDF y el Excel de la carga.
+- La carga queda **aprobada**. Lo no aplicado ya no se aplica desde ella:
+  regístrelo en una carga nueva, con su lote y cuando haya stock.
+- Si ninguna línea se puede aplicar, no hay nada que aprobar: ingrese primero el
+  stock, o elimine la carga e impórtela corregida.
 
 La otra opción sigue siendo ingresar el stock que falta y aprobar la carga completa,
 o eliminarla e importarla corregida. La aprobación desde el **enlace del correo**
@@ -410,7 +418,9 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 - **Un error de los anteriores aparece recién al aprobar** (termina en *Elimine la carga y vuelva a importarla corregida*): la carga se importó antes de que existiera esa regla, o el producto empezó a manejar lotes después de importar el ajuste. Elimínela e impórtela de nuevo.
 - **"Para aprobar cargas de ajuste falta aplicar en la base de datos el script…"**: aviso para soporte técnico; falta una actualización de la base de datos.
 - **"Fila N: código - producto, bodega X, salida de C. Stock insuficiente en el lote 'L'. Disponible: D."** (o *Stock insuficiente en bodega*): al aplicar o aprobar la carga, esa línea pide sacar más de lo que hay. El mensaje indica la fila del Excel, el producto, la bodega y la cantidad, y lista todas las líneas en esa situación. Puede aprobar solo las líneas que sí tienen stock, ingresar primero el stock que falta, o eliminar la carga e importarla corregida (ver *Salidas sin stock* en *Aprobación*).
-- **"Ninguna línea de la carga tiene stock suficiente: no hay nada que aplicar"**: todas las líneas de la salida piden más de lo disponible.
+- **"Falta el lote: el producto tiene stock por lotes en esta bodega (…)"**: salida sin lote de un producto que maneja lotes. Escriba en `numero_lote` el lote del que sale, tal como aparece entre paréntesis o en el Kardex, una línea por lote.
+- **"Stock insuficiente en el lote 'X'. Disponible: 0"** cuando el producto sí tiene stock: el lote está escrito distinto en el kardex (se compara exacto), el stock está en otra bodega o entró sin lote. Revise el Kardex del producto en esa bodega.
+- **"Ninguna línea de la carga se puede aplicar (sin stock suficiente o sin lote)"**: todas las líneas de la salida piden más de lo disponible o les falta el lote.
 - **Carga aprobada con líneas en X roja y motivo "No se aplicó…"**: se aprobó en parte; esas líneas no movieron el stock.
 - **La carga no afecta el stock**: puede estar pendiente de aprobación, o anulada.
 - **No aparece la observación de las líneas**: en las cargas importadas antes de la versión 1.6 con un archivo propio cuyo título de columna llevaba tilde o era plural (*Observación*, *Observaciones*), la observación de cada línea no se guardó y no se puede recuperar. Desde la 1.6 esos títulos se reconocen.
@@ -449,7 +459,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
-- **2.4** — Cuando una línea no se puede aplicar al inventario (p. ej. *Stock insuficiente en el lote*), el mensaje ahora dice **qué línea es**: fila del Excel, código y nombre del producto, bodega y cantidad. En las **salidas** se listan **todas** las líneas sin stock (no solo la primera), se marcan al abrir la carga pendiente y se puede **aprobar solo las que tienen stock**: las demás quedan en la carga como no aplicadas.
+- **2.4** — Cuando una línea no se puede aplicar al inventario (p. ej. *Stock insuficiente en el lote*), el mensaje ahora dice **qué línea es**: fila del Excel, código y nombre del producto, bodega y cantidad. En las **salidas** se listan **todas** las líneas sin stock (no solo la primera), se marcan al abrir la carga pendiente y se puede **aprobar solo las que tienen stock**: las demás quedan en la carga como no aplicadas. Una **salida sin lote** de un producto con stock por lotes ya no se aplica: debe indicar el lote.
 - **2.3** — **Revisión antes de generar la carga**: al importar, el sistema revisa el archivo sin grabar nada y, si hay avisos, pregunta si se genera la carga. Las **bodegas que no existen** se pueden crear en ese momento (las que no se crean dejan sus filas sin cargar); las filas de **servicios** y, en entradas y salidas, las de **cantidad 0** ya no dejan la carga con error: no se cargan. El aviso final resume las bodegas creadas y las filas que no se cargaron. El motivo de cada línea con error conserva la fila real del Excel aunque se hayan omitido filas.
 - **2.2** — **Importar** una carga registra una sola vez: un reintento tras «Error de conexión» ya no crea una segunda carga (que, sin aprobación exigida, se aplicaba sola). Rechazar o eliminar una carga mientras otro usuario la aprueba ya no la deja «rechazada» con su stock aplicado: quien llega segundo ve el estado real.
 - **2.1** — La **observación general** de la carga se puede editar desde la ventana

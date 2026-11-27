@@ -222,6 +222,24 @@ class MigracionMysqlService
               WHERE rc.id_empresa = :e AND rc.eliminado = false AND rc.id_compra IS NULL AND rc.id_liquidacion IS NULL",
             [':e' => $idEmpresa]);
 
+        // Cobros migrados cuya línea de factura/recibo no enlaza a ningún documento vivo: el cobro
+        // existe pero la factura sigue apareciendo pendiente. Se corrige re-ejecutando Ingresos,
+        // Facturas o Recibos (cruzarCobrosConDocumentos).
+        foreach (['FACTURA' => ['ventas_cabecera', 'factura'], 'RECIBO' => ['recibos_venta_cabecera', 'recibo']] as $tipoDoc => [$tablaDoc, $nombreDoc]) {
+            $chk('cobro_sin_enlace', "Cobros migrados sin enlazar a su $nombreDoc (el documento aparece pendiente aunque esté cobrado)",
+                "SELECT (c.numero_ingreso || ' → ' || COALESCE(d.numero_documento, 's/n')) AS clave
+                   FROM ingresos_detalle d
+                   JOIN ingresos_cabecera c   ON c.id = d.id_ingreso
+                   JOIN migracion_mysql_map m ON m.id_empresa = c.id_empresa AND m.entidad = 'ingresos' AND m.id_destino = c.id
+                  WHERE c.id_empresa = :e AND c.eliminado = false AND c.estado <> 'anulado'
+                    AND d.tipo_documento = {$qEnt($tipoDoc)}
+                    AND (d.id_referencia_documento IS NULL
+                         OR NOT EXISTS (SELECT 1 FROM $tablaDoc z
+                                         WHERE z.id = d.id_referencia_documento
+                                           AND z.id_empresa = c.id_empresa AND z.eliminado = false))",
+                [':e' => $idEmpresa]);
+        }
+
         // Asientos migrados descuadrados o sin detalle.
         $chk('asiento_descuadrado', "Asientos contables descuadrados (debe ≠ haber)",
             "SELECT numero_comprobante AS clave FROM asientos_contables_cabecera
@@ -296,7 +314,71 @@ class MigracionMysqlService
 
         $res = $this->ejecutarMigracion($entidad, $idEmpresa, $ruc, $idUsuario, $limite, $desde, $hasta);
         if ($revividos > 0) { $res['revividos'] = $revividos; }
+        // Cobros migrados que quedaron sin su factura/recibo: pasa cuando las facturas (o recibos) se
+        // eliminan y se vuelven a migrar DESPUÉS de los ingresos — el documento renace con otro id y
+        // el cobro queda con el enlace vacío, así que la factura aparece pendiente aunque esté cobrada.
+        // Se re-enlaza al terminar cualquiera de las tres entidades, sin importar el orden.
+        if (in_array($entidad, ['facturas', 'recibos', 'ingresos'], true)) {
+            $reenlazados = $this->cruzarCobrosConDocumentos($pg, $idEmpresa);
+            if ($reenlazados > 0) { $res['cobros_reenlazados'] = $reenlazados; }
+        }
         return $res;
+    }
+
+    /**
+     * Cruza los cobros (ingresos) migrados con su FACTURA o RECIBO de venta: llena
+     * id_referencia_documento de las líneas 'FACTURA' / 'RECIBO' que quedaron sin documento (vacío, o
+     * apuntando a uno que ya no existe) porque el documento se migró —o se re-migró— después del cobro.
+     * Empareja por número (establecimiento-punto-secuencial, que la migración guarda en
+     * numero_documento) dentro de la empresa; ante números repetidos prefiere el ambiente del ingreso
+     * y luego su cliente y, si sigue ambiguo, no enlaza (mejor sin enlace que con uno equivocado).
+     * Solo toca ingresos del mapa de migración: nunca los registrados en el sistema nuevo. No cambia
+     * valores ni estados. Idempotente. Lo llama migrar() al terminar facturas, recibos e ingresos.
+     */
+    private function cruzarCobrosConDocumentos(PDO $pg, int $idEmpresa): int
+    {
+        $total = 0;
+        foreach (['FACTURA' => 'ventas_cabecera', 'RECIBO' => 'recibos_venta_cabecera'] as $tipoDoc => $tabla) {
+            try {
+                $st = $pg->prepare(
+                    "UPDATE ingresos_detalle d
+                        SET id_referencia_documento = x.id_doc
+                       FROM (
+                            SELECT d2.id AS id_det,
+                                   CASE
+                                     WHEN COUNT(v.id) = 1 THEN MIN(v.id)
+                                     WHEN COUNT(v.id) FILTER (WHERE v.tipo_ambiente = c.tipo_ambiente) = 1
+                                          THEN MIN(v.id) FILTER (WHERE v.tipo_ambiente = c.tipo_ambiente)
+                                     WHEN COUNT(v.id) FILTER (WHERE v.tipo_ambiente = c.tipo_ambiente AND v.id_cliente = c.id_cliente) = 1
+                                          THEN MIN(v.id) FILTER (WHERE v.tipo_ambiente = c.tipo_ambiente AND v.id_cliente = c.id_cliente)
+                                   END AS id_doc
+                              FROM ingresos_detalle d2
+                              JOIN ingresos_cabecera c   ON c.id = d2.id_ingreso
+                              JOIN migracion_mysql_map m ON m.id_empresa = c.id_empresa AND m.entidad = 'ingresos' AND m.id_destino = c.id
+                              JOIN $tabla v
+                                ON v.id_empresa = c.id_empresa AND v.eliminado = false
+                               AND (COALESCE(v.establecimiento,'') || COALESCE(v.punto_emision,'') || COALESCE(v.secuencial,''))
+                                   = (LPAD(SPLIT_PART(d2.numero_documento, '-', 1), 3, '0')
+                                      || LPAD(SPLIT_PART(d2.numero_documento, '-', 2), 3, '0')
+                                      || LPAD(SPLIT_PART(d2.numero_documento, '-', 3), 9, '0'))
+                             WHERE c.id_empresa = :e AND c.eliminado = false
+                               AND d2.tipo_documento = :t
+                               AND d2.numero_documento ~ '^[0-9]{1,3}-[0-9]{1,3}-[0-9]{1,9}$'
+                               AND (d2.id_referencia_documento IS NULL
+                                    OR NOT EXISTS (SELECT 1 FROM $tabla z
+                                                    WHERE z.id = d2.id_referencia_documento
+                                                      AND z.id_empresa = c.id_empresa AND z.eliminado = false))
+                             GROUP BY d2.id, c.tipo_ambiente, c.id_cliente
+                       ) x
+                      WHERE d.id = x.id_det AND x.id_doc IS NOT NULL"
+                );
+                $st->execute([':e' => $idEmpresa, ':t' => $tipoDoc]);
+                $total += $st->rowCount();
+            } catch (\Throwable $e) {
+                // tabla/columna ausente en esta instalación: se omite ese cruce
+            }
+        }
+        return $total;
     }
 
     /** Despacha la migración de la entidad a su método específico. */

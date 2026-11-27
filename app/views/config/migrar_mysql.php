@@ -711,6 +711,9 @@ $base = BASE_URL;
                 if (d.actualizados > 0 && ent === 'vehiculos') {
                     html += `<br><span class="text-success small">🛠 ${fmt(d.actualizados)} vehículo(s) ya migrado(s) se actualizaron (datos más recientes, sin valores de relleno).</span>`;
                 }
+                if (d.cobros_reenlazados > 0) {
+                    html += `<br><span class="text-success small">🔗 ${fmt(d.cobros_reenlazados)} cobro(s) ya migrado(s) se enlazaron a su factura o recibo (dejan de aparecer pendientes).</span>`;
+                }
                 if (d.revividos > 0) {
                     html += `<br><span class="text-success small">♻ ${fmt(d.revividos)} estaban eliminado(s) y se restauraron (volvieron a mostrarse).</span>`;
                 }

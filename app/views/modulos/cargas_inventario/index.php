@@ -711,7 +711,7 @@ function CI_resultadoImportacion(d) {
                 <p class="mb-2">${registradas}, pero el stock no se actualizó:</p>
                 ${CI_listaMensaje(d.error_aplicacion)}
                 <p class="mb-0 text-muted">La carga quedó <b>pendiente</b>. Corrija la causa y apruébela${quien ? ` (o pídaselo a ${CI_esc(CI_APROBADORES.join(', '))})` : ''},
-                    o elimínela e impórtela de nuevo. Si es por falta de stock, al abrirla puede aprobar solo las líneas que sí tienen.</p>
+                    o elimínela e impórtela de nuevo. Si es por falta de stock o de lote, al abrirla puede aprobar solo las líneas que sí se pueden aplicar.</p>
             </div>`,
         };
     }
@@ -786,7 +786,7 @@ async function CI_verDetalle(id) {
     // Resumen junto a los botones de exportar: la lista de líneas hace su propio scroll.
     document.getElementById('ci-det-resumen').innerHTML = `${detalle.length} ${detalle.length === 1 ? 'línea' : 'líneas'}`
         + (esAjuste && detalle.some(d => difDe(d) != null) ? ` · ${conDif} con diferencia${ajusteHoy ? ' (estimado)' : ''}` : '')
-        + (sinStock ? ` · <span class="text-warning-emphasis fw-semibold">${sinStock} sin stock</span>` : '')
+        + (sinStock ? ` · <span class="text-warning-emphasis fw-semibold">${sinStock} sin aplicar</span>` : '')
         + (conError ? ` · <span class="text-danger fw-semibold">${conError} ${c.estado === 'aprobada' ? (conError === 1 ? 'no aplicada' : 'no aplicadas') : 'con error'}</span>` : '');
 
     // Líneas en el orden del archivo. El motivo lleva la fila del Excel (fila 1 =
@@ -803,7 +803,7 @@ async function CI_verDetalle(id) {
             ${esAjuste ? `<td class="text-end text-nowrap">${celdaNum(saldoDe(d))}</td><td class="text-end text-nowrap">${celdaDif(difDe(d))}</td>` : ''}
             <td class="text-end text-nowrap">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
             <td style="min-width:180px">${CI_esc(d.observacion || '')}</td>
-            <td class="text-center">${!ok ? '<i class="bi bi-x-circle text-danger"></i>' : (d.sin_stock ? '<i class="bi bi-exclamation-triangle-fill text-warning" title="Sin stock suficiente"></i>' : '<i class="bi bi-check-circle text-success"></i>')}</td>
+            <td class="text-center">${!ok ? '<i class="bi bi-x-circle text-danger"></i>' : (d.sin_stock ? '<i class="bi bi-exclamation-triangle-fill text-warning" title="No se puede aplicar hoy"></i>' : '<i class="bi bi-check-circle text-success"></i>')}</td>
             <td class="pe-2 ${ok ? 'text-warning-emphasis' : 'text-danger'}" style="min-width:220px">${ok ? (d.sin_stock ? CI_esc(`Fila ${i + 2}: ${d.sin_stock}`) : '') : CI_esc(/^Fila \d+:/.test(d.error_linea || '') ? d.error_linea : `Fila ${i + 2}: ${d.error_linea || 'Línea con error'}`)}</td>
         </tr>`;
     }).join('');
@@ -837,10 +837,10 @@ async function CI_verDetalle(id) {
             <strong>elimine</strong> esta carga e impórtela de nuevo.
         </div>` : ''}
         ${sinStock ? `<div class="small text-warning-emphasis mb-2 flex-shrink-0">
-            <i class="bi bi-exclamation-triangle-fill me-1"></i>${sinStock === 1 ? '1 línea no tiene' : `${sinStock} líneas no tienen`} stock suficiente hoy (marcadas en la columna <strong>Motivo</strong>).
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>${sinStock === 1 ? '1 línea no se puede' : `${sinStock} líneas no se pueden`} aplicar hoy, por falta de stock o de lote (ver la columna <strong>Motivo</strong>).
             ${conStock > 0
-                ? `Al aprobar puede aplicar solo ${conStock === 1 ? 'la línea que sí tiene' : `las ${conStock} que sí tienen`}; las demás quedan en la carga como no aplicadas.`
-                : 'Ninguna línea se puede aplicar: ingrese primero el stock o elimine la carga.'}
+                ? `Al aprobar puede aplicar solo ${conStock === 1 ? 'la línea que sí se puede' : `las ${conStock} que sí se pueden`}; las demás quedan en la carga como no aplicadas.`
+                : 'Ninguna línea se puede aplicar: ingrese primero el stock, o elimine la carga e impórtela corregida.'}
         </div>` : ''}
         ${c.estado === 'aprobada' && conError ? `<div class="small text-danger mb-2 flex-shrink-0">
             <i class="bi bi-info-circle-fill me-1"></i>Carga aprobada en parte: ${conError === 1 ? 'la línea con X roja no se aplicó' : `las ${conError} líneas con X roja no se aplicaron`} al inventario (ver <strong>Motivo</strong>).
@@ -879,7 +879,7 @@ async function CI_verDetalle(id) {
         btnAp.classList.remove('d-none');
         const nadaQueAplicar = sinStock > 0 && conStock === 0;
         btnAp.disabled = !validada || nadaQueAplicar;
-        btnAp.title = !validada ? 'La carga tiene líneas con error' : (nadaQueAplicar ? 'Ninguna línea tiene stock suficiente' : '');
+        btnAp.title = !validada ? 'La carga tiene líneas con error' : (nadaQueAplicar ? 'Ninguna línea se puede aplicar' : '');
     }
     if (puedeAprobar) document.getElementById('ci-btn-rechazar')?.classList.remove('d-none');
     // Pendientes y rechazadas no movieron el stock: se eliminan. Una aprobada se anula
@@ -975,17 +975,17 @@ async function CI_aprobar() {
         const conStock = CI_cargaActual.lineas_con_stock || 0;
         const parcial = await CI_aviso({
             icon: 'warning',
-            title: `¿Aprobar solo las líneas con stock de la carga #${CI_cargaActual.numero}?`,
+            title: `¿Aprobar solo las líneas aplicables de la carga #${CI_cargaActual.numero}?`,
             html: `<div class="text-start small">
                 <p class="mb-2">Se ${conStock === 1 ? 'aplicará <b>1 línea</b>' : `aplicarán <b>${conStock} líneas</b>`} al inventario.
-                    ${sinStock === 1 ? '<b>1 línea no tiene</b>' : `<b>${sinStock} líneas no tienen</b>`} stock suficiente y <b>no se ${sinStock === 1 ? 'aplicará' : 'aplicarán'}</b>:
+                    ${sinStock === 1 ? '<b>1 línea no tiene</b>' : `<b>${sinStock} líneas no tienen</b>`} stock suficiente o les falta el lote y <b>no se ${sinStock === 1 ? 'aplicará' : 'aplicarán'}</b>:
                     ${sinStock === 1 ? 'queda' : 'quedan'} en la carga con X roja y su motivo.</p>
-                <p class="mb-0 text-muted">La carga quedará <b>aprobada</b> y lo no aplicado ya no se podrá aplicar desde ella: regístrelo en una carga nueva cuando haya stock.
+                <p class="mb-0 text-muted">La carga quedará <b>aprobada</b> y lo no aplicado ya no se podrá aplicar desde ella: regístrelo en una carga nueva, con su lote y cuando haya stock.
                     El stock se revisa otra vez en este momento, así que la cantidad de líneas puede variar.</p>
             </div>`,
             width: 600,
             showCancelButton: true,
-            confirmButtonText: 'Sí, aprobar las que tienen stock',
+            confirmButtonText: 'Sí, aprobar las aplicables',
             confirmButtonColor: '#198754',
         }, 'ci-modal-detalle');
         if (!parcial.isConfirmed) return;
