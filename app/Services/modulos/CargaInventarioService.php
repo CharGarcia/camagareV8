@@ -169,13 +169,51 @@ class CargaInventarioService
         return $this->repo->getById($idCarga, $idEmpresa);
     }
 
-    /** Datos de referencia (productos y bodegas) para las hojas de la plantilla. */
+    /**
+     * Datos de referencia (productos y bodegas) para las hojas de la plantilla. Cada bodega
+     * indica si su configuración de facturación exige lote, caducidad y NUP (SÍ/NO).
+     */
     public function getReferenciasPlantilla(int $idEmpresa): array
     {
         return [
             'productos' => $this->repo->getProductosParaPlantilla($idEmpresa),
-            'bodegas'   => $this->repo->getBodegasParaPlantilla($idEmpresa),
+            'bodegas'   => $this->bodegasConObligatorios($idEmpresa),
         ];
+    }
+
+    /** @return list<array{nombre:string, lote:string, caducidad:string, nup:string}> */
+    private function bodegasConObligatorios(int $idEmpresa): array
+    {
+        $bodegas = [];
+        foreach ($this->repo->getBodegasParaPlantilla($idEmpresa) as $b) {
+            $o = $this->obligatoriosBodega((int) $b['id'], $idEmpresa);
+            $bodegas[] = [
+                'nombre'    => (string) $b['nombre'],
+                'lote'      => $o['lote'] ? 'SÍ' : 'NO',
+                'caducidad' => $o['caducidad'] ? 'SÍ' : 'NO',
+                'nup'       => $o['nup'] ? 'SÍ' : 'NO',
+            ];
+        }
+        return $bodegas;
+    }
+
+    /**
+     * Bodegas cuya configuración de facturación exige lote, caducidad o NUP (para avisarlo
+     * en la ventana de importación).
+     *
+     * @return array{lote:list<string>, caducidad:list<string>, nup:list<string>}
+     */
+    public function getBodegasObligatorios(int $idEmpresa): array
+    {
+        $r = ['lote' => [], 'caducidad' => [], 'nup' => []];
+        foreach ($this->bodegasConObligatorios($idEmpresa) as $b) {
+            foreach (array_keys($r) as $k) {
+                if ($b[$k] === 'SÍ') {
+                    $r[$k][] = $b['nombre'];
+                }
+            }
+        }
+        return $r;
     }
 
     // ─── Configuración de aprobación (módulo Aprobaciones) ─────────────────────
@@ -251,7 +289,7 @@ class CargaInventarioService
     public function analizarImportacion(int $idEmpresa, string $tipoMovimiento, array $filas): array
     {
         $this->rules->validarCabecera(['tipo_movimiento' => $tipoMovimiento, 'filas' => $filas]);
-        $r = $this->clasificarFilas($idEmpresa, $tipoMovimiento === 'ajuste', $filas);
+        $r = $this->clasificarFilas($idEmpresa, $tipoMovimiento, $filas);
 
         $faltantes = [];
         $conFaltante = 0;
@@ -283,8 +321,9 @@ class CargaInventarioService
      * cada línea con error lo lleva al inicio ("Fila 7: …") para que siga coincidiendo con el
      * archivo aunque se hayan omitido filas.
      */
-    private function clasificarFilas(int $idEmpresa, bool $esAjuste, array $filas): array
+    private function clasificarFilas(int $idEmpresa, string $tipoMovimiento, array $filas): array
     {
+        $esAjuste  = $tipoMovimiento === 'ajuste';
         $lineas    = [];
         $omitidas  = [];
         $faltantes = [];
@@ -300,6 +339,7 @@ class CargaInventarioService
             $lote      = $esAjuste
                 ? CargaInventarioRules::normalizarLote($f['numero_lote'] ?? null)
                 : (($f['numero_lote'] ?? '') !== '' ? trim((string) $f['numero_lote']) : null);
+            $caducidad = ($f['fecha_caducidad'] ?? '') !== '' ? trim((string) $f['fecha_caducidad']) : null;
 
             $idProd = $codProd !== '' ? $this->repo->getProductoIdPorCodigo($codProd, $idEmpresa) : 0;
 
@@ -337,11 +377,13 @@ class CargaInventarioService
                 $err = 'Falta la bodega.';
             } elseif ($esAjuste) {
                 $err = $this->rules->validarLineaAjuste($f['cantidad'] ?? null, $nup)
+                    ?? $this->errorObligatorios($tipoMovimiento, $idProd, $idBod, $idEmpresa, $lote, $caducidad, $nup)
                     ?? ($lote === null ? $this->errorAjusteSinLote($idProd, $idBod, $idEmpresa) : null);
             } elseif ($cant <= 0) {
                 $err = 'La cantidad debe ser mayor a cero.';
             } else {
-                $err = $this->rules->validarCantidadSeries($cant, CargaInventarioRules::seriesDeNup($nup));
+                $err = $this->errorObligatorios($tipoMovimiento, $idProd, $idBod, $idEmpresa, $lote, $caducidad, $nup)
+                    ?? $this->rules->validarCantidadSeries($cant, CargaInventarioRules::seriesDeNup($nup));
             }
 
             $lineas[] = [
@@ -351,7 +393,7 @@ class CargaInventarioService
                 'cantidad'         => $cant,
                 'costo_unitario'   => (float) ($f['costo_unitario'] ?? 0),
                 'numero_lote'      => $lote,
-                'fecha_caducidad'  => ($f['fecha_caducidad'] ?? '') !== '' ? trim((string) $f['fecha_caducidad']) : null,
+                'fecha_caducidad'  => $caducidad,
                 'nup'              => $nup,
                 'observacion'      => ($f['observacion'] ?? '') !== '' ? trim((string) $f['observacion']) : null,
                 'cod_producto_raw' => $codProd,
@@ -384,6 +426,58 @@ class CargaInventarioService
             'omitidas'          => $omitidas,
             'bodegas_faltantes' => array_values($faltantes),
         ];
+    }
+
+    /** @var array<int,array{lote:bool, caducidad:bool, nup:bool}> id_bodega => switches (una consulta por bodega y petición) */
+    private array $cacheObligatorios = [];
+
+    /**
+     * ¿Qué exige la configuración de facturación en esta bodega (lote, caducidad, NUP)? Manda
+     * el establecimiento al que pertenece la bodega (empresa_establecimiento.obligatorio_*).
+     * Una bodega sin establecimiento exige cada dato si algún establecimiento de la empresa lo
+     * exige: si no, sería la puerta para mover stock sin ese dato en una empresa que lo pide.
+     * Los valores se leen con Booleano::es(): en la base llegan como texto 'true'/'false'.
+     *
+     * @return array{lote:bool, caducidad:bool, nup:bool}
+     */
+    public function obligatoriosBodega(int $idBodega, int $idEmpresa): array
+    {
+        $exige = ['lote' => false, 'caducidad' => false, 'nup' => false];
+        if ($idBodega <= 0) {
+            return $exige;
+        }
+        if (!array_key_exists($idBodega, $this->cacheObligatorios)) {
+            $mapa = ['lote' => 'obligatorio_lotes', 'caducidad' => 'obligatorio_caducidad', 'nup' => 'obligatorio_nup'];
+            foreach ($this->repo->getObligatoriosBodega($idBodega, $idEmpresa)['filas'] as $fila) {
+                foreach ($mapa as $k => $col) {
+                    $exige[$k] = $exige[$k] || Booleano::es($fila[$col] ?? false);
+                }
+            }
+            $this->cacheObligatorios[$idBodega] = $exige;
+        }
+        return $this->cacheObligatorios[$idBodega];
+    }
+
+    /**
+     * Lote, caducidad y NUP que exige la configuración de facturación para una línea (ver
+     * CargaInventarioRules::validarObligatorios). En un ajuste sin caducidad se acepta la del
+     * lote si ya existe en la bodega (es la que se conserva al aplicar).
+     */
+    private function errorObligatorios(string $tipoMovimiento, int $idProducto, int $idBodega, int $idEmpresa,
+                                       ?string $lote, ?string $caducidad, ?string $nup): ?string
+    {
+        $oblig = $this->obligatoriosBodega($idBodega, $idEmpresa);
+        if (!$oblig['lote'] && !$oblig['caducidad'] && !$oblig['nup']) {
+            return null;
+        }
+        $caducidadLote = null;
+        $loteNorm = CargaInventarioRules::normalizarLote($lote);
+        if ($oblig['caducidad'] && $tipoMovimiento === 'ajuste' && trim((string) $caducidad) === '' && $loteNorm !== null) {
+            $caducidadLote = $this->inventarioService()->getRepository()
+                ->getLoteMasAntiguo($idProducto, $idBodega, $idEmpresa, $loteNorm, false)['fecha_caducidad'] ?? null;
+        }
+        return $this->rules->validarObligatorios($oblig, $tipoMovimiento, $lote, $caducidad, $nup,
+            $caducidadLote !== null ? (string) $caducidadLote : null);
     }
 
     /** Fila del archivo que no se carga, con su motivo (para el resumen al usuario). */
@@ -482,7 +576,7 @@ class CargaInventarioService
             // Primero las bodegas que el usuario aceptó crear: así sus filas se resuelven.
             $bodegasCreadas = $this->crearBodegasDelArchivo($crearBodegas, $filas, $idEmpresa, $idUsuario);
 
-            $r = $this->clasificarFilas($idEmpresa, $esAjuste, $filas);
+            $r = $this->clasificarFilas($idEmpresa, $tipoMovimiento, $filas);
             $lineas   = $r['lineas'];
             $errores  = $r['errores'];
             $omitidas = $r['omitidas'];
@@ -705,9 +799,23 @@ class CargaInventarioService
                 $this->validarAjusteAntesDeAplicar($detalle);
             }
 
-            foreach ($detalle as $d) {
+            foreach ($detalle as $i => $d) {
                 if (empty($d['linea_valida']) || $d['linea_valida'] === 'f') {
                     throw new \InvalidArgumentException('Hay líneas con error; no se puede aprobar.');
+                }
+                // Se revisa otra vez al aprobar: la carga pudo importarse antes de activar
+                // lote / caducidad / NUP obligatorio en la configuración de facturación.
+                $errOblig = $this->errorObligatorios(
+                    (string) $carga['tipo_movimiento'],
+                    (int) $d['id_producto'],
+                    (int) $d['id_bodega'],
+                    $idEmpresa,
+                    ($d['numero_lote'] ?? null) !== null ? (string) $d['numero_lote'] : null,
+                    ($d['fecha_caducidad'] ?? null) !== null ? (string) $d['fecha_caducidad'] : null,
+                    ($d['nup'] ?? null) !== null ? (string) $d['nup'] : null
+                );
+                if ($errOblig !== null) {
+                    throw new \InvalidArgumentException('Fila ' . ($i + 2) . ": {$errOblig}" . self::CORREGIR_E_IMPORTAR);
                 }
             }
             $totalLineas = count($detalle);

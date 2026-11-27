@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion, crear bodega, bodega no existe, bodega inexistente, servicio, servicios, cantidad cero, cantidad 0, filas omitidas, filas no cargadas, revisar archivo, advertencias, resumen de importacion, stock insuficiente, sin stock, stock insuficiente en el lote, que producto no tiene stock, aprobar solo las que tienen stock, aprobacion parcial, aprobar en parte, lineas no aplicadas, no se aplico
-version: 2.4
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion, crear bodega, bodega no existe, bodega inexistente, servicio, servicios, cantidad cero, cantidad 0, filas omitidas, filas no cargadas, revisar archivo, advertencias, resumen de importacion, stock insuficiente, sin stock, stock insuficiente en el lote, que producto no tiene stock, aprobar solo las que tienen stock, aprobacion parcial, aprobar en parte, lineas no aplicadas, no se aplico, lote obligatorio, exige lote, sin lote, numero de lote, configuracion de facturacion, caducidad obligatoria, fecha de caducidad, vencimiento, nup obligatorio, serie obligatoria
+version: 2.5
 orden: 25
 estado: activo
 ---
@@ -82,6 +82,31 @@ Por ejemplo, *cantidad 3* con las series *A1*, *A2* y *A3* en la misma celda ent
 como tres unidades, una por serie; *cantidad 1* con dos series es un error.
 
 Las cargas de ajuste no admiten NUP.
+
+## Lote, caducidad y NUP obligatorios según la configuración de facturación
+
+El lote, la fecha de caducidad y el NUP (serie) son obligatorios u opcionales
+según los switches **Lote obligatorio**, **Caducidad obligatoria** y **NUP
+obligatorio** de la configuración de facturación (Empresa → Facturación) del
+**establecimiento al que pertenece la bodega** de cada fila. Con un switch
+apagado, ese dato es opcional, como siempre.
+
+| Switch activado | Entrada | Salida | Ajuste |
+|-----------------|---------|--------|--------|
+| **Lote obligatorio** | Debe traer `numero_lote` | Debe traer `numero_lote` | Debe traer `numero_lote` |
+| **Caducidad obligatoria** | Debe traer `fecha_caducidad` | No se pide (sale de un lote que ya tiene su caducidad) | Debe traer `fecha_caducidad`, salvo que el lote ya exista en la bodega con su caducidad |
+| **NUP obligatorio** | Debe traer `nup` | Debe traer `nup` | **No se admite**: un ajuste no lleva series. Registre la diferencia con una carga de entrada o de salida con sus series |
+
+- Escribir *sin lote* cuenta como lote vacío.
+- La fila a la que le falta un dato exigido queda con error y la carga no se
+  puede aprobar hasta corregir el archivo e importarlo de nuevo.
+- Una bodega **sin establecimiento asignado** exige cada dato si **algún**
+  establecimiento de la empresa lo tiene activado.
+- La hoja **Bodegas** de la plantilla trae las columnas **LOTE OBLIGATORIO**,
+  **CADUCIDAD OBLIGATORIA** y **NUP OBLIGATORIO** (SÍ/NO), y la ventana de
+  importación avisa en qué bodegas se exige cada uno.
+- Se revisa al importar y otra vez **al aprobar**: si activó un switch después de
+  importar una carga pendiente, esa carga no se aprueba con filas sin ese dato.
 
 ## Ajuste por conteo físico
 
@@ -415,6 +440,8 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 - **"El producto tiene stock por lotes en esta bodega (…): indique el lote que contó"**: en un ajuste, cuente ese producto por lote, una línea por lote.
 - **"Este producto ya se contó en la fila N…"**: en un ajuste cada producto va una vez por bodega y lote, en total o por lotes.
 - **"Una carga de ajuste no admite NUP"**: quite la serie o registre esas unidades con una carga de entrada o salida.
+- **"La configuración de facturación de esta bodega exige lote / fecha de caducidad / NUP"**: el establecimiento de la bodega tiene activado ese switch. Llene la columna `numero_lote`, `fecha_caducidad` o `nup` (ver *Lote, caducidad y NUP obligatorios según la configuración de facturación*).
+- **"…exige NUP y una carga de ajuste no admite series"**: con *NUP obligatorio* esa bodega no se ajusta por conteo; registre la diferencia con una carga de entrada o de salida indicando las series.
 - **Un error de los anteriores aparece recién al aprobar** (termina en *Elimine la carga y vuelva a importarla corregida*): la carga se importó antes de que existiera esa regla, o el producto empezó a manejar lotes después de importar el ajuste. Elimínela e impórtela de nuevo.
 - **"Para aprobar cargas de ajuste falta aplicar en la base de datos el script…"**: aviso para soporte técnico; falta una actualización de la base de datos.
 - **"Fila N: código - producto, bodega X, salida de C. Stock insuficiente en el lote 'L'. Disponible: D."** (o *Stock insuficiente en bodega*): al aplicar o aprobar la carga, esa línea pide sacar más de lo que hay. El mensaje indica la fila del Excel, el producto, la bodega y la cantidad, y lista todas las líneas en esa situación. Puede aprobar solo las líneas que sí tienen stock, ingresar primero el stock que falta, o eliminar la carga e importarla corregida (ver *Salidas sin stock* en *Aprobación*).
@@ -451,6 +478,10 @@ para corregir el archivo. Los motivos posibles son:
   | *El producto tiene stock por lotes en esta bodega…* | Ajuste sin lote de un producto que maneja lotes | Una línea por lote con lo contado de cada uno |
   | *Este producto ya se contó en la fila N…* | El mismo producto, bodega y lote dos veces, o contado en total y por lotes | Deje una sola forma y una sola línea |
   | *Una carga de ajuste no admite NUP* | Ajuste con series | Quite la serie o use una carga de entrada o salida |
+  | *La configuración de facturación de esta bodega exige lote…* | Fila sin lote en una bodega con *Lote obligatorio* | Escriba el número de lote |
+  | *…exige fecha de caducidad…* | Entrada o ajuste sin caducidad en una bodega con *Caducidad obligatoria* | Escriba la fecha de caducidad |
+  | *…exige NUP: indique el número de serie* | Entrada o salida sin serie en una bodega con *NUP obligatorio* | Escriba la serie en la columna `nup` |
+  | *…exige NUP y una carga de ajuste no admite series* | Ajuste en una bodega con *NUP obligatorio* | Use una carga de entrada o de salida con sus series |
 
   Las líneas de una carga **no se editan** desde el sistema: corrija el archivo,
   **elimine** la carga pendiente (botón Eliminar del detalle) e impórtela de
@@ -459,6 +490,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **2.5** — **Lote, caducidad y NUP obligatorios según la configuración de facturación**: si el establecimiento de la bodega tiene activado *Lote obligatorio*, *Caducidad obligatoria* o *NUP obligatorio*, las filas deben traer ese dato (lote en todo movimiento; caducidad en entradas y ajustes; NUP en entradas y salidas, y con NUP obligatorio no se admiten ajustes). Se revisa al importar y al aprobar. Con los switches apagados esos datos siguen siendo opcionales. La hoja **Bodegas** de la plantilla indica qué exige cada bodega y la ventana de importación lo avisa.
 - **2.4** — Cuando una línea no se puede aplicar al inventario (p. ej. *Stock insuficiente en el lote*), el mensaje ahora dice **qué línea es**: fila del Excel, código y nombre del producto, bodega y cantidad. En las **salidas** se listan **todas** las líneas sin stock (no solo la primera), se marcan al abrir la carga pendiente y se puede **aprobar solo las que tienen stock**: las demás quedan en la carga como no aplicadas. Una **salida sin lote** de un producto con stock por lotes ya no se aplica: debe indicar el lote.
 - **2.3** — **Revisión antes de generar la carga**: al importar, el sistema revisa el archivo sin grabar nada y, si hay avisos, pregunta si se genera la carga. Las **bodegas que no existen** se pueden crear en ese momento (las que no se crean dejan sus filas sin cargar); las filas de **servicios** y, en entradas y salidas, las de **cantidad 0** ya no dejan la carga con error: no se cargan. El aviso final resume las bodegas creadas y las filas que no se cargaron. El motivo de cada línea con error conserva la fila real del Excel aunque se hayan omitido filas.
 - **2.2** — **Importar** una carga registra una sola vez: un reintento tras «Error de conexión» ya no crea una segunda carga (que, sin aprobación exigida, se aplicaba sola). Rechazar o eliminar una carga mientras otro usuario la aprueba ya no la deja «rechazada» con su stock aplicado: quien llega segundo ve el estado real.

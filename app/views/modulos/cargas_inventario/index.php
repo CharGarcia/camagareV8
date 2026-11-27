@@ -305,6 +305,29 @@ echo \App\Helpers\PreferenciasHelper::renderEstilosColumnasOcultas($vistaConfig)
                                 <br><strong>Ajuste</strong>: conteo físico. La cantidad es lo contado (0 si no hay); al aprobar se registra solo la diferencia. Si el producto tiene lotes, una línea por lote; sin NUP.
                                 <br><strong>Antes de generar la carga</strong> se revisa el archivo: no se cargan los servicios ni, en entradas y salidas, las filas con cantidad 0; si una bodega no existe, puede crearla en ese momento.
                                 <br><strong>NUP</strong>: una serie con cualquier cantidad, o varias series (una por renglón de la celda) con cantidad igual al número de series.
+                                <?php
+                                $bodOblig = $bodegasObligatorios ?? ['lote' => [], 'caducidad' => [], 'nup' => []];
+                                $listaBod = static function (array $nombres): string {
+                                    return count($nombres) <= 5
+                                        ? '<strong>' . htmlspecialchars(implode(', ', $nombres)) . '</strong>'
+                                        : count($nombres) . ' bodegas (ver hoja <strong>Bodegas</strong> de la plantilla)';
+                                };
+                                $avisosOblig = [
+                                    'lote'      => ['Lote obligatorio', 'en entradas, salidas y ajustes', '<code>numero_lote</code>'],
+                                    'caducidad' => ['Caducidad obligatoria', 'en entradas y ajustes (en un ajuste basta la del lote si ya existe)', '<code>fecha_caducidad</code>'],
+                                    'nup'       => ['NUP obligatorio', 'en entradas y salidas (no se admiten ajustes: use entrada o salida con sus series)', '<code>nup</code>'],
+                                ];
+                                ?>
+                                <?php if (!$bodOblig['lote'] && !$bodOblig['caducidad'] && !$bodOblig['nup']): ?>
+                                    <br><strong>Lote, caducidad y NUP</strong>: opcionales (la configuración de facturación no los exige).
+                                <?php else: ?>
+                                    <?php foreach ($avisosOblig as $k => [$titulo, $donde, $col]): ?>
+                                        <?php if (!empty($bodOblig[$k])): ?>
+                                            <br><span class="text-danger"><i class="bi bi-exclamation-triangle me-1"></i><strong><?= $titulo ?></strong></span>
+                                            (configuración de facturación) <?= $donde ?> de <?= $listaBod($bodOblig[$k]) ?>: toda fila debe indicar <?= $col ?>.
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
                             </div>
                         </div>
                     </div>

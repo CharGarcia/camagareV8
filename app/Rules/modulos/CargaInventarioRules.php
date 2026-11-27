@@ -123,6 +123,49 @@ class CargaInventarioRules
         return null;
     }
 
+    // ─── Lote, caducidad y NUP obligatorios (configuración de facturación) ────
+
+    /**
+     * Switches «lote / caducidad / NUP obligatorio» de la configuración de facturación del
+     * establecimiento de la bodega. Con la opción apagada el dato es opcional.
+     *
+     *  - Lote: toda línea (entrada, salida o ajuste) lo indica; «Sin lote» cuenta como vacío.
+     *  - Caducidad: la indican las líneas que meten stock — entradas y ajustes. En un ajuste
+     *    basta la del lote si ya existe en la bodega ($caducidadLote); una salida sale de un
+     *    lote que ya tiene su caducidad registrada, así que no la pide.
+     *  - NUP: entradas y salidas lo indican. Un ajuste no admite series (no se sabe qué
+     *    serie sobra o falta), así que con NUP obligatorio esa bodega se ajusta con cargas
+     *    de entrada o salida con sus series.
+     *
+     * @param array{lote:bool, caducidad:bool, nup:bool} $obligatorios
+     */
+    public function validarObligatorios(
+        array $obligatorios,
+        string $tipoMovimiento,
+        ?string $lote,
+        ?string $caducidad,
+        ?string $nup,
+        ?string $caducidadLote = null
+    ): ?string {
+        $esAjuste = $tipoMovimiento === 'ajuste';
+
+        if (!empty($obligatorios['nup']) && $esAjuste) {
+            return 'La configuración de facturación de esta bodega exige NUP y una carga de ajuste no admite series: '
+                . 'registre la diferencia con una carga de entrada o de salida con sus series.';
+        }
+        if (!empty($obligatorios['lote']) && self::normalizarLote($lote) === null) {
+            return 'La configuración de facturación de esta bodega exige lote: indique el número de lote.';
+        }
+        if (!empty($obligatorios['caducidad']) && $tipoMovimiento !== 'salida'
+            && trim((string) $caducidad) === '' && trim((string) $caducidadLote) === '') {
+            return 'La configuración de facturación de esta bodega exige fecha de caducidad: indique la fecha de caducidad.';
+        }
+        if (!empty($obligatorios['nup']) && self::seriesDeNup($nup) === []) {
+            return 'La configuración de facturación de esta bodega exige NUP: indique el número de serie.';
+        }
+        return null;
+    }
+
     // ─── Ajuste por conteo físico ─────────────────────────────────────────────
 
     /** "Sin lote" escrito a mano en la columna de lote equivale a no indicar lote. */

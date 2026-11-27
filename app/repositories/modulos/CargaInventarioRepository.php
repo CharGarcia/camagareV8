@@ -488,6 +488,55 @@ class CargaInventarioRepository extends BaseRepository
     }
 
     /**
+     * Switches «lote / caducidad / NUP obligatorio» (empresa_establecimiento.obligatorio_lotes,
+     * obligatorio_caducidad, obligatorio_nup) que rigen a una bodega: los del establecimiento
+     * al que pertenece. Si la bodega no tiene establecimiento (o la base aún no tiene
+     * bodegas.id_establecimiento), los de todos los establecimientos vigentes de la empresa:
+     * quien llama decide cómo combinarlos. Valores crudos (texto 'true'/'false' o booleano).
+     *
+     * @return array{propio:bool, filas:list<array{obligatorio_lotes:mixed, obligatorio_caducidad:mixed, obligatorio_nup:mixed}>}
+     */
+    public function getObligatoriosBodega(int $idBodega, int $idEmpresa): array
+    {
+        if ($this->tieneColumnaEstablecimientoBodega()) {
+            $st = $this->db->prepare(
+                "SELECT ee.obligatorio_lotes, ee.obligatorio_caducidad, ee.obligatorio_nup
+                   FROM bodegas b
+                   JOIN empresa_establecimiento ee
+                     ON ee.id = b.id_establecimiento AND ee.id_empresa = b.id_empresa AND ee.eliminado = false
+                  WHERE b.id = :b AND b.id_empresa = :e AND b.eliminado = false
+                  LIMIT 1"
+            );
+            $st->execute([':b' => $idBodega, ':e' => $idEmpresa]);
+            $fila = $st->fetch(PDO::FETCH_ASSOC);
+            if ($fila !== false) {
+                return ['propio' => true, 'filas' => [$fila]];
+            }
+        }
+
+        $st = $this->db->prepare(
+            "SELECT obligatorio_lotes, obligatorio_caducidad, obligatorio_nup
+               FROM empresa_establecimiento
+              WHERE id_empresa = :e AND eliminado = false"
+        );
+        $st->execute([':e' => $idEmpresa]);
+        return ['propio' => false, 'filas' => $st->fetchAll(PDO::FETCH_ASSOC)];
+    }
+
+    /** ¿bodegas ya tiene id_establecimiento? (migración de Transferencias de Inventario). */
+    private function tieneColumnaEstablecimientoBodega(): bool
+    {
+        static $existe = null;
+        if ($existe === null) {
+            $existe = (bool) $this->db->query(
+                "SELECT 1 FROM information_schema.columns
+                  WHERE table_name = 'bodegas' AND column_name = 'id_establecimiento'"
+            )->fetchColumn();
+        }
+        return $existe;
+    }
+
+    /**
      * Candado transaccional por nombre de bodega (CLAUDE.md §8): dos importaciones a la vez
      * que crean la misma bodega no la duplican. Se libera solo al COMMIT/ROLLBACK.
      */
@@ -582,7 +631,7 @@ class CargaInventarioRepository extends BaseRepository
     /** Bodegas de la empresa para la hoja de referencia de la plantilla. */
     public function getBodegasParaPlantilla(int $idEmpresa): array
     {
-        $st = $this->db->prepare("SELECT nombre FROM bodegas WHERE id_empresa = :e AND eliminado = false ORDER BY nombre ASC");
+        $st = $this->db->prepare("SELECT id, nombre FROM bodegas WHERE id_empresa = :e AND eliminado = false ORDER BY nombre ASC");
         $st->execute([':e' => $idEmpresa]);
         return $st->fetchAll(PDO::FETCH_ASSOC);
     }

@@ -98,6 +98,8 @@ class CargasInventarioController extends BaseModuloController
             'fullWidth'   => true,
             // Selects del modal de filtros: solo usuarios y bodegas que aparecen en las cargas.
             'opcionesFiltro' => $this->service->getOpcionesFiltroListado($idEmpresa),
+            // Bodegas cuya configuración de facturación exige lote, caducidad o NUP (aviso en la importación).
+            'bodegasObligatorios' => $this->service->getBodegasObligatorios($idEmpresa),
         ]);
     }
 
@@ -407,7 +409,7 @@ class CargasInventarioController extends BaseModuloController
         };
 
         $crearHojaRef('Productos', ['CODIGO (usar este valor)', 'NOMBRE'], $refs['productos'], 'FF70AD47');
-        $crearHojaRef('Bodegas', ['NOMBRE_BODEGA (usar este valor)'], $refs['bodegas'], 'FFED7D31');
+        $crearHojaRef('Bodegas', ['NOMBRE_BODEGA (usar este valor)', 'LOTE OBLIGATORIO', 'CADUCIDAD OBLIGATORIA', 'NUP OBLIGATORIO'], $refs['bodegas'], 'FFED7D31');
 
         $ss->setActiveSheetIndex(0);
 
