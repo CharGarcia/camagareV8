@@ -110,6 +110,7 @@ class CargaInventarioService
         $cab = $this->repo->getById($idCarga, $idEmpresa);
         if (!$cab) return null;
         $cab['detalle'] = $this->agregarEstimacionAjuste($cab, $this->repo->getDetalle($idCarga, $idEmpresa));
+        $cab['detalle'] = $this->agregarLineasSinStock($cab, $cab['detalle'], $idEmpresa);
 
         // Nombre de quien anuló: se resuelve aparte y no en el JOIN de getById(), que así
         // sigue funcionando en una base donde aún no existe la columna anulada_por.
@@ -138,6 +139,27 @@ class CargaInventarioService
             }
         }
         unset($d);
+        return $detalle;
+    }
+
+    /**
+     * Salida pendiente: a cada línea que hoy no tiene stock suficiente le agrega `sin_stock`
+     * con el motivo, para que quien aprueba lo vea al abrir la carga. Es una estimación (sin
+     * bloquear el stock): al aprobar se vuelve a revisar. Best-effort: nunca impide abrir la carga.
+     */
+    private function agregarLineasSinStock(array $cabecera, array $detalle, int $idEmpresa): array
+    {
+        if (($cabecera['tipo_movimiento'] ?? '') !== 'salida' || ($cabecera['estado'] ?? '') !== 'pendiente') {
+            return $detalle;
+        }
+        $detalle = array_values($detalle);
+        try {
+            foreach ($this->lineasSinStock($detalle, $idEmpresa, false) as $i => $motivo) {
+                $detalle[$i]['sin_stock'] = $motivo;
+            }
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+        }
         return $detalle;
     }
 
@@ -635,9 +657,14 @@ class CargaInventarioService
      * y solo se registra la diferencia (ver aplicarLineaAjuste()).
      *
      * @param bool $auto true cuando la aprobación es automática (no exige ser aprobador).
+     * @param bool $soloConStock Carga de salida: en vez de rechazar toda la carga cuando hay
+     *        líneas sin stock, aplica las que sí tienen y deja las demás en la carga marcadas
+     *        como no aplicadas (X roja y motivo). Lo decide quien aprueba desde la pantalla.
      */
-    public function aprobar(int $idCarga, int $idEmpresa, int $idUsuario, bool $auto = false, int $nivel = 3): array
+    public function aprobar(int $idCarga, int $idEmpresa, int $idUsuario, bool $auto = false, int $nivel = 3, bool $soloConStock = false): array
     {
+        $noAplicadas = 0;
+        $totalLineas = 0;
         $db = Database::getConnection();
         $manejaTransaccion = !$db->inTransaction();
         if ($manejaTransaccion) {
@@ -678,19 +705,54 @@ class CargaInventarioService
                 $this->validarAjusteAntesDeAplicar($detalle);
             }
 
-            foreach ($detalle as $i => $d) {
+            foreach ($detalle as $d) {
                 if (empty($d['linea_valida']) || $d['linea_valida'] === 'f') {
                     throw new \InvalidArgumentException('Hay líneas con error; no se puede aprobar.');
                 }
-                if ($esAjuste) {
-                    $this->aplicarLineaAjuste($carga, $d, $i + 2, $idEmpresa, $idUsuario);
-                } else {
-                    $this->aplicarLineaMovimiento($carga, $d, $i + 2, $idEmpresa, $idUsuario);
+            }
+            $totalLineas = count($detalle);
+            $sinStock    = [];
+            if ($carga['tipo_movimiento'] === 'salida') {
+                // Todas las líneas sin stock de una vez, no solo la primera que falla.
+                $sinStock = $this->lineasSinStock($detalle, $idEmpresa, true);
+                if ($sinStock !== [] && !$soloConStock) {
+                    throw new \RuntimeException($this->mensajeSinStock($carga, $detalle, $sinStock));
+                }
+                if ($sinStock !== [] && count($sinStock) === $totalLineas) {
+                    throw new \InvalidArgumentException('Ninguna línea de la carga tiene stock suficiente: no hay nada que aplicar.');
+                }
+                // Aprobación parcial: la línea queda en la carga, con X roja y su motivo.
+                foreach ($sinStock as $i => $motivo) {
+                    $this->repo->marcarLineaNoAplicada((int) $detalle[$i]['id'], $idEmpresa, 'Fila ' . ($i + 2) . ': No se aplicó. ' . $motivo);
+                }
+                $noAplicadas = count($sinStock);
+            }
+
+            foreach ($detalle as $i => $d) {
+                if (isset($sinStock[$i])) {
+                    continue;
+                }
+                try {
+                    if ($esAjuste) {
+                        $this->aplicarLineaAjuste($carga, $d, $i + 2, $idEmpresa, $idUsuario);
+                    } else {
+                        $this->aplicarLineaMovimiento($carga, $d, $i + 2, $idEmpresa, $idUsuario);
+                    }
+                } catch (\PDOException $e) {
+                    throw $e;
+                } catch (\Exception $e) {
+                    // El inventario rechaza la línea sin decir cuál es («Stock insuficiente en el
+                    // lote X»): se antepone la fila, el producto, la bodega y la cantidad.
+                    $mensaje = $this->contextoLinea($carga, $d, $i + 2) . ' ' . preg_replace('/^Fila \d+:\s*/u', '', $e->getMessage());
+                    throw $e instanceof \InvalidArgumentException
+                        ? new \InvalidArgumentException($mensaje, 0, $e)
+                        : new \RuntimeException($mensaje, 0, $e);
                 }
             }
 
             $this->repo->actualizarEstado($idCarga, $idEmpresa, 'aprobada', $idUsuario);
-            $this->log->registrar($idUsuario, $idEmpresa, $auto ? 'aprobar_auto' : 'aprobar', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'], ['estado' => 'aprobada']);
+            $this->log->registrar($idUsuario, $idEmpresa, $auto ? 'aprobar_auto' : 'aprobar', 'inventario_cargas', $idCarga, ['estado' => 'pendiente'],
+                ['estado' => 'aprobada'] + ($noAplicadas > 0 ? ['lineas_aplicadas' => $totalLineas - $noAplicadas, 'lineas_no_aplicadas' => $noAplicadas] : []));
 
             if ($manejaTransaccion) {
                 $db->commit();
@@ -702,7 +764,109 @@ class CargaInventarioService
             throw $e;
         }
 
-        return ['ok' => true, 'estado' => 'aprobada'];
+        return ['ok' => true, 'estado' => 'aprobada', 'lineas' => $totalLineas, 'no_aplicadas' => $noAplicadas];
+    }
+
+    /**
+     * Identifica una línea de la carga en un mensaje de error: fila del archivo, código y nombre
+     * del producto, bodega y cantidad (en un ajuste, la cantidad contada).
+     */
+    private function contextoLinea(array $carga, array $d, int $fila): string
+    {
+        $codigo   = trim((string) ($d['producto_codigo'] ?? ''));
+        $nombre   = trim((string) ($d['producto_nombre'] ?? ''));
+        $producto = trim($codigo . ($codigo !== '' && $nombre !== '' ? ' - ' : '') . mb_substr($nombre, 0, 80));
+        if ($producto === '') {
+            $producto = 'producto #' . (int) ($d['id_producto'] ?? 0);
+        }
+        $bodega   = trim((string) ($d['bodega_nombre'] ?? ''));
+        $etiqueta = ['entrada' => 'entrada de', 'salida' => 'salida de', 'ajuste' => 'contado'][$carga['tipo_movimiento'] ?? ''] ?? 'cantidad';
+
+        return "Fila {$fila}: {$producto}"
+             . ($bodega !== '' ? ", bodega {$bodega}" : '')
+             . ", {$etiqueta} " . CargaInventarioRules::numero((float) ($d['cantidad'] ?? 0)) . '.';
+    }
+
+    /** Tope de líneas sin stock que se detallan en el mensaje. */
+    private const MAX_LINEAS_SIN_STOCK = 50;
+
+    /**
+     * Carga de salida: líneas que no tienen stock suficiente en la bodega o en su lote, como
+     * [índice de la línea => motivo]. Lo que sacan las líneas anteriores de la misma carga se
+     * descuenta. Es un adelanto para informar todas de una vez: la regla sigue en
+     * InventarioService::ajusteManual(), que vuelve a validar cada línea al aplicarla.
+     *
+     * @param bool $bloquear true al aprobar (candado de stock antes de leer, §8); false para
+     *        solo mostrar una estimación al abrir la carga.
+     */
+    private function lineasSinStock(array $detalle, int $idEmpresa, bool $bloquear): array
+    {
+        $invRepo     = $this->inventarioService()->getRepository();
+        $bodega      = []; // "producto:bodega"      => disponible
+        $lotes       = []; // "producto:bodega:lote" => disponible
+        $usado       = []; // claves de las que ya sacó una línea anterior
+        $sinStock    = [];
+        $descontadas = ' (descontadas las filas anteriores de esta carga)';
+
+        foreach ($detalle as $i => $d) {
+            if (empty($d['linea_valida']) || $d['linea_valida'] === 'f') {
+                continue;
+            }
+            $idProducto = (int) $d['id_producto'];
+            $idBodega   = (int) $d['id_bodega'];
+            $cantidad   = abs((float) $d['cantidad']);
+            $lote       = $d['numero_lote'] ?: null;
+            $kb         = $idProducto . ':' . $idBodega;
+            $kl         = $lote !== null ? $kb . ':' . $lote : null;
+
+            if (!array_key_exists($kb, $bodega)) {
+                if ($bloquear) {
+                    $invRepo->lockStock($idProducto, $idBodega, $idEmpresa);
+                }
+                $bodega[$kb] = (float) $invRepo->getStockActual($idProducto, $idBodega, $idEmpresa);
+            }
+            if ($kl !== null && !array_key_exists($kl, $lotes)) {
+                $lotes[$kl] = (float) $invRepo->getStockLote($idProducto, $idBodega, $idEmpresa, $lote);
+            }
+
+            if ($cantidad > $bodega[$kb] + 0.000001) {
+                $sinStock[$i] = 'Stock insuficiente en la bodega. Disponible: ' . CargaInventarioRules::numero(max(0.0, $bodega[$kb]))
+                              . (isset($usado[$kb]) ? $descontadas : '') . '.';
+                continue; // la línea no sale: no descuenta
+            }
+            if ($kl !== null && $cantidad > $lotes[$kl] + 0.000001) {
+                $sinStock[$i] = "Stock insuficiente en el lote '" . mb_substr((string) $lote, 0, 60) . "'. Disponible: "
+                              . CargaInventarioRules::numero(max(0.0, $lotes[$kl]))
+                              . (isset($usado[$kl]) ? $descontadas : '') . '.';
+                continue;
+            }
+            $bodega[$kb] -= $cantidad;
+            $usado[$kb]   = true;
+            if ($kl !== null) {
+                $lotes[$kl] -= $cantidad;
+                $usado[$kl]  = true;
+            }
+        }
+        return $sinStock;
+    }
+
+    /** Mensaje con todas las líneas sin stock: una sola, en un renglón; varias, una por renglón. */
+    private function mensajeSinStock(array $carga, array $detalle, array $sinStock): string
+    {
+        $renglones = [];
+        foreach ($sinStock as $i => $motivo) {
+            $renglones[] = $this->contextoLinea($carga, $detalle[$i], $i + 2) . ' ' . $motivo;
+        }
+        $total = count($renglones);
+        if ($total === 1) {
+            return $renglones[0];
+        }
+        $mensaje = "{$total} de " . count($detalle) . " líneas no tienen stock suficiente:\n"
+                 . implode("\n", array_slice($renglones, 0, self::MAX_LINEAS_SIN_STOCK));
+        if ($total > self::MAX_LINEAS_SIN_STOCK) {
+            $mensaje .= "\n… y " . ($total - self::MAX_LINEAS_SIN_STOCK) . ' más.';
+        }
+        return $mensaje;
     }
 
     /** Línea de entrada o salida: su cantidad, con una unidad por serie si trae varias. */

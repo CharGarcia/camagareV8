@@ -620,6 +620,19 @@ class CargaInventarioRepository extends BaseRepository
         )->execute([':saldo' => $saldoSistema, ':dif' => $diferencia, ':id' => $idLinea, ':e' => $idEmpresa]);
     }
 
+    /**
+     * Aprobación parcial: la línea no se aplicó al inventario (sin stock). Queda en la carga
+     * como línea no válida con su motivo, igual que se muestran las líneas con error.
+     */
+    public function marcarLineaNoAplicada(int $idLinea, int $idEmpresa, string $motivo): void
+    {
+        $this->db->prepare(
+            "UPDATE inventario_cargas_detalle
+                SET linea_valida = false, error_linea = :motivo, updated_at = CURRENT_TIMESTAMP
+              WHERE id = :id AND id_empresa = :e AND eliminado = false"
+        )->execute([':motivo' => mb_substr($motivo, 0, 300), ':id' => $idLinea, ':e' => $idEmpresa]); // error_linea es VARCHAR(300)
+    }
+
     /** ¿Alguna línea de la carga se aplicó ya como ajuste por conteo (tiene diferencia registrada)? */
     public function tieneAjusteAplicado(int $idCarga, int $idEmpresa): bool
     {

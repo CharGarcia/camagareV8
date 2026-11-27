@@ -420,6 +420,21 @@ function CI_aviso(opciones, modalId = null) {
     });
 }
 
+/** Mensaje del servidor en varios renglones (p. ej. una línea sin stock por renglón) como lista. */
+function CI_listaMensaje(mensaje) {
+    const [titulo, ...items] = String(mensaje).split('\n').filter(x => x.trim() !== '');
+    if (!items.length) return `<p class="mb-2 text-danger">${CI_esc(titulo || '')}</p>`;
+    return `<p class="mb-1 text-danger">${CI_esc(titulo)}</p>
+        <ul class="mb-2 ps-3 text-danger" style="max-height:240px;overflow:auto;">${items.map(x => `<li>${CI_esc(x)}</li>`).join('')}</ul>`;
+}
+
+/** Cuerpo de un aviso de error: texto simple, o lista si el mensaje trae varios renglones. */
+function CI_cuerpoMensaje(mensaje) {
+    return String(mensaje).includes('\n')
+        ? { width: 640, html: `<div class="text-start small">${CI_listaMensaje(mensaje)}</div>` }
+        : { text: mensaje };
+}
+
 /** Aviso de "en proceso" (sin botones) mientras corre una petición al servidor. */
 function CI_avisoProceso(titulo, html, modalId = null) {
     CI_aviso({
@@ -694,9 +709,9 @@ function CI_resultadoImportacion(d) {
             width: 640,
             html: `<div class="text-start small">
                 <p class="mb-2">${registradas}, pero el stock no se actualizó:</p>
-                <p class="mb-2 text-danger">${CI_esc(d.error_aplicacion)}</p>
+                ${CI_listaMensaje(d.error_aplicacion)}
                 <p class="mb-0 text-muted">La carga quedó <b>pendiente</b>. Corrija la causa y apruébela${quien ? ` (o pídaselo a ${CI_esc(CI_APROBADORES.join(', '))})` : ''},
-                    o elimínela e impórtela de nuevo.</p>
+                    o elimínela e impórtela de nuevo. Si es por falta de stock, al abrirla puede aprobar solo las líneas que sí tienen.</p>
             </div>`,
         };
     }
@@ -742,6 +757,11 @@ async function CI_verDetalle(id) {
     const validada = CI_bool(c.validada);
     const detalle  = c.detalle || [];
     const conError = detalle.filter(d => !CI_bool(d.linea_valida)).length;
+    // Salida pendiente: líneas que hoy no tienen stock (estimación; al aprobar se revisa de nuevo).
+    const sinStock = detalle.filter(d => d.sin_stock).length;
+    const conStock = detalle.length - sinStock;
+    c.lineas_sin_stock = sinStock;
+    c.lineas_con_stock = conStock;
     // Segregación de funciones: quien registró la carga no la aprueba (salvo super admin o
     // que la empresa no tenga aprobadores configurados).
     const esCreador    = String(c.created_by) === String(CI_ID_USUARIO);
@@ -766,7 +786,8 @@ async function CI_verDetalle(id) {
     // Resumen junto a los botones de exportar: la lista de líneas hace su propio scroll.
     document.getElementById('ci-det-resumen').innerHTML = `${detalle.length} ${detalle.length === 1 ? 'línea' : 'líneas'}`
         + (esAjuste && detalle.some(d => difDe(d) != null) ? ` · ${conDif} con diferencia${ajusteHoy ? ' (estimado)' : ''}` : '')
-        + (conError ? ` · <span class="text-danger fw-semibold">${conError} con error</span>` : '');
+        + (sinStock ? ` · <span class="text-warning-emphasis fw-semibold">${sinStock} sin stock</span>` : '')
+        + (conError ? ` · <span class="text-danger fw-semibold">${conError} ${c.estado === 'aprobada' ? (conError === 1 ? 'no aplicada' : 'no aplicadas') : 'con error'}</span>` : '');
 
     // Líneas en el orden del archivo. El motivo lleva la fila del Excel (fila 1 =
     // encabezado), con la misma numeración de la comprobación al importar.
@@ -782,8 +803,8 @@ async function CI_verDetalle(id) {
             ${esAjuste ? `<td class="text-end text-nowrap">${celdaNum(saldoDe(d))}</td><td class="text-end text-nowrap">${celdaDif(difDe(d))}</td>` : ''}
             <td class="text-end text-nowrap">$ ${parseFloat(d.costo_unitario || 0).toFixed(2)}</td>
             <td style="min-width:180px">${CI_esc(d.observacion || '')}</td>
-            <td class="text-center">${ok ? '<i class="bi bi-check-circle text-success"></i>' : '<i class="bi bi-x-circle text-danger"></i>'}</td>
-            <td class="pe-2 text-danger" style="min-width:220px">${ok ? '' : CI_esc(/^Fila \d+:/.test(d.error_linea || '') ? d.error_linea : `Fila ${i + 2}: ${d.error_linea || 'Línea con error'}`)}</td>
+            <td class="text-center">${!ok ? '<i class="bi bi-x-circle text-danger"></i>' : (d.sin_stock ? '<i class="bi bi-exclamation-triangle-fill text-warning" title="Sin stock suficiente"></i>' : '<i class="bi bi-check-circle text-success"></i>')}</td>
+            <td class="pe-2 ${ok ? 'text-warning-emphasis' : 'text-danger'}" style="min-width:220px">${ok ? (d.sin_stock ? CI_esc(`Fila ${i + 2}: ${d.sin_stock}`) : '') : CI_esc(/^Fila \d+:/.test(d.error_linea || '') ? d.error_linea : `Fila ${i + 2}: ${d.error_linea || 'Línea con error'}`)}</td>
         </tr>`;
     }).join('');
 
@@ -814,6 +835,15 @@ async function CI_verDetalle(id) {
         ${c.estado === 'pendiente' && !validada ? `<div class="small text-danger mb-2 flex-shrink-0">
             <i class="bi bi-exclamation-triangle-fill me-1"></i>No se puede aprobar mientras haya líneas con error: corrija el archivo,
             <strong>elimine</strong> esta carga e impórtela de nuevo.
+        </div>` : ''}
+        ${sinStock ? `<div class="small text-warning-emphasis mb-2 flex-shrink-0">
+            <i class="bi bi-exclamation-triangle-fill me-1"></i>${sinStock === 1 ? '1 línea no tiene' : `${sinStock} líneas no tienen`} stock suficiente hoy (marcadas en la columna <strong>Motivo</strong>).
+            ${conStock > 0
+                ? `Al aprobar puede aplicar solo ${conStock === 1 ? 'la línea que sí tiene' : `las ${conStock} que sí tienen`}; las demás quedan en la carga como no aplicadas.`
+                : 'Ninguna línea se puede aplicar: ingrese primero el stock o elimine la carga.'}
+        </div>` : ''}
+        ${c.estado === 'aprobada' && conError ? `<div class="small text-danger mb-2 flex-shrink-0">
+            <i class="bi bi-info-circle-fill me-1"></i>Carga aprobada en parte: ${conError === 1 ? 'la línea con X roja no se aplicó' : `las ${conError} líneas con X roja no se aplicaron`} al inventario (ver <strong>Motivo</strong>).
         </div>` : ''}
         ${esAjuste ? `<div class="small text-muted mb-2 flex-shrink-0">
             <i class="bi bi-clipboard-check me-1"></i>Ajuste por conteo físico: cada producto queda con la cantidad contada y solo se registra la diferencia.
@@ -847,8 +877,9 @@ async function CI_verDetalle(id) {
     const btnAp = document.getElementById('ci-btn-aprobar');
     if (btnAp && puedeAprobar) {
         btnAp.classList.remove('d-none');
-        btnAp.disabled = !validada;
-        btnAp.title = validada ? '' : 'La carga tiene líneas con error';
+        const nadaQueAplicar = sinStock > 0 && conStock === 0;
+        btnAp.disabled = !validada || nadaQueAplicar;
+        btnAp.title = !validada ? 'La carga tiene líneas con error' : (nadaQueAplicar ? 'Ninguna línea tiene stock suficiente' : '');
     }
     if (puedeAprobar) document.getElementById('ci-btn-rechazar')?.classList.remove('d-none');
     // Pendientes y rechazadas no movieron el stock: se eliminan. Una aprobada se anula
@@ -885,7 +916,7 @@ async function CI_accion(url, body, textoProceso, alTerminar = null) {
         json = { ok: false, mensaje: 'No se pudo comunicar con el servidor. Intente de nuevo.' };
     }
     if (!json.ok) {
-        CI_aviso({ icon: 'error', title: 'No se pudo completar', text: json.mensaje || json.error || 'Error al procesar la carga.' }, 'ci-modal-detalle');
+        CI_aviso({ icon: 'error', title: 'No se pudo completar', ...CI_cuerpoMensaje(json.mensaje || json.error || 'Error al procesar la carga.') }, 'ci-modal-detalle');
         return;
     }
     bootstrap.Modal.getInstance(document.getElementById('ci-modal-detalle'))?.hide();
@@ -938,6 +969,29 @@ async function CI_guardarObservacion() {
 
 async function CI_aprobar() {
     if (!CI_cargaActual) return;
+    // Salida con líneas sin stock: se aprueba solo lo que sí se puede aplicar.
+    const sinStock = CI_cargaActual.lineas_sin_stock || 0;
+    if (sinStock > 0) {
+        const conStock = CI_cargaActual.lineas_con_stock || 0;
+        const parcial = await CI_aviso({
+            icon: 'warning',
+            title: `¿Aprobar solo las líneas con stock de la carga #${CI_cargaActual.numero}?`,
+            html: `<div class="text-start small">
+                <p class="mb-2">Se ${conStock === 1 ? 'aplicará <b>1 línea</b>' : `aplicarán <b>${conStock} líneas</b>`} al inventario.
+                    ${sinStock === 1 ? '<b>1 línea no tiene</b>' : `<b>${sinStock} líneas no tienen</b>`} stock suficiente y <b>no se ${sinStock === 1 ? 'aplicará' : 'aplicarán'}</b>:
+                    ${sinStock === 1 ? 'queda' : 'quedan'} en la carga con X roja y su motivo.</p>
+                <p class="mb-0 text-muted">La carga quedará <b>aprobada</b> y lo no aplicado ya no se podrá aplicar desde ella: regístrelo en una carga nueva cuando haya stock.
+                    El stock se revisa otra vez en este momento, así que la cantidad de líneas puede variar.</p>
+            </div>`,
+            width: 600,
+            showCancelButton: true,
+            confirmButtonText: 'Sí, aprobar las que tienen stock',
+            confirmButtonColor: '#198754',
+        }, 'ci-modal-detalle');
+        if (!parcial.isConfirmed) return;
+        CI_accion(`${CI_URL}/aprobarAjax`, `id=${CI_cargaActual.id}&solo_con_stock=1`, 'Aplicando la carga al inventario…');
+        return;
+    }
     const r = await CI_aviso({
         icon: 'question',
         title: `¿Aprobar la carga #${CI_cargaActual.numero}?`,

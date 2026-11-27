@@ -452,8 +452,15 @@ class CargasInventarioController extends BaseModuloController
 
         try {
             $id = (int) ($_POST['id'] ?? 0);
-            $res = $this->service->aprobar($id, $idEmpresa, $idUsuario, false, $nivel);
-            echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => 'Carga aprobada y aplicada al inventario.']);
+            // Salida con líneas sin stock: quien aprueba eligió aplicar solo las que sí tienen.
+            $soloConStock = ($_POST['solo_con_stock'] ?? '') === '1';
+            $res = $this->service->aprobar($id, $idEmpresa, $idUsuario, false, $nivel, $soloConStock);
+            $no  = (int) ($res['no_aplicadas'] ?? 0);
+            $mensaje = $no > 0
+                ? 'Carga aprobada: se aplicaron ' . ((int) $res['lineas'] - $no) . ' de ' . (int) $res['lineas']
+                    . ' líneas. ' . ($no === 1 ? '1 línea no se aplicó' : "{$no} líneas no se aplicaron") . ' por falta de stock.'
+                : 'Carga aprobada y aplicada al inventario.';
+            echo json_encode(['ok' => true, 'data' => $res, 'mensaje' => $mensaje]);
         } catch (\Throwable $e) {
             \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
             echo json_encode(['ok' => false, 'mensaje' => $e->getMessage()]);

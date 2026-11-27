@@ -5,8 +5,8 @@ categoria: Inventario
 ruta_modulo: modulos/cargas-inventario
 tipo: modulo
 visibilidad: todos
-etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion, crear bodega, bodega no existe, bodega inexistente, servicio, servicios, cantidad cero, cantidad 0, filas omitidas, filas no cargadas, revisar archivo, advertencias, resumen de importacion
-version: 2.3
+etiquetas: carga de inventario, errores de carga, no se puede aprobar, lineas con error, comprobada, corregir carga, ajuste masivo, entrada masiva, salida masiva, conteo fisico, inventario fisico, toma fisica, cuadrar stock, saldo contado, diferencia de inventario, faltantes, sobrantes, importar stock, aprobacion, buscar, filtrar, ordenar, columnas, observacion, observaciones, observacion de la linea, creado por, aprobado por, exportar, buscador, filtros, filtrar cargas, buscar por producto, cargas pendientes, chips, detalle de la carga, lineas de la carga, ver lineas, motivo, fila del excel, descargar pdf, descargar excel, exportar lineas, cargando archivo, importar excel, rechazar carga, eliminar carga, anular carga, anular carga aprobada, reversar carga, revertir carga, deshacer carga, modificar carga aprobada, editar carga aprobada, corregir carga aprobada, carga anulada, productos ya usados, no se puede anular, nup, serie, series, serial, numero de serie, varias series, lote, ajuste por lote, imprimir, impresora, quien aprueba, aprobar salida, salida no se aprueba, sin aprobadores, aprobacion automatica, editar observacion, cambiar observacion, corregir observacion, crear bodega, bodega no existe, bodega inexistente, servicio, servicios, cantidad cero, cantidad 0, filas omitidas, filas no cargadas, revisar archivo, advertencias, resumen de importacion, stock insuficiente, sin stock, stock insuficiente en el lote, que producto no tiene stock, aprobar solo las que tienen stock, aprobacion parcial, aprobar en parte, lineas no aplicadas, no se aplico
+version: 2.4
 orden: 25
 estado: activo
 ---
@@ -298,6 +298,34 @@ así antes de esta corrección (pendientes sin enlace ni aviso) se rescatan sola
 primera vez que alguien abre el módulo: reciben su enlace y se avisa a los
 aprobadores una sola vez.
 
+### Salidas sin stock: aprobar solo lo que sí se puede aplicar
+
+Una carga de **salida** no puede sacar más de lo que hay en la bodega ni en el
+lote de la línea. El sistema revisa **todas** las líneas y las informa juntas,
+cada una con su fila del Excel, código y nombre del producto, bodega, cantidad y
+lo disponible. Lo que sacan las filas anteriores de la misma carga ya se descuenta.
+
+Al **abrir** una salida pendiente, las líneas que hoy no tienen stock aparecen con
+un triángulo amarillo y la explicación en la columna **Motivo**, y arriba de la
+tabla se indica cuántas son. Es el stock de ese momento: al aprobar se revisa de
+nuevo.
+
+Con líneas sin stock, el botón **Aprobar** ofrece **aprobar solo las que tienen
+stock**:
+
+- Las líneas con stock se aplican al inventario.
+- Las demás **no se aplican** y quedan en la carga con X roja y el motivo
+  (*No se aplicó. Stock insuficiente…*), también en el PDF y el Excel de la carga.
+- La carga queda **aprobada**. Lo no aplicado ya no se aplica desde ella: cuando
+  haya stock, regístrelo en una carga nueva.
+- Si ninguna línea tiene stock, no hay nada que aprobar: ingrese primero el stock o
+  elimine la carga.
+
+La otra opción sigue siendo ingresar el stock que falta y aprobar la carga completa,
+o eliminarla e importarla corregida. La aprobación desde el **enlace del correo**
+y la que el sistema hace sola al importar no aplican cargas en parte: si falta
+stock, la carga queda pendiente con la lista de líneas.
+
 ### Quién aprueba
 
 | Caso | Quién puede aprobar o rechazar |
@@ -381,6 +409,9 @@ stock y se ven con el filtro *Ver anulados*, con la observación terminada en
 - **"Una carga de ajuste no admite NUP"**: quite la serie o registre esas unidades con una carga de entrada o salida.
 - **Un error de los anteriores aparece recién al aprobar** (termina en *Elimine la carga y vuelva a importarla corregida*): la carga se importó antes de que existiera esa regla, o el producto empezó a manejar lotes después de importar el ajuste. Elimínela e impórtela de nuevo.
 - **"Para aprobar cargas de ajuste falta aplicar en la base de datos el script…"**: aviso para soporte técnico; falta una actualización de la base de datos.
+- **"Fila N: código - producto, bodega X, salida de C. Stock insuficiente en el lote 'L'. Disponible: D."** (o *Stock insuficiente en bodega*): al aplicar o aprobar la carga, esa línea pide sacar más de lo que hay. El mensaje indica la fila del Excel, el producto, la bodega y la cantidad, y lista todas las líneas en esa situación. Puede aprobar solo las líneas que sí tienen stock, ingresar primero el stock que falta, o eliminar la carga e importarla corregida (ver *Salidas sin stock* en *Aprobación*).
+- **"Ninguna línea de la carga tiene stock suficiente: no hay nada que aplicar"**: todas las líneas de la salida piden más de lo disponible.
+- **Carga aprobada con líneas en X roja y motivo "No se aplicó…"**: se aprobó en parte; esas líneas no movieron el stock.
 - **La carga no afecta el stock**: puede estar pendiente de aprobación, o anulada.
 - **No aparece la observación de las líneas**: en las cargas importadas antes de la versión 1.6 con un archivo propio cuyo título de columna llevaba tilde o era plural (*Observación*, *Observaciones*), la observación de cada línea no se guardó y no se puede recuperar. Desde la 1.6 esos títulos se reconocen.
 - **"No se puede eliminar una carga ya aprobada"**: una carga aprobada se anula, no se elimina (ver *Anular o corregir una carga aprobada*).
@@ -418,6 +449,7 @@ para corregir el archivo. Los motivos posibles son:
 
 ## Historial de cambios
 
+- **2.4** — Cuando una línea no se puede aplicar al inventario (p. ej. *Stock insuficiente en el lote*), el mensaje ahora dice **qué línea es**: fila del Excel, código y nombre del producto, bodega y cantidad. En las **salidas** se listan **todas** las líneas sin stock (no solo la primera), se marcan al abrir la carga pendiente y se puede **aprobar solo las que tienen stock**: las demás quedan en la carga como no aplicadas.
 - **2.3** — **Revisión antes de generar la carga**: al importar, el sistema revisa el archivo sin grabar nada y, si hay avisos, pregunta si se genera la carga. Las **bodegas que no existen** se pueden crear en ese momento (las que no se crean dejan sus filas sin cargar); las filas de **servicios** y, en entradas y salidas, las de **cantidad 0** ya no dejan la carga con error: no se cargan. El aviso final resume las bodegas creadas y las filas que no se cargaron. El motivo de cada línea con error conserva la fila real del Excel aunque se hayan omitido filas.
 - **2.2** — **Importar** una carga registra una sola vez: un reintento tras «Error de conexión» ya no crea una segunda carga (que, sin aprobación exigida, se aplicaba sola). Rechazar o eliminar una carga mientras otro usuario la aprueba ya no la deja «rechazada» con su stock aplicado: quien llega segundo ve el estado real.
 - **2.1** — La **observación general** de la carga se puede editar desde la ventana

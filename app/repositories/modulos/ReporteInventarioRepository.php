@@ -636,20 +636,28 @@ class ReporteInventarioRepository extends BaseRepository
                     $condBod = ' AND x.id_bodega = :id_bodega_norm';
                     $params[':id_bodega_norm'] = (int) $filtros['id_bodega'];
                 }
+                // Una fila por clave (GROUP BY de esa sola columna): así el planificador sabe que
+                // el cruce no multiplica filas. Sin eso estimaba millones y se iba a disco.
                 $ctes[] = "nup_origen AS MATERIALIZED (
-                    SELECT DISTINCT x.id_producto, x.id_bodega, x.numero_lote, x.nup
+                    SELECT " . self::claveSql(['x.id_producto', 'x.id_bodega', 'x.numero_lote', 'x.nup']) . " AS clave,
+                           MAX(x.nup) AS nup
                     FROM inventario_kardex x
                     WHERE x.id_empresa = :id_empresa_norm AND x.eliminado = false AND x.cantidad > 0
                       AND NULLIF(TRIM(x.nup), '') IS NOT NULL
                       AND COALESCE(x.referencia_tipo, '') NOT IN ({$devol}){$condProd}{$condBod}
+                    GROUP BY 1
                 )";
                 [$j, $nup] = self::exprNupNormalizado('k0', 'numero_lote', 'nup');
                 $joins .= $j;
             }
             if ($normCad) {
                 // La misma regla con la que los documentos de salida eligen la caducidad del lote.
-                $ctes[] = "cad_lote AS MATERIALIZED ("
-                    . InventarioRepository::sqlCaducidadPrincipalLote(':id_empresa_norm', $condProd) . ")";
+                $ctes[] = "cad_lote AS MATERIALIZED (
+                    SELECT " . self::claveSql(['cl.id_producto', 'cl.numero_lote']) . " AS clave,
+                           MAX(cl.caducidad) AS caducidad
+                    FROM (" . InventarioRepository::sqlCaducidadPrincipalLote(':id_empresa_norm', $condProd) . ") cl
+                    GROUP BY 1
+                )";
                 [$j, $cad] = self::exprCadNormalizada('k0', 'numero_lote', 'fecha_caducidad');
                 $joins .= $j;
             }
@@ -666,13 +674,39 @@ class ReporteInventarioRepository extends BaseRepository
         return [implode(",\n", $ctes), $from, $params];
     }
 
+    /**
+     * Clave de cruce de UNA sola expresión para los JOIN del desglose: todas las columnas
+     * concatenadas; NULL viaja como chr(2), así que cruza igual que IS NOT DISTINCT FROM.
+     *
+     * Por qué no se cruza columna por columna: con varias condiciones —y más si alguna es
+     * IS NOT DISTINCT FROM, que no admite hash— PostgreSQL resolvía el cruce solo por
+     * id_producto (o producto + bodega) y comparaba el resto fila contra fila. Con un producto
+     * de miles de lotes eso es cuadrático: "Lote + caducidad" no terminaba (27-11-2026; medido
+     * en una copia con 140.000 movimientos: 42 millones de comparaciones en cada cruce).
+     * Con una sola igualdad el cruce es siempre por hash o por orden, lineal.
+     *
+     * Un NULL en una columna que del otro lado nunca es NULL ni vacía (el NUP o el lote de
+     * nup_origen / cad_lote) sigue sin cruzar, igual que con "=".
+     *
+     * @param string[] $exprs expresiones SQL, en el MISMO orden en los dos lados del cruce.
+     */
+    private static function claveSql(array $exprs): string
+    {
+        // COLLATE "C": la clave solo se compara por igualdad; con la intercalación de la base
+        // (es_EC) ordenar 140.000 claves de texto costaba varios segundos (medido: 8 s → 2 s).
+        return '(' . implode(' || chr(1) || ', array_map(
+            static fn(string $e) => "COALESCE(({$e})::text, chr(2))",
+            $exprs
+        )) . ') COLLATE "C"';
+    }
+
     /** NUP normalizado de `$alias` (requiere el CTE nup_origen). @return array{0: string, 1: string} [JOIN, expresión] */
     private static function exprNupNormalizado(string $alias, string $colLote, string $colNup): array
     {
         $j = "{$alias}_no";
         return [
-            " LEFT JOIN nup_origen {$j} ON {$j}.id_producto = {$alias}.id_producto AND {$j}.id_bodega = {$alias}.id_bodega
-                AND {$j}.numero_lote IS NOT DISTINCT FROM {$alias}.{$colLote} AND {$j}.nup = {$alias}.{$colNup}",
+            " LEFT JOIN nup_origen {$j} ON {$j}.clave = "
+                . self::claveSql(["{$alias}.id_producto", "{$alias}.id_bodega", "{$alias}.{$colLote}", "{$alias}.{$colNup}"]),
             "CASE WHEN {$j}.nup IS NOT NULL THEN {$alias}.{$colNup} END",
         ];
     }
@@ -682,7 +716,7 @@ class ReporteInventarioRepository extends BaseRepository
     {
         $j = "{$alias}_cl";
         return [
-            " LEFT JOIN cad_lote {$j} ON {$j}.id_producto = {$alias}.id_producto AND {$j}.numero_lote = {$alias}.{$colLote}",
+            " LEFT JOIN cad_lote {$j} ON {$j}.clave = " . self::claveSql(["{$alias}.id_producto", "{$alias}.{$colLote}"]),
             "COALESCE({$j}.caducidad, {$alias}.{$colCad})",
         ];
     }
@@ -742,50 +776,48 @@ class ReporteInventarioRepository extends BaseRepository
         // El consignado se cruza EXACTAMENTE por las columnas que definen el grupo: si la
         // fila no distingue caducidad, el consignado tampoco, o los números no cuadrarían.
         $groupExtra = '';
-        $selCvGroup = '';
-        $groupCv    = '';
-        $joinCv     = '';
+        // Clave única con la que cruzan la fila del reporte (g) y lo consignado (línea cvd):
+        // las mismas columnas del grupo, en el mismo orden en los dos lados (ver claveSql()).
+        $claveCv    = ['cvd.id_producto', 'cvd.id_bodega'];
+        $claveK     = ['g.id_producto', 'g.id_bodega'];
         $ordenExtra = [];
         if ($conLote) {
             $groupExtra .= ', k.numero_lote';
-            $selCvGroup .= ', cvd.lote';
-            $groupCv    .= ', cvd.lote';
-            $joinCv     .= ' AND ca.lote IS NOT DISTINCT FROM k.numero_lote';
+            $claveCv[]  = 'cvd.lote';
+            $claveK[]   = 'g.lote';
             $ordenExtra[] = 'lote ASC NULLS LAST';
         }
         if ($conNup) {
             $groupExtra .= ', k.nup';
-            $selCvGroup .= ", {$cvdNup} AS nup";
-            $groupCv    .= ", {$cvdNup}";
-            $joinCv     .= ' AND ca.nup IS NOT DISTINCT FROM k.nup';
+            $claveCv[]  = $cvdNup;
+            $claveK[]   = 'g.nup';
         }
         if ($conCad) {
             $groupExtra .= ', k.fecha_caducidad';
-            $selCvGroup .= ", {$cvdCad} AS fecha_caducidad";
-            $groupCv    .= ", {$cvdCad}";
-            $joinCv     .= ' AND ca.fecha_caducidad IS NOT DISTINCT FROM k.fecha_caducidad';
+            $claveCv[]  = $cvdCad;
+            $claveK[]   = 'g.fecha_caducidad';
             $ordenExtra[] = 'fecha_caducidad ASC NULLS LAST';
+        }
+        $claveLinea = self::claveSql($claveCv);
+        if ($conNup) {
+            // Desempate: sin él, las filas de un mismo lote y caducidad salían en cualquier orden.
+            $ordenExtra[] = 'nup ASC NULLS FIRST';
         }
         $orden = 'producto_nombre ASC, bodega_nombre ASC' . ($ordenExtra ? ', ' . implode(', ', $ordenExtra) : '');
 
-        // El consignado va con las subconsultas por línea y NO con cteConsignadoPorGrupo(): se
-        // cruza fila a fila del kardex con IS NOT DISTINCT FROM y, con la forma agrupada, el
-        // planificador estimaba mal ese cruce (medido: 4,8 s → 9 s). Ver sqlRetornadoCv().
-        $sql = "WITH " . ($ctesNorm !== '' ? $ctesNorm . ",\n" : '') . "consignado_desglose AS (
-                    SELECT cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$selCvGroup},
-                           SUM(cvd.cantidad
-                               - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
-                               - COALESCE((" . $this->sqlFacturadoCv() . "), 0)
-                               - COALESCE((" . $this->sqlCambiadoCv() . "), 0)) AS consignado
-                    FROM consignaciones_ventas_detalles cvd
-                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion{$joinsCvd}
-                    WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
-                      AND cv.eliminado = false AND " . self::COND_CV_NO_ANULADA . "{$condCorteCv}
-                    GROUP BY cvd.id_empresa, cvd.id_producto, cvd.id_bodega{$groupCv}
-                )
-                SELECT *, (stock_actual * costo_unitario) AS valor_total,
-                       (stock_actual + consignado) AS stock_total
-                FROM (
+        // Tres pasos, cada uno lineal:
+        //  1. existencias_grupo: el kardex agrupado en las filas del reporte, con su clave.
+        //  2. consignado_desglose: lo consignado SOLO de las líneas cuya clave existe en el
+        //     paso 1 (con un filtro de producto, lote o caducidad no se recorre —ni se le
+        //     calculan retornos/facturas/cambios— toda la consignación de la empresa).
+        //  3. Cruce fila del reporte ↔ grupo de consignado por la clave.
+        // Antes el consignado se cruzaba movimiento a movimiento del kardex con
+        // IS NOT DISTINCT FROM, que era cuadrático por producto: con la clave normalizada
+        // (24-11-2026) "Lote + caducidad" dejó de terminar. Ver claveSql().
+        // El consignado va con las subconsultas por línea y NO con cteConsignadoPorGrupo()
+        // (medido: 4,8 s → 9 s; ver sqlRetornadoCv()).
+        $sql = "WITH " . ($ctesNorm !== '' ? $ctesNorm . ",\n" : '') . "existencias_grupo AS MATERIALIZED (
+                  SELECT g.*, " . self::claveSql($claveK) . " AS clave FROM (
                     SELECT k.id_producto, k.id_bodega,
                            {$selLote} AS lote, {$selNup} AS nup, {$selCad} AS fecha_caducidad,
                            p.codigo AS producto_codigo, p.nombre AS producto_nombre,
@@ -794,18 +826,39 @@ class ReporteInventarioRepository extends BaseRepository
                            b.nombre AS bodega_nombre,
                            SUM(k.cantidad) AS stock_actual,
                            COALESCE(NULLIF((ARRAY_AGG(k.costo_unitario ORDER BY k.fecha_movimiento DESC, k.id DESC))[1], 0),
-                                    p.costo_producto, 0) AS costo_unitario,
-                           COALESCE(MAX(ca.consignado), 0) AS consignado
+                                    p.costo_producto, 0) AS costo_unitario
                     FROM {$fromKardex}
                     INNER JOIN productos p ON p.id = k.id_producto AND p.id_empresa = k.id_empresa
                     INNER JOIN bodegas b ON b.id = k.id_bodega
                     LEFT JOIN categorias cat ON cat.id = p.id_categoria
                     LEFT JOIN marcas mar ON mar.id = p.id_marca
-                    LEFT JOIN consignado_desglose ca ON ca.id_empresa = k.id_empresa
-                        AND ca.id_producto = k.id_producto AND ca.id_bodega = k.id_bodega{$joinCv}
                     WHERE {$where}
                     GROUP BY k.id_empresa, k.id_producto, k.id_bodega{$groupExtra},
                              p.codigo, p.nombre, p.costo_producto, cat.nombre, mar.nombre, b.nombre
+                  ) g
+                ),
+                consignado_desglose AS (
+                    SELECT {$claveLinea} AS clave,
+                           SUM(cvd.cantidad
+                               - COALESCE((" . $this->sqlRetornadoCv() . "), 0)
+                               - COALESCE((" . $this->sqlFacturadoCv() . "), 0)
+                               - COALESCE((" . $this->sqlCambiadoCv() . "), 0)) AS consignado
+                    FROM consignaciones_ventas_detalles cvd
+                    INNER JOIN consignaciones_ventas cv ON cv.id = cvd.id_consignacion{$joinsCvd}
+                    WHERE cvd.id_empresa = :id_empresa AND cvd.eliminado = false
+                      AND cv.eliminado = false AND " . self::COND_CV_NO_ANULADA . "{$condCorteCv}
+                      AND {$claveLinea} IN (SELECT eg.clave FROM existencias_grupo eg)
+                    GROUP BY 1
+                )
+                SELECT *, (stock_actual * costo_unitario) AS valor_total,
+                       (stock_actual + consignado) AS stock_total
+                FROM (
+                  SELECT g.id_producto, g.id_bodega, g.lote, g.nup, g.fecha_caducidad,
+                         g.producto_codigo, g.producto_nombre, g.categoria_nombre, g.marca_nombre,
+                         g.bodega_nombre, g.stock_actual, g.costo_unitario,
+                         COALESCE(ca.consignado, 0) AS consignado
+                  FROM existencias_grupo g
+                  LEFT JOIN consignado_desglose ca ON ca.clave = g.clave
                 ) t
                 WHERE (t.stock_actual + t.consignado) <> 0" . self::condConsignadoDesglose($filtros) . "
                 ORDER BY {$orden}";
