@@ -1134,6 +1134,26 @@ class RolPagoRepository extends BaseRepository
         return $egresos;
     }
 
+    /**
+     * Estado de pago de una línea del rol, el mismo en el listado, la ficha y el PDF:
+     *   en_contra  neto negativo: no hay nada que pagar (lo debe el empleado).
+     *   sin_valor  neto 0 y sin pagos: nada que pagar; se entrega el recibo para firmar.
+     *   pendiente / parcial / pagado según lo pagado por egreso.
+     * sin_valor y en_contra no congelan la línea (no hubo pago): si el rol cambia, el estado
+     * se recalcula.
+     */
+    public static function estadoPago(float $neto, float $pagado): string
+    {
+        $neto = round($neto, 2);
+        $pagado = round($pagado, 2);
+        if ($pagado <= 0) {
+            if ($neto < 0) return 'en_contra';
+            if ($neto == 0.0) return 'sin_valor';
+            return 'pendiente';
+        }
+        return round($neto - $pagado, 2) <= 0 ? 'pagado' : 'parcial';
+    }
+
     public function getDetalleCompleto(int $idRol, int $idEmpresa): array
     {
         $sql = "SELECT d.*, e.nombres_apellidos, e.identificacion, e.email, e.cargo,
@@ -1147,7 +1167,7 @@ class RolPagoRepository extends BaseRepository
         if ($detalle) {
             $ids = array_column($detalle, 'id');
             $in = implode(',', array_map('intval', $ids));
-            $rub = $this->db->query("SELECT r.*, n.observacion AS novedad_observacion
+            $rub = $this->db->query("SELECT r.*, n.observacion AS novedad_observacion{$this->colRolOrigenNovedad()}
                                       FROM rol_detalle_rubro r
                                       LEFT JOIN novedades n ON n.id = r.id_novedad
                                       WHERE r.id_detalle IN ($in) ORDER BY r.tipo DESC, r.id");
@@ -1159,7 +1179,7 @@ class RolPagoRepository extends BaseRepository
                 $neto = round((float) $d['neto'], 2);
                 $d['pagado'] = $pagado;
                 $d['saldo'] = round($neto - $pagado, 2);
-                $d['estado_pago'] = $pagado <= 0 ? 'pendiente' : ($d['saldo'] <= 0 ? 'pagado' : 'parcial');
+                $d['estado_pago'] = self::estadoPago($neto, $pagado);
             }
         }
         return $detalle;
@@ -1176,7 +1196,7 @@ class RolPagoRepository extends BaseRepository
         $st->execute([':d' => $idDetalle, ':emp' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
-        $rub = $this->db->prepare("SELECT r.*, n.observacion AS novedad_observacion
+        $rub = $this->db->prepare("SELECT r.*, n.observacion AS novedad_observacion{$this->colRolOrigenNovedad()}
                                    FROM rol_detalle_rubro r
                                    LEFT JOIN novedades n ON n.id = r.id_novedad
                                    WHERE r.id_detalle = :d ORDER BY r.tipo DESC, r.id");
@@ -1200,7 +1220,7 @@ class RolPagoRepository extends BaseRepository
         $st->execute([':r' => $idRol, ':emp2' => $idEmpleado, ':emp' => $idEmpresa]);
         $row = $st->fetch(PDO::FETCH_ASSOC);
         if (!$row) return null;
-        $rub = $this->db->prepare("SELECT r.*, n.observacion AS novedad_observacion
+        $rub = $this->db->prepare("SELECT r.*, n.observacion AS novedad_observacion{$this->colRolOrigenNovedad()}
                                    FROM rol_detalle_rubro r
                                    LEFT JOIN novedades n ON n.id = r.id_novedad
                                    WHERE r.id_detalle = :d ORDER BY r.tipo DESC, r.id");
@@ -1459,6 +1479,28 @@ class RolPagoRepository extends BaseRepository
     private function colMarcaIessNovedad(): string
     {
         return $this->columnaExiste('novedades', 'aporta_iess') ? 'aporta_iess' : 'NULL AS aporta_iess';
+    }
+
+    /**
+     * ", n.id_rol_origen" para los rubros: marca el descuento automático por saldo en contra
+     * (RolSaldoContraService), que el asiento cruza contra la cuenta por cobrar al empleado.
+     * Sin database/2026-11-27_roles_saldo_en_contra.sql sale NULL.
+     */
+    private function colRolOrigenNovedad(): string
+    {
+        return $this->columnaExiste('novedades', 'id_rol_origen') ? ', n.id_rol_origen' : ', NULL AS id_rol_origen';
+    }
+
+    /** [id_empleado => neto] de las líneas del rol. */
+    public function getNetosDelRol(int $idRol, int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT id_empleado, neto FROM rol_detalle WHERE id_rol = :r AND id_empresa = :e");
+        $st->execute([':r' => $idRol, ':e' => $idEmpresa]);
+        $out = [];
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $out[(int) $r['id_empleado']] = round((float) $r['neto'], 2);
+        }
+        return $out;
     }
 
     public function getNovedades(int $idEmpresa, int $idEmpleado, int $anio, int $mes, string $aplicaEn): array

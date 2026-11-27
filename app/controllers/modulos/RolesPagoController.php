@@ -474,6 +474,31 @@ class RolesPagoController extends BaseModuloController
     }
 
     /** PDF individual (recibo) de un empleado dentro del rol. */
+    /**
+     * Recibos para firmar de todos los empleados del rol (un PDF, una página por empleado),
+     * incluidos los de neto 0 o en contra, que no tienen egreso.
+     */
+    public function recibosPdf(): void
+    {
+        $this->requireLeer();
+        $id = (int) ($_GET['id'] ?? 0);
+        $idEmpresa = (int) $_SESSION['id_empresa'];
+        $dest = ($_GET['view'] ?? '') === '1' ? 'I' : 'D';
+        try {
+            $rec = $this->service->getRecibos($id, $idEmpresa, (int) $_SESSION['id_usuario']);
+            if (!$rec) throw new \Exception('Corrida no encontrada.');
+            if (empty($rec['lineas'])) throw new \Exception('El rol no tiene empleados.');
+            $empresa = $this->cargarEmpresaParaPdf($idEmpresa);
+            (new RolPagoPdfService())->generarRecibos($rec['cabecera'], $rec['lineas'], $empresa, $dest);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => __FUNCTION__]);
+            http_response_code(400);
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => false, 'error' => 'No se pudieron generar los recibos: ' . $e->getMessage()]);
+        }
+        exit;
+    }
+
     public function pdfEmpleado(): void
     {
         $this->requireLeer();

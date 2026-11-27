@@ -111,7 +111,20 @@ class RolPagoService
             ? array_values($this->repo->getEmpleadosConQuincenaNovedad($idEmpresa, (int) $cab['periodo_anio'], (int) $cab['periodo_mes']))
             : [];
         // Aviso: empleados con valor a pagar EN CONTRA (neto negativo).
+        // Cada uno con el descuento automático que se le registró para el mes siguiente
+        // (RolSaldoContraService): null si no se registró (SQL sin aplicar, o el rol de ese mes
+        // ya está pagado), o con otro valor si quedó congelado en un rol ya pagado.
         $cab['en_contra'] = self::empleadosEnContra($cab['detalle']);
+        $cab['saldo_contra_disponible'] = false;
+        if ($cab['en_contra'] && $cab['tipo_rol'] === 'MENSUAL') {
+            $sc = new RolSaldoContraService($this->repo, $this->log);
+            $cab['saldo_contra_disponible'] = $sc->disponible();
+            $desc = $sc->descuentosDelRol($id, $idEmpresa);
+            foreach ($cab['en_contra'] as &$ec) {
+                $ec['descuento'] = $desc[$ec['id_empleado']] ?? null;
+            }
+            unset($ec);
+        }
         return $cab;
     }
 
@@ -137,6 +150,7 @@ class RolPagoService
             }
             $out[] = [
                 'id'             => (int) $d['id'],
+                'id_empleado'    => (int) ($d['id_empleado'] ?? 0),
                 'empleado'       => (string) ($d['nombres_apellidos'] ?? ''),
                 'identificacion' => (string) ($d['identificacion'] ?? ''),
                 'neto'           => $neto,
@@ -201,7 +215,57 @@ class RolPagoService
         }
 
         $lin['cabecera'] = $this->repo->findCabecera((int) $lin['id_rol'], $idEmpresa);
+        $desc = ((float) $lin['neto'] < 0 && $lin['cabecera'])
+            ? (new RolSaldoContraService($this->repo, $this->log))->descuentosDelRol((int) $lin['id_rol'], $idEmpresa)
+            : [];
+        $lin['nota_neto'] = self::notaNetoRecibo($lin, $desc);
         return $lin;
+    }
+
+    /**
+     * Recibos para firmar de TODOS los empleados del rol (un PDF, una página por empleado),
+     * incluidos los que no tienen valor a recibir o salen en contra. Cada línea lleva su
+     * cabecera y la nota del neto, igual que el recibo individual.
+     */
+    public function getRecibos(int $id, int $idEmpresa, int $idUsuario): ?array
+    {
+        $rol = $this->getDetalle($id, $idEmpresa, $idUsuario);
+        if (!$rol) return null;
+        $cab = $rol;
+        unset($cab['detalle']);
+        $desc = (new RolSaldoContraService($this->repo, $this->log))->descuentosDelRol($id, $idEmpresa);
+        $lineas = [];
+        foreach ($rol['detalle'] as $lin) {
+            $lin['cabecera'] = $cab;
+            $lin['nota_neto'] = self::notaNetoRecibo($lin, $desc);
+            $lineas[] = $lin;
+        }
+        return ['cabecera' => $cab, 'lineas' => $lineas];
+    }
+
+    /**
+     * Texto bajo «Neto a recibir» del recibo cuando no hay dinero que entregar: con neto 0 el
+     * empleado firma que recibió su rol sin valor a cobrar; en contra, firma reconociendo el
+     * saldo y el mes en que se le descontará (descuento automático, RolSaldoContraService).
+     *
+     * @param array $descuentos id_empleado => ['valor','periodo_anio','periodo_mes']
+     */
+    public static function notaNetoRecibo(array $lin, array $descuentos): string
+    {
+        $neto = round((float) ($lin['neto'] ?? 0), 2);
+        if ($neto == 0.0) {
+            return 'Sin valor a recibir en este rol.';
+        }
+        if ($neto > 0) {
+            return '';
+        }
+        $texto = 'Saldo en contra del empleado: $ ' . number_format(-$neto, 2);
+        $d = $descuentos[(int) ($lin['id_empleado'] ?? 0)] ?? null;
+        if ($d) {
+            $mes = \App\models\CatalogoNovedades::MESES[(int) $d['periodo_mes']] ?? $d['periodo_mes'];
+            $texto .= ', que se descontará en el rol de ' . $mes . ' ' . $d['periodo_anio'];
+        }
+        return $texto . '.';
     }
 
     /** Detalle completo de un empleado del rol: general (rubros) + provisiones + asiento. */
@@ -232,7 +296,7 @@ class RolPagoService
         $neto     = round((float) $lin['neto'], 2);
         $lin['pagado']      = $pagado;
         $lin['saldo']       = round($neto - $pagado, 2);
-        $lin['estado_pago'] = $pagado <= 0 ? 'pendiente' : ($lin['saldo'] <= 0 ? 'pagado' : 'parcial');
+        $lin['estado_pago'] = RolPagoRepository::estadoPago($neto, $pagado);
         $lin['pagos']       = $this->repo->getEgresosPorDetalle((int) $lin['id'], $idEmpresa);
         return $lin;
     }
@@ -511,6 +575,12 @@ class RolPagoService
             throw $e;
         }
 
+        // Empleados en contra: descuento automático en el mes siguiente (crea, actualiza o
+        // elimina según el neto recién calculado).
+        if ($esMensual) {
+            $this->sincronizarSaldoContra($id, $idEmpresa, $idUsuario, false);
+        }
+
         return $this->getDetalle($id, $idEmpresa);
     }
 
@@ -722,6 +792,11 @@ class RolPagoService
             throw $e;
         }
 
+        // Rol mensual anulado: sus descuentos automáticos por saldo en contra ya no corresponden.
+        if ($nuevo === 'anulado' && $cab['tipo_rol'] === 'MENSUAL') {
+            $this->sincronizarSaldoContra($id, $idEmpresa, $idUsuario, true);
+        }
+
         // Pagar/despagar una semana o quincena cambia el neteo del rol mensual del mismo período.
         if (in_array($cab['tipo_rol'], ['SEMANAL', 'QUINCENA'], true)) {
             $this->regenerarAfectados($idEmpresa, 'rol', (int) $cab['periodo_anio'], (int) $cab['periodo_mes'], $idUsuario);
@@ -774,6 +849,23 @@ class RolPagoService
         } catch (\Throwable $e) {
             $this->repo->rollBack();
             throw $e;
+        }
+        if ($cab['tipo_rol'] === 'MENSUAL') {
+            $this->sincronizarSaldoContra($id, $idEmpresa, $idUsuario, true);
+        }
+    }
+
+    /**
+     * Descuentos automáticos por saldo en contra del rol (RolSaldoContraService). Corre después
+     * del commit del rol; si falla, el rol ya quedó guardado y se registra el error (el aviso del
+     * rol muestra al empleado sin descuento registrado).
+     */
+    private function sincronizarSaldoContra(int $idRol, int $idEmpresa, int $idUsuario, bool $anulado): void
+    {
+        try {
+            (new RolSaldoContraService($this->repo, $this->log))->sincronizar($idRol, $idEmpresa, $idUsuario, $anulado);
+        } catch (\Throwable $e) {
+            \App\Services\ErrorLogService::registrar($e, ['ruta' => static::class, 'accion' => 'sincronizarSaldoContra', 'id_rol' => $idRol]);
         }
     }
 }

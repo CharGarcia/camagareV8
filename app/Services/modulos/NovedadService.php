@@ -435,6 +435,7 @@ class NovedadService
         $data = $this->aplicarMarcaPago($data, $old);
         $data = $this->normalizar($data, $idEmpresa);
         $this->rules->validate($data);
+        $this->bloquearCambioSaldoContra($old, $data);
 
         // Bloquear si el destino ANTERIOR o el NUEVO corresponden a un rol ya pagado.
         $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
@@ -470,6 +471,8 @@ class NovedadService
             throw new Exception('Novedad no encontrada.');
         }
 
+        // El descuento automático por saldo en contra lo maneja su rol de origen.
+        $this->bloquearCambioSaldoContra($old, null);
         // No permitir eliminar una novedad que ya afecta a un rol pagado.
         $this->bloquearSiRolPagado($idEmpresa, $old['id_empleado'] ?? 0, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0);
         // No permitir eliminar un Anticipo o cuota de Préstamo Empresa ya desembolsados.
@@ -485,6 +488,31 @@ class NovedadService
             throw $e;
         }
         $this->sincronizarRol($idEmpresa, $old['aplica_en'] ?? 'rol', $old['periodo_anio'] ?? 0, $old['periodo_mes'] ?? 0, $idUsuario);
+    }
+
+    /**
+     * Descuento automático por saldo en contra (id_rol_origen, ver RolSaldoContraService): su
+     * valor lo pone el rol del mes en que el empleado salió en contra, y se actualiza o elimina
+     * solo cuando ese rol cambia. Aquí no se elimina ni se cambia el empleado, el tipo, el valor
+     * ni a qué rol aplica; sí se puede pasar a otro mes y editar la observación.
+     * $data = null al eliminar.
+     */
+    private function bloquearCambioSaldoContra(array $old, ?array $data): void
+    {
+        if ((int) ($old['id_rol_origen'] ?? 0) <= 0) {
+            return;
+        }
+        $motivo = 'Este descuento lo registró el sistema porque el empleado salió en contra en un rol anterior'
+            . ' (ver la observación). Se actualiza o elimina solo cuando cambia ese rol: corrija el rol de ese mes.';
+        if ($data === null) {
+            throw new Exception('No se puede eliminar. ' . $motivo);
+        }
+        if ((int) $data['id_empleado'] !== (int) $old['id_empleado']
+            || (string) $data['tipo_codigo'] !== (string) $old['tipo_codigo']
+            || (string) ($data['aplica_en'] ?? 'rol') !== (string) ($old['aplica_en'] ?? 'rol')
+            || abs((float) $data['valor'] - (float) $old['valor']) > 0.004) {
+            throw new Exception('Solo se puede cambiar el mes o la observación. ' . $motivo);
+        }
     }
 
     /**

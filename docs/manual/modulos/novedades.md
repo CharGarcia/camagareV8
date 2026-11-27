@@ -6,7 +6,7 @@ ruta_modulo: modulos/novedades
 tipo: modulo
 visibilidad: todos
 etiquetas: novedades, novedad, cambiar a por pagar, cambiar a ya pagado, marcar como pagado, todos los empleados, observacion por empleado, registro masivo, novedades para todos, varios empleados, cuadricula, tabla de novedades, ya pagado, por pagar, anticipo por pagar, prestamo por desembolsar, numero de cuotas, cuotas del prestamo, prestamo en cuotas, instrucciones de la plantilla, hoja instrucciones, anticipo ya pagado, prestamo ya desembolsado, desembolso, pendiente de desembolso, aviso de desembolso, anticipo cargado por excel, horas extra, faltas, atrasos, prestamo, anticipo, descuento, aviso de salida, motivo de salida, multa, bonos, comisiones, otros ingresos, iess, aporta iess, con iess, sin iess, aporte personal, base del iess, carga masiva, importar, importacion, excel, plantilla, plantilla por empleado, columnas por novedad, subir novedades, eliminar carga, revertir carga, deshacer carga, borrar importacion, historial de cargas, duplicados, repetida, todo o nada, buscar novedades, buscador, filtros, filtrar novedades, buscar por empleado, novedades pagadas, novedades pendientes, chips, quincena, quincena ya pagada, quincena por pagar, adelanto de quincena, quincena repetida, ya tiene quincenas, valor quincena, concepto repetido, novedad repetida, doble descuento
-version: 1.16
+version: 1.17
 orden: 20
 estado: activo
 ---
@@ -224,6 +224,16 @@ mismo tipo en el mismo mes** (por ejemplo un segundo *Descuento*), el sistema
 avisa cuántas tiene y de qué valor, y pregunta si desea registrar otra. No lo
 impide: a veces es correcto tener dos. Al editar solo avisa si cambió el
 empleado, el tipo o el periodo.
+
+## Descuento automático por saldo en contra
+
+Cuando un empleado sale **en contra** en el rol mensual (sus descuentos superan lo
+que gana), el sistema registra aquí un **Descuento** por ese valor en el mes
+siguiente, con la observación *«Saldo en contra del rol de …»*. Lo maneja el rol
+que lo originó: se actualiza si ese rol cambia y se elimina si el empleado deja
+de salir en contra o el rol se anula. Por eso aquí no se puede eliminar ni cambiar
+su valor o empleado; solo pasarlo a otro mes o editar la observación. Detalle en
+*Roles de pago → Empleados con valor a pagar en contra*.
 
 ## Carga masiva desde una plantilla Excel
 
@@ -488,6 +498,8 @@ filtrado.
   anteriores se eliminan novedad por novedad desde el listado.
 
 ## Historial de cambios
+
+- **1.17** — Descuento automático por saldo en contra: lo registra el rol mensual cuando un empleado sale en contra, en el mes siguiente, y solo se puede mover de mes o cambiar su observación.
 
 - **1.16** — Al crear con **Nuevo** se puede elegir **Todos los empleados**: una tabla con todos los empleados activos y una columna por cada tipo de novedad (incluido el aviso de salida), con selectores Con/Sin IESS, Por pagar/Ya pagado y motivo, y una observación por empleado (vacía: «Tipo - Mes Año»). Todo o nada, sin duplicar novedades ya registradas. Selector **Pago** (Por pagar / Ya pagado) en Anticipo, Quincena y Préstamo Empresa al crear y al editar de a una.
 - **1.15** — Nuevo tipo **Quincena**, que funciona como el anticipo (*ya pagada* / *por pagar*) y se descuenta en el rol mensual; en la plantilla tiene dos columnas junto al anticipo. No se acepta una segunda quincena del mismo mes ni una quincena para quien ya está en el rol de QUINCENA del mes; si la ficha tiene valor quincena se pide confirmación. Al registrar a mano, aviso si el empleado ya tiene otra novedad del mismo tipo en el mes.

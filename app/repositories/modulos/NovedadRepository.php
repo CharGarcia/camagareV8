@@ -388,6 +388,34 @@ class NovedadRepository extends BaseRepository
         return $this->columnaExiste('novedades', 'desembolso_manual');
     }
 
+    /** ¿Ya existe novedades.id_rol_origen? (database/2026-11-27_roles_saldo_en_contra.sql) */
+    public function tieneRolOrigen(): bool
+    {
+        return $this->columnaExiste('novedades', 'id_rol_origen');
+    }
+
+    /**
+     * Descuentos automáticos por saldo en contra que generó un rol mensual (vigentes),
+     * en cualquier período: el usuario puede haberlos movido de mes.
+     */
+    public function getPorRolOrigen(int $idRol, int $idEmpresa): array
+    {
+        $st = $this->db->prepare("SELECT id, id_empleado, valor, periodo_anio, periodo_mes, aplica_en, observacion
+                                  FROM {$this->table}
+                                  WHERE id_empresa = :e AND id_rol_origen = :r AND eliminado = false");
+        $st->execute([':e' => $idEmpresa, ':r' => $idRol]);
+        return $st->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /** Actualiza el valor (y la observación) de un descuento automático por saldo en contra. */
+    public function actualizarValorSaldoContra(int $id, int $idEmpresa, float $valor, string $observacion, int $idUsuario): void
+    {
+        $st = $this->db->prepare("UPDATE {$this->table}
+                                     SET valor = :v, observacion = :o, updated_by = :u, updated_at = CURRENT_TIMESTAMP
+                                   WHERE id = :id AND id_empresa = :e AND id_rol_origen IS NOT NULL AND eliminado = false");
+        $st->execute([':v' => round($valor, 2), ':o' => $observacion, ':u' => $idUsuario, ':id' => $id, ':e' => $idEmpresa]);
+    }
+
     /** Valor para la columna aporta_iess: 'true'/'false', o null si la novedad no lleva marca. */
     private static function paramMarcaIess(array $d)
     {
@@ -402,6 +430,12 @@ class NovedadRepository extends BaseRepository
         $idCarga    = isset($d['id_carga']) && (int) $d['id_carga'] > 0 ? (int) $d['id_carga'] : null;
         $colCarga   = $idCarga !== null ? ', id_carga' : '';
         $valCarga   = $idCarga !== null ? ', :id_carga' : '';
+        // Descuento automático por saldo en contra (RolSaldoContraService): rol que lo generó.
+        $idRolOrigen = isset($d['id_rol_origen']) && (int) $d['id_rol_origen'] > 0 ? (int) $d['id_rol_origen'] : null;
+        if ($idRolOrigen !== null) {
+            $colCarga .= ', id_rol_origen';
+            $valCarga .= ', :id_rol_origen';
+        }
         // Anticipo/Préstamo Empresa ya entregados fuera del sistema (la carga Excel lo asume):
         // el rol los descuenta sin pedir el egreso de desembolso.
         $desemb     = !empty($d['desembolsado_migrado']);
@@ -446,6 +480,9 @@ class NovedadRepository extends BaseRepository
         ];
         if ($idCarga !== null) {
             $params[':id_carga'] = $idCarga;
+        }
+        if ($idRolOrigen !== null) {
+            $params[':id_rol_origen'] = $idRolOrigen;
         }
         if ($conIess) {
             $params[':aporta_iess'] = self::paramMarcaIess($d);

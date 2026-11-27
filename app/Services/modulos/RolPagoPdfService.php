@@ -21,17 +21,48 @@ class RolPagoPdfService
      */
     public function generarEmpleado(array $lin, array $empresa, string $dest = 'I')
     {
-        $cab = $lin['cabecera'] ?? [];
-        $periodo = CatalogoRol::nombrePeriodo((string) ($cab['tipo_rol'] ?? ''), (int) ($cab['periodo_anio'] ?? 0), (int) ($cab['periodo_mes'] ?? 0), (int) ($cab['numero_periodo'] ?? 0));
-        $tipo = CatalogoRol::nombreTipo((string) ($cab['tipo_rol'] ?? ''));
+        $pdf = $this->nuevoPdfRecibo('Rol de Pago - ' . ($lin['nombres_apellidos'] ?? ''));
+        $this->paginaEmpleado($pdf, $lin, $empresa);
+        $arch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado')) . '.pdf';
+        return $pdf->Output($arch, $dest);
+    }
 
+    /**
+     * Recibos de todos los empleados del rol en un solo PDF (una página cada uno), para
+     * imprimir y hacer firmar de una vez, incluidos los de neto 0 o en contra.
+     *
+     * @param array $lineas Líneas con 'cabecera', 'rubros' y 'nota_neto' (RolPagoService::getRecibos).
+     */
+    public function generarRecibos(array $cab, array $lineas, array $empresa, string $dest = 'I')
+    {
+        $periodo = CatalogoRol::nombrePeriodo((string) ($cab['tipo_rol'] ?? ''), (int) ($cab['periodo_anio'] ?? 0), (int) ($cab['periodo_mes'] ?? 0), (int) ($cab['numero_periodo'] ?? 0));
+        $pdf = $this->nuevoPdfRecibo('Recibos de rol de pago - ' . $periodo);
+        foreach ($lineas as $lin) {
+            $this->paginaEmpleado($pdf, $lin, $empresa);
+        }
+        $arch = 'Recibos_Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', $periodo) . '.pdf';
+        return $pdf->Output($arch, $dest);
+    }
+
+    private function nuevoPdfRecibo(string $titulo): TCPDF
+    {
         $pdf = new TCPDF('P', 'mm', 'A4', true, 'UTF-8', false);
         $pdf->SetCreator('Sistema');
-        $pdf->SetTitle('Rol de Pago - ' . ($lin['nombres_apellidos'] ?? ''));
+        $pdf->SetTitle($titulo);
         $pdf->setPrintHeader(false);
         $pdf->setPrintFooter(false);
         $pdf->SetMargins(14, 14, 14);
         $pdf->SetAutoPageBreak(true, 14);
+        return $pdf;
+    }
+
+    /** Una página de recibo (rol individual con firmas) en el PDF dado. */
+    private function paginaEmpleado(TCPDF $pdf, array $lin, array $empresa): void
+    {
+        $cab = $lin['cabecera'] ?? [];
+        $periodo = CatalogoRol::nombrePeriodo((string) ($cab['tipo_rol'] ?? ''), (int) ($cab['periodo_anio'] ?? 0), (int) ($cab['periodo_mes'] ?? 0), (int) ($cab['numero_periodo'] ?? 0));
+        $tipo = CatalogoRol::nombreTipo((string) ($cab['tipo_rol'] ?? ''));
+
         $pdf->AddPage();
         // Logo más grande en el rol individual: cabe en una caja de 46 x 24 mm
         // (proporcional, sin deformar) y el encabezado le reserva ese hueco.
@@ -100,6 +131,12 @@ class RolPagoPdfService
         $html .= '<table class="g" cellpadding="0"><tr>'
             . '<td width="70%" align="right" class="tot" style="font-size:10px;">NETO A RECIBIR</td>'
             . '<td width="30%" align="right" class="tot" style="font-size:11px;">$ ' . $m($lin['neto']) . '</td></tr></table>';
+        // Neto 0 o en contra: qué firma el empleado (RolPagoService::notaNetoRecibo).
+        $nota = trim((string) ($lin['nota_neto'] ?? ''));
+        if ($nota !== '') {
+            $html .= '<table cellpadding="4"><tr><td style="font-size:9px; border:0.5px solid #999; background-color:#fff8e1;"><b>'
+                . $h($nota) . '</b></td></tr></table>';
+        }
 
         $pdf->writeHTML($html, true, false, true, false, '');
 
@@ -111,8 +148,6 @@ class RolPagoPdfService
             . '<td width="10%"></td>'
             . '<td width="45%" align="center" style="border-top:0.5px solid #333; font-size:8px;">Empleador</td></tr></table>';
         $pdf->writeHTML($firmas, true, false, true, false, '');
-        $arch = 'Rol_' . preg_replace('/[^A-Za-z0-9]/', '_', (string) ($lin['identificacion'] ?? 'empleado')) . '.pdf';
-        return $pdf->Output($arch, $dest);
     }
 
     /**

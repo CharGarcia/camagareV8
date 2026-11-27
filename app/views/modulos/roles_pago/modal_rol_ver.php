@@ -44,6 +44,7 @@
                 <?php endif; ?>
                 <span class="me-auto small text-muted" id="rolver_conteo"></span>
                 <button type="button" class="btn btn-outline-danger btn-sm" id="rolverBtnPdf" onclick="window.rolVerPdf()" title="PDF con todos los empleados"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="rolverBtnRecibos" onclick="window.rolVerRecibos()" title="Recibos para firmar: una página por empleado, incluidos los que no tienen valor a recibir o salen en contra"><i class="bi bi-pen me-1"></i>Recibos</button>
                 <button type="button" class="btn btn-outline-success btn-sm" id="rolverBtnExcel" onclick="window.rolVerExcel()" title="Excel con el detalle de todos los empleados"><i class="bi bi-file-earmark-spreadsheet me-1"></i>Excel</button>
                 <?php if (!empty($perm['actualizar'])): ?>
                     <button type="button" class="btn btn-success btn-sm" id="rolverBtnEgresos" onclick="window.abrirEgresoLote()"><i class="bi bi-cash-coin me-1"></i>Generar egresos</button>

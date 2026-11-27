@@ -21,13 +21,15 @@
         pagado:    { c: 'success',   t: 'Pagado',         i: 'bi-check-circle-fill' },
         parcial:   { c: 'warning',   t: 'Pago parcial',   i: 'bi-hourglass-split' },
         pendiente: { c: 'secondary', t: 'Pago pendiente', i: 'bi-cash-coin' },
-        en_contra: { c: 'danger',    t: 'En contra',      i: 'bi-exclamation-octagon-fill' }
+        en_contra: { c: 'danger',    t: 'En contra',      i: 'bi-exclamation-octagon-fill' },
+        sin_valor: { c: 'secondary', t: 'Sin valor a pagar', i: 'bi-dash-circle' }
     };
+    // Estado de pago de una línea: lo calcula el servidor (RolPagoRepository::estadoPago).
+    const estadoPagoDe = d => PAGO[d.estado_pago] || PAGO.pendiente;
     // Badge del estado de pago. En el listado del rol (clicable=true) abre la ficha del
     // empleado directo en la pestaña «Pago», donde se ven los egresos que lo pagaron.
     const pagoBadge = (d, clicable) => {
-        // Neto negativo: no hay nada que pagar, el empleado sale en contra (ver aviso del rol).
-        const p = (parseFloat(d.neto) || 0) < 0 ? PAGO.en_contra : (PAGO[d.estado_pago] || PAGO.pendiente);
+        const p = estadoPagoDe(d);
         const pagado = money(d.pagado || 0);
         const saldo  = money(d.saldo != null ? d.saldo : d.neto);
         const title  = `Pagado ${pagado} · Saldo ${saldo}` + (clicable ? ' · Clic para ver el detalle del pago' : '');
@@ -137,7 +139,7 @@
     // en el backend) se deshabilitan para que nadie los use contra el rol anterior
     // que quedó pintado, o contra uno que todavía no terminó de recalcularse.
     function rolverBotonesCarga(cargando) {
-        ['rolverBtnPdf', 'rolverBtnExcel', 'rolverBtnEgresos', 'rolverBtnEliminar'].forEach(id => {
+        ['rolverBtnPdf', 'rolverBtnRecibos', 'rolverBtnExcel', 'rolverBtnEgresos', 'rolverBtnEliminar'].forEach(id => {
             const b = $(id);
             if (b) b.disabled = cargando;
         });
@@ -190,6 +192,7 @@
         rolActual = { id: rol.id, estado: rol.estado, tipo_rol: rol.tipo_rol };
         $('rolver_periodo').textContent = periodoTexto;
         $('rolver_totales').innerHTML = `Ingresos <b>${money(rol.total_ingresos)}</b> · Egresos <b>${money(rol.total_egresos)}</b> · Neto <b>${money(rol.total_neto)}</b>`;
+        saldoContraDisponible = !!rol.saldo_contra_disponible;
         renderAvisos(rol.avisos || [], rol.empleados_sin_periodo || [], rol.parciales_pendientes || [], rol.quincena_en_novedades || [], rol.en_contra || []);
 
         const det = rol.detalle || [];
@@ -213,12 +216,33 @@
 
     // Empleado en contra: "Juan Pérez — en contra -$45,20 (Préstamo Empresa $120,00; Descuento $30,00)".
     // Se listan los descuentos/cuotas de préstamo de Novedades del rol: son los que se pueden pasar al mes siguiente.
-    const TEXTO_EN_CONTRA = `Sus descuentos superan lo que gana en este rol, así que el neto es negativo: no hay valor que pagarle
-        y el rol <b>no se podrá contabilizar</b> mientras siga así. Revise el rol y, si corresponde, pase préstamos o descuentos
-        al mes siguiente en <b>Novedades</b> (el rol se recalcula solo):`;
+    // Con el SQL del descuento automático aplicado (saldo_contra_disponible), el saldo se descuenta
+    // solo el mes siguiente; sin él, el rol no se contabiliza hasta corregirlo.
+    let saldoContraDisponible = false;
+    const textoEnContra = () => saldoContraDisponible
+        ? `Sus descuentos superan lo que gana en este rol, así que el neto es negativo: no hay valor que pagarle. El sistema
+           registró un <b>Descuento</b> por ese valor en el <b>mes siguiente</b> (Novedades), que se actualiza o elimina solo si
+           este rol cambia. Revise el rol: si prefiere que no salga en contra, pase préstamos o descuentos al mes siguiente en
+           <b>Novedades</b> (el rol se recalcula solo):`
+        : `Sus descuentos superan lo que gana en este rol, así que el neto es negativo: no hay valor que pagarle
+           y el rol <b>no se podrá contabilizar</b> mientras siga así. Revise el rol y, si corresponde, pase préstamos o descuentos
+           al mes siguiente en <b>Novedades</b> (el rol se recalcula solo):`;
     const liEnContra = e => {
         const mov = (e.movibles || []).map(m => `${esc(m.concepto)} ${money(m.valor)}`).join('; ');
-        return `<li>${esc(e.empleado)} <span class="text-muted">${esc(e.identificacion || '')}</span> — en contra <b class="text-danger">${money(e.neto)}</b>${mov ? ` <span class="text-muted">(${mov})</span>` : ''}</li>`;
+        let desc = '';
+        if (saldoContraDisponible) {
+            const d = e.descuento;
+            const enContra = Math.abs(parseFloat(e.neto) || 0);
+            if (!d) {
+                desc = ' <span class="text-danger">— sin descuento registrado: el rol del mes siguiente ya está pagado</span>';
+            } else {
+                const per = `${MESES[d.periodo_mes] || d.periodo_mes} ${d.periodo_anio}`;
+                desc = Math.abs(d.valor - enContra) > 0.004
+                    ? ` <span class="text-danger">— el descuento de ${esc(per)} quedó en ${money(d.valor)}: ese rol ya está pagado y no se actualizó</span>`
+                    : ` <span class="text-success">— descuento registrado en ${esc(per)}</span>`;
+            }
+        }
+        return `<li>${esc(e.empleado)} <span class="text-muted">${esc(e.identificacion || '')}</span> — en contra <b class="text-danger">${money(e.neto)}</b>${mov ? ` <span class="text-muted">(${mov})</span>` : ''}${desc}</li>`;
     };
 
     // Avisos en acordeón (cerrados): (1) empleados activos NO incluidos por falta de período,
@@ -244,7 +268,7 @@
         if (enContra && enContra.length) {
             html += item('rolver_av_encontra', 'danger', 'bi-exclamation-octagon-fill',
                 `<b>${enContra.length} empleado(s) con valor a pagar en contra — revisar</b>`,
-                `${TEXTO_EN_CONTRA}<ul class="mb-0 mt-1">${enContra.map(liEnContra).join('')}</ul>`);
+                `${textoEnContra()}<ul class="mb-0 mt-1">${enContra.map(liEnContra).join('')}</ul>`);
         }
         if (sinPeriodo && sinPeriodo.length) {
             const liSp = sinPeriodo.map(e =>
@@ -292,7 +316,7 @@
 
         let html = '';
         if (hayEnContra) {
-            html += `<div class="mb-2"><b class="text-danger">${enContra.length} empleado(s) con valor a pagar en contra.</b> ${TEXTO_EN_CONTRA}
+            html += `<div class="mb-2"><b class="text-danger">${enContra.length} empleado(s) con valor a pagar en contra.</b> ${textoEnContra()}
                 <ul class="mt-1 mb-0">${enContra.map(liEnContra).join('')}</ul></div>`;
         }
         if (haySinPeriodo) {
@@ -321,6 +345,12 @@
     window.rolVerPdf = function () {
         if (!rolActual || !rolActual.id) return;
         CMG_pdfDocumento(`${urlModulo}/pdf?id=${rolActual.id}`);
+    };
+
+    // Recibos para firmar: una página por empleado (también los de neto 0 o en contra).
+    window.rolVerRecibos = function () {
+        if (!rolActual || !rolActual.id) return;
+        CMG_pdfDocumento(`${urlModulo}/recibosPdf?id=${rolActual.id}`);
     };
 
     window.rolVerExcel = function () {
@@ -596,14 +626,14 @@
     function renderPago(d) {
         const box = $('rolemp_pago_body');
         if (!box) return;
-        // Neto negativo: no hay nada que pagar, el empleado sale en contra (ver aviso del rol).
-        const p = (parseFloat(d.neto) || 0) < 0 ? PAGO.en_contra : (PAGO[d.estado_pago] || PAGO.pendiente);
+        const p = estadoPagoDe(d);
         // Icono en la pestaña, sin texto: visto verde si está pagado, reloj ámbar si es
-        // parcial, aspa roja si está pendiente (el detalle va en el title).
+        // parcial, guion gris sin valor a pagar, aspa roja si está pendiente o en contra.
         const badgeTab = $('rolemp_pago_badge');
         if (badgeTab) {
             const icono = d.estado_pago === 'pagado' ? 'bi-check-circle-fill text-success'
                         : d.estado_pago === 'parcial' ? 'bi-hourglass-split text-warning'
+                        : d.estado_pago === 'sin_valor' ? 'bi-dash-circle text-secondary'
                         : 'bi-x-circle-fill text-danger';
             badgeTab.className = 'ms-1';
             badgeTab.style.fontSize = '';
@@ -622,7 +652,14 @@
             </div>`;
 
         if (!egresos.length) {
-            html += `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
+            // Sin valor a pagar o en contra: no hay egreso que registrar; el respaldo es el
+            // recibo firmado (PDF del rol del empleado, o «Recibos» en el rol).
+            const sinEgreso = d.estado_pago === 'sin_valor' || d.estado_pago === 'en_contra';
+            html += sinEgreso
+                ? `<div class="text-muted text-center py-4"><i class="bi bi-pen fs-3 d-block mb-1"></i>
+                    ${d.estado_pago === 'sin_valor' ? 'Este empleado no tiene valor a recibir en este rol' : 'Este empleado sale en contra en este rol'}:
+                    no se registra egreso. Imprima su <b>PDF</b> (arriba) o los <b>Recibos</b> del rol para que lo firme.</div>`
+                : `<div class="text-muted text-center py-4"><i class="bi bi-cash-coin fs-3 d-block mb-1"></i>
                 Aún no hay ningún egreso que pague este rol. Use <b>Generar egresos</b> en el rol o regístrelo en <b>Egresos → Nómina</b>.</div>`;
             box.innerHTML = html;
             return;
